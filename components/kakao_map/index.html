@@ -167,7 +167,7 @@ const Kakao = {
     this.map = new K.Map(document.getElementById("map"), {
       center: new K.LatLng(KOREA.lat, KOREA.lng), level: 12,
     });
-    this.map.setMaxLevel(13);
+    this.map.setMaxLevel(12);   // 처음 화면(한반도 전체)보다 더 작게는 축소하지 않는다
     this.map.addControl(new K.ZoomControl(), K.ControlPosition.RIGHT);
     // 카카오맵에는 이동 범위 옵션이 없어서, 벗어나면 가운데를 범위 안으로 되돌린다
     const clamp = () => {
@@ -228,7 +228,8 @@ const Basic = {
   init() {
     const asia = L.latLngBounds([ASIA.south, ASIA.west], [ASIA.north, ASIA.east]);
     this.map = L.map("map", {
-      center: [KOREA.lat, KOREA.lng], zoom: 7, minZoom: 4,
+      // 처음 화면(한반도 전체)보다 더 작게는 축소하지 않는다
+      center: [KOREA.lat, KOREA.lng], zoom: 7, minZoom: 7,
       maxBounds: asia, maxBoundsViscosity: 1.0,   // 범위 끝에서 더 끌리지 않는다
     });
     // CARTO 타일은 이제 키가 있어야 해서("API KEY REQUIRED"), 키 없이 되는 OpenStreetMap 을 쓴다

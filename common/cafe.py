@@ -255,13 +255,20 @@ MAX_LINKS = 5
 
 
 def parse_links(text: str) -> tuple[list[str], list[str]]:
-    """참고 웹사이트 입력 → (쓸 수 있는 주소들, 잘못된 값들). 줄바꿈·공백·쉼표로 나눈다."""
-    good, bad = [], []
+    """참고 웹사이트 입력 → (쓸 수 있는 주소들, 잘못된 값들). 줄바꿈·공백·쉼표로 나눈다.
+
+    같은 주소는 한 번만 남긴다. 끝의 '/', http/https, 'www.' 만 다른 주소도 같은 주소로 본다.
+    """
+    good, bad, seen = [], [], set()
     for part in re.split(r"[\s,]+", str(text or "").strip()):
         if not part:
             continue
         if re.fullmatch(r"https?://[^\s/$.?#][^\s]*", part, flags=re.I):
-            if part not in good:
+            # 도메인은 대소문자를 가리지 않지만 그 뒤 경로는 사이트마다 가릴 수 있어서 도메인만 소문자로
+            host, _, path = re.sub(r"^https?://(www\.)?", "", part, flags=re.I).partition("/")
+            key = f"{host.lower()}/{path}".rstrip("/")
+            if key not in seen:
+                seen.add(key)
                 good.append(part)
         else:
             bad.append(part)

@@ -1087,16 +1087,22 @@ _LIVE_SEND_JS = """
 (function () {
   if (window.__aniLiveSend) return;
   window.__aniLiveSend = true;
-  // 리뷰·답글 입력칸에 한 글자라도 있으면 등록 버튼을 켜고, 비면 끈다 (칸을 벗어나지 않아도 바로)
+  // 입력칸에 한 글자라도 있으면 버튼을 켜고, 비면 끈다 (칸을 벗어나지 않아도 바로)
+  const toggle = (b, ta) => {
+    if (!b || !ta) return;
+    if (!ta.value.trim()) { if (!b.disabled) { b.disabled = true; b.dataset.aniEmpty = '1'; } }
+    else if (b.dataset.aniEmpty) { b.disabled = false; delete b.dataset.aniEmpty; }
+  };
   const sync = () => {
+    // 리뷰·답글: rv_..._body_N 입력칸 ↔ rv_..._send_N 버튼
     document.querySelectorAll('[class*="st-key-rv_"][class*="_send_"] button').forEach((b) => {
       const box = b.closest('[class*="_send_"]');
       const cls = [...box.classList].find((c) => c.startsWith('st-key-rv_') && c.includes('_send_'));
-      const ta = cls && document.querySelector('.' + CSS.escape(cls.replace('_send_', '_body_')) + ' textarea');
-      if (!ta) return;
-      if (!ta.value.trim()) { if (!b.disabled) { b.disabled = true; b.dataset.aniEmpty = '1'; } }
-      else if (b.dataset.aniEmpty) { b.disabled = false; delete b.dataset.aniEmpty; }
+      toggle(b, cls && document.querySelector('.' + CSS.escape(cls.replace('_send_', '_body_')) + ' textarea'));
     });
+    // 공지로 간편등록: 공지 입력칸 ↔ 읽어오기 버튼
+    toggle(document.querySelector('.st-key-quick_read button'),
+           document.querySelector('.st-key-quick_raw textarea'));
   };
   document.addEventListener('input', sync, true);
   new MutationObserver(sync).observe(document.body, { childList: true, subtree: true });
@@ -1487,8 +1493,10 @@ def _quick(w: dict) -> None:
     raw = st.text_area("공지", key="quick_raw", height=180, label_visibility="collapsed",
                        placeholder="공지 글을 그대로 붙여넣어 주세요\n\n#OO 콜라보 카페\n카페명: ...\n"
                                    "주소: ...\n기간: 2026.11.01 ~ 2026.11.30\n특전: ...\n굿즈: ...")
-    if st.button("읽어오기", type="primary", width="stretch", disabled=not raw.strip(), key="quick_read"):
-        if not _block_sensitive(raw):
+    # 비었는지는 화면에서 바로 본다 (_live_send). 입력칸은 칸을 벗어나야 값이 넘어와서
+    # 여기서 막으면 글을 붙여넣어도 버튼이 계속 꺼져 있다
+    if st.button("읽어오기", type="primary", width="stretch", key="quick_read"):
+        if raw.strip() and not _block_sensitive(raw):
             got = cafe.parse_notice(raw, today=TODAY)
             w.update({
                 "work": got["work"], "characters": ", ".join(got["characters"]),
@@ -1785,6 +1793,7 @@ def page_add() -> None:
     st.markdown(GLOBAL_CSS + WIZARD_CSS, unsafe_allow_html=True)
     _no_translate()
     _history_guard(on_main=False)
+    _live_send()    # 간편등록 '읽어오기' 버튼을 공지 입력칸에 맞춰 바로 켜고 끈다
     # 메인과 같은 상단(제목·문구)이 스크롤해도 떠 있고, 'ANIME POP-UP · CAFE · GOODS' 줄 오른쪽에 홈으로
     with st.container(key="topbar"):
         if _brand(home=True):

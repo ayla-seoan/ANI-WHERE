@@ -95,7 +95,7 @@ def entry_from_row(row: dict) -> tuple[CafeEntry | None, dict, str]:
     # 출처·주최링크·참고링크(줄바꿈으로 여러 개)를 모두 '참고 웹사이트' 로. 겹치는 주소는 한 번만
     found = re.findall(r"https?://\S+", " ".join(str(row.get(k) or "") for k in LINK_FIELDS))
     lat, lng = row.get("위도"), row.get("경도")
-    extra = {"tags": tags, "links": list(dict.fromkeys(found))[:cafe.MAX_LINKS],
+    extra = {"tags": tags, "links": cafe.parse_links(" ".join(found))[0][:cafe.MAX_LINKS],
              "images": image_urls(row), "notion_id": _page_id(row.get("url")),
              "latlng": (float(lat), float(lng)) if lat and lng else None}
     return entry, extra, ""
