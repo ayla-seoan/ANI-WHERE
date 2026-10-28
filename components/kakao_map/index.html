@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+                      "Malgun Gothic", "Noto Sans KR", sans-serif; }
+  #map { width: 100%; height: 100%; border-radius: 20px; overflow: hidden; }
+  .dot {
+    width: 14px; height: 14px; border-radius: 50%; cursor: pointer;
+    background: rgba(86, 194, 167, .95); border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3); transition: transform .12s;
+  }
+  .dot:hover { transform: scale(1.3); }
+  .dot.sel { width: 22px; height: 22px; background: rgba(255, 143, 163, .98); }
+  /* 커서를 올리면 뜨는 카드: 포스터 · 작품 · 카페 · 위치 · 기간 */
+  .card { width: 250px; background: #fff; border-radius: 14px; padding: 8px;
+          box-shadow: 0 6px 20px rgba(0,0,0,.18); color: #26302d; font-size: 12px; line-height: 1.4;
+          white-space: normal; pointer-events: none; }
+  .card .item { display: flex; gap: 9px; align-items: flex-start; }
+  .card .item + .item { margin-top: 8px; padding-top: 8px; border-top: 1px solid #eef2f0; }
+  .card img { width: 58px; height: 78px; object-fit: cover; border-radius: 8px; flex: 0 0 auto;
+              background: #f1f3f2; }
+  .card .w { font-weight: 800; font-size: 13.5px; color: #2E9C82; margin-bottom: 2px; }
+  .card .c { font-weight: 600; margin-bottom: 3px; }
+  .card .a, .card .d { color: #5f6b67; font-size: 11.5px; }
+  .card .more { margin-top: 6px; color: #2E9C82; font-weight: 700; font-size: 11.5px; }
+  .kcard { position: relative; bottom: 26px; }
+  /* 같은 자리에 팝업이 여러 개일 때 점을 누르면 뜨는 목록 창 */
+  body { position: relative; }
+  #spot { display: none; position: absolute; left: 12px; top: 12px; z-index: 1000; width: 300px;
+          max-height: calc(100% - 24px); overflow-y: auto; background: #fff; border-radius: 16px;
+          box-shadow: 0 8px 28px rgba(0,0,0,.22); padding: 10px; }
+  #spot.open { display: block; }
+  #spot .head { display: flex; align-items: center; justify-content: space-between; margin: 2px 4px 8px;
+                font-weight: 800; font-size: 13.5px; color: #2E9C82; }
+  #spot .x { border: 0; background: #f1f3f2; width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+             font-size: 14px; color: #5f6b67; }
+  #spot .item { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 12px; cursor: pointer;
+                transition: background .15s; }
+  #spot .item:hover { background: #e6f6f0; }
+  #spot .item + .item { margin-top: 2px; }
+  #spot img { width: 46px; height: 62px; object-fit: cover; border-radius: 8px; flex: 0 0 auto; background: #f1f3f2; }
+  #spot .w { font-weight: 800; font-size: 13px; color: #26302d; }
+  #spot .c, #spot .d { font-size: 11.5px; color: #5f6b67; }
+  #spot .go { margin-left: auto; color: #56C2A7; font-size: 18px; }
+  .leaflet-tooltip.tip-l { background: transparent; border: 0; box-shadow: none; padding: 0; }
+  .leaflet-tooltip.tip-l::before { display: none; }
+  .msg { padding: 24px; font-size: 13px; color: #6b6b76; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="spot"></div>
+
+<script>
+/* ---------- Streamlit 연결 (빌드 없이 쓰는 기본 핸드셰이크) ---------- */
+function send(type, data) {
+  window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data), "*");
+}
+const Streamlit = {
+  ready: () => send("streamlit:componentReady", { apiVersion: 1 }),
+  height: (h) => send("streamlit:setFrameHeight", { height: h }),
+  value: (v) => send("streamlit:setComponentValue", { value: v, dataType: "json" }),
+};
+
+/* 지도는 아시아 밖으로 나가지 않는다. 등록되는 주소는 한국뿐이라 처음에는 한국을 비춘다 */
+const ASIA = { south: -11, west: 60, north: 56, east: 150 };
+const KOREA = { lat: 36.3, lng: 127.8 };
+
+function showMessage(html) {
+  document.getElementById("map").innerHTML = '<div class="msg">' + html + "</div>";
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function loadCss(href) {
+  const l = document.createElement("link");
+  l.rel = "stylesheet";
+  l.href = href;
+  document.head.appendChild(l);
+}
+
+const pick = (id) => Streamlit.value({ id: id, at: Date.now() });
+
+// 앱이 넘겨주는 포스터 주소는 페이지 기준 상대 주소라 바깥 페이지 주소를 기준으로 바꾼다
+const abs = (u) => new URL(u, window.parent.location.href).href;
+let ALL = [];
+const sameSpot = (p) => ALL.filter((q) => q.lat === p.lat && q.lng === p.lng);
+
+function closeSpot() { document.getElementById("spot").classList.remove("open"); }
+
+// 점을 눌렀을 때: 같은 자리에 팝업이 하나면 바로 상세, 여럿이면 지도 안에 목록 창을 띄운다
+function onPick(p) {
+  const here = sameSpot(p);
+  if (here.length <= 1) { closeSpot(); pick(p.id); return; }
+  const box = document.getElementById("spot");
+  box.innerHTML = "";
+  const head = document.createElement("div"); head.className = "head";
+  const t = document.createElement("span"); t.textContent = `📍 이 자리의 팝업 ${here.length}곳`;
+  const x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "닫기";
+  x.onclick = (e) => { e.stopPropagation(); closeSpot(); };
+  head.appendChild(t); head.appendChild(x); box.appendChild(head);
+  here.forEach((q) => {
+    const item = document.createElement("div"); item.className = "item";
+    const img = document.createElement("img"); img.src = abs(q.poster); img.alt = "";
+    const info = document.createElement("div");
+    [["w", q.work], ["c", "☕ " + q.cafe], ["d", "🗓️ " + q.dates]].forEach(([cls, text]) => {
+      const d = document.createElement("div"); d.className = cls; d.textContent = text; info.appendChild(d);
+    });
+    const go = document.createElement("span"); go.className = "go"; go.textContent = "›";
+    item.appendChild(img); item.appendChild(info); item.appendChild(go);
+    item.onclick = () => { closeSpot(); pick(q.id); };
+    box.appendChild(item);
+  });
+  box.classList.add("open");
+}
+
+// 사용자가 입력한 글이라 HTML 로 넣지 않고 textContent 로 넣는다
+function tipCard(p) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const here = sameSpot(p);
+  const list = [p, ...here.filter((q) => q.id !== p.id)].slice(0, 3);
+  list.forEach((q) => {
+    const item = document.createElement("div"); item.className = "item";
+    const img = document.createElement("img"); img.src = abs(q.poster); img.alt = "";
+    const box = document.createElement("div");
+    [["w", q.work], ["c", "☕ " + q.cafe], ["a", "📍 " + q.address], ["d", "🗓️ " + q.dates]].forEach(([cls, text]) => {
+      const d = document.createElement("div"); d.className = cls; d.textContent = text; box.appendChild(d);
+    });
+    item.appendChild(img); item.appendChild(box); card.appendChild(item);
+  });
+  if (here.length > list.length) {
+    const m = document.createElement("div"); m.className = "more";
+    m.textContent = `+ 같은 곳에 ${here.length - list.length}곳 더 · 눌러서 모두 보기`; card.appendChild(m);
+  }
+  return card;
+}
+
+/* ---------- 카카오맵 (KAKAO_JS_KEY 가 있을 때) ---------- */
+const Kakao = {
+  map: null, overlays: [], tip: null,
+
+  load(appKey) {
+    return loadScript("https://dapi.kakao.com/v2/maps/sdk.js?autoload=false&appkey=" +
+                      encodeURIComponent(appKey))
+      .then(() => new Promise((resolve, reject) => {
+        // 도메인이 등록되지 않으면 준비가 끝나지 않고 멈추기도 해서, 6초 안에 안 되면 실패로 본다
+        const t = setTimeout(() => reject(new Error("kakao maps timeout")), 6000);
+        try { kakao.maps.load(() => { clearTimeout(t); resolve(); }); } catch (e) { clearTimeout(t); reject(e); }
+      }));
+  },
+
+  init() {
+    const K = kakao.maps;
+    this.map = new K.Map(document.getElementById("map"), {
+      center: new K.LatLng(KOREA.lat, KOREA.lng), level: 12,
+    });
+    this.map.setMaxLevel(13);
+    this.map.addControl(new K.ZoomControl(), K.ControlPosition.RIGHT);
+    // 카카오맵에는 이동 범위 옵션이 없어서, 벗어나면 가운데를 범위 안으로 되돌린다
+    const clamp = () => {
+      const c = this.map.getCenter();
+      const lat = Math.min(ASIA.north, Math.max(ASIA.south, c.getLat()));
+      const lng = Math.min(ASIA.east, Math.max(ASIA.west, c.getLng()));
+      if (lat !== c.getLat() || lng !== c.getLng()) this.map.setCenter(new K.LatLng(lat, lng));
+    };
+    K.event.addListener(this.map, "dragend", clamp);
+    K.event.addListener(this.map, "click", closeSpot);
+    window.addEventListener("resize", () => this.map.relayout());
+    K.event.addListener(this.map, "zoom_changed", clamp);
+  },
+
+  draw(points, selected) {
+    const K = kakao.maps;
+    this.overlays.forEach((o) => o.setMap(null));
+    this.overlays = [];
+    if (this.tip) { this.tip.setMap(null); this.tip = null; }
+
+    points.forEach((p) => {
+      const pos = new K.LatLng(p.lat, p.lng);
+      const el = document.createElement("div");
+      el.className = "dot" + (p.id === selected ? " sel" : "");
+      el.onclick = () => onPick(p);
+      el.onmouseenter = () => {
+        const t = tipCard(p);
+        t.classList.add("kcard");
+        this.tip = new K.CustomOverlay({ position: pos, content: t, yAnchor: 1, zIndex: 3 });
+        this.tip.setMap(this.map);
+      };
+      el.onmouseleave = () => { if (this.tip) { this.tip.setMap(null); this.tip = null; } };
+      const o = new K.CustomOverlay({
+        position: pos, content: el, zIndex: p.id === selected ? 2 : 1, clickable: true,
+      });
+      o.setMap(this.map);
+      this.overlays.push(o);
+    });
+  },
+
+  focus(p) { this.map.setLevel(4); this.map.panTo(new kakao.maps.LatLng(p.lat, p.lng)); },
+  fit(points) {
+    const b = new kakao.maps.LatLngBounds();
+    points.forEach((p) => b.extend(new kakao.maps.LatLng(p.lat, p.lng)));
+    this.map.setBounds(b);
+  },
+};
+
+/* ---------- 기본 지도 (키가 없을 때: Leaflet + OpenStreetMap) ---------- */
+const Basic = {
+  map: null, layer: null,
+
+  load() {
+    loadCss("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
+    return loadScript("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js");
+  },
+
+  init() {
+    const asia = L.latLngBounds([ASIA.south, ASIA.west], [ASIA.north, ASIA.east]);
+    this.map = L.map("map", {
+      center: [KOREA.lat, KOREA.lng], zoom: 7, minZoom: 4,
+      maxBounds: asia, maxBoundsViscosity: 1.0,   // 범위 끝에서 더 끌리지 않는다
+    });
+    // CARTO 타일은 이제 키가 있어야 해서("API KEY REQUIRED"), 키 없이 되는 OpenStreetMap 을 쓴다
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap", maxZoom: 19,
+    }).addTo(this.map);
+    this.layer = L.layerGroup().addTo(this.map);
+    // 점을 눌러도 지도가 마우스를 붙잡아 클릭이 점에 오지 않을 때가 있고, 누르는 순간 브라우저가 지도 칸에
+    // 초점을 주며 페이지를 스크롤해 뗄 때의 위치가 어긋나기도 한다. 그래서 '누른 순간의 위치' 에서
+    // 12px 안의 가장 가까운 점을 처리한다. 지도를 끌었으면 무시하고, 점이 없으면 목록 창을 닫는다
+    let downAt = null, dragged = false;
+    const box = this.map.getContainer();
+    box.addEventListener("pointerdown", (ev) => {
+      downAt = this.map.mouseEventToContainerPoint(ev); dragged = false;
+    }, true);
+    this.map.on("dragstart", () => { dragged = true; });
+    box.addEventListener("click", (ev) => {
+      if (ev.target.closest && ev.target.closest(".leaflet-control")) return;      // 확대·축소 버튼은 그대로
+      if (dragged || !downAt) return;
+      let best = null, bestD = 12;
+      ALL.forEach((p) => {
+        const q = this.map.latLngToContainerPoint([p.lat, p.lng]);
+        const d = Math.hypot(q.x - downAt.x, q.y - downAt.y);
+        if (d < bestD) { bestD = d; best = p; }
+      });
+      if (best) { this.layer.eachLayer((l) => l.closeTooltip()); onPick(best); }
+      else closeSpot();
+    }, true);
+  },
+
+  draw(points, selected) {
+    this.layer.clearLayers();
+    points.forEach((p) => {
+      const sel = p.id === selected;
+      L.circleMarker([p.lat, p.lng], {
+        radius: sel ? 11 : 8, weight: 2.5, color: "#fff", fillOpacity: .95,
+        bubblingMouseEvents: false,   // 점 클릭이 지도 빈 곳 클릭(목록 닫기)으로 번지지 않게
+        fillColor: sel ? "rgb(255, 143, 163)" : "rgb(86, 194, 167)",
+      })
+        .bindTooltip(() => tipCard(p), { className: "tip-l", direction: "top", offset: [0, -10], opacity: 1 })
+        .addTo(this.layer);
+    });
+  },
+
+  focus(p) { this.map.setView([p.lat, p.lng], 15); },
+  fit(points) {
+    this.map.fitBounds(points.map((p) => [p.lat, p.lng]), { padding: [30, 30], maxZoom: 15 });
+  },
+};
+
+/* ---------- 공통 ---------- */
+let engine = null;
+let ready = null;         // 지도 라이브러리 로딩
+let loaded = false;       // 로딩에 성공했을 때만 그린다
+let pending = null;       // 로딩 중에 받은 데이터
+let lastView = "";        // 선택·점 목록이 바뀔 때만 화면을 옮긴다 (사용자가 움직인 화면 유지)
+
+function draw(args) {
+  const points = args.points || [];
+  const selected = args.selected;
+  ALL = points;
+  if (!engine.map) engine.init();
+  engine.draw(points, selected);
+
+  const view = JSON.stringify([selected, points.map((p) => p.id)]);
+  if (view === lastView || !points.length) return;
+  lastView = view;
+  const focus = points.find((p) => p.id === selected);
+  if (focus) engine.focus(focus);
+  else if (points.length === 1) engine.focus(points[0]);
+  else engine.fit(points);
+}
+
+window.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "streamlit:render") return;
+  const args = event.data.args || {};
+  // 지도는 iframe 높이를 그대로 채운다 (앱 CSS 가 화면 높이에 맞춰 iframe 높이를 바꿀 수 있다)
+  Streamlit.height(args.height || 600);
+
+  pending = args;
+  if (!ready) {
+    // 카카오 키가 있으면 카카오맵, 못 불러오면(도메인 미등록 등) 기본 지도로 바꿔 그린다 (지도가 비지 않게)
+    const useBasic = () => { engine = Basic; return Basic.load(); };
+    const fail = () => showMessage("지도를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.");
+    engine = args.app_key ? Kakao : Basic;
+    ready = (args.app_key
+      ? Kakao.load(args.app_key).then(
+          () => { if (!(window.kakao && kakao.maps && kakao.maps.LatLng)) throw new Error("kakao maps not ready"); },
+        ).catch(() => {
+          console.warn("카카오맵을 불러오지 못해 기본 지도로 표시합니다. 카카오 개발자 콘솔 > 플랫폼 > Web 에 이 주소를 등록했는지 확인해 주세요.");
+          return useBasic();
+        })
+      : Basic.load()
+    ).then(() => { loaded = true; draw(pending); }, fail);
+  } else if (loaded) {
+    draw(args);
+  }
+});
+
+Streamlit.ready();
+Streamlit.height(600);
+</script>
+</body>
+</html>

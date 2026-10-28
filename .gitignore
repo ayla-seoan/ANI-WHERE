@@ -1,0 +1,7 @@
+# 비밀 키 (카카오·Notion·OpenAI 등) — 절대 올리지 않는다. 예시는 .env.example
+.env
+service_account.json
+
+# 파이썬 임시 파일
+__pycache__/
+*.pyc

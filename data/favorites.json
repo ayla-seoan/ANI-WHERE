@@ -1,0 +1,29 @@
+[
+  {
+    "row_id": "978061109a",
+    "entry_id": "52b1ba0f85744081:f337a6d05b",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-28T11:09:10+00:00",
+    "cafe_id": "f337a6d05b",
+    "user": "52b1ba0f85744081"
+  },
+  {
+    "row_id": "2294539fa3",
+    "entry_id": "52b1ba0f85744081:f828fd30f1",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-28T11:24:43+00:00",
+    "cafe_id": "f828fd30f1",
+    "user": "52b1ba0f85744081"
+  },
+  {
+    "row_id": "6dfc29754c",
+    "entry_id": "52b1ba0f85744081:e7ac4bdbc6",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-28T11:24:44+00:00",
+    "cafe_id": "e7ac4bdbc6",
+    "user": "52b1ba0f85744081"
+  }
+]

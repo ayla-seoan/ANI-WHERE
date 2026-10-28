@@ -1,0 +1,15 @@
+# ANI:WHERE 테마 — 바탕은 흰색, 포인트만 우유빛 민트
+[theme]
+base = "light"
+primaryColor = "#56C2A7"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F6F5"
+textColor = "#26302D"
+borderColor = "#E5EAE8"
+baseRadius = "large"
+
+[server]
+# 업로드 한도: 포스터 20MB 에 맞춘다 (추가 이미지 10MB 는 코드에서 따로 검사)
+maxUploadSize = 20
+# static/ 폴더의 파일을 app/static/ 주소로 내보낸다 (기본 포스터 그림)
+enableStaticServing = true

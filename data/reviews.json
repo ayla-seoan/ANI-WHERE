@@ -1,0 +1,50 @@
+[
+  {
+    "row_id": "6cce0741df",
+    "entry_id": "66c1464373",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-28T09:36:39+00:00",
+    "cafe_id": "f027b55aa5",
+    "parent_id": "",
+    "kind": "다녀온 후기",
+    "nickname": "배고픈 다람쥐#b515",
+    "body": "ㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇㅇ"
+  },
+  {
+    "row_id": "f03f0616be",
+    "entry_id": "0febc93988",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-28T09:36:44+00:00",
+    "cafe_id": "f027b55aa5",
+    "parent_id": "66c1464373",
+    "kind": "",
+    "nickname": "배고픈 다람쥐#b515",
+    "body": "ㅇㅇㅇㅇ"
+  },
+  {
+    "row_id": "1447196412",
+    "entry_id": "78523b37d1",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-28T11:09:26+00:00",
+    "cafe_id": "f337a6d05b",
+    "parent_id": "",
+    "kind": "다녀온 후기",
+    "nickname": "배고픈 다람쥐#b515",
+    "body": "ㄴㄴㄴ"
+  },
+  {
+    "row_id": "931331a235",
+    "entry_id": "0d8025ff39",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-28T11:09:29+00:00",
+    "cafe_id": "f337a6d05b",
+    "parent_id": "",
+    "kind": "기대평",
+    "nickname": "배고픈 다람쥐#b515",
+    "body": "ㄴㄴㄴㄴ"
+  }
+]

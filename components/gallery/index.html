@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+                      "Malgun Gothic", "Noto Sans KR", sans-serif; }
+  .stage { position: relative; height: 100%; border-radius: 18px; overflow: hidden;
+           background: #f4f6f5; }
+  .track { display: flex; height: 100%; transition: transform .45s ease; }
+  .slide { flex: 0 0 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+           cursor: zoom-in; }
+  .slide img { width: 100%; height: 100%; object-fit: contain; user-select: none; }  /* 작은 그림도 칸에 맞게 키운다 */
+  .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 38px; height: 38px;
+         border-radius: 50%; border: 0; background: rgba(255,255,255,.92); color: #2E9C82;
+         font-size: 20px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.15);
+         display: flex; align-items: center; justify-content: center; transition: background .15s; }
+  .nav:hover { background: #56C2A7; color: #fff; }
+  .prev { left: 10px; } .next { right: 10px; }
+  .dots { position: absolute; bottom: 10px; left: 0; right: 0; display: flex; gap: 6px;
+          justify-content: center; }
+  .dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(255,255,255,.85);
+         border: 1px solid #cfe5dd; cursor: pointer; transition: width .2s, background .2s; }
+  .dot.on { width: 20px; background: #56C2A7; border-color: #56C2A7; }
+  .count { position: absolute; top: 10px; right: 10px; background: rgba(38,48,45,.7); color: #fff;
+           font-size: 12px; padding: 3px 9px; border-radius: 999px; }
+  .zoomhint { position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,.92);
+              color: #2E9C82; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+
+<script>
+/* ---------- Streamlit 연결 (빌드 없이 쓰는 기본 핸드셰이크) ---------- */
+function send(type, data) {
+  window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data), "*");
+}
+const Streamlit = {
+  ready: () => send("streamlit:componentReady", { apiVersion: 1 }),
+  height: (h) => send("streamlit:setFrameHeight", { height: h }),
+};
+
+const AUTO_MS = 4000;      // 이 시간마다 다음 이미지로 넘어간다
+let urls = [], idx = 0, timer = null, sig = "";
+
+// 앱이 넘겨주는 주소는 페이지 기준 상대 주소라, 바깥 페이지 주소를 기준으로 바꾼다
+const abs = (u) => new URL(u, window.parent.location.href).href;
+
+function go(i) {
+  idx = (i + urls.length) % urls.length;
+  document.querySelector(".track").style.transform = `translateX(-${idx * 100}%)`;
+  document.querySelectorAll(".dot").forEach((d, j) => d.classList.toggle("on", j === idx));
+  const c = document.querySelector(".count");
+  if (c) c.textContent = `${idx + 1} / ${urls.length}`;
+}
+
+function play() {
+  stop();
+  if (urls.length > 1) timer = setInterval(() => go(idx + 1), AUTO_MS);
+}
+function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+function render() {
+  const stage = document.getElementById("stage");
+  const many = urls.length > 1;
+  stage.innerHTML =
+    `<div class="track">${urls.map((u) => `<div class="slide"><img src="${abs(u)}" alt=""/></div>`).join("")}</div>` +
+    `<span class="zoomhint">🔍 눌러서 크게 보기</span>` +
+    (many ? `<span class="count"></span>
+             <button class="nav prev" aria-label="이전 이미지">‹</button>
+             <button class="nav next" aria-label="다음 이미지">›</button>
+             <div class="dots">${urls.map((_, j) => `<span class="dot" data-i="${j}"></span>`).join("")}</div>` : "");
+  stage.querySelectorAll(".slide").forEach((s, j) => s.onclick = () => openZoom(j));
+  if (many) {
+    stage.querySelector(".prev").onclick = (e) => { e.stopPropagation(); go(idx - 1); play(); };
+    stage.querySelector(".next").onclick = (e) => { e.stopPropagation(); go(idx + 1); play(); };
+    stage.querySelectorAll(".dot").forEach((d) => d.onclick = () => { go(+d.dataset.i); play(); });
+    stage.onmouseenter = stop;          // 보고 있는 동안은 멈춘다
+    stage.onmouseleave = play;
+  }
+  go(0);
+  play();
+}
+
+/* ---------- 확대 보기: 바깥 페이지 전체를 덮는 창을 띄운다 ---------- */
+function openZoom(start) {
+  stop();
+  const doc = window.parent.document;
+  doc.getElementById("aniwhere-zoom")?.remove();
+  let i = start, scale = 1;
+  const box = doc.createElement("div");
+  box.id = "aniwhere-zoom";
+  box.innerHTML = `
+    <style>
+      #aniwhere-zoom { position: fixed; inset: 0; z-index: 999999; background: rgba(20,28,26,.92);
+        display: flex; align-items: center; justify-content: center; }
+      #aniwhere-zoom .z-img { max-width: 92vw; max-height: 88vh; object-fit: contain; cursor: zoom-in;
+        transition: transform .2s ease; border-radius: 8px; user-select: none; }
+      #aniwhere-zoom .z-img.big { cursor: zoom-out; }
+      #aniwhere-zoom button { position: absolute; border: 0; cursor: pointer; border-radius: 50%;
+        width: 46px; height: 46px; background: rgba(255,255,255,.95); color: #2E9C82; font-size: 24px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.3); }
+      #aniwhere-zoom button:hover { background: #56C2A7; color: #fff; }
+      #aniwhere-zoom .z-close { top: 18px; right: 18px; }
+      #aniwhere-zoom .z-prev { left: 18px; top: 50%; transform: translateY(-50%); }
+      #aniwhere-zoom .z-next { right: 18px; top: 50%; transform: translateY(-50%); }
+      #aniwhere-zoom .z-count { position: absolute; bottom: 20px; color: #fff; font-size: 14px;
+        background: rgba(0,0,0,.4); padding: 4px 12px; border-radius: 999px; }
+    </style>
+    <img class="z-img" alt=""/>
+    <button class="z-close" aria-label="닫기">×</button>
+    ${urls.length > 1 ? '<button class="z-prev" aria-label="이전">‹</button><button class="z-next" aria-label="다음">›</button>' : ""}
+    <span class="z-count"></span>`;
+  doc.body.appendChild(box);
+  const img = box.querySelector(".z-img");
+
+  const show = (n) => {
+    i = (n + urls.length) % urls.length; scale = 1;
+    img.style.transform = ""; img.classList.remove("big");
+    img.src = abs(urls[i]);
+    box.querySelector(".z-count").textContent = `${i + 1} / ${urls.length}  ·  이미지를 누르면 더 크게`;
+  };
+  const close = () => { box.remove(); doc.removeEventListener("keydown", onKey); go(i); play(); };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+    if (e.key === "ArrowLeft") show(i - 1);
+    if (e.key === "ArrowRight") show(i + 1);
+  };
+
+  // 이미지를 누르면 누른 자리를 중심으로 2.2배 확대, 다시 누르면 원래대로
+  img.onclick = (e) => {
+    e.stopPropagation();
+    if (scale === 1) {
+      const r = img.getBoundingClientRect();
+      img.style.transformOrigin = `${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`;
+      scale = 2.2;
+    } else scale = 1;
+    img.style.transform = scale === 1 ? "" : `scale(${scale})`;
+    img.classList.toggle("big", scale !== 1);
+  };
+  box.onclick = (e) => { if (e.target === box) close(); };
+  box.querySelector(".z-close").onclick = close;
+  box.querySelector(".z-prev")?.addEventListener("click", (e) => { e.stopPropagation(); show(i - 1); });
+  box.querySelector(".z-next")?.addEventListener("click", (e) => { e.stopPropagation(); show(i + 1); });
+  doc.addEventListener("keydown", onKey);
+  show(start);
+}
+
+window.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "streamlit:render") return;
+  const args = event.data.args || {};
+  Streamlit.height(args.height || 420);
+  const next = JSON.stringify(args.urls || []);
+  if (next === sig) return;          // 같은 이미지면 다시 그리지 않는다 (보던 위치 유지)
+  sig = next;
+  urls = args.urls || [];
+  render();
+});
+
+Streamlit.ready();
+Streamlit.height(420);
+</script>
+</body>
+</html>
