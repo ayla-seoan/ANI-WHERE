@@ -324,11 +324,34 @@ def _from_gazetteer(address: str) -> GeoResult:
     )
 
 
+# 서울·경기 밖 광역시. 이 도시 주소는 동네(서면·동성로) 대신 도시 이름으로 보여 준다
+_METRO_CITIES = ("부산", "대구", "대전", "울산", "인천", "세종")
+# 광역시 안의 동네 → 도시 ('부산 서면' 이 아니라 '서면 카페 모모' 처럼 도시 이름 없이 적은 주소용)
+_CITY_OF = {"서면": "부산", "해운대": "부산", "동성로": "대구", "둔산": "대전",
+            "송도": "인천", "부평": "인천", "청라": "인천", "영종": "인천"}
+_CAPITAL = ("서울", "경기")
+
+
 def area_name(address: str) -> str:
-    """카드 왼쪽 위 지역 배지용 짧은 이름 (예: '홍대', '부산'). 모르면 빈 문자열."""
-    address = address or ""
-    for table in (GAZETTEER, PROVINCES):
-        name = next((n for n in sorted(table, key=len, reverse=True) if n in address), None)
-        if name:
-            return name.replace("특별시", "").replace("광역시", "")
-    return ""
+    """카드 왼쪽 위 지역 배지용 짧은 이름. 모르면 빈 문자열.
+
+    서울·경기는 동네 이름('홍대', '판교'), 그 밖의 지역은 시 이름('부산', '창원')으로 보여 준다.
+    """
+    address = (address or "").strip()
+    # 1) 광역시로 시작하는 주소는 동네와 상관없이 도시 이름 ('부산 강서구' 가 서울 '강서' 로 잡히지 않게)
+    if address.startswith("광주광역시") or re.match(r"광주\s+(?:광산|북|남|동|서)구", address):
+        return "광주"
+    for city in _METRO_CITIES:
+        if address.startswith(city):
+            return city
+    # 2) 동네·도시 사전. 광역시 안의 동네면 도시로 바꾼다
+    name = next((n for n in sorted(GAZETTEER, key=len, reverse=True) if n in address), None)
+    if name:
+        return _CITY_OF.get(name, name)
+    # 3) 서울·경기 밖에서 사전에 없는 시는 'OO시' 를 그대로 쓴다 ('경남 통영시' → '통영')
+    if not address.startswith(_CAPITAL):
+        m = re.search(r"([가-힣]{2,})시(?:\s|$)", address)
+        if m and not m.group(1).endswith(("특별", "광역", "자치")):
+            return m.group(1)
+    name = next((n for n in sorted(PROVINCES, key=len, reverse=True) if n in address), None)
+    return name.replace("특별시", "").replace("광역시", "") if name else ""

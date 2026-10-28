@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -52,6 +53,17 @@ def _work(name: str) -> str:
     return re.sub(r"\s*\(.*?\)\s*$", "", str(name or "")).strip()
 
 
+def _place(name) -> str:
+    """여러 지점이 함께 적힌 장소명에서 첫 지점만 남긴다.
+    '애니메이트 Gratte (잠실롯데 / 홍대)' → '애니메이트 Gratte 잠실롯데',
+    '애니플러스 서울 합정점 / 부산 서면점' → '애니플러스 서울 합정점'."""
+    t = _known(name)
+    m = re.match(r"^(.*?)\s*\(([^()]*/[^()]*)\)\s*$", t)
+    if m:
+        return f"{m.group(1)} {m.group(2).split('/')[0].strip()}".strip()
+    return t.split(" / ")[0].strip()
+
+
 def _page_id(url: str) -> str:
     m = re.search(r"([0-9a-f]{32})", str(url or "").replace("-", ""))
     return m.group(1) if m else ""
@@ -65,7 +77,7 @@ def entry_from_row(row: dict) -> tuple[CafeEntry | None, dict, str]:
     start, end = row.get("date:기간:start"), row.get("date:기간:end")
     if not start or not end:
         return None, {}, "기간 없음"
-    place = _known(row.get("장소명")).split(" / ")[0].strip()
+    place = _place(row.get("장소명"))
     work = _work(row.get("작품명"))
     if not place or not work:
         return None, {}, "작품명·장소명 없음"
@@ -80,9 +92,16 @@ def entry_from_row(row: dict) -> tuple[CafeEntry | None, dict, str]:
         perks=_split(row.get("특전")), goods=_split(row.get("굿즈"), r","),
         confidence="high",
     )
-    extra = {"tags": tags, "links": [u for u in [_known(row.get("출처"))] if u.startswith("http")],
-             "images": image_urls(row), "notion_id": _page_id(row.get("url"))}
+    # 출처·주최링크·참고링크(줄바꿈으로 여러 개)를 모두 '참고 웹사이트' 로. 겹치는 주소는 한 번만
+    found = re.findall(r"https?://\S+", " ".join(str(row.get(k) or "") for k in LINK_FIELDS))
+    lat, lng = row.get("위도"), row.get("경도")
+    extra = {"tags": tags, "links": list(dict.fromkeys(found))[:cafe.MAX_LINKS],
+             "images": image_urls(row), "notion_id": _page_id(row.get("url")),
+             "latlng": (float(lat), float(lng)) if lat and lng else None}
     return entry, extra, ""
+
+
+LINK_FIELDS = ("출처", "주최링크", "참고링크")
 
 
 def image_urls(row: dict) -> list[str]:
@@ -91,15 +110,53 @@ def image_urls(row: dict) -> list[str]:
     return list(dict.fromkeys(urls))
 
 
-def _match(store_rows: list[dict], entry: CafeEntry, notion_id: str) -> dict | None:
-    """이미 있는 같은 카페(같은 Notion 페이지, 또는 같은 작품 + 같은 카페)의 최신 행."""
+def _near(r: dict, latlng: tuple[float, float] | None, km: float = 0.5) -> bool:
+    """앱 행의 좌표가 latlng 에서 km 안에 있는지. 어느 쪽이든 좌표가 없으면 False."""
+    try:
+        lat, lng = float(r.get("lat")), float(r.get("lng"))
+    except (TypeError, ValueError):
+        return False
+    if not latlng:
+        return False
+    # 짧은 거리라 평면 근사로 충분하다 (위도 1도 ≈ 111km, 경도 1도 ≈ 111km × cos(위도))
+    dy = (lat - latlng[0]) * 111.0
+    dx = (lng - latlng[1]) * 111.0 * math.cos(math.radians(lat))
+    return math.hypot(dx, dy) <= km
+
+
+def _match(store_rows: list[dict], entry: CafeEntry, notion_id: str,
+           latlng: tuple[float, float] | None = None) -> dict | None:
+    """이미 있는 같은 카페(같은 Notion 페이지, 같은 작품 + 같은 카페, 또는 같은 작품 + 같은 기간 + 같은 장소)의 최신 행.
+
+    작품명이 '타네무라 아리나' / '타네무라 아리나 30주년' 처럼 조금 달라도 한쪽이 다른 쪽을 품고
+    시작·종료일이 똑같고 위치가 500m 안이면 같은 행사로 본다 (직접 등록한 걸 Notion 에서 또 가져오지 않게).
+    위치까지 보는 건, 같은 행사를 지점별(홍대점·부산점)로 나눠 적은 행을 중복으로 버리지 않기 위해서다.
+    """
     for r in store_rows:
         if notion_id and f"notion:{notion_id}" in str(r.get("note") or ""):
             return r
+    norm = lambda s: re.sub(r"\s+", "", str(s or ""))
     for r in store_rows:
-        if _work(r.get("work")) == entry.work and str(r.get("cafe_name") or "").strip() == entry.cafe_name:
+        # 카페명은 띄어쓰기만 다른 경우('서울합정점' / '서울 합정점')도 같다고 본다
+        if _work(r.get("work")) == entry.work and norm(r.get("cafe_name")) == norm(entry.cafe_name):
+            return r
+    for r in store_rows:
+        a, b = norm(_work(r.get("work"))), norm(entry.work)
+        same_work = a and b and (a in b or b in a)
+        # 같은 작품을 같은 곳에서 기간이 겹치게 두 번 하지는 않으니, Notion 이 날짜를 고쳤어도 같은 행사다
+        overlap = str(r.get("start_date"))[:10] <= entry.end_date.isoformat() \
+            and entry.start_date.isoformat() <= str(r.get("end_date"))[:10]
+        # 같은 곳: 좌표가 500m 안이거나, 도로명 주소('양화로 188')가 같으면 (앱 쪽 좌표가 대략 위치일 수 있다)
+        road = _road(r.get("address"))
+        if same_work and overlap and (_near(r, latlng) or (road and road == _road(entry.address))):
             return r
     return None
+
+
+def _road(address) -> str:
+    """주소의 도로명 + 번지 ('서울 마포구 양화로 188 5층' → '양화로188'). 없으면 빈 문자열."""
+    m = re.search(r"([가-힣A-Za-z0-9]+(?:로|길))\s*(\d+(?:-\d+)?)", str(address or ""))
+    return f"{m.group(1)}{m.group(2)}" if m else ""
 
 
 def _download(urls: list[str]) -> list[str]:
@@ -120,8 +177,11 @@ def _download(urls: list[str]) -> list[str]:
     return saved
 
 
-def import_rows(store, rows: list[dict], today: date) -> dict:
-    """행들을 앱 저장소에 넣는다. {'added': [...], 'skipped': [(이름, 이유)]} 를 돌려준다."""
+def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) -> dict:
+    """행들을 앱 저장소에 넣는다. {'added': [...], 'skipped': [(이름, 이유)]} 를 돌려준다.
+
+    fill_images 가 False 면 이미 있는 행은 이미지도 건드리지 않고 새 행만 넣는다.
+    """
     report = {"added": [], "skipped": []}
     for row in rows:
         name = f"{row.get('작품명')} · {row.get('장소명')}"
@@ -129,10 +189,17 @@ def import_rows(store, rows: list[dict], today: date) -> dict:
         if entry is None:
             report["skipped"].append((name, why))
             continue
-        found = _match(store.current_rows(), entry, extra["notion_id"])
+        # 위치: Notion 에 위도·경도가 있으면 그대로 쓰고, 없으면 주소로 찾는다
+        if extra["latlng"]:
+            g = geo.GeoResult(ok=True, lat=extra["latlng"][0], lng=extra["latlng"][1],
+                              precision="exact", matched="Notion 좌표")
+        else:
+            g = geo.geocode(entry.address)
+        latlng = (g.lat, g.lng) if g.ok else None
+        found = _match(store.current_rows(), entry, extra["notion_id"], latlng)
         if found:
             # 앱 쪽에 이미지가 없고 Notion 에 이미지가 있으면 이미지만 채운다 (다른 칸은 그대로)
-            if not images.split(found.get("images")) and extra["images"]:
+            if fill_images and not images.split(found.get("images")) and extra["images"]:
                 saved = _download(extra["images"])
                 if saved:
                     payload = {k: found.get(k, "") for k in store.headers
@@ -147,7 +214,6 @@ def import_rows(store, rows: list[dict], today: date) -> dict:
             report["skipped"].append((name, "예전에 가져왔다가 내린 항목"))
             continue
         v = guard.validate_cafe(entry, today=today, existing=store.current_rows())
-        g = geo.geocode(entry.address)
         if not v.ok or not g.ok:
             report["skipped"].append((name, "; ".join(v.errors) or g.note))
             continue
@@ -172,6 +238,8 @@ def _flatten(page: dict) -> dict:
             out[name] = (prop.get("select") or {}).get("name", "")
         elif t == "url":
             out[name] = prop.get("url") or ""
+        elif t == "number":
+            out[name] = prop.get("number")
         elif t == "files":
             # '파일과 미디어' 칸: 올린 파일(file)과 링크(external) 주소를 모두 모은다
             out.setdefault("__files__", [])

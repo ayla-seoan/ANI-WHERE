@@ -368,7 +368,10 @@ def render_detail_tabs(current: dict) -> None:
     """상세 화면 오른쪽: 리뷰 / 수정하기 탭."""
     entry_id = str(current["entry_id"])
     n = review.counts(reviews.current_rows()).get(entry_id, 0)
-    tab_review, tab_edit = st.tabs([f"💬 리뷰 {n}", "✏️ 수정하기"])
+    # 키를 주고 고른 탭을 서버가 기억하게 한다. 그렇지 않으면 수정하기에서 이미지를 지우거나 올려
+    # 다시 그릴 때마다 첫 탭(리뷰)으로 돌아가 버린다
+    tab_review, tab_edit = st.tabs([f"💬 리뷰 {n}", "✏️ 수정하기"], key=f"detail_tabs_{entry_id}",
+                                   on_change="rerun")
     with tab_review:
         render_reviews(entry_id)
     with tab_edit:
@@ -413,8 +416,10 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
 
     c1, c2 = st.columns(2) if parent_id else (st.container(), None)
     with c1:
+        # 입력칸이 비었는지는 화면에서 바로 본다 (_live_send). 입력칸은 칸을 벗어나야 값이 넘어와서
+        # 여기서 막으면 한 글자를 써도 버튼이 계속 꺼져 있다
         clicked = st.button("답글 등록" if parent_id else "리뷰 등록", type="primary",
-                            width="stretch", disabled=bad or not body.strip(), key=f"{slot}_send_{n}")
+                            width="stretch", disabled=bad, key=f"{slot}_send_{n}")
     if c2 is not None:
         with c2:
             if st.button("취소", width="stretch", key=f"{slot}_cancel_{n}"):
@@ -435,10 +440,14 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
         st.rerun()
 
 
+# 리뷰 종류마다 배지 색을 달리한다 (기타는 회색)
+KIND_COLORS = {"다녀온 후기": "green", "기대평": "blue", "기타": "gray"}
+
+
 def _review_card(r: dict, reply: bool = False) -> None:
     head = f"**{_plain(r.get('nickname') or '익명')}**"
     if r.get("kind"):
-        head = f":violet-badge[{r['kind']}] " + head
+        head = f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] " + head
     if reply:
         head = ":gray-badge[답글] " + head
     st.markdown(f"{head} · :gray[{_when(r.get('updated_at'))}]")
@@ -645,11 +654,9 @@ def render_edit(current: dict) -> None:
             store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=g.badge,
                                            images=saved, tags=new_tags, links=new_links),
                          entry_id=entry_id)
+            # 저장해도 상세에 그대로 머물고, 맨 위로 올려 바뀐 내용을 처음부터 보여 준다
             st.session_state["flash"] = "수정했습니다."
             st.session_state["scroll_top"] = True
-            # 저장하면 상세를 닫고 메인(리스트 + 지도)으로 돌아간다
-            st.session_state["selected"] = None
-            st.session_state["list_only"] = False
             st.rerun()
         for err in v.errors:
             st.error(err)
@@ -660,7 +667,6 @@ def render_edit(current: dict) -> None:
                      help="직전 내용으로 복구합니다"):
             if store.revert(entry_id):
                 st.session_state["flash"] = "직전 내용으로 되돌렸습니다."
-                st.session_state["scroll_top"] = True
                 st.rerun()
             st.warning("되돌릴 이전 기록이 없습니다.")
     with b2:
@@ -793,11 +799,13 @@ def _list_bar(count: int, wide: bool) -> None:
         if wide:
             if st.button("🗺️ 지도보기", key="show_map", width="content"):
                 st.session_state["list_only"] = False
+                st.session_state["scroll_top"] = True    # 화면 길이가 바뀌어도 맨 위부터 보이게
                 st.rerun()
         elif st.button("리스트 전체보기", key="list_only_btn", width="content",
                        help="지도 없이 리스트만 크게 봅니다"):
             st.session_state["list_only"] = True
             st.session_state["selected"] = None    # 상세를 보던 중이면 닫고 리스트로
+            st.session_state["scroll_top"] = True
             st.rerun()
 
 
@@ -812,8 +820,9 @@ def render_list(view: pd.DataFrame, wide: bool = False) -> None:
         """카드 전체를 덮는 투명 버튼. 카드 어디를 눌러도 상세로 넘어간다 (LIST_CSS 의 .st-key-card_)."""
         if st.button("자세히 보기", key=f"open_{r['entry_id']}", width="stretch"):
             # 상세는 지도와 함께 보여 준다. 아래쪽 카드를 눌러도 상세 맨 위부터 보이게 올린다
+            # 보던 모드(리스트 전체보기 / 지도보기)는 그대로 둔다. 상세는 모드와 상관없이 지도와 함께 보이고,
+            # 리스트로 돌아가면 원래 보던 모드로 돌아간다
             st.session_state["selected"] = r["entry_id"]
-            st.session_state["list_only"] = False
             st.session_state["scroll_top"] = True
             st.rerun()
 
@@ -975,11 +984,23 @@ iframe[src*="kakao_map"] {{
 
 def _scroll_top() -> None:
     """페이지를 맨 위로 올린다. Streamlit 은 다시 그려도 스크롤 위치를 그대로 두어서,
-    상세를 닫고 돌아오면 짧아진 페이지의 맨 아래에 머문다."""
+    상세를 닫고 돌아오면 짧아진 페이지의 맨 아래에 머문다.
+
+    지도·리스트가 다 그려지는 동안 페이지 길이가 바뀌며 위치가 다시 밀릴 수 있어서,
+    1.2초 동안 몇 번 더 맨 위로 올린다 (그 사이 사용자가 스크롤하면 멈춘다).
+    """
+    # 내용이 지난번과 똑같으면 Streamlit 이 칸을 다시 쓰고 스크립트를 다시 돌리지 않는다.
+    # (리스트 전체보기 → 지도보기처럼 연달아 올릴 때 두 번째가 안 먹었다) 그래서 매번 다른 번호를 붙인다
+    n = st.session_state["_scroll_n"] = st.session_state.get("_scroll_n", 0) + 1
     components.html(
-        "<script>const d = window.parent.document;"
-        "[d.querySelector('[data-testid=stMain]'), d.querySelector('[data-testid=stAppViewContainer]'),"
-        " d.scrollingElement].forEach(e => e && e.scrollTo({top: 0, behavior: 'smooth'}));</script>",
+        f"<script>/* {n} */ const w = window.parent, d = w.document;"
+        "if (w.__aniKeepStop) w.__aniKeepStop();"
+        "const els = () => [d.querySelector('[data-testid=stMain]'),"
+        " d.querySelector('[data-testid=stAppViewContainer]'), d.scrollingElement];"
+        "let moved = false; const stop = () => { moved = true; };"
+        "['wheel', 'touchmove', 'keydown'].forEach(t => d.addEventListener(t, stop, {once: true, capture: true}));"
+        "const up = () => { if (!moved) els().forEach(e => e && e.scrollTo({top: 0})); };"
+        "up(); [100, 300, 600, 1200].forEach(ms => setTimeout(up, ms));</script>",
         height=0,
     )
 
@@ -1022,11 +1043,16 @@ _KEEP_SCROLL_JS = """
   window.__aniKeepScroll = true;
   let saved = null, until = 0, userMoved = false;
   const main = () => document.querySelector('[data-testid=stMain]');
-  // 선택 버튼(리뷰 종류·탭·체크·스위치)을 누르는 순간의 스크롤 위치를 기억한다
-  document.addEventListener('pointerdown', (e) => {
-    if (!e.target.closest('[data-testid=stButtonGroup], [data-baseweb=tab], [data-testid=stCheckbox], [data-testid=stToggle]')) return;
+  // 맨 위로 올릴 때(_scroll_top)는 지키던 위치를 놓아 준다
+  window.__aniKeepStop = () => { until = 0; };
+  // 선택 버튼(리뷰 종류·탭·체크·스위치)이나 상세 탭(리뷰·수정하기) 안을 누르는 순간의 스크롤 위치를 기억한다.
+  // 수정하기에서 이미지 삭제·추가 같은 걸 누를 때마다 화면이 맨 아래로 튀지 않게 한다
+  const PICKS = '[data-testid=stButtonGroup], [data-baseweb=tab], [data-testid=stCheckbox], [data-testid=stToggle],'
+              + ' [role=tabpanel], [data-baseweb=tab-panel]';
+  const remember = (e) => {
+    if (!e.target.closest || !e.target.closest(PICKS)) return;
     const m = main(); if (!m) return;
-    saved = m.scrollTop; until = Date.now() + 2000; userMoved = false;
+    saved = m.scrollTop; until = Date.now() + 3000; userMoved = false;
     // 다시 그리는 동안 페이지가 잠깐 짧아졌다 길어지면 스크롤 이벤트 없이 위치가 바뀌므로 짧은 간격으로도 확인한다
     clearInterval(window.__aniKeepTimer);
     window.__aniKeepTimer = setInterval(() => {
@@ -1034,7 +1060,10 @@ _KEEP_SCROLL_JS = """
       if (!mm || userMoved || Date.now() > until) { clearInterval(window.__aniKeepTimer); return; }
       if (Math.abs(mm.scrollTop - saved) > 30 && mm.scrollHeight - mm.clientHeight >= saved) mm.scrollTop = saved;
     }, 80);
-  }, true);
+  };
+  document.addEventListener('pointerdown', remember, true);
+  // 파일 창에서 이미지를 고르고 돌아오면 그때 다시 그려지므로, 고른 순간에도 위치를 기억한다
+  document.addEventListener('change', remember, true);
   ['wheel', 'touchmove', 'keydown'].forEach((t) => document.addEventListener(t, () => { userMoved = true; }, true));
   // 그 뒤 2초 안에 사용자가 스크롤하지 않았는데 위치가 크게 바뀌면 되돌린다
   document.addEventListener('scroll', (e) => {
@@ -1052,6 +1081,33 @@ def _keep_scroll() -> None:
     다시 그릴 때 사라지는 칸이 아니라 바깥 페이지 안에서 직접 실행해(eval), 감시 코드가 계속 살아 있다.
     """
     components.html(f"<script>window.parent.eval({json.dumps(_KEEP_SCROLL_JS)});</script>", height=0)
+
+
+_LIVE_SEND_JS = """
+(function () {
+  if (window.__aniLiveSend) return;
+  window.__aniLiveSend = true;
+  // 리뷰·답글 입력칸에 한 글자라도 있으면 등록 버튼을 켜고, 비면 끈다 (칸을 벗어나지 않아도 바로)
+  const sync = () => {
+    document.querySelectorAll('[class*="st-key-rv_"][class*="_send_"] button').forEach((b) => {
+      const box = b.closest('[class*="_send_"]');
+      const cls = [...box.classList].find((c) => c.startsWith('st-key-rv_') && c.includes('_send_'));
+      const ta = cls && document.querySelector('.' + CSS.escape(cls.replace('_send_', '_body_')) + ' textarea');
+      if (!ta) return;
+      if (!ta.value.trim()) { if (!b.disabled) { b.disabled = true; b.dataset.aniEmpty = '1'; } }
+      else if (b.dataset.aniEmpty) { b.disabled = false; delete b.dataset.aniEmpty; }
+    });
+  };
+  document.addEventListener('input', sync, true);
+  new MutationObserver(sync).observe(document.body, { childList: true, subtree: true });
+  sync();
+})();
+"""
+
+
+def _live_send() -> None:
+    """리뷰 등록 버튼을 입력칸 내용에 맞춰 바로 켜고 끈다."""
+    components.html(f"<script>window.parent.eval({json.dumps(_LIVE_SEND_JS)});</script>", height=0)
 
 
 _DETAIL_BACK_JS = """
@@ -1093,7 +1149,7 @@ def _brand(home: bool = False) -> bool:
 
     home 이면 'ANIME POP-UP · CAFE · GOODS' 줄 오른쪽 끝에 🏠 홈으로 버튼을 둔다 (등록 화면).
     """
-    clicked = st.button("ANI:WHERE 🗺️", key="home_brand", type="tertiary", help="처음 화면으로")
+    clicked = st.button("ANI:WHERE 🗺️", key="home_brand", type="tertiary")
     if not home:
         st.markdown(
             '<div class="brand-tag">함께 만드는 애니 팝업 지도!! 찾고, 공유하고, 함께 기록해요!<br/>'
@@ -1111,11 +1167,27 @@ def _brand(home: bool = False) -> bool:
     return clicked
 
 
+def _reset_filters() -> None:
+    """메인의 검색 조건을 처음 값으로. 버튼 콜백이라 입력칸이 그려지기 전에 돌아서 값을 바로 바꿀 수 있다.
+
+    키를 지우기만 하면 브라우저의 입력칸(특히 날짜)이 예전 값을 그대로 보여 줄 수 있어서,
+    처음 값을 직접 넣어 화면까지 새로 그리게 한다.
+    """
+    st.session_state.update({"f_query": "", "f_work": "전체", "f_span": "진행중 + 예정"})
+    st.session_state.pop(f"f_date_{st.session_state.get('date_ver', 0)}", None)
+    st.session_state["date_ver"] = st.session_state.get("date_ver", 0) + 1
+    for k in [k for k in st.session_state if str(k).startswith("filter_chars_")]:
+        st.session_state[k] = []
+    st.session_state["regions"] = []
+    st.session_state["fav_only"] = False
+
+
 def page_map() -> None:
     st.markdown(GLOBAL_CSS + LIST_CSS, unsafe_allow_html=True)
     _no_translate()
     _history_guard(on_main=True)
     _keep_scroll()
+    _live_send()
     # 공유받은 링크(?cafe=<id>)로 들어오면 그 카페 상세를 연다. 한 번 쓰고 주소창에서 지운다
     shared = st.query_params.get("cafe")
     if shared:
@@ -1143,10 +1215,10 @@ def page_map() -> None:
     with top:
         head, btn = st.columns([5, 1], vertical_alignment="bottom")
     with head:
-        # 제목을 누르면 처음 화면(선택 해제, 리스트+지도 반반)으로 돌아간다
+        # 제목을 누르면 상세를 닫고 보던 모드(리스트 전체보기 / 지도보기)의 첫 화면으로 돌아간다
         if _brand():
             st.session_state["selected"] = None
-            st.session_state["list_only"] = False
+            st.session_state["scroll_top"] = True
             st.rerun()
     with btn:
         # 상세에서는 등록하기 자리에 '리스트로 돌아가기' (상단에 늘 떠 있다)
@@ -1183,12 +1255,16 @@ def page_map() -> None:
     df["work"] = df["work"].fillna("").astype(str).map(catalog.canonical_work)
 
     with top, st.container(key="filters"):
-        c0, c1, c4, c2, c3 = st.columns([2, 2, 2, 2, 3])
+        c0, c1, c4, c2, c3, c5 = st.columns([2.4, 2, 2, 2, 2, 1.1], vertical_alignment="bottom")
+    with c5:
+        # 검색어·작품·캐릭터·기간·특전과 목록 위의 지역·찜 필터를 한 번에 처음 값으로 돌린다 (정렬은 그대로)
+        st.button("↺ 초기화", key="filter_reset", width="stretch", on_click=_reset_filters,
+                  help="검색 조건을 모두 지웁니다")
     with c0:
-        query = st.text_input("검색", placeholder="카페명·캐릭터·주소")
+        query = st.text_input("검색", placeholder="작품·카페명·캐릭터·주소", key="f_query")
     with c1:
         works = ["전체"] + sorted(set(df["work"]) - {""})
-        pick_work = st.selectbox("작품", works)
+        pick_work = st.selectbox("작품", works, key="f_work")
     with c4:
         # 작품을 고르면 그 작품의 캐릭터만 고를 수 있다
         chars = _characters_by_work().get(pick_work, []) if pick_work != "전체" else []
@@ -1197,16 +1273,18 @@ def page_map() -> None:
             placeholder="캐릭터 고르기" if pick_work != "전체" else "작품을 먼저 골라주세요",
         )
     with c2:
-        span = st.selectbox("기간", ["진행 중 + 예정", "이번 주", "전체"])
+        span = st.selectbox("진행여부", ["진행중 + 예정", "예정", "진행중"], key="f_span")
     with c3:
-        all_perks = sorted({p for v in df["perks"].fillna("") for p in _split(v)})
-        pick_perks = st.multiselect("특전", all_perks, placeholder="특전을 골라주세요 (중복 가능)")
+        # 날짜를 고르면 그날 열려 있는 곳만 보여 준다. 비워 두면 날짜로 거르지 않는다
+        # 날짜 칸은 값을 비워도 브라우저 화면에 예전 날짜가 남아서, 초기화 때마다 키 번호를 올려 새 칸으로 그린다
+        pick_day = st.date_input("날짜", value=None, key=f"f_date_{st.session_state.get('date_ver', 0)}",
+                                 format="YYYY.MM.DD", help="이 날짜에 진행 중인 곳만 봅니다")
 
     view = df.copy()
     if query.strip():
         q = query.strip()
         hit = lambda col: view[col].astype(str).str.contains(q, case=False, regex=False)
-        view = view[hit("cafe_name") | hit("characters") | hit("address")]
+        view = view[hit("cafe_name") | hit("work") | hit("characters") | hit("address")]
     if pick_work != "전체":
         view = view[view["work"] == pick_work]
     if pick_chars:
@@ -1214,14 +1292,14 @@ def page_map() -> None:
         same = lambda a, b: a == b or a in b or b in a
         view = view[view["characters"].fillna("").apply(
             lambda v: any(same(p, c) for p in pick_chars for c in _split(v)))]
-    if span == "진행 중 + 예정":
+    if span == "진행중 + 예정":
         view = view[view["end_date"] >= TODAY]
-    elif span == "이번 주":
-        week = TODAY + timedelta(days=7)
-        view = view[(view["start_date"] <= week) & (view["end_date"] >= TODAY)]
-    if pick_perks:
-        view = view[view["perks"].fillna("").apply(
-            lambda v: any(p in str(v) for p in pick_perks))]
+    elif span == "예정":
+        view = view[view["start_date"] > TODAY]
+    elif span == "진행중":
+        view = view[(view["start_date"] <= TODAY) & (view["end_date"] >= TODAY)]
+    if pick_day:
+        view = view[(view["start_date"] <= pick_day) & (view["end_date"] >= pick_day)]
     # 지역·정렬 고르기는 목록 바로 위에 있다. 고른 값은 지난 실행의 것을 쓴다 (정렬 기본: 최신순)
     df["area"] = df["address"].map(lambda a: geo.area_name(str(a or "")))
     view = view.assign(area=df.loc[view.index, "area"])
@@ -1370,10 +1448,14 @@ def _block_sensitive(*texts: str) -> bool:
 def _nav(next_label: str = "다음", next_ok: bool = True, on_next=None, primary: bool = True) -> None:
     """카드 아래 이전/다음 버튼. on_next 가 False 를 돌려주면 넘어가지 않는다."""
     w = _wiz()
-    b1, b2 = st.columns(2)
-    with b1:
-        if w["step"] > 0 and st.button("이전", width="stretch", key=f"prev_{w['step']}"):
-            _move(-1)
+    # 첫 단계는 '이전' 이 없으니 다음 버튼 하나를 카드 폭에 꽉 채운다 (반쪽에 치우치지 않게)
+    if w["step"] > 0:
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button("이전", width="stretch", key=f"prev_{w['step']}"):
+                _move(-1)
+    else:
+        b2 = st.container()
     with b2:
         if st.button(next_label, type="primary" if primary else "secondary", width="stretch",
                      disabled=not next_ok,
@@ -1390,7 +1472,95 @@ def _step_work(w: dict) -> None:
         w["work"], w["characters"] = pick, ", ".join(chars)
 
     bad = _block_sensitive(pick, *chars)
-    _nav("찾기" if not w["work"] else "다음", next_ok=bool(pick) and not bad, on_next=save)
+    _nav("다음", next_ok=bool(pick) and not bad, on_next=save)
+
+    # 공지 글이 이미 있으면 단계를 밟지 않고 한 화면에서 바로 등록한다
+    st.divider()
+    st.caption("공지 글이 있나요? 붙여넣기만 하면 한 화면에서 바로 등록할 수 있어요.")
+    if st.button("📝 공지로 간편등록", width="stretch", key="quick_start"):
+        w["quick"] = True
+        st.rerun()
+
+
+def _quick(w: dict) -> None:
+    """간편등록: 공지를 붙여넣고 '읽어오기' → 채워진 칸을 확인·수정 → 바로 등록."""
+    raw = st.text_area("공지", key="quick_raw", height=180, label_visibility="collapsed",
+                       placeholder="공지 글을 그대로 붙여넣어 주세요\n\n#OO 콜라보 카페\n카페명: ...\n"
+                                   "주소: ...\n기간: 2026.11.01 ~ 2026.11.30\n특전: ...\n굿즈: ...")
+    if st.button("읽어오기", type="primary", width="stretch", disabled=not raw.strip(), key="quick_read"):
+        if not _block_sensitive(raw):
+            got = cafe.parse_notice(raw, today=TODAY)
+            w.update({
+                "work": got["work"], "characters": ", ".join(got["characters"]),
+                "cafe_name": got["cafe_name"], "address": got["address"], "picked": None,
+                "start_date": got["start_date"] or TODAY,
+                "end_date": got["end_date"] or got["start_date"] or TODAY + timedelta(days=27),
+                "perks": ", ".join(got["perks"]), "goods": ", ".join(got["goods"]),
+                "tags": got["tags"], "links": got["links"], "quick_read": True,
+            })
+            w["v"] += 1
+            st.rerun()
+    if not w.get("quick_read"):
+        return
+
+    # 결과 화면에는 늘 어떤 방식으로 읽었는지 적는다 (지금은 AI 없이 규칙으로만 읽는다)
+    st.caption("🔧 규칙 기반으로 읽었어요. 비었거나 틀린 칸은 직접 고쳐 주세요.")
+    v_ = w["v"]
+    work, chars = pick_work_and_characters(w["work"], _split(w["characters"]), key=f"quick_{v_}")
+    name = st.text_input("카페명", value=w["cafe_name"], key=f"quick_cafe_{v_}", placeholder=_ask("카페명"))
+
+    def pick(c: geo.Candidate) -> None:
+        w["cafe_name"] = name.strip() or c.name
+        w["address"] = c.address
+        w["picked"] = _picked(c)
+        w["v"] += 1
+
+    addr = address_field(w["address"], key=f"quick_{v_}", on_pick=pick,
+                         placeholder=f"{_ask('주소')} (예: 서울 마포구 ...)")
+    d1, d2 = st.columns(2)
+    start = d1.date_input("시작", value=w["start_date"], key=f"quick_start_{v_}")
+    end = d2.date_input("종료", value=w["end_date"], key=f"quick_end_{v_}")
+    perks = st.text_input("특전", value=w["perks"], key=f"quick_perks_{v_}", help="쉼표로 구분")
+    goods = st.text_input("굿즈", value=w["goods"], key=f"quick_goods_{v_}", help="쉼표로 구분")
+    tags = st.pills("이벤트 추가 정보", cafe.EVENT_TAGS, selection_mode="multi", default=w["tags"],
+                    key=f"quick_tags_{v_}")
+    links, bad_links = _links_field("\n".join(w["links"]), key=f"quick_links_{v_}")
+    poster = st.file_uploader(f"포스터 (선택, 1장 · ~ {images.POSTER_MB} MB)", type=images.TYPES,
+                              key=f"quick_poster_{v_}")
+    big = bool(poster) and images.too_big(poster.getvalue(), images.POSTER_MB)
+    if big:
+        st.error(f"포스터는 {images.POSTER_MB} MB 까지 올릴 수 있습니다.")
+
+    entry = None
+    ready = bool(work and name.strip() and addr.strip())
+    if ready:
+        entry = CafeEntry(cafe_name=name.strip(), work=work, characters=chars, address=addr.strip(),
+                          start_date=start, end_date=end, perks=_split(perks), goods=_split(goods),
+                          confidence="high")
+        v = guard.validate_cafe(entry, today=TODAY, existing=store.current_rows())
+        for warn in v.warnings:
+            st.warning(warn)
+        for err in v.errors:
+            st.error(err)
+        ready = v.ok
+    else:
+        st.caption("작품 · 카페명 · 주소를 채우면 등록할 수 있어요.")
+    bad = _block_sensitive(name, addr, perks, goods)
+
+    if st.button("등록하기", type="primary", width="stretch", key="quick_save",
+                 disabled=not ready or bad or bad_links or big):
+        g = locate(entry.address, w.get("picked") if addr.strip() == w["address"] else None)
+        if not g.ok:
+            st.error(g.note)
+            return
+        saved = [images.save(poster.name, poster.getvalue())] if poster else []
+        store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="간편 등록",
+                                       note=f"{g.badge} ({g.matched})",
+                                       images=saved, tags=tags, links=links))
+        st.session_state["save_report"] = {"saved": [(entry.cafe_name, g.badge)], "blocked": []}
+        for k in ("wiz", "raw", "quick_raw", "addr_hits"):
+            st.session_state.pop(k, None)
+        go("map")
 
 
 def _ask(label: str) -> str:
@@ -1634,6 +1804,17 @@ def page_add() -> None:
             go("map")
 
     _, mid, _ = st.columns([1, 2, 1])
+    if w.get("quick"):
+        # 간편등록은 단계 없이 한 화면. '단계별로 등록' 을 누르면 읽어 온 값을 그대로 들고 1단계로 간다
+        with mid, st.container(border=True):
+            st.markdown('<div class="wiz-title">공지로 간편등록</div>', unsafe_allow_html=True)
+            st.markdown('<div class="wiz-icon">📝</div>', unsafe_allow_html=True)
+            _quick(w)
+            if st.button("단계별로 등록하기", width="stretch", key="quick_off"):
+                w["quick"], w["step"] = False, 0
+                w["v"] += 1
+                st.rerun()
+        return
     with mid:
         pct = (step + 1) / len(STEPS) * 100
         st.markdown(
