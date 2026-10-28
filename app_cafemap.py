@@ -191,7 +191,7 @@ def pick_work_and_characters(work: str, characters: list[str], key: str) -> tupl
     options += [c for c in default if c not in options]
     chars = st.multiselect(
         "캐릭터", options, default=default, accept_new_options=True,
-        placeholder="캐릭터 고르기 · 없으면 이름을 입력하고 Enter" if pick else "작품을 먼저 고르세요",
+        placeholder="캐릭터 고르기 · 없으면 이름을 입력하고 Enter" if pick else "작품을 먼저 골라주세요",
         disabled=not pick, key=f"chars_{key}_{pick}",
     )
     return pick, chars
@@ -841,9 +841,12 @@ def render_list(view: pd.DataFrame, wide: bool = False) -> None:
                     area = geo.area_name(str(r.get("address") or ""))
                     st.markdown((f":green-badge[📍 {area}] " if area else "") + f":{color}-badge[{label}]")
                     chars = str(r.get("characters") or "").strip()
-                    # 작품 이름을 먼저(굵게), 그 아래에 카페 이름 · 캐릭터
-                    st.markdown(f"**{_plain(r['work'])}**  \n:gray[☕ {_plain(r['cafe_name'])}"
-                                + (f" · {_plain(chars)}" if chars else "") + "]")
+                    # 작품 이름을 먼저(굵게), 그 아래에 카페 이름(회색) · 캐릭터(민트)
+                    st.markdown(
+                        f'<p class="ctitle"><strong>{escape(str(r["work"]))}</strong><br/>'
+                        f'<span class="ccafe">☕ {escape(str(r["cafe_name"]))}</span>'
+                        + (f'<span class="ccafe"> · </span><span class="cchars">{escape(chars)}</span>' if chars else "")
+                        + "</p>", unsafe_allow_html=True)
                     st.markdown(f'<div class="chips">{_chips(r)}</div>', unsafe_allow_html=True)
                 st.caption(
                     f"🗓️ {r['start_date']} ~ {r['end_date']}  \n"
@@ -855,7 +858,7 @@ def render_list(view: pd.DataFrame, wide: bool = False) -> None:
                 gifts = "".join(f'<span class="chip perk">🎁 {escape(x)}</span>'
                                 for x in _split(r.get("perks") or ""))
                 if gifts:
-                    st.markdown(f'<div class="chips">{gifts}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="chips gifts">{gifts}</div>', unsafe_allow_html=True)
                 open_button(r)
 
 
@@ -928,6 +931,11 @@ iframe[src*="kakao_map"] {{
 .chip {{ font-size:12.5px; font-weight:600; padding:3px 10px; border-radius:999px; background:{MINT_SOFT};
         color:{MINT_DEEP}; border:1px solid {MINT}; white-space:nowrap; }}
 .chip.tag {{ background:{MINT}; color:#fff; border-color:{MINT}; }}
+/* 반반 보기 카드: 카페 이름은 회색, 캐릭터 이름은 민트 포인트 */
+.ctitle .ccafe {{ color: #6b7672; }}
+.ctitle .cchars {{ color: {MINT_DEEP}; font-weight: 600; }}
+/* 반반 보기 카드 맨 아래 특전 칩 줄: 카드 아래 테두리와 한 칸 띄운다 */
+.chips.gifts {{ margin: 2px 0 22px; }}
 .chip.perk {{ background:{MINT}; color:#fff; border-color:{MINT}; white-space:normal; line-height:1.4; }}
 /* 상세 화면의 특전·굿즈 칩: 크게, 긴 문구는 줄바꿈 */
 .dchips {{ margin:4px 0 14px; }}
@@ -1186,13 +1194,13 @@ def page_map() -> None:
         chars = _characters_by_work().get(pick_work, []) if pick_work != "전체" else []
         pick_chars = st.multiselect(
             "캐릭터", chars, key=f"filter_chars_{pick_work}", disabled=pick_work == "전체",
-            placeholder="캐릭터 고르기" if pick_work != "전체" else "작품을 먼저 고르세요",
+            placeholder="캐릭터 고르기" if pick_work != "전체" else "작품을 먼저 골라주세요",
         )
     with c2:
         span = st.selectbox("기간", ["진행 중 + 예정", "이번 주", "전체"])
     with c3:
         all_perks = sorted({p for v in df["perks"].fillna("") for p in _split(v)})
-        pick_perks = st.multiselect("특전", all_perks)
+        pick_perks = st.multiselect("특전", all_perks, placeholder="특전을 골라주세요 (중복 가능)")
 
     view = df.copy()
     if query.strip():
