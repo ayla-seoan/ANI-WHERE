@@ -1,7 +1,8 @@
-streamlit>=1.60
+streamlit>=1.66
 openai>=1.60
 pydantic>=2.9
 pandas>=2.2
 gspread>=6.1
 google-auth>=2.35
 python-dotenv>=1.0
+requests>=2.31
