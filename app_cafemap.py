@@ -1864,10 +1864,26 @@ def _quick_report(got: dict) -> None:
         st.caption(" · ".join(e for e in extra if e) + " (저장 칸이 없어 참고로만 보여 줘요)")
 
 
+# 간편등록 공지 입력칸에 미리 보이는 안내 (입력하면 사라진다)
+QUICK_PLACEHOLDER = """공지 내용을 그대로 붙여넣어 주세요.
+
+SNS, 블로그, 공식 홈페이지 등 어디서 가져온 공지든 괜찮아요. 읽어오기를 누르면 행사 정보를 자동으로 정리해 드려요.
+
+입력 예시)
+
+명일방주 콜라보 카페 오픈!
+기간: 2026.10.16 ~ 11.17
+장소: 애니메이트 카페 홍대점
+주소: 서울 마포구 양화로 188 AK&홍대 5층
+구매 금액별 한정 특전 증정!
+
+※ 정리된 정보는 등록 전에 확인하고 수정할 수 있어요."""
+
+
 def _quick(w: dict) -> None:
     """간편등록: 공지를 붙여넣고 '읽어오기' → 채워진 칸을 확인·수정 → 바로 등록."""
-    raw = st.text_area("공지", key="quick_raw", height=180, label_visibility="collapsed",
-                       placeholder="공지 글을 그대로 붙여넣어 주세요\n\n읽어오기 클릭 시 자동으로 항목이 입력됩니다.")
+    raw = st.text_area("공지", key="quick_raw", height=300, label_visibility="collapsed",
+                       placeholder=QUICK_PLACEHOLDER)
     # 비었는지는 화면에서 바로 본다 (_live_send). 입력칸은 칸을 벗어나야 값이 넘어와서
     # 여기서 막으면 글을 붙여넣어도 버튼이 계속 꺼져 있다
     if st.button("읽어오기", type="primary", width="stretch", key="quick_read"):
