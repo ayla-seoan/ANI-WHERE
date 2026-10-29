@@ -2057,7 +2057,10 @@ DAILY_CSS = f"""
   .dn-thumb {{ flex-basis: 30px; height: 30px; }}
   .dn-item {{ gap: 6px; }}
   .dn-item:not(:last-child)::before {{ left: 14px; top: 32px; }}
-  .dn-list {{ max-height: max(320px, 58vh); }}
+  /* 데일리 팝업 노트는 옆 지도(높이 58vh, 최소 320px)와 딱 같은 높이까지만, 목록은 그 안에서 스크롤 */
+  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {{
+    height: max(320px, 58vh) !important; overflow: hidden !important; }}
+  .dn-list {{ max-height: calc(max(320px, 58vh) - 136px); }}   /* 136px = 위 상자 + 목록 위 여백 */
 }}
 </style>
 """
