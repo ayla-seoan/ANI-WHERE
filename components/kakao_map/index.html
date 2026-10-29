@@ -3,49 +3,63 @@
 <head>
 <meta charset="utf-8" />
 <style>
+  /* 포인트 컬러 (map-template.html) — 이 두 줄만 바꾸면 지도 전체 톤이 바뀐다 */
+  :root { --accent: #14b8a6; --accent-soft: #e6fbf7; --line: #e5e7eb; --fg: #1a1d21; --muted: #6b7280; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+  body { font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo",
                       "Malgun Gothic", "Noto Sans KR", sans-serif; }
-  #map { width: 100%; height: 100%; border-radius: 20px; overflow: hidden; }
-  .dot {
-    width: 14px; height: 14px; border-radius: 50%; cursor: pointer;
-    background: rgba(86, 194, 167, .95); border: 2px solid #fff;
-    box-shadow: 0 1px 4px rgba(0,0,0,.3); transition: transform .12s;
+  #map { width: 100%; height: 100%; border-radius: 14px; overflow: hidden; background: var(--line);
+         border: 1px solid var(--line); }
+  /* 핀: 물방울 모양 (네모를 45도 돌려 한쪽 모서리만 뾰족하게). 고른 카페는 크고 분홍 */
+  .pin {
+    width: 26px; height: 26px; border-radius: 50% 50% 50% 0; cursor: pointer;
+    background: var(--accent); transform: rotate(-45deg); border: 2px solid #fff;
+    box-shadow: 0 2px 8px rgba(20, 184, 166, .45); transition: filter .12s;
   }
-  .dot:hover { transform: scale(1.3); }
-  .dot.sel { width: 22px; height: 22px; background: rgba(255, 143, 163, .98); }
+  .pin:hover { filter: brightness(1.12); }
+  .pin.sel { width: 34px; height: 34px; background: #ff8fa3; box-shadow: 0 2px 10px rgba(255, 143, 163, .55); }
+  /* 지도 그림 바꾸기 버튼 (오른쪽 위): 밝은 회색 / 컬러 / 다크 */
+  #styles { position: absolute; top: 10px; right: 10px; z-index: 900; display: flex; gap: 6px; }
+  #styles button { font: inherit; font-size: 12px; padding: 5px 11px; cursor: pointer; background: #fff;
+                   color: var(--fg); border: 1px solid var(--line); border-radius: 999px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  #styles button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
+                                        background: var(--accent-soft); font-weight: 700; }
   /* 커서를 올리면 뜨는 카드: 포스터 · 작품 · 카페 · 위치 · 기간 */
-  .card { width: 250px; background: #fff; border-radius: 14px; padding: 8px;
+  .card { width: 250px; background: #fff; border-radius: 14px; padding: 8px; border-top: 3px solid var(--accent);
           box-shadow: 0 6px 20px rgba(0,0,0,.18); color: #26302d; font-size: 12px; line-height: 1.4;
           white-space: normal; pointer-events: none; }
   .card .item { display: flex; gap: 9px; align-items: flex-start; }
   .card .item + .item { margin-top: 8px; padding-top: 8px; border-top: 1px solid #eef2f0; }
   .card img { width: 58px; height: 78px; object-fit: cover; border-radius: 8px; flex: 0 0 auto;
               background: #f1f3f2; }
-  .card .w { font-weight: 800; font-size: 13.5px; color: #2E9C82; margin-bottom: 2px; }
+  .card .w { font-weight: 800; font-size: 13.5px; color: #0d9488; margin-bottom: 2px; }
   .card .c { font-weight: 600; margin-bottom: 3px; }
-  .card .a, .card .d { color: #5f6b67; font-size: 11.5px; }
-  .card .more { margin-top: 6px; color: #2E9C82; font-weight: 700; font-size: 11.5px; }
-  .kcard { position: relative; bottom: 26px; }
+  .card .a { color: #5f6b67; font-size: 11.5px; }
+  .card .d, #spot .d { color: var(--accent-deep, #0d9488); font-size: 11.5px; font-weight: 700; }
+  .card .more { margin-top: 6px; color: #0d9488; font-weight: 700; font-size: 11.5px; }
+  .kcard { position: relative; bottom: 40px; }
   /* 같은 자리에 팝업이 여러 개일 때 점을 누르면 뜨는 목록 창 */
   body { position: relative; }
-  #spot { display: none; position: absolute; left: 12px; top: 12px; z-index: 1000; width: 300px;
-          max-height: calc(100% - 24px); overflow-y: auto; background: #fff; border-radius: 16px;
-          box-shadow: 0 8px 28px rgba(0,0,0,.22); padding: 10px; }
+  #spot { display: none; position: absolute; left: 12px; top: 12px; z-index: 1000; width: 250px;
+          max-height: calc(100% - 24px); overflow-y: auto; background: #fff; border-radius: 14px;
+          border-top: 3px solid var(--accent); color: #26302d; font-size: 12px; line-height: 1.4;
+          box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 8px; }
   #spot.open { display: block; }
-  #spot .head { display: flex; align-items: center; justify-content: space-between; margin: 2px 4px 8px;
-                font-weight: 800; font-size: 13.5px; color: #2E9C82; }
-  #spot .x { border: 0; background: #f1f3f2; width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
-             font-size: 14px; color: #5f6b67; }
-  #spot .item { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 12px; cursor: pointer;
+  #spot .head { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 6px;
+                font-weight: 700; font-size: 11.5px; color: #5f6b67; }
+  #spot .x { border: 0; background: #f1f3f2; width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+             font-size: 13px; line-height: 1; color: #5f6b67; }
+  #spot .item { display: flex; gap: 9px; align-items: flex-start; padding: 4px; border-radius: 10px; cursor: pointer;
                 transition: background .15s; }
-  #spot .item:hover { background: #e6f6f0; }
-  #spot .item + .item { margin-top: 2px; }
-  #spot img { width: 46px; height: 62px; object-fit: cover; border-radius: 8px; flex: 0 0 auto; background: #f1f3f2; }
-  #spot .w { font-weight: 800; font-size: 13px; color: #26302d; }
-  #spot .c, #spot .d { font-size: 11.5px; color: #5f6b67; }
-  #spot .go { margin-left: auto; color: #56C2A7; font-size: 18px; }
+  #spot .item:hover { background: var(--accent-soft); }
+  #spot .item + .item { margin-top: 4px; padding-top: 8px; border-top: 1px solid #eef2f0; }
+  #spot img { width: 58px; height: 78px; object-fit: cover; border-radius: 8px; flex: 0 0 auto; background: #f1f3f2; }
+  #spot .w { font-weight: 800; font-size: 13.5px; color: #0d9488; margin-bottom: 2px; }
+  #spot .c { font-weight: 600; margin-bottom: 3px; }
+  #spot .a { color: #5f6b67; font-size: 11.5px; }
+  #spot .go { margin-left: auto; color: var(--accent); font-size: 18px; }
   .leaflet-tooltip.tip-l { background: transparent; border: 0; box-shadow: none; padding: 0; }
   .leaflet-tooltip.tip-l::before { display: none; }
   .msg { padding: 24px; font-size: 13px; color: #6b6b76; line-height: 1.6; }
@@ -54,6 +68,7 @@
 <body>
 <div id="map"></div>
 <div id="spot"></div>
+<div id="styles"></div>
 
 <script>
 /* ---------- Streamlit 연결 (빌드 없이 쓰는 기본 핸드셰이크) ---------- */
@@ -72,6 +87,9 @@ const KOREA = { lat: 36.3, lng: 127.8 };
 // 처음 화면: 북쪽 포천부터 남쪽 제주까지 (서쪽 제주·인천, 동쪽 포항·울산). 이 범위가 다 보이는 가장 큰 확대가
 // 처음 화면이자 '가장 많이 축소한' 화면이다
 const MAINLAND_JEJU = { south: 33.15, west: 126.1, north: 37.95, east: 129.45 };
+// 처음 화면 범위: 앱이 넘겨주는 '팝업이 가장 많은 지역'(args.home). 없으면 포천~제주 전체
+let HOME = null;
+const homeBox = () => HOME || MAINLAND_JEJU;
 
 function showMessage(html) {
   document.getElementById("map").innerHTML = '<div class="msg">' + html + "</div>";
@@ -101,28 +119,33 @@ const abs = (u) => new URL(u, window.parent.location.href).href;
 let ALL = [];
 const sameSpot = (p) => ALL.filter((q) => q.lat === p.lat && q.lng === p.lng);
 
-function closeSpot() { document.getElementById("spot").classList.remove("open"); }
+function closeSpot() { document.getElementById("spot").classList.remove("open"); spotOf = null; }
 
-// 점을 눌렀을 때: 같은 자리에 팝업이 하나면 바로 상세, 여럿이면 지도 안에 목록 창을 띄운다
+// 점을 눌렀을 때: 하나든 여럿이든 먼저 지도 안에 목록 창으로 미리 보여 준다.
+// 목록의 팝업을 누르거나, 팝업이 하나인 점을 한 번 더 누르면 상세로 간다
+let spotOf = null;      // 지금 열린 목록 창이 어느 점의 것인지 (점 id)
 function onPick(p) {
   const here = sameSpot(p);
-  if (here.length <= 1) { closeSpot(); pick(p.id); return; }
   const box = document.getElementById("spot");
+  if (box.classList.contains("open") && here.length === 1 && spotOf === p.id) {
+    closeSpot(); pick(p.id); return;
+  }
+  spotOf = p.id;
   box.innerHTML = "";
   const head = document.createElement("div"); head.className = "head";
-  const t = document.createElement("span"); t.textContent = `📍 이 자리의 팝업 ${here.length}곳`;
-  const x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "닫기";
+  const t = document.createElement("span");
+  t.textContent = here.length > 1 ? `이 자리의 팝업 ${here.length}곳` : "팝업 미리보기";
+  const x = document.createElement("button"); x.className = "x"; x.textContent = "×"; x.title = "닫기";
   x.onclick = (e) => { e.stopPropagation(); closeSpot(); };
   head.appendChild(t); head.appendChild(x); box.appendChild(head);
   here.forEach((q) => {
     const item = document.createElement("div"); item.className = "item";
     const img = document.createElement("img"); img.src = abs(q.poster); img.alt = "";
     const info = document.createElement("div");
-    [["w", q.work], ["c", "☕ " + q.cafe], ["d", "🗓️ " + q.dates]].forEach(([cls, text]) => {
+    [["w", q.work], ["c", q.cafe], ["a", q.address], ["d", q.dates]].forEach(([cls, text]) => {
       const d = document.createElement("div"); d.className = cls; d.textContent = text; info.appendChild(d);
     });
-    const go = document.createElement("span"); go.className = "go"; go.textContent = "›";
-    item.appendChild(img); item.appendChild(info); item.appendChild(go);
+    item.appendChild(img); item.appendChild(info);
     item.onclick = () => { closeSpot(); pick(q.id); };
     box.appendChild(item);
   });
@@ -139,7 +162,7 @@ function tipCard(p) {
     const item = document.createElement("div"); item.className = "item";
     const img = document.createElement("img"); img.src = abs(q.poster); img.alt = "";
     const box = document.createElement("div");
-    [["w", q.work], ["c", "☕ " + q.cafe], ["a", "📍 " + q.address], ["d", "🗓️ " + q.dates]].forEach(([cls, text]) => {
+    [["w", q.work], ["c", q.cafe], ["a", q.address], ["d", q.dates]].forEach(([cls, text]) => {
       const d = document.createElement("div"); d.className = cls; d.textContent = text; box.appendChild(d);
     });
     item.appendChild(img); item.appendChild(box); card.appendChild(item);
@@ -172,6 +195,7 @@ const Kakao = {
     });
     this.overview();
     this.map.addControl(new K.ZoomControl(), K.ControlPosition.RIGHT);
+    document.getElementById("styles").style.display = "none";   // 지도 그림 바꾸기는 기본 지도에서만
     // 카카오맵에는 이동 범위 옵션이 없어서, 벗어나면 가운데를 범위 안으로 되돌린다
     const clamp = () => {
       const c = this.map.getCenter();
@@ -186,12 +210,14 @@ const Kakao = {
   },
 
   // 포천~제주가 다 보이게 맞추고, 그 화면보다 더 축소하지 못하게 한다
+  // 축소 한계는 포천~제주 전체, 처음 화면은 팝업이 가장 많은 지역(homeBox)
   overview() {
     const K = kakao.maps;
+    const box = (b) => new K.LatLngBounds(new K.LatLng(b.south, b.west), new K.LatLng(b.north, b.east));
     this.map.setMaxLevel(14);
-    this.map.setBounds(new K.LatLngBounds(new K.LatLng(MAINLAND_JEJU.south, MAINLAND_JEJU.west),
-                                          new K.LatLng(MAINLAND_JEJU.north, MAINLAND_JEJU.east)), 0, 0, 0, 0);
+    this.map.setBounds(box(MAINLAND_JEJU), 0, 0, 0, 0);
     this.map.setMaxLevel(this.map.getLevel());
+    if (HOME) this.map.setBounds(box(HOME), 20, 20, 20, 20);
   },
 
   draw(points, selected) {
@@ -203,7 +229,7 @@ const Kakao = {
     points.forEach((p) => {
       const pos = new K.LatLng(p.lat, p.lng);
       const el = document.createElement("div");
-      el.className = "dot" + (p.id === selected ? " sel" : "");
+      el.className = "pin" + (p.id === selected ? " sel" : "");
       el.onclick = () => onPick(p);
       el.onmouseenter = () => {
         const t = tipCard(p);
@@ -212,8 +238,9 @@ const Kakao = {
         this.tip.setMap(this.map);
       };
       el.onmouseleave = () => { if (this.tip) { this.tip.setMap(null); this.tip = null; } };
+      // 물방울 핀은 아래 뾰족한 끝이 카페 자리에 오도록 아래 가운데를 기준점으로 둔다
       const o = new K.CustomOverlay({
-        position: pos, content: el, zIndex: p.id === selected ? 2 : 1, clickable: true,
+        position: pos, content: el, zIndex: p.id === selected ? 2 : 1, clickable: true, xAnchor: 0.5, yAnchor: 1.15,
       });
       o.setMap(this.map);
       this.overlays.push(o);
@@ -243,11 +270,9 @@ const Basic = {
     });
     this.overview();
     // 지도 칸 크기가 바뀌면 축소 한계만 다시 잰다 (보고 있던 위치는 그대로)
-    window.addEventListener("resize", () => this.overview(false));
-    // CARTO 타일은 이제 키가 있어야 해서("API KEY REQUIRED"), 키 없이 되는 OpenStreetMap 을 쓴다
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap", maxZoom: 19,
-    }).addTo(this.map);
+    // 처음 맞출 때 지도 칸 크기가 아직 0 이었으면(화면에 막 붙는 중) 크기가 생긴 뒤 처음 화면으로 다시 맞춘다
+    window.addEventListener("resize", () => this.overview(this.homePending));
+    this.styles();
     this.layer = L.layerGroup().addTo(this.map);
     // 점을 눌러도 지도가 마우스를 붙잡아 클릭이 점에 오지 않을 때가 있고, 누르는 순간 브라우저가 지도 칸에
     // 초점을 주며 페이지를 스크롤해 뗄 때의 위치가 어긋나기도 한다. 그래서 '누른 순간의 위치' 에서
@@ -261,10 +286,10 @@ const Basic = {
     box.addEventListener("click", (ev) => {
       if (ev.target.closest && ev.target.closest(".leaflet-control")) return;      // 확대·축소 버튼은 그대로
       if (dragged || !downAt) return;
-      let best = null, bestD = 12;
+      let best = null, bestD = 18;
       ALL.forEach((p) => {
         const q = this.map.latLngToContainerPoint([p.lat, p.lng]);
-        const d = Math.hypot(q.x - downAt.x, q.y - downAt.y);
+        const d = Math.hypot(q.x - downAt.x, q.y - 16 - downAt.y);   // 핀 몸통은 자리보다 위에 있다
         if (d < bestD) { bestD = d; best = p; }
       });
       if (best) { this.layer.eachLayer((l) => l.closeTooltip()); onPick(best); }
@@ -272,16 +297,54 @@ const Basic = {
     }, true);
   },
 
+  // 지도 그림(타일) 3가지 — map-template.html 의 '밝은 회색 / 컬러 / 다크'.
+  // 템플릿의 CARTO 는 이제 키가 있어야 해서("API KEY REQUIRED"), 키 없이 되는 Esri 회색 지도와 OpenStreetMap 을 쓴다.
+  // 고른 그림은 이 브라우저에 기억해 둔다
+  styles() {
+    const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
+    const esri = "&copy; Esri &copy; OpenStreetMap";
+    const STYLES = {
+      "밝은 회색": [[ESRI + "World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", esri],
+                  [ESRI + "World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", ""]],
+      "컬러": [["https://tile.openstreetmap.org/{z}/{x}/{y}.png", "&copy; OpenStreetMap"]],
+      "다크": [[ESRI + "World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", esri],
+              [ESRI + "World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", ""]],
+    };
+    let saved = "밝은 회색";
+    try { saved = localStorage.getItem("aniwhere-map-style") || saved; } catch (e) {}
+    if (!STYLES[saved]) saved = "밝은 회색";
+    let layers = [];
+    const use = (key) => {
+      layers.forEach((l) => this.map.removeLayer(l));
+      layers = STYLES[key].map(([url, attribution]) =>
+        // Esri 회색 지도는 한국에서 13 단계까지만 그림이 있다 (14 부터는 'Map data not yet available').
+        // 그보다 확대하면 13 단계 그림을 늘려서 보여 준다
+        L.tileLayer(url, { attribution, maxZoom: 19, maxNativeZoom: key === "컬러" ? 19 : 13 }).addTo(this.map));
+      layers.forEach((l) => l.bringToBack());
+      [...bar.children].forEach((b) => b.setAttribute("aria-pressed", b.textContent === key ? "true" : "false"));
+      try { localStorage.setItem("aniwhere-map-style", key); } catch (e) {}
+    };
+    const bar = document.getElementById("styles");
+    bar.innerHTML = "";
+    Object.keys(STYLES).forEach((key) => {
+      const b = document.createElement("button");
+      b.textContent = key;
+      b.onclick = (e) => { e.stopPropagation(); use(key); };
+      bar.appendChild(b);
+    });
+    use(saved);
+  },
+
   draw(points, selected) {
     this.layer.clearLayers();
     points.forEach((p) => {
       const sel = p.id === selected;
-      L.circleMarker([p.lat, p.lng], {
-        radius: sel ? 11 : 8, weight: 2.5, color: "#fff", fillOpacity: .95,
-        bubblingMouseEvents: false,   // 점 클릭이 지도 빈 곳 클릭(목록 닫기)으로 번지지 않게
-        fillColor: sel ? "rgb(255, 143, 163)" : "rgb(86, 194, 167)",
-      })
-        .bindTooltip(() => tipCard(p), { className: "tip-l", direction: "top", offset: [0, -10], opacity: 1 })
+      // 물방울 핀 (map-template.html): 아래 뾰족한 끝이 카페 자리. 고른 카페는 크고 분홍
+      const size = sel ? 34 : 26;
+      const icon = L.divIcon({ className: "", html: `<div class="pin${sel ? " sel" : ""}"></div>`,
+                               iconSize: [size, size], iconAnchor: [size / 2, size + 4] });
+      L.marker([p.lat, p.lng], { icon, zIndexOffset: sel ? 1000 : 0, bubblingMouseEvents: false })
+        .bindTooltip(() => tipCard(p), { className: "tip-l", direction: "top", offset: [0, -size - 6], opacity: 1 })
         .addTo(this.layer);
     });
   },
@@ -290,8 +353,20 @@ const Basic = {
   overview(move = true) {
     const b = L.latLngBounds([MAINLAND_JEJU.south, MAINLAND_JEJU.west], [MAINLAND_JEJU.north, MAINLAND_JEJU.east]);
     this.map.invalidateSize();
-    this.map.setMinZoom(this.map.getBoundsZoom(b));
-    if (move) { this.focused = null; this.map.fitBounds(b, { animate: false }); }
+    const size = this.map.getSize();
+    if (move && (size.x < 50 || size.y < 50)) {             // 아직 크기가 없으면 맞추지 않고 다음 resize 를 기다린다
+      this.homePending = true;
+      setTimeout(() => { if (this.homePending) this.overview(true); }, 300);
+      return;
+    }
+    this.homePending = false;
+    this.map.setMinZoom(this.map.getBoundsZoom(b));      // 축소 한계는 포천~제주 전체
+    if (move) {                                             // 처음 화면은 내 주변 (위치를 모르면 팝업이 가장 많은 지역)
+      const h = homeBox();
+      this.focused = null;
+      this.map.fitBounds(L.latLngBounds([h.south, h.west], [h.north, h.east]),
+                         { animate: false, padding: [20, 20], maxZoom: 13 });   // 회색 지도가 또렷한 단계까지만
+    }
     // 칸 크기가 바뀌어도 상세에서 보던 카페 위치는 그대로 가운데에 둔다
     else if (this.focused) this.map.setView([this.focused.lat, this.focused.lng], this.map.getZoom(), { animate: false });
   },
@@ -320,18 +395,29 @@ function draw(args) {
   if (!engine.map) engine.init();
   engine.draw(points, selected);
 
-  const view = JSON.stringify([selected, points.map((p) => p.id)]);
+  const view = JSON.stringify([selected, points.map((p) => p.id), HOME]);
   if (view === lastView || !points.length) return;
   lastView = view;
   const focus = points.find((p) => p.id === selected);
   if (focus) engine.focus(focus);
   else if (points.length === 1) engine.focus(points[0]);
-  else engine.fit(points);
+  else {
+    engine.fit(points);
+    // 처음 그릴 때 지도 칸이 아직 자리를 잡는 중이면 맞춘 범위가 전국으로 풀려 버린다.
+    // 사용자가 지도를 건드리지 않았으면 잠시 뒤 한 번 더 처음 화면(내 주변)으로 맞춘다
+    touched = false;
+    const again = view;
+    [400, 1200].forEach((ms) => setTimeout(() => { if (!touched && lastView === again) engine.fit(points); }, ms));
+  }
 }
+let touched = false;      // 사용자가 지도를 끌거나 확대·축소했는지
+["pointerdown", "wheel", "touchstart"].forEach((t) =>
+  document.getElementById("map").addEventListener(t, () => { touched = true; }, { passive: true, capture: true }));
 
 window.addEventListener("message", (event) => {
   if (!event.data || event.data.type !== "streamlit:render") return;
   const args = event.data.args || {};
+  HOME = args.home || null;
   // 지도는 iframe 높이를 그대로 채운다 (앱 CSS 가 화면 높이에 맞춰 iframe 높이를 바꿀 수 있다)
   Streamlit.height(args.height || 600);
 

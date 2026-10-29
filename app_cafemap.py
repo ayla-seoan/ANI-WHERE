@@ -27,7 +27,8 @@ import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 from common import (ai, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
-                    kakao_postcode, notice, notion_sync, review, share)
+                    kakao_postcode, mycal, notice, notion_sync, review, share)
+from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
 from common.schema import CafeEntry
 from common.storage import Storage
 
@@ -51,6 +52,9 @@ GLOBAL_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+/* @import 는 맨 앞에 와야 해서(앞에 다른 규칙이 있으면 폰트가 무시된다) 변수는 그 뒤에 둔다 */
+/* 포인트 컬러 변수 (map-template.html 과 같은 값). 지도·등록하기 버튼 등이 쓴다 */
+:root {{ --accent: #14b8a6; --accent-soft: #e6fbf7; --accent-deep: #0d9488; }}
 html, body, [class*="st-"], .stMarkdown, button, input, textarea {{
   font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }}
 /* 위의 글꼴 지정이 아이콘 글꼴까지 덮지 않게 (안 그러면 '_arrow_right' 같은 이름 글자가 보인다) */
@@ -91,14 +95,37 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 모바일(폭 640px 이하, 칸이 세로로 쌓이는 화면)에서는 위에 붙는 것 없이 그냥 함께 스크롤한다
    (메인·등록 화면의 상단 묶음, 메인의 지도 칸) */
 @media (max-width: 640px) {{
+  /* 세로로 쌓인 칸은 화면 폭을 다 쓴다. Streamlit 기본값(전체 폭 - 1.5rem)이면 오른쪽만 24px 비어
+     지도·리스트가 왼쪽으로 쏠려 보였다. 한 줄로 둔 칸(카드 포스터·상세 제목 등)은 더 구체적인 규칙이 덮어쓴다 */
+  [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
+    width: 100% !important; min-width: 100% !important; flex: 1 1 100% !important; }}
   [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ position: static !important; box-shadow: none !important; }}
   [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{ position: static !important; }}
 }}
-/* 등록 화면의 홈으로: 둘째 줄 오른쪽 끝, 흰 바탕에 민트 테두리·글자 (지도보기 버튼과 같은 모양) */
+/* 메인 '등록하기'·상세 '리스트로 돌아가기'·등록 화면 '홈으로 돌아가기' 버튼:
+   포인트 색으로 채운 둥근 사각형, 흰 굵은 글자 (공식 안내 보기 버튼 모양) */
+.st-key-add_btn button, .st-key-back_to_list button, .st-key-wiz_home button {{ background: var(--accent) !important; border: 0 !important; border-radius: 10px !important;
+  min-height: 0 !important; height: 32px !important; width: auto !important; padding: 0 .9rem !important;
+  box-shadow: 0 3px 10px rgba(20,184,166,.3) !important; }}
+.st-key-add_btn, .st-key-back_to_list, .st-key-wiz_home, .st-key-add_btn > div, .st-key-back_to_list > div, .st-key-wiz_home > div {{ display: flex !important; justify-content: flex-end !important; }}
+.st-key-add_btn button, .st-key-back_to_list button, .st-key-wiz_home button {{ margin-left: auto !important; }}
+.st-key-add_btn button p, .st-key-back_to_list button p, .st-key-wiz_home button p {{ color: #fff !important; font-weight: 800 !important; font-size: .92rem !important;
+  letter-spacing: .01em; white-space: pre; }}
+.st-key-add_btn button:hover, .st-key-back_to_list button:hover, .st-key-wiz_home button:hover {{ background: var(--accent-deep) !important; transform: translateY(-1px); }}
+/* '팔로우' 스위치 (팔로우한 곳만 보기). 키에 'fav_' 를 쓰지 않는다 — 카드 팔로우 버튼 규칙([class*="st-key-fav_"])에 걸리지 않게 */
+[class*="st-key-folsw"] button {{ position: relative; min-height: 0 !important; height: 24px; min-width: 70px;
+  border-radius: 999px !important; border: 0 !important; background: #E4E8E6 !important;
+  padding: 0 9px 0 25px !important; transition: background .15s; }}
+[class*="st-key-folsw"] button::before {{ content: ""; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: left .15s; }}
+[class*="st-key-folsw"] button p {{ font-size: .7rem !important; font-weight: 800 !important; color: #5B6663 !important; }}
+[class*="st-key-folsw"][class*="_on"] button {{ background: var(--accent) !important; padding: 0 25px 0 9px !important; }}
+[class*="st-key-folsw"][class*="_on"] button::before {{ left: calc(100% - 21px); }}
+[class*="st-key-folsw"][class*="_on"] button p {{ color: #fff !important; }}
+/* 목록 위 '팔로우' 스위치는 칸 오른쪽 끝, 바로 옆 '지역 고르기' 에 붙인다 */
+.st-key-listtools [data-testid="stColumn"]:has([class*="st-key-folsw_"]) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
+/* 등록 화면의 홈으로 돌아가기: 둘째 줄 오른쪽 끝 */
 [data-testid="stColumn"]:has(.st-key-wiz_home) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
-.st-key-wiz_home button {{ border: 1.5px solid {MINT} !important; color: {MINT_DEEP} !important;
-  background: #fff !important; padding-left: 3rem !important; padding-right: 3rem !important; }}
-.st-key-wiz_home button:hover {{ background: {MINT_SOFT} !important; }}
 /* 화면에 안 보이는 칸(스타일만 담은 칸, 스크립트용 iframe)은 줄 간격을 차지하지 않게 흐름에서 뺀다 */
 [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] style),
 [data-testid="stElementContainer"]:has(> iframe[data-testid="stIFrame"]),
@@ -160,13 +187,14 @@ def _fav_state() -> tuple[str, set[str], dict[str, int]]:
 
 
 def _heart(cafe_id: str, where: str, label_count: bool = False) -> None:
-    """찜 버튼. 찜하면 빨간 ♥, 아니면 빈 ♡. where 는 위치(w: 전체보기 카드, s: 반반 카드, d: 상세)."""
+    """팔로우 버튼. 팔로우하면 포인트 색으로 채운 '팔로잉', 아니면 테두리만 있는 '+ 팔로우'.
+    where 는 위치(w: 전체보기 카드, s: 반반 카드, d: 상세)."""
     me, mine, counts = _fav_state()
     on = str(cafe_id) in mine
     n = counts.get(str(cafe_id), 0)
-    label = ("♥" if on else "♡") + (f" {n}" if label_count else "")
+    label = ("팔로잉" if on else "팔로우") + (f" {n}" if label_count else "")
     if st.button(label, key=f"fav_{'on' if on else 'off'}_{where}_{cafe_id}",
-                 help="찜 해제" if on else "찜하기"):
+                 help="팔로우 취소" if on else "팔로우"):
         favorite.toggle(favs, str(cafe_id), me, not on)
         st.session_state.pop("_fav_cache", None)
         st.rerun()
@@ -279,80 +307,124 @@ def address_field(value: str, key: str, on_pick, placeholder: str = "") -> str:
 
 
 # ================================================================ 카페 상세
-def _directions_url(current: dict) -> str:
-    """카카오맵에서 이 카페를 도착지로 여는 주소.
+_WEEKDAYS = "월화수목금토일"
 
-    정확한 좌표가 있으면 바로 도착지로 찍는다. 대략 위치(동네 중심)라면 그 좌표로 안내하면 엉뚱한 곳이
-    나오므로, 주소로 카카오맵 검색을 연다 (검색 결과에서 '도착' 을 누르면 된다).
-    """
-    name = re.sub(r"[,/]", " ", str(current.get("cafe_name") or "도착지")).strip()
+
+def _day(d, with_year: bool) -> str:
+    """'26.10.27(화)' / '11.11(수)'."""
+    d = pd.to_datetime(d).date()
+    return f"{d:%y.%m.%d}({_WEEKDAYS[d.weekday()]})" if with_year else f"{d:%m.%d}({_WEEKDAYS[d.weekday()]})"
+
+
+def _map_link(current: dict) -> str:
+    """'지도에서 확인하기': 카카오맵에서 이 카페 위치를 연다 (좌표가 있으면 그 자리, 없으면 주소 검색)."""
+    name = re.sub(r"[,/]", " ", str(current.get("cafe_name") or "카페")).strip()
     lat, lng = str(current.get("lat") or "").strip(), str(current.get("lng") or "").strip()
-    if lat and lng and str(current.get("note") or "").startswith("정확한"):
-        return f"https://map.kakao.com/link/to/{quote(name)},{lat},{lng}"
-    # '서울 마포구 양화로 188 AK&홍대 5층' → '서울 마포구 양화로 188' (층·호수는 검색에 방해가 된다)
-    # 번지가 없는 주소('서울 마포구 (상세 주소 확인 필요)')는 카페 이름 + 지역으로 찾는다
-    addr = re.sub(r"\(.*?\)", "", str(current.get("address") or "")).strip()
-    m = re.match(r"^(.*?\d+(?:-\d+)?)(?=\s|$)", addr)
-    query = m.group(1) if m else f"{name} {addr}".strip()
-    return f"https://map.kakao.com/link/search/{quote(query)}"
+    if lat and lng:
+        return f"https://map.kakao.com/link/map/{quote(name)},{lat},{lng}"
+    return f"https://map.kakao.com/link/search/{quote(str(current.get('address') or name))}"
 
 
-def render_detail(current: dict, map_slot=None) -> None:
-    """상세 화면 왼쪽: 이미지 슬라이드 · 작품/카페 · 기간/주소 · 특전/굿즈 · 이벤트 · 링크 · (길찾기·지도) · 공유.
+def _detail_info_html(current: dict) -> str:
+    """상세 정보 블록: 위치(주소 + 지도에서 확인하기) · 일정 → 혜택(특전·굿즈·이벤트) → 참고 웹사이트 카드."""
+    # 위치 · 일정: 왼쪽에 항목 이름, 오른쪽에 내용 (오른쪽 정렬)
+    addr = str(current.get("address") or "-")
+    start, end = pd.to_datetime(current.get("start_date")), pd.to_datetime(current.get("end_date"))
+    span = f"{_day(start, True)} - {_day(end, end.year != start.year)}"
+    # 위치: 카페 이름을 크고 굵게 맨 위에, 그 아래 주소, 그 아래 '지도에서 확인하기'
+    # '방문 전 확인' 회색 상자: 왼쪽 항목 이름(고정 폭), 오른쪽 내용(왼쪽 정렬)
+    rows = (
+        '<div class="dinfo-title">방문 전 확인</div>'
+        # 위치 줄: 항목 이름 | 카페 이름·주소 | (같은 줄 오른쪽 끝) 지도에서 확인하기
+        '<div class="drow"><div class="dlabel">위치</div><div class="dval">'
+        f'<div class="dcafe">{escape(str(current.get("cafe_name") or "-"))}</div>'
+        f'<div class="daddr">{escape(addr)}</div></div>'
+        f'<a class="dbtn" href="{escape(_map_link(current))}" target="_blank" rel="noopener">📍 지도에서 확인하기</a>'
+        '</div>'
+        f'<div class="drow"><div class="dlabel">일정</div><div class="dval">{escape(span)}</div></div>'
+    )
+    # 혜택: 특전 · 굿즈 · 이벤트마다 검은 알약 라벨, 그 옆에 회색 상자 안 목록 (라벨 | 내용 한 줄)
+    groups = [("특전", "🎁", _split(current.get("perks") or "")),
+              ("굿즈", "🛍️", _split(current.get("goods") or "")),
+              ("이벤트", "🎪", _split(current.get("tags") or ""))]
+    perks = "".join(
+        f'<div class="dgroup"><span class="dpill">{name}</span><ul class="dbox">'
+        + "".join(f"<li>{icon} {escape(x)}</li>" for x in items) + "</ul></div>"
+        for name, icon, items in groups if items)
+    perks_html = (f'<div class="dsec"><div class="dsec-title">혜택</div>{perks}</div>' if perks else
+                  '<div class="dsec"><div class="dsec-title">혜택</div><div class="dnone">등록된 특전·굿즈가 없어요</div></div>')
+    # 참고 웹사이트: 연회색 카드 (사이트 이름 + 주소 + ↗), 카드 전체를 누르면 새 탭
+    links = cafe.parse_links(current.get("links") or "")[0]
+    link_html = ""
+    if links:
+        cards = "".join(
+            f'<a class="dlink" href="{escape(u)}" target="_blank" rel="noopener">'
+            f'<div class="dlink-text"><div class="dlink-title">{escape(_site_name(u))}</div>'
+            f'<div class="dlink-url">{escape(u)}</div></div><span class="dlink-go">↗</span></a>'
+            for u in links)
+        link_html = f'<div class="dsec"><div class="dsec-title">참고 웹사이트</div>{cards}</div>'
+    return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}'
 
-    map_slot 을 주면 참고 웹사이트 아래에 그린다 (길찾기·지도 자리).
-    """
+
+def render_detail(current: dict) -> None:
+    """상세 화면 왼쪽: 이미지 슬라이드 · 작품(+캐릭터) · 위치(카페명·주소)·일정 · 혜택 · 참고 웹사이트 · 공유.
+    지도는 상세에 따로 그리지 않고, 위치의 '지도에서 확인하기' 로 카카오맵을 연다."""
     entry_id = str(current["entry_id"])
     # 포스터와 추가 이미지를 한 슬라이드로: 몇 초마다 넘어가고, 버튼으로 넘기고, 누르면 크게 본다.
     # 포스터가 없으면 기본 그림을 보여 준다 (저장소에는 넣지 않는다)
     pics = images.paths(current.get("images"))
     gallery.gallery([images.url(p) for p in pics] or [images.DEFAULT_POSTER_URL],
                     key=f"gallery_{entry_id}")
-    # 행사(작품) 이름을 크게, 그 아래에 카페 이름과 캐릭터. 오른쪽에 찜 버튼
-    # (모바일에서도 제목 옆에 나란히 — LIST_CSS 의 .st-key-detail_title)
-    with st.container(key="detail_title"):
-        title, heart = st.columns([5, 1], vertical_alignment="center")
-    with title:
-        st.markdown(f"### {current.get('work', '')}")
-    with heart:
-        _heart(entry_id, "d", label_count=True)
-    st.markdown(
-        f"☕ **{current.get('cafe_name', '')}**"
-        + (f" · :gray[{_plain(current.get('characters'))}]"
-           if str(current.get("characters") or "").strip() else "")
-        + f"\n\n🗓️ {current.get('start_date')} ~ {current.get('end_date')}\n\n"
-        f"📍 {current.get('address') or '-'}"
-    )
+    # 머리글 (LIST_CSS 의 .dhead):
+    #   1줄 📍 지역 ······························· 진행 상태 배지(작게)
+    #   2줄 작품 이름(크게) ························ [공유][♡]
+    #   3줄 캐릭터(포인트 색)
+    top, title_html, chars_html = _detail_head_html(current)
+    st.markdown(top, unsafe_allow_html=True)
+    # 2줄: 작품 이름 칸이 남는 폭을 쓰고, 오른쪽에 공유·찜 버튼 칸 (공유를 누르면 공유 칸이 넓어지며 왼쪽으로 펼쳐진다)
+    with st.container(key="detail_actions"):
+        title_col, share_col, fav_col = st.columns([6, 1, 1], vertical_alignment="center")
+    with title_col:
+        st.markdown(title_html, unsafe_allow_html=True)
+    with fav_col:
+        _heart(entry_id, "d")      # 하트만 (글자·찜 수 없이)
+    with share_col:
+        # 받은 사람이 누르면 이 카페 상세가 바로 열린다 (?cafe=...)
+        share.share_buttons(
+            entry_id,
+            title=f"{current.get('work', '')} · {current.get('cafe_name', '')}",
+            text=f"{current.get('start_date')} ~ {current.get('end_date')} · {current.get('address') or ''}",
+            image=images.url(pics[0]) if pics else images.DEFAULT_POSTER_URL,
+            key=f"share_{entry_id}",
+        )
+    if chars_html:
+        st.markdown(chars_html, unsafe_allow_html=True)
+    # 위치(카페명·주소) · 일정 · 혜택 · 참고 웹사이트 (LIST_CSS 의 .dinfo / .dsec / .dlink)
+    st.markdown(_detail_info_html(current), unsafe_allow_html=True)
 
-    # 특전·굿즈는 한 줄 글 대신 민트 칩으로 하나씩 보여 준다 (눈에 잘 들어오게)
-    def chip_row(icon: str, label: str, items: list[str], cls: str) -> str:
-        body = ("".join(f'<span class="chip {cls}">{escape(x)}</span>' for x in items)
-                or '<span class="none">-</span>')
-        return f'<div class="dchips"><div class="lbl">{icon} {label}</div><div class="chips">{body}</div></div>'
 
-    st.markdown(chip_row("🎁", "특전", _split(current.get("perks") or ""), "perk")
-                + chip_row("🛍️", "굿즈", _split(current.get("goods") or ""), "good"),
-                unsafe_allow_html=True)
-    tags = _split(current.get("tags") or "")
-    if tags:
-        st.markdown(" ".join(f":green-badge[{t}]" for t in tags))
-    links = cafe.parse_links(current.get("links") or "")[0]
-    if links:
-        st.markdown("🔗 **참고 웹사이트**  \n" + "  \n".join(
-            f"[{_plain(_site_name(u))}](<{u}>)" for u in links))
-    if map_slot:
-        map_slot()
-    if not str(current.get("lat", "")).strip():
-        st.caption("좌표가 없어 지도에는 표시되지 않습니다. 주소를 수정해 보세요.")
-
-    # 공유: 받은 사람이 누르면 이 카페 상세가 바로 열린다 (?cafe=...)
-    share.share_buttons(
-        entry_id,
-        title=f"{current.get('work', '')} · {current.get('cafe_name', '')}",
-        text=f"{current.get('start_date')} ~ {current.get('end_date')} · {current.get('address') or ''}",
-        image=images.url(pics[0]) if pics else images.DEFAULT_POSTER_URL,
-        key=f"share_{entry_id}",
-    )
+def _detail_head_html(current: dict) -> tuple[str, str, str]:
+    """상세 머리글 세 조각: (📍 지역 + 진행 상태 배지 줄, 작품 이름, 캐릭터 줄).
+    일정 날짜는 아래 '일정' 줄에만 둔다. 캐릭터가 없으면 셋째는 빈 문자열."""
+    area = geo.area_name(str(current.get("address") or ""))
+    color, _ = _area_colors(current.get("address"))
+    start = pd.to_datetime(current.get("start_date")).date()
+    end = pd.to_datetime(current.get("end_date")).date()
+    if end < TODAY:
+        state = "종료"
+    elif end == TODAY:
+        state = "오늘 종료"
+    elif start > TODAY:
+        state = f"오픈 예정 D-{(start - TODAY).days}"
+    else:
+        state = "진행 중"
+    chars = str(current.get("characters") or "").strip()
+    top = ('<div class="dhead dtop">'
+           + f'<span class="dregion" style="color:{color}">{"📍 " + escape(area) if area else ""}</span>'
+           + f'<span class="dstate{" ended" if state == "종료" else ""}">{state}</span></div>')
+    title = f'<div class="dtitle">{escape(str(current.get("work") or ""))}</div>'
+    sub = f'<div class="dsub"><span class="dchars">{escape(chars)}</span></div>' if chars else ""
+    return top, title, sub
 
 
 
@@ -395,9 +467,18 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
     nick = review.nickname_for(st.context.ip_address)
     # 닉네임 → 종류 → 내용 순으로 한 줄씩, 같은 왼쪽 선에 맞춰 둔다
     st.caption(f"✍️ 닉네임 **{nick}**", help="접속한 IP 에 따라 자동으로 정해지는 닉네임입니다")
+    rating = None
     if not parent_id:
         kind = st.pills("종류", review.KINDS, default=review.KINDS[0], key=f"{slot}_kind_{n}",
                         label_visibility="collapsed")
+        # 다녀온 후기는 별점(1~5)을 고를 수 있다. st.feedback 은 0~4 를 돌려줘서 1 을 더한다
+        if kind == review.RATED_KIND:
+            with st.container(key=f"{slot}_rate_box_{n}"):
+                st.markdown('<div class="rv-rate-q">이 팝업 방문하셨나요?</div>'
+                            '<div class="rv-rate-sub">방문 예정인 분들에게 도움이 되는 후기를 작성해주세요</div>',
+                            unsafe_allow_html=True)
+                picked = st.feedback("stars", key=f"{slot}_rating_{n}")
+            rating = picked + 1 if picked is not None else None
     body = st.text_area(
         "내용", key=f"{slot}_body_{n}", height=80 if parent_id else 100, label_visibility="collapsed",
         max_chars=review.MAX_BODY,
@@ -426,7 +507,7 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
             for err in v.errors:
                 st.error(err)
             return
-        reviews.append(review.to_row(cafe_id, body, nick, kind or "", parent_id))
+        reviews.append(review.to_row(cafe_id, body, nick, kind or "", parent_id, rating=rating))
         st.session_state[f"{slot}_n"] = n + 1
         st.session_state["flash"] = "답글을 남겼습니다." if parent_id else "리뷰를 남겼습니다."
         st.rerun()
@@ -457,7 +538,10 @@ def confirm_review_delete(entry_id: str, replies: int) -> None:
 def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     head = f"**{_plain(r.get('nickname') or '익명')}**"
     if r.get("kind"):
-        head = f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] " + head
+        # 다녀온 후기는 종류 배지 옆에 별점 (★★★★☆)
+        rated = review.stars(r.get("rating")) if r.get("kind") == review.RATED_KIND else ""
+        head = (f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] "
+                + (f":orange[{rated}] " if rated else "") + head)
     if reply:
         head = ":gray-badge[답글] " + head
     eid = str(r["entry_id"])
@@ -487,9 +571,19 @@ def _review_edit_box(r: dict) -> None:
     """내 글 고치기: 원글은 종류·내용, 답글은 내용만. 저장하면 새 수정본이 쌓인다 (지난 내용은 남는다)."""
     eid = str(r["entry_id"])
     kind = r.get("kind") or ""
+    rating = None
     if not str(r.get("parent_id") or ""):
         kind = st.pills("종류", review.KINDS, default=kind or review.KINDS[0], key=f"rv_edit_kind_{eid}",
                         label_visibility="collapsed")
+        if kind == review.RATED_KIND:
+            # 지금 별점을 미리 골라 둔 채로 보여 준다 (st.feedback 은 0~4)
+            try:
+                old = int(r.get("rating")) - 1
+            except (TypeError, ValueError):
+                old = None
+            picked = st.feedback("stars", key=f"rv_edit_rating_{eid}",
+                                 default=old if old is not None and 0 <= old <= 4 else None)
+            rating = picked + 1 if picked is not None else None
     body = st.text_area("내용", value=str(r.get("body") or ""), key=f"rv_edit_body_{eid}", height=90,
                         max_chars=review.MAX_BODY, label_visibility="collapsed")
     bad = _block_sensitive(body)
@@ -514,6 +608,8 @@ def _review_edit_box(r: dict) -> None:
         payload["body"] = body.strip()
         if not str(current.get("parent_id") or ""):
             payload["kind"] = kind if kind in review.KINDS else review.KINDS[0]
+            # 별점은 다녀온 후기일 때만 남기고, 종류를 바꾸면 비운다
+            payload["rating"] = rating if payload["kind"] == review.RATED_KIND and rating else ""
         reviews.append(payload, entry_id=eid)
         st.session_state.pop("rv_editing", None)
         st.session_state["flash"] = "수정했습니다."
@@ -521,8 +617,8 @@ def _review_edit_box(r: dict) -> None:
 
 
 def render_reviews(cafe_id: str) -> None:
-    # 열자마자 바로 쓸 수 있게 입력칸을 맨 위에 펼쳐 두고, 그 아래에 리뷰를 보여 준다
-    with st.container(border=True):
+    # 맨 위 리뷰 쓰기: 닉네임·종류·별점·입력칸·리뷰 등록 버튼을 처음부터 펼쳐 둔다. 그 아래에 리뷰를 보여 준다
+    with st.container(border=True, key=f"rvbox_{cafe_id}"):
         _write_box(cafe_id)
 
     threads = review.threads(reviews.current_rows(), cafe_id)
@@ -837,6 +933,30 @@ def _area_badge(address, cls: str = "abadge") -> str:
             f'{escape(area)}</span>')
 
 
+def _busiest_area(mapped: pd.DataFrame) -> dict | None:
+    """지도 처음 화면 범위: 지금 보이는 카페를 시(서울·부산·수원…) 단위로 묶어 가장 많은 시의 점들을 감싸는 범위.
+    점이 한 곳에 몰려 있으면 너무 확대되지 않게 최소 폭을 둔다. 카페가 없으면 None (지도 쪽 기본 범위)."""
+    if mapped.empty:
+        return None
+    city = mapped["address"].map(lambda a: geo.city_name(str(a or "")) or "?")
+    top = city.value_counts().index[0]
+    pts = mapped[city == top]
+    south, north = float(pts["lat"].min()), float(pts["lat"].max())
+    west, east = float(pts["lng"].min()), float(pts["lng"].max())
+    pad_lat = max((north - south) * 0.15, 0.02)       # 위아래·좌우로 조금 여유 (최소 약 2km)
+    pad_lng = max((east - west) * 0.15, 0.025)
+    return {"south": south - pad_lat, "north": north + pad_lat, "west": west - pad_lng, "east": east + pad_lng}
+
+
+def _home_area(mapped: pd.DataFrame) -> dict | None:
+    """지도 처음 화면 범위: 내 위치를 알면 내 주변(가까운 팝업 몇 곳이 들어오게), 모르면 팝업이 가장 많은 시."""
+    loc = st.session_state.get("_my_loc")
+    if isinstance(loc, dict) and "lat" in loc and not mapped.empty:
+        pts = list(zip(mapped["lat"].astype(float), mapped["lng"].astype(float)))
+        return my_place.home_box((float(loc["lat"]), float(loc["lng"])), pts)
+    return _busiest_area(mapped)
+
+
 def _poster_card(r, label: str) -> str:
     return f"""
 <div class="pcard" style="background-image:url('{_poster_url(r.get("images"))}')">
@@ -892,10 +1012,12 @@ def _list_bar(count: int, wide: bool, note: str = "") -> None:
     note 는 제목 옆 도움말(?)에 커서를 올리면 보인다."""
     head, toggle = st.columns([5, 1.3], vertical_alignment="center")
     with head:
-        st.markdown(f"#### 팝업 카페 :green[**{count}**]곳", help=note or None)   # 숫자만 굵게
+        # 지도보기에서는 개수 제목을 두지 않는다 (리스트 전체보기에서만)
+        if wide:
+            st.markdown(f"#### 팝업 카페 :green[**{count}**]곳", help=note or None)   # 숫자만 굵게
     with toggle:
         if wide:
-            if st.button("🗺️ 지도보기", key="show_map", width="content"):
+            if st.button("지도보기", key="show_map", width="content"):
                 st.session_state["list_only"] = False
                 st.session_state["scroll_top"] = True    # 화면 길이가 바뀌어도 맨 위부터 보이게
                 st.rerun()
@@ -952,10 +1074,10 @@ def render_list(view: pd.DataFrame, wide: bool = False) -> None:
                     st.markdown(f'<div class="thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\')"></div>',
                                 unsafe_allow_html=True)
                 with top:
-                    # 📍 지역은 시마다 다른 색 (CITY_COLORS), 그 옆에 진행 상태
+                    # 📍 지역은 시마다 다른 색 (CITY_COLORS). 진행 상태는 아래 작품 이름 오른쪽에
                     badge = _area_badge(r.get("address"))
-                    st.markdown((f"{badge.replace('\">', '\">📍 ', 1)} " if badge else "")
-                                + f":{color}-badge[{label}]", unsafe_allow_html=True)
+                    if badge:
+                        st.markdown(badge.replace('">', '">📍 ', 1), unsafe_allow_html=True)
                     chars = str(r.get("characters") or "").strip()
                     # 포스터 옆: 작품(굵게) · 캐릭터(민트) → 카페 이름(회색) → 날짜 · 위치.
                     # 한 덩어리로 그려 카페 이름과 날짜 사이에 칸 간격(빈 줄)이 생기지 않게 한다
@@ -966,6 +1088,7 @@ def render_list(view: pd.DataFrame, wide: bool = False) -> None:
                         meta.append(f"💬 리뷰 {n_reviews[r['entry_id']]}")
                     st.markdown(
                         f'<p class="ctitle"><strong>{escape(str(r["work"]))}</strong>'
+                        + f' <span class="cstate {color}">{escape(label)}</span>'
                         + (f'<br/><span class="cchars">{escape(chars)}</span>' if chars else "")
                         + f'<br/><span class="ccafe">☕ {escape(str(r["cafe_name"]))}</span></p>'
                         + f'<p class="cmeta">{"<br/>".join(meta)}</p>',
@@ -991,18 +1114,31 @@ LIST_CSS = f"""
   position:absolute; inset:0; z-index:5; margin:0; }}
 [class*="st-key-open_"] .stButton, [class*="st-key-open_"] .stButton button {{
   width:100%; height:100%; opacity:0; cursor:pointer; }}
-/* 찜 하트: 카드 오른쪽 위 동그란 버튼. 찜하면 빨간 하트 */
+/* 팔로우 버튼: 카드 오른쪽 위. 팔로우하면 포인트 색으로 채운다 */
 [class*="st-key-card_"] [class*="st-key-fav_"] {{ position:absolute; z-index:7; width:auto; }}
-/* 리스트 전체보기: 찜(♥)은 카드 맨 아래 오른쪽 모서리. 글자 칸 오른쪽을 비워 긴 제목이 ♥ 밑으로 들어가지 않게 */
+/* 리스트 전체보기: 팔로우는 카드 맨 아래 오른쪽 모서리. 글자 칸 오른쪽을 비워 긴 제목이 버튼 밑으로 들어가지 않게 */
 [class*="st-key-card_w_"] [class*="st-key-fav_"] {{ top:auto; bottom:16px; right:20px; }}
-[class*="st-key-card_w_"] .pcard .info {{ padding-right:64px; }}
+[class*="st-key-card_w_"] .pcard .info {{ padding-right:100px; }}
 [class*="st-key-card_s_"] [class*="st-key-fav_"] {{ top:12px; right:12px; }}
-[class*="st-key-fav_"] button {{ min-height:0 !important; height:36px; min-width:36px; padding:0 10px !important;
-  border-radius:999px !important; background:#fff !important; border:1px solid #e3e8e6 !important;
-  color:#b9c2bf !important; font-size:18px; line-height:1; box-shadow:0 1px 6px rgba(0,0,0,.12); }}
-[class*="st-key-fav_"] button p {{ font-size:18px !important; }}
-[class*="st-key-fav_on_"] button {{ color:#ff3b5c !important; border-color:#ffc2cd !important; }}
-[class*="st-key-fav_"] button:hover {{ color:#ff3b5c !important; transform:scale(1.08); }}
+/* 카드 작품 이름 오른쪽의 진행 상태 배지 */
+.cstate {{ display:inline-block; vertical-align:middle; margin-left:6px; font-size:.78rem; font-weight:700;
+          line-height:1.4; padding:.1rem .45rem; border-radius:.5rem; white-space:nowrap; }}
+.cstate.green {{ background:#E3F6EA; color:#1F7A44; }}
+.cstate.blue {{ background:#E5EEFC; color:#2C5BC5; }}
+.cstate.gray {{ background:#EEF0EF; color:#6B7672; }}
+/* 카드·상세의 팔로우 버튼도 '팔로우한 곳만' 과 같은 스위치: 꺼지면 회색 바탕 + 왼쪽 흰 동그라미 '팔로우',
+   켜지면 포인트 색 바탕 + 오른쪽 동그라미 '팔로잉' */
+[class*="st-key-fav_"] button {{ position:relative; min-height:0 !important; height:22px; min-width:64px;
+  border-radius:999px !important; border:0 !important; background:#E4E8E6 !important;
+  padding:0 8px 0 23px !important; box-shadow:0 1px 4px rgba(0,0,0,.12); white-space:nowrap; transition:background .15s; }}
+[class*="st-key-fav_"] button::before {{ content:""; position:absolute; left:3px; top:3px; width:16px; height:16px;
+  border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); transition:left .15s; }}
+[class*="st-key-fav_"] button p {{ font-size:.66rem !important; font-weight:800 !important; color:#5B6663 !important; }}
+[class*="st-key-fav_on_"] button {{ background:var(--accent) !important; padding:0 23px 0 8px !important; }}
+[class*="st-key-fav_on_"] button::before {{ left:calc(100% - 19px); }}
+[class*="st-key-fav_on_"] button p {{ color:#fff !important; }}
+[class*="st-key-fav_off_"] button:hover {{ background:#D5DBD9 !important; }}
+[class*="st-key-fav_on_"] button:hover {{ background:var(--accent-deep) !important; }}
 /* 카드 테두리: 회색 대신 포인트(민트)보다 살짝 밝은 민트. 커서를 올리면 아래 :hover 처럼 연한 민트 바탕 + 진한 테두리 */
 [class*="st-key-card_s_"] {{ border: 2.5px solid {MINT_LINE} !important; transition:transform .18s ease,
   background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }}
@@ -1048,16 +1184,16 @@ LIST_CSS = f"""
 /* 지도 높이는 남은 화면 높이에 맞춘다 (화면이 작아도 지도 아래가 잘리지 않게) */
 iframe[src*="kakao_map"] {{
   height: max(360px, calc(100vh - {TOPBAR_TOP} - {TOPBAR_H} - 1.75rem)) !important; }}
-/* 필터 판 안의 '찜한 곳만' · '지역 고르기' 는 모바일에서만. 모바일에서는 목록 위의 같은 칸을 숨긴다 */
+/* 필터 판 안의 '팔로우한 곳만' · '지역 고르기' 는 모바일에서만. 모바일에서는 목록 위의 같은 칸을 숨긴다 */
 .st-key-m_only {{ display: none !important; }}
 @media (max-width: 640px) {{
   .st-key-m_only {{ display: flex !important; }}
   /* 필터 판 맨 위에 둔다 (그리는 순서는 아래지만 화면에서는 앞으로) */
   .st-key-filters > [data-testid="stLayoutWrapper"]:has(> .st-key-m_only),
   .st-key-filters > .st-key-m_only {{ order: -1; }}
-  .st-key-listtools .st-key-fav_only, .st-key-listtools .st-key-regions {{ display: none !important; }}
+  .st-key-listtools [class*="st-key-folsw_"], .st-key-listtools .st-key-regions {{ display: none !important; }}
   /* 비어 버린 칸(필터 판으로 옮긴 찜·지역)은 칸째 빼고, '팝업 카페 N곳' ~ 정렬 사이 줄 간격을 좁힌다 */
-  .st-key-listtools [data-testid="stColumn"]:has(.st-key-fav_only),
+  .st-key-listtools [data-testid="stColumn"]:has([class*="st-key-folsw_"]),
   .st-key-listtools [data-testid="stColumn"]:has(.st-key-regions),
   .st-key-listtools [data-testid="stColumn"]:not(:has([data-testid="stElementContainer"])) {{ display: none !important; }}
   .st-key-listbar [data-testid="stHorizontalBlock"] {{ gap: .35rem !important; }}
@@ -1089,17 +1225,14 @@ iframe[src*="kakao_map"] {{
   .st-key-show_map, .st-key-list_only_btn {{ bottom: 20px; transform: translateX(6px); }}
   .st-key-m_filter_btn {{ position: fixed !important; left: 50%; bottom: 20px;
     transform: translateX(calc(-100% - 6px)); z-index: 1000; width: auto !important; }}
+  /* 두 버튼 폭을 똑같이 해서, 가운데에서 6px 씩 떨어진 두 버튼 묶음이 정확히 가운데에 오게 한다 */
   .st-key-show_map button, .st-key-list_only_btn button, .st-key-m_filter_btn button {{
-    padding: .55rem 1.3rem !important; }}
-  /* 상세의 '← 리스트로 돌아가기' 도 같은 모양으로 화면 아래 가운데에 띄운다 */
+    padding: .55rem .6rem !important; width: 140px !important; justify-content: center; }}
+  /* 상세의 '리스트로 돌아가기' 는 화면 아래 가운데에 띄운다 (모양은 등록하기 버튼과 같다) */
   .st-key-back_to_list {{ position: fixed !important; left: 50%; bottom: 20px;
     transform: translateX(-50%); z-index: 1000; width: auto !important; }}
-  .st-key-back_to_list button {{ background: #fff !important; color: {MINT_DEEP} !important;
-    border: 2px solid {MINT} !important; padding: .55rem 1.5rem !important; min-height: 0 !important;
-    box-shadow: 0 6px 18px rgba(0,0,0,.16) !important; white-space: nowrap; width: auto !important; }}
-  .st-key-back_to_list button p {{ font-weight: 700; }}
-  .st-key-back_to_list button:hover, .st-key-back_to_list button:active {{ background: {MINT} !important;
-    color: #fff !important; border-color: {MINT} !important; }}
+  .st-key-back_to_list button {{ height: 40px !important; padding: 0 1.4rem !important;
+    box-shadow: 0 6px 18px rgba(0,0,0,.16) !important; white-space: nowrap; }}
   /* 떠 있는 버튼이 맨 아래 카드를 가리지 않게 페이지 아래에 여백 */
   .stMainBlockContainer {{ padding-bottom: 6rem !important; }}
 }}
@@ -1125,9 +1258,12 @@ iframe[src*="kakao_map"] {{
   .st-key-wide_grid .pcard .area {{ top: 6px; left: 6px; font-size: 10.5px; padding: 2px 6px; }}
   .st-key-wide_grid .pcard .state {{ top: 6px; right: 6px; font-size: 10.5px; padding: 2px 7px; }}
   .st-key-wide_grid [class*="st-key-fav_"] {{ top: auto !important; bottom: 8px !important; right: 12px !important; }}
-  .st-key-wide_grid .pcard .info {{ padding-right: 44px; }}
-  .st-key-wide_grid [class*="st-key-fav_"] button {{ height: 28px; min-width: 28px; padding: 0 6px !important; }}
-  .st-key-wide_grid [class*="st-key-fav_"] button p {{ font-size: 14px !important; }}
+  .st-key-wide_grid .pcard .info {{ padding-right: 76px; }}
+  .st-key-wide_grid [class*="st-key-fav_"] button {{ height: 20px; min-width: 56px; padding: 0 6px 0 20px !important; }}
+  .st-key-wide_grid [class*="st-key-fav_on_"] button {{ padding: 0 20px 0 6px !important; }}
+  .st-key-wide_grid [class*="st-key-fav_"] button::before {{ width: 14px; height: 14px; }}
+  .st-key-wide_grid [class*="st-key-fav_on_"] button::before {{ left: calc(100% - 17px); }}
+  .st-key-wide_grid [class*="st-key-fav_"] button p {{ font-size: .6rem !important; }}
 }}
 @media (max-width: 480px) {{
   .st-key-wide_grid [data-testid="stHorizontalBlock"] {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
@@ -1136,14 +1272,6 @@ iframe[src*="kakao_map"] {{
 @media (max-width: 640px) {{
   .st-key-detail_left [data-testid="stElementContainer"]:has(iframe[src*="gallery"]) {{ margin-bottom: -.5rem; }}
   .st-key-detail_left h3 {{ padding-top: .2rem !important; }}
-  /* 작품 제목과 찜(♥) 버튼을 한 줄에: 제목은 글자 길이만큼, 찜은 그 바로 뒤에 한 칸 띄워서 (오른쪽 끝이 아니라) */
-  .st-key-detail_title [data-testid="stHorizontalBlock"] {{ flex-direction: row !important;
-    flex-wrap: nowrap !important; align-items: center !important; justify-content: flex-start !important;
-    gap: .35rem !important; }}
-  .st-key-detail_title [data-testid="stColumn"]:first-child {{ flex: 0 1 auto !important; width: auto !important;
-    min-width: 0 !important; }}
-  .st-key-detail_title [data-testid="stColumn"]:last-child {{ flex: 0 0 auto !important; width: auto !important;
-    min-width: 0 !important; }}
 }}
 /* 모바일 지도보기: 지도를 맨 위에, 그 아래 리스트는 왼쪽 작은 포스터 + 오른쪽 정보 (PC 는 그대로 반반) */
 @media (max-width: 640px) {{
@@ -1182,6 +1310,40 @@ iframe[src*="kakao_map"] {{
 [class*="st-key-rpbox_"]:focus-within [data-baseweb="textarea"], [class*="st-key-rpbox_"]:focus-within textarea,
 [class*="st-key-rpbox_"]:has(textarea:not(:placeholder-shown)) [data-baseweb="textarea"],
 [class*="st-key-rpbox_"]:has(textarea:not(:placeholder-shown)) textarea {{ height: 5rem !important; }}
+/* 다녀온 후기 별점: 가운데 정렬 질문 + 안내 + 큰 별 5개 (회색, 고른 별까지 노랑. 커서를 올리면 그 별까지 미리 노랑) */
+[class*="_rate_box_"] {{ display: flex; flex-direction: column; align-items: center; text-align: center; gap: .2rem !important;
+  padding: .4rem 0 .2rem; }}
+[class*="_rate_box_"] [data-testid="stElementContainer"] {{ width: 100% !important; display: flex;
+  justify-content: center; height: auto !important; }}
+.rv-rate-q {{ font-weight: 800; font-size: 1.15rem; color: #26302D; text-align: center; width: 100%; }}
+.rv-rate-sub {{ color: #8A9490; font-size: .95rem; margin-top: 4px; text-align: center; width: 100%; }}
+[class*="_rate_box_"] [data-testid="stFeedback"] {{ margin-top: .5rem; }}
+[class*="_rate_box_"] [data-testid="stFeedback"] [role="radiogroup"] {{ gap: .3rem; }}
+/* 안 고른 별은 stFeedbackButton(아이콘 글자), 고른 별은 stFeedbackButtonActive(작은 노란 그림)라 둘 다 맞춘다.
+   버튼 높이를 별 크기에 맞춰 위 안내 문구와 겹치지 않게 한다 */
+[class*="_rate_box_"] [data-testid^="stFeedbackButton"] {{ padding: 0 !important; background: none !important;
+  height: 2.9rem !important; min-height: 0 !important; width: 2.9rem !important; min-width: 2.9rem !important;
+  line-height: 1; display: flex !important; align-items: center; justify-content: center; }}
+[class*="_rate_box_"] [data-testid="stFeedback"] [role="radiogroup"] {{ gap: .45rem !important;
+  justify-content: center; }}
+[class*="_rate_box_"] [data-testid="stFeedbackButtonActive"] img {{ display: none !important; }}
+[class*="_rate_box_"] [data-testid="stFeedbackButtonActive"] > span::before {{ content: "★";
+  font-family: "Segoe UI Symbol", "Apple Color Emoji", sans-serif; font-size: 2.6rem; line-height: 1;
+  color: #FFC94D; transition: color .12s; }}
+/* 고른 상태에서 더 앞의 별에 커서를 올리면, 그 뒤의 고른 별은 회색으로 미리 보여 준다 */
+[class*="_rate_box_"] [role="radiogroup"]:hover [data-testid^="stFeedbackButton"]:hover
+  ~ [data-testid="stFeedbackButtonActive"] > span::before {{ color: #CDD3DE; }}
+/* 아이콘 글꼴로는 '꽉 찬 별'을 만들 수 없어서, 아이콘 글자는 숨기고 그 자리에 큰 ★ 를 그린다 (색은 아래 규칙) */
+[class*="_rate_box_"] [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"] {{ font-size: 0 !important;
+  width: auto !important; height: auto !important; color: #CDD3DE !important; transition: color .12s; }}
+[class*="_rate_box_"] [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"]::before {{ content: "★";
+  font-family: "Segoe UI Symbol", "Apple Color Emoji", sans-serif; font-size: 2.6rem; line-height: 1; }}
+[class*="_rate_box_"] [data-testid="stFeedbackButton"][aria-checked="true"] [data-testid="stIconMaterial"],
+[class*="_rate_box_"] [data-testid="stFeedbackButton"]:has(~ [aria-checked="true"]) [data-testid="stIconMaterial"],
+[class*="_rate_box_"] [role="radiogroup"]:hover [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"] {{
+  color: #FFC94D !important; }}
+[class*="_rate_box_"] [role="radiogroup"]:hover [data-testid="stFeedbackButton"]:hover ~ [data-testid="stFeedbackButton"]
+  [data-testid="stIconMaterial"] {{ color: #CDD3DE !important; }}
 /* 지도보기 카드의 📍 지역 배지 (색은 시마다 다르게 글자에 직접 넣는다) — 옆의 상태 배지와 같은 크기 */
 .abadge {{ display:inline-block; font-size:.8rem; font-weight:600; line-height:1.4; padding:.1rem .45rem;
           border-radius:.5rem; margin-right:.2rem; vertical-align:middle; }}
@@ -1203,6 +1365,77 @@ iframe[src*="kakao_map"] {{
 /* 칩이 하나도 없는 카드: 빈 묶음 칸(위 칸 간격) + 약간의 여백으로 다른 카드와 같은 아래 여백을 만든다 */
 .cbottom.none {{ margin: 0 0 6px; height: 0; }}
 .chip.perk {{ background:{MINT}; color:#fff; border-color:{MINT}; white-space:normal; line-height:1.4; }}
+/* '방문 전 확인' 상자: 연회색 둥근 상자, 굵은 제목, 왼쪽 항목 이름(고정 폭·회색) + 오른쪽 내용(왼쪽 정렬) */
+.dinfo {{ margin: 18px 0 0; background:{GRAY_SOFT}; border-radius:18px; padding:20px 24px 8px; }}
+/* 공유·찜 줄과 '방문 전 확인' 상자 사이를 좁힌다 (칸 사이 기본 간격만 남기고 조금 더 당긴다) */
+.st-key-detail_actions {{ margin-bottom: -.75rem; }}
+.dinfo-title {{ font-weight:800; font-size:1.1rem; color:#1F2A27; margin-bottom:10px; }}
+/* 폭이 모자라면(휴대폰) 오른쪽 끝의 '지도에서 확인하기' 만 다음 줄 오른쪽으로 내려간다 */
+.drow {{ display:flex; flex-wrap:wrap; align-items:flex-start; column-gap:18px; row-gap:6px; padding:8px 0 14px; }}
+.dlabel {{ flex:0 0 72px; color:#6B7672; font-weight:700; font-size:1rem; white-space:nowrap; line-height:1.7; }}
+.dval {{ flex:1 1 180px; min-width:0; text-align:left; font-size:1.02rem; color:#26302D; line-height:1.7;
+        word-break:keep-all; }}
+/* 상세 머리글: 지역(작게, 시 색) → 작품 이름(아주 크게) → 캐릭터(회색) + 진행 상태 배지(포인트 색) */
+.dhead {{ margin: 10px 0 6px; }}
+.dregion {{ font-weight: 800; font-size: 1rem; margin-bottom: 4px; }}
+/* 1줄: 📍 지역(왼쪽) + 진행 상태 배지(오른쪽 끝, 작게) */
+.dtop {{ display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 2px; }}
+/* 2줄: 작품 이름 (공유·찜 버튼과 같은 줄, 이름이 길면 이름만 줄이 바뀐다) */
+.dtitle {{ font-weight: 900; font-size: 2.2rem; line-height: 1.2; color: #111; word-break: keep-all; }}
+.dsub {{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }}
+/* 캐릭터 이름: 포인트(민트) 색으로 강조 */
+.dchars {{ color: {MINT_DEEP}; font-size: 1.05rem; font-weight: 700; }}
+.dstate {{ display: inline-block; background: {MINT_DEEP}; color: #fff; font-weight: 800; font-size: .78rem;
+          padding: .18rem .55rem; border-radius: 6px; white-space: nowrap; }}
+.dstate.ended {{ background: #9AA5A1; }}
+/* 상세 팔로우 스위치: 공유 버튼(40px) 옆에 세로 가운데로 */
+.st-key-detail_actions [class*="st-key-fav_"] button {{ width: 70px !important; height: 24px !important;
+  box-shadow: none !important; transform: none !important; }}
+.st-key-detail_actions [class*="st-key-fav_"] button p {{ font-size: .7rem !important; }}
+/* 2줄을 화면 폭과 상관없이 한 줄에: 작품 이름 칸이 남는 폭, 공유·찜 칸은 버튼 크기(40px)만큼 오른쪽 끝.
+   공유를 누르면 공유 칸이 넓어진다(공유 컴포넌트가 바깥 칸 폭을 직접 바꾼다) */
+.st-key-detail_actions [data-testid="stHorizontalBlock"] {{ flex-direction: row !important; flex-wrap: nowrap !important;
+  gap: 8px !important; align-items: center !important; }}
+.st-key-detail_actions [data-testid="stColumn"]:first-child {{ flex: 1 1 auto !important; width: auto !important;
+  min-width: 0 !important; }}
+.st-key-detail_actions [data-testid="stColumn"]:not(:first-child) {{ flex: 0 0 40px !important; width: 40px !important;
+  min-width: 0 !important; transition: flex-basis .2s, width .2s; }}
+.st-key-detail_actions [data-testid="stColumn"]:last-child {{ flex: 0 0 70px !important; width: 70px !important; }}
+/* 공유 iframe 은 글자처럼 줄에 놓여 아래 8px 빈칸이 생기고, 그만큼 찜 버튼보다 위로 떠 보였다 → 블록으로 */
+.st-key-detail_actions iframe {{ display: block; }}
+/* 위치 안의 카페 이름: 굵게 (주소보다 돋보이게), 주소는 그 아래 */
+.dcafe {{ font-weight:800; font-size:1.1rem; color:#1F2A27; line-height:1.6; }}
+.daddr {{ color:#3F4A47; font-size:1rem; }}
+/* 지도에서 확인하기: 위치 줄 오른쪽 끝에 붙는 작은 흰 알약 버튼 (줄 맨 위에 맞춘다) */
+.dbtn {{ flex:0 0 auto; align-self:flex-start; margin-left:auto; padding:.3rem .85rem; border:1px solid #DDE2E0;
+        border-radius:999px; background:#fff; color:#26302D !important; text-decoration:none !important;
+        font-size:.92rem; font-weight:700; white-space:nowrap; }}
+.dbtn:hover {{ border-color:{MINT}; color:{MINT_DEEP} !important; }}
+/* '방문 전 확인' 상자와 혜택 사이 여백 (상자가 회색이라 따로 띠는 두지 않는다) */
+.dband {{ height:0; margin:0 0 22px; }}
+/* 혜택 · 참고 웹사이트 묶음: 굵은 제목, 검은 알약 라벨, 연회색 상자 목록 */
+.dsec {{ margin-bottom:18px; }}
+.dsec-title {{ font-family:"Jua", sans-serif; font-size:1.45rem; color:#26302D; margin:0 0 10px; }}
+/* 라벨(왼쪽, 고정 폭) | 내용 상자(오른쪽, 남는 폭)를 한 줄에 */
+.dgroup {{ display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }}
+.dpill {{ display:inline-block; flex:0 0 auto; min-width:64px; text-align:center; background:#26302D; color:#fff;
+         font-weight:700; font-size:.9rem; padding:.4rem .9rem; border-radius:999px; margin-top:10px; }}
+.dbox {{ flex:1 1 auto; min-width:0; list-style:none; margin:0 !important; padding:14px 18px !important;
+         background:{GRAY_SOFT}; border-radius:16px; }}
+/* Streamlit 기본 목록 들여쓰기를 없애 상자 안쪽 여백에 바로 붙게 */
+.dbox li {{ font-size:1rem; line-height:1.75; color:#26302D; margin:0 !important; padding:0 !important;
+           list-style:none; }}
+.dbox li::marker {{ content:""; }}
+.dnone {{ color:#9AA5A1; }}
+/* 참고 웹사이트 카드: 연회색 둥근 카드, 오른쪽 위 ↗. 카드 전체가 링크 */
+.dlink {{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; background:{GRAY_SOFT};
+         border-radius:16px; padding:16px 20px; margin-bottom:10px; text-decoration:none !important;
+         color:#26302D !important; transition:background .15s; }}
+.dlink:hover {{ background:{MINT_SOFT}; }}
+.dlink-text {{ min-width:0; }}
+.dlink-title {{ font-weight:700; font-size:1.05rem; }}
+.dlink-url {{ color:#6B7672; font-size:.9rem; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.dlink-go {{ color:{MINT_DEEP}; font-size:1.4rem; line-height:1; flex:0 0 auto; }}
 /* 상세 화면의 특전·굿즈 칩: 크게, 긴 문구는 줄바꿈 */
 .dchips {{ margin:4px 0 14px; }}
 .dchips .lbl {{ font-weight:700; font-size:1rem; margin-bottom:6px; }}
@@ -1435,7 +1668,7 @@ def _logo_swap() -> None:
 def _brand(home: bool = False, fixed: bool = False) -> bool:
     """ANI:WHERE 제목 + 문구. 제목(또는 home 일 때 '홈으로')을 눌렀으면 True.
 
-    home 이면 'ANIME POP-UP · CAFE · GOODS' 줄 오른쪽 끝에 🏠 홈으로 버튼을 둔다 (등록 화면).
+    home 이면 'ANIME POP-UP · CAFE · GOODS' 줄 오른쪽 끝에 홈으로 돌아가기 버튼을 둔다 (등록 화면).
     """
     # 글자 대신 로고 그림을 보여 준다 (GLOBAL_CSS 의 .st-key-home_brand). 글자는 화면 읽기용으로 남긴다.
     # 로고 주소는 포스터처럼 'app/static/…' 상대 주소로 둔다 ('/' 로 시작하면 하위 경로에 배포했을 때 못 찾는다)
@@ -1459,8 +1692,18 @@ def _brand(home: bool = False, fixed: bool = False) -> bool:
     sub.markdown('<div class="brand-tag"><span>ANIME POP-UP · CAFE · GOODS</span></div>',
                  unsafe_allow_html=True)
     with btn:
-        clicked = st.button("🏠 홈으로", key="wiz_home", help="등록을 그만두고 메인으로") or clicked
+        clicked = st.button("홈으로 돌아가기", key="wiz_home", help="등록을 그만두고 메인으로") or clicked
     return clicked
+
+
+def _follow_switch(key: str) -> None:
+    """'팔로우한 곳만' 스위치. 글자가 스위치 안에 들어 있고 꺼지면 '팔로우', 켜지면 포인트 색 '팔로잉'.
+    목록 위(PC)와 모바일 필터 판에 같은 스위치를 두고, 둘 다 같은 값(fav_only)을 바꾼다."""
+    on = bool(st.session_state.get("fav_only"))
+    if st.button("팔로잉" if on else "팔로우", key=f"{key}_{'on' if on else 'off'}",
+                 help="팔로우한 곳만 보는 중 · 누르면 모두 보기" if on else "팔로우한 곳만 보기"):
+        st.session_state["fav_only"] = not on
+        st.rerun()
 
 
 def _reset_filters() -> None:
@@ -1478,7 +1721,6 @@ def _reset_filters() -> None:
     st.session_state["fav_only"] = False
     # 모바일 필터 판의 같은 칸도 함께 비운다
     st.session_state["regions_m"] = []
-    st.session_state["fav_only_m"] = False
 
 
 def page_map() -> None:
@@ -1487,6 +1729,8 @@ def page_map() -> None:
     _history_guard(on_main=True)
     _keep_scroll()
     _live_send()
+    # 처음 들어오면 기본은 리스트 전체보기 (지도보기는 버튼으로)
+    st.session_state.setdefault("list_only", True)
     # 공유받은 링크(?cafe=<id>)로 들어오면 그 카페 상세를 연다. 한 번 쓰고 주소창에서 지운다
     shared = st.query_params.get("cafe")
     if shared:
@@ -1512,7 +1756,7 @@ def page_map() -> None:
     # 제목·등록하기(상세에서는 돌아가기)·검색 필터는 스크롤해도 늘 위에 붙어 있다 (LIST_CSS 의 .st-key-topbar)
     top = st.container(key="topbar")
     with top:
-        head, btn = st.columns([5, 1], vertical_alignment="bottom")
+        head, btn = st.columns([4, 2], vertical_alignment="bottom")
     with head:
         # 제목을 누르면 상세를 닫고 보던 모드(리스트 전체보기 / 지도보기)의 첫 화면으로 돌아간다
         if _brand(fixed=current is not None):     # 상세에서는 로고 고정
@@ -1522,13 +1766,16 @@ def page_map() -> None:
     with btn:
         # 상세에서는 등록하기 자리에 '리스트로 돌아가기' (상단에 늘 떠 있다)
         if current:
-            if st.button("← 리스트로 돌아가기", key="back_to_list", type="primary", width="stretch"):
+            if st.button("리스트로 돌아가기", key="back_to_list", type="primary", width="stretch"):
                 st.session_state["selected"] = None
                 st.session_state["scroll_top"] = True
                 st.rerun()
-        elif st.button("➕ 등록하기", type="primary", width="stretch"):
-            st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
-            go("add")
+        else:
+            # 내 캘린더는 지도보기 오른쪽에 바로 보여서 따로 버튼을 두지 않는다
+            with st.container(horizontal=True, horizontal_alignment="right", key="top_btns"):
+                if st.button("등록하기  ↗", key="add_btn", type="primary"):
+                    st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
+                    go("add")
 
     report = st.session_state.pop("save_report", None)
     if report:
@@ -1612,13 +1859,11 @@ def page_map() -> None:
     # 지역 이름 (카드 배지와 같은 이름). 지역 고르기 칸 두 곳(필터 판·목록 위)이 함께 쓴다
     df["area"] = df["address"].map(lambda a: geo.area_name(str(a or "")))
     areas = sorted({a for a in df["area"] if a})
-    # 모바일 필터 판에만 '찜한 곳만' · '지역 고르기' 를 한 번 더 둔다 (PC 는 목록 위에만, LIST_CSS 의 .st-key-m_only).
+    # 모바일 필터 판에만 '팔로우' 스위치 · '지역 고르기' 를 한 번 더 둔다 (PC 는 목록 위에만, LIST_CSS 의 .st-key-m_only).
     # 같은 키를 두 번 쓸 수 없어 따로 키를 두고, 어느 쪽을 바꿔도 원래 값(fav_only·regions)에 맞춘다
-    ss["fav_only_m"] = bool(ss.get("fav_only", False))
     ss["regions_m"] = [r for r in ss.get("regions", []) if r in areas]
     with fbox, st.container(key="m_only"):
-        st.toggle("♥ 찜한 곳만", key="fav_only_m",
-                  on_change=lambda: ss.update(fav_only=ss["fav_only_m"]))
+        _follow_switch("folswm")
         st.multiselect("지역", areas, key="regions_m", placeholder="📍 지역 고르기 (여러 곳 가능)",
                        on_change=lambda: ss.update(regions=ss["regions_m"]))
 
@@ -1642,28 +1887,33 @@ def page_map() -> None:
         view = view[(view["start_date"] <= TODAY) & (view["end_date"] >= TODAY)]
     if pick_day:
         view = view[(view["start_date"] <= pick_day) & (view["end_date"] >= pick_day)]
-    # 지역·정렬 고르기는 목록 바로 위에 있다. 고른 값은 지난 실행의 것을 쓴다 (정렬 기본: 최신순)
+    # 팔로우한 곳만·지역·정렬은 리스트 전체보기에서만 보이고 걸린다 (지도보기에서는 숨기기만 해서 고른 값은 남는다)
+    wide = bool(st.session_state.get("list_only")) and not current
     view = view.assign(area=df.loc[view.index, "area"])
-    regions = st.session_state.get("regions", [])
-    if regions:
-        view = view[view["area"].isin(regions)]
-    if st.session_state.get("fav_only"):
-        view = view[view["entry_id"].astype(str).isin(_fav_state()[1])]
-    view = _sort_view(view, st.session_state.get("sort", SORTS[0]))
+    if wide:
+        regions = st.session_state.get("regions", [])
+        if regions:
+            view = view[view["area"].isin(regions)]
+        if st.session_state.get("fav_only"):
+            view = view[view["entry_id"].astype(str).isin(_fav_state()[1])]
+        view = _sort_view(view, st.session_state.get("sort", SORTS[0]))
+    else:
+        # 칸을 위젯으로 집어서 숨긴다 (':not(:first-child)' 로 잡으면 '팝업 카페 N곳' 칸 안의 리스트 전체보기 버튼 칸까지 숨는다)
+        st.markdown("<style>.st-key-listtools [data-testid='stColumn']:has([class*='st-key-folsw_'], .st-key-regions, .st-key-sort),"
+                    " .st-key-m_only { display: none !important; }</style>", unsafe_allow_html=True)
 
     mapped = view.dropna(subset=["lat", "lng"])
-    wide = bool(st.session_state.get("list_only")) and not current
     # 조건에 맞는 수·지도 표시 수·안내는 '팝업 카페 N곳' 옆 도움말(?)에 커서를 올리면 보인다
     note = (f"조건에 맞는 카페 {len(view)}곳 · 지도에 표시 가능 {len(mapped)}곳"
             + (f" · 좌표 없음 {len(view) - len(mapped)}곳" if len(view) > len(mapped) else "")
             + " · 카드나 지도의 점을 누르면 상세를 보고 리뷰를 남기거나 수정할 수 있습니다.")
     # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
     with st.container(key="listtools"):
-        head, fav_only, region, sort = st.columns([3, 1.1, 2, 1.3], vertical_alignment="center")
+        head, fav_only, region, sort = st.columns([3.5, 0.6, 2, 1.3], vertical_alignment="center")
     with head, st.container(key="listbar"):
         _list_bar(len(view), wide, note)
     with fav_only:
-        st.toggle("♥ 찜한 곳만", key="fav_only")
+        _follow_switch("folsw")
     with region:
         # 지금 등록된 카페가 있는 지역만, 카드 배지와 같은 이름으로. 여러 곳을 함께 고를 수 있다
         st.multiselect("지역", areas, key="regions", label_visibility="collapsed",
@@ -1689,6 +1939,7 @@ def page_map() -> None:
                      "poster": _poster_url(r.get("images"))}
                     for _, r in mapped.iterrows()],
             selected=selected, height=MAP_HEIGHT,
+            home=_home_area(mapped),     # 처음 화면: 내 주변 (위치를 모르면 팝업이 가장 많은 지역)
         )
         # 같은 점을 다시 눌러도 반영되도록 누른 시각까지 비교한다
         if clicked and st.session_state.get("_last_kakao") != clicked.get("at"):
@@ -1697,30 +1948,187 @@ def page_map() -> None:
             st.session_state["scroll_top"] = True    # 상세는 맨 위부터 보이게
 
     if current:
-        # 상세: 왼쪽은 이미지·정보·공유 → 지도 → 길찾기, 오른쪽은 리뷰·수정하기
+        # 상세: 왼쪽은 이미지·정보·공유, 오른쪽은 리뷰·수정하기 (지도·길찾기는 두지 않는다)
         col_info, col_tabs = st.columns([1, 1], gap="medium")
         with col_info, st.container(key="detail_left"):
-            def map_and_route() -> None:
-                # 특전·굿즈 바로 아래에 길찾기(가운데), 그 아래에 지도
-                st.link_button("🧭 길찾기", _directions_url(current),
-                               help="카카오맵에서 이 카페를 도착지로 엽니다")
-                draw_map()
-
-            render_detail(current, map_slot=map_and_route)
+            render_detail(current)
         with col_tabs:
             render_detail_tabs(current)
     else:
-        # 목록: 왼쪽은 리스트, 오른쪽은 지도 (지도는 스크롤해도 화면에 붙어 있다)
-        col_list, col_map = st.columns([2, 3], gap="medium")
-        with col_list:
-            render_list(view)
+        # 지도보기: 왼쪽 데일리 팝업 노트, 가운데 지도, 오른쪽 내 캘린더 (팝업 리스트는 두지 않는다)
+        st.markdown(CAL_CSS, unsafe_allow_html=True)
+        with st.container(key="map_row"):
+            col_day, col_map, col_cal = st.columns([0.9, 3.4, 1.55], gap="medium")
+        with col_day, st.container(key="map_daily"):
+            render_daily(df)
         with col_map:
             draw_map()
+        with col_cal, st.container(key="map_cal"):
+            render_calendar(compact=True)
 
     # 지도에서 고른 게 이번 실행에서 바뀌었으면 왼쪽 패널·강조를 다시 그린다
     if st.session_state.get("selected") != selected:
         st.rerun()
 
+
+# ================================================================ 데일리 팝업 노트
+# 지도보기 왼쪽: 고른 날(처음엔 오늘)에 열려 있는 팝업을 지역별로. 날짜는 ‹ › 로 하루씩 옮긴다
+DAILY_CSS = f"""
+<style>
+/* 머리 상자: 제목 / ‹ 날짜 › / ‹ 지역 › 세 줄을 촘촘하게 */
+.st-key-daily_head {{ border:1px solid #DDE2E0; border-radius:12px; padding:8px 6px; background:#fff;
+                     gap:4px !important; }}
+.st-key-daily_head [data-testid="stMarkdownContainer"] {{ margin:0 !important; }}
+.dn-title {{ text-align:center; color:#6B7672; font-size:.75rem; font-weight:600; line-height:1.2; }}
+.st-key-daily_nav, .st-key-daily_areas {{ align-items:center !important; justify-content:center !important;
+  gap:4px !important; flex-wrap:nowrap !important; }}
+.st-key-daily_nav > div, .st-key-daily_areas > div {{ width:auto !important; flex:0 0 auto !important; }}
+.st-key-daily_nav button, .st-key-daily_areas button {{ min-height:0 !important; height:22px; width:22px;
+  padding:0 !important; line-height:1; }}
+.st-key-daily_nav button p, .st-key-daily_areas button p {{ font-size:1rem !important; line-height:1 !important;
+  color:var(--accent-deep) !important; font-weight:700; margin:0 !important; }}
+.st-key-daily_nav [data-testid="stMarkdownContainer"], .st-key-daily_areas [data-testid="stMarkdownContainer"] {{
+  display:flex; align-items:center; height:22px; margin:0 !important; }}
+.st-key-daily_nav [data-testid="stMarkdownContainer"] p, .st-key-daily_areas [data-testid="stMarkdownContainer"] p {{
+  margin:0; line-height:1; }}
+.dn-date {{ font-weight:800; font-size:.88rem; color:#1F2A27; white-space:nowrap; }}
+.dn-today {{ background:var(--accent-soft); color:var(--accent-deep); font-size:.66rem; font-weight:700;
+            padding:.1rem .35rem; border-radius:5px; margin-right:4px; }}
+.dn-area {{ display:inline-block; min-width:70px; text-align:center; font-size:.76rem; font-weight:700; color:#26302D;
+           background:#F4F6F5; border-radius:999px; padding:.2rem .6rem; white-space:nowrap; }}
+.dn-area span {{ color:#8A9490; font-weight:500; margin-left:3px; }}
+/* 목록: 포스터 · 위치 · 작품명만. 포스터를 점선으로 잇는다 */
+.dn-list {{ max-height:{MAP_HEIGHT - 120}px; overflow-y:auto; margin-top:12px; padding:0 2px; }}
+.dn-item {{ display:flex; align-items:center; gap:10px; position:relative; padding:0 0 12px;
+           text-decoration:none !important; color:inherit !important; }}
+.dn-item:not(:last-child)::before {{ content:""; position:absolute; left:17px; top:38px; bottom:2px;
+                                    border-left:1.5px dashed #C9D1CE; }}
+.dn-thumb {{ flex:0 0 36px; height:36px; border-radius:50%; background:#F4F6F5 center/cover no-repeat;
+            border:1px solid #E4E8E6; }}
+.dn-body {{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:3px; }}
+.dn-body .abadge {{ font-size:.62rem; line-height:1.4; padding:0 .35rem; border-radius:5px; font-weight:700; }}
+.dn-name {{ max-width:100%; font-weight:800; font-size:.8rem; line-height:1.25; color:#1F2A27;
+           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.dn-item:hover .dn-name {{ color:var(--accent-deep); }}
+.dn-empty {{ color:#6B7672; text-align:center; padding:16px 4px; font-size:.76rem; margin-top:8px; }}
+/* 내 위치를 묻는 칸은 보이지 않게 흐름에서 뺀다 (스크립트만 돈다) */
+.st-key-daily_loc {{ position:absolute !important; width:0 !important; height:0 !important; overflow:hidden; }}
+/* 제목 옆 ? : 커서를 올리거나(모바일은 누르면) 안내 말풍선 */
+.dn-help {{ position:relative; display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px;
+           margin-left:4px; border:1px solid #B5BDBA; border-radius:50%; color:#8A9490; font-size:.6rem; font-weight:700;
+           line-height:1; cursor:help; vertical-align:1px; }}
+.dn-tip {{ display:none; position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%); z-index:50;
+          width:170px; padding:7px 9px; border-radius:8px; background:#26302D; color:#fff; font-size:.7rem;
+          font-weight:500; line-height:1.4; text-align:left; word-break:keep-all; box-shadow:0 4px 12px rgba(0,0,0,.18); }}
+.dn-tip b {{ color:#7FE3D3; }}
+.dn-help:hover .dn-tip, .dn-help:focus .dn-tip {{ display:block; }}
+.st-key-daily_head {{ overflow:visible !important; }}
+/* 지도보기: 지도는 화면에 붙어 따라 내려오지 않고 페이지와 함께 스크롤된다 */
+.st-key-map_row [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{ position: static !important; top: auto !important; }}
+/* 모바일: 데일리 팝업 노트(왼쪽 좁게)와 지도를 한 줄에, 내 캘린더는 그 아래 전체 폭 */
+@media (max-width: 640px) {{
+  /* 예전 모바일 규칙(지도를 맨 위로 세로 쌓기: flex-direction column + order -1)을 이 줄에서는 덮어쓴다 */
+  .st-key-map_row [data-testid="stHorizontalBlock"]:has(.st-key-map_daily) {{ flex-direction: row !important;
+    flex-wrap: wrap !important; gap: 8px !important; }}
+  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{ order: 0 !important; }}
+  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {{
+    flex: 0 0 38% !important; width: 38% !important; min-width: 38% !important; }}
+  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{
+    flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }}
+  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_cal) {{
+    flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important; }}
+  .st-key-daily_head {{ padding: 6px 2px; }}
+  .dn-today {{ display: none; }}
+  .dn-date {{ font-size: .76rem; }}
+  .dn-area {{ min-width: 0; font-size: .7rem; padding: .15rem .45rem; }}
+  .dn-name {{ font-size: .74rem; }}
+  .dn-thumb {{ flex-basis: 30px; height: 30px; }}
+  .dn-item {{ gap: 6px; }}
+  .dn-item:not(:last-child)::before {{ left: 14px; top: 32px; }}
+  .dn-list {{ max-height: max(320px, 58vh); }}
+}}
+</style>
+"""
+
+
+def _daily_shift(delta: int) -> None:
+    st.session_state["daily_day"] = st.session_state.get("daily_day", 0) + delta
+    st.session_state["daily_area_i"] = 0      # 날이 바뀌면 지역은 다시 '전체'
+
+
+def _daily_area_shift(delta: int, n: int) -> None:
+    st.session_state["daily_area_i"] = (st.session_state.get("daily_area_i", 0) + delta) % n
+
+
+def render_daily(df: pd.DataFrame) -> None:
+    """데일리 팝업 노트: 고른 날 열려 있는 팝업을 포스터 · 위치 · 작품명으로.
+
+    지역은 내 위치에서 가까운 곳부터 보여 주고 ‹ › 로 넘긴다 ('전체' 는 맨 끝).
+    위치를 못 받으면 그날 팝업이 많은 지역부터. 팝업은 팔로우 많은 순.
+    """
+    st.markdown(DAILY_CSS, unsafe_allow_html=True)
+    with st.container(key="daily_loc"):
+        loc = my_place.my_location()
+    st.session_state["_my_loc"] = loc     # 같은 실행에서 바로 뒤에 그리는 지도가 처음 화면을 내 주변으로 맞춘다
+    off = st.session_state.get("daily_day", 0)
+    day = TODAY + timedelta(days=off)
+    # 날짜가 빈 행(NaT)은 비교하지 않고 뺀다
+    open_ = df[[isinstance(a, date) and isinstance(b, date) and a <= day <= b
+                for a, b in zip(df["start_date"], df["end_date"])]]
+    # 지역은 ‹ › 로 하나씩 넘긴다: 내 위치에서 가까운 지역부터 (위치를 모르면 팝업이 많은 지역부터), '전체' 는 맨 끝
+    by_area = open_["area"].replace("", "기타").value_counts() if not open_.empty else pd.Series(dtype=int)
+    order = by_area.index.tolist()
+    near = ""
+    if isinstance(loc, dict) and "lat" in loc:
+        placed = df.dropna(subset=["lat", "lng"])
+        ranked = my_place.areas_by_distance(
+            (float(loc["lat"]), float(loc["lng"])),
+            [(a, float(la), float(ln)) for a, la, ln in zip(placed["area"], placed["lat"], placed["lng"]) if a])
+        near = ranked[0] if ranked else ""
+        rank = {a: i for i, a in enumerate(ranked)}
+        order = sorted(order, key=lambda a: rank.get(a, len(rank)))
+    choices = [*order, "전체"]
+    area = choices[st.session_state.get("daily_area_i", 0) % len(choices)]
+    count = len(open_) if area == "전체" else int(by_area[area])
+
+    # 안내(내 위치 기준인지, 위치를 허용해야 하는지)는 제목 옆 ? 에 커서를 올리면 보인다
+    if near:
+        guide = f"내 위치(<b>{escape(near)}</b> 근처)에서 가까운 지역부터 보여 줘요"
+    elif isinstance(loc, dict) and loc.get("error"):
+        guide = "위치 권한을 허용하면 내 주변 지역 팝업부터 보여 줘요"
+    else:
+        guide = "내 위치를 확인하고 있어요"
+    with st.container(key="daily_head"):
+        st.markdown(f'<div class="dn-title">데일리 팝업 노트<span class="dn-help" tabindex="0">?'
+                    f'<span class="dn-tip">{guide}</span></span></div>', unsafe_allow_html=True)
+        with st.container(horizontal=True, key="daily_nav"):
+            st.button("‹", key="daily_prev", type="tertiary", on_click=_daily_shift, args=(-1,), help="전날")
+            st.markdown(('<span class="dn-today">오늘</span>' if off == 0 else "")
+                        + f'<span class="dn-date">{day:%y. %m. %d.} {_WEEKDAYS[day.weekday()]}</span>',
+                        unsafe_allow_html=True)
+            st.button("›", key="daily_next", type="tertiary", on_click=_daily_shift, args=(1,), help="다음 날")
+        with st.container(horizontal=True, key="daily_areas"):
+            st.button("‹", key="daily_area_prev", type="tertiary", on_click=_daily_area_shift,
+                      args=(-1, len(choices)), help="이전 지역", disabled=len(choices) < 2)
+            st.markdown(f'<span class="dn-area">{escape(area)}<span>{count}</span></span>', unsafe_allow_html=True)
+            st.button("›", key="daily_area_next", type="tertiary", on_click=_daily_area_shift,
+                      args=(1, len(choices)), help="다음 지역", disabled=len(choices) < 2)
+
+    if area != "전체":
+        open_ = open_[open_["area"].replace("", "기타") == area]
+    if open_.empty:
+        st.markdown('<div class="dn-empty">이날 열려 있는 팝업이 없어요.</div>', unsafe_allow_html=True)
+        return
+    _, _, fcounts = _fav_state()
+    rows = sorted(open_.to_dict("records"), key=lambda r: (-fcounts.get(str(r["entry_id"]), 0), r["start_date"]))
+    items = "".join(
+        f'<a class="dn-item" href="./?cafe={quote(str(r["entry_id"]))}" target="_self"'
+        f' title="{escape(str(r["work"]))} · {escape(str(r["cafe_name"]))}">'
+        f'<span class="dn-thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\')"></span>'
+        f'<div class="dn-body">{_area_badge(r.get("address"))}'
+        f'<div class="dn-name">{escape(str(r["work"]))}</div></div></a>'
+        for r in rows)
+    st.markdown(f'<div class="dn-list">{items}</div>', unsafe_allow_html=True)
 
 # =================================================================== 등록하기
 # 한 화면에 한 단계씩 묻는다. 진행 막대 + 가운데 카드 하나.
@@ -1744,16 +2152,12 @@ WIZARD_CSS = f"""
 /* 이미지 올리는 칸: 회색 상자 + 민트 점선 */
 [data-testid="stFileUploaderDropzone"] {{ background:{GRAY_SOFT}; border:1.5px dashed {ACCENT};
              border-radius:8px; min-height:140px; }}
-/* 모바일: '🏠 홈으로' 를 화면 아래 가운데에 떠 있는 버튼으로 (메인의 떠 있는 버튼과 같은 모양, PC 는 원래 자리) */
+/* 모바일: '홈으로 돌아가기' 를 화면 아래 가운데에 떠 있는 버튼으로 (메인의 떠 있는 버튼과 같은 모양, PC 는 원래 자리) */
 @media (max-width: 640px) {{
   .st-key-wiz_home {{ position: fixed !important; left: 50%; bottom: 20px; transform: translateX(-50%);
     z-index: 1000; width: auto !important; }}
-  .st-key-wiz_home button {{ background: #fff !important; color: {MINT_DEEP} !important;
-    border: 2px solid {ACCENT} !important; padding: .55rem 1.5rem !important; min-height: 0 !important;
+  .st-key-wiz_home button {{ height: 40px !important; padding: 0 1.4rem !important;
     box-shadow: 0 6px 18px rgba(0,0,0,.16) !important; white-space: nowrap; }}
-  .st-key-wiz_home button p {{ font-weight: 700; }}
-  .st-key-wiz_home button:hover, .st-key-wiz_home button:active {{ background: {ACCENT} !important;
-    color: #fff !important; border-color: {ACCENT} !important; }}
   /* 떠 있는 버튼이 맨 아래 '이전 / 다음' 버튼을 가리지 않게 페이지 아래에 여백 */
   .stMainBlockContainer {{ padding-bottom: 6rem !important; }}
 }}
@@ -2251,10 +2655,192 @@ def page_add() -> None:
             [_step_work, _step_cafe, _step_images, _step_dates, _step_extras,
              _step_confirm][step](w)
 
+# ================================================================ 내 캘린더
+# 찜한 팝업을 달마다 달력에 막대로 (연속된 날은 한 막대), 아래에 곧 있는 팝업 목록
+CAL_COLORS = ["#14b8a6", "#F59E0B", "#8B5CF6", "#EC4899", "#3B82F6", "#22A06B", "#EF6C4D", "#64748B"]
+CAL_CSS = f"""
+<style>
+/* 달력 머리글: 큰 '2026년 10월' · ‹ › · 테두리 있는 '오늘' */
+.st-key-cal_nav {{ align-items:center !important; flex-wrap:nowrap !important; gap:6px !important; margin:4px 0 12px; }}
+.st-key-cal_nav > div {{ width:auto !important; flex:0 0 auto !important; }}
+.st-key-cal_nav > div:first-child {{ flex:1 1 auto !important; }}
+.st-key-cal_nav [data-testid="stMarkdownContainer"] {{ margin:0 !important; }}
+.st-key-cal_nav [data-testid="stMarkdownContainer"] p {{ margin:0; }}
+.cal-month {{ font-weight:900; font-size:1.6rem; color:#111; letter-spacing:-.01em; white-space:nowrap; }}
+.st-key-cal_prev button, .st-key-cal_next button {{ min-height:0 !important; height:40px; width:40px; padding:0 !important; }}
+.st-key-cal_prev button p, .st-key-cal_next button p {{ font-size:1.6rem !important; line-height:1 !important;
+  color:#26302D !important; font-weight:500; margin:0 !important; }}
+.st-key-cal_prev button:hover p, .st-key-cal_next button:hover p {{ color:var(--accent-deep) !important; }}
+.st-key-cal_now button {{ min-height:0 !important; height:44px; padding:0 .9rem !important; border-radius:10px !important;
+  border:1.5px solid #DDE2E0 !important; background:#fff !important; margin-left:10px; }}
+.st-key-cal_now button p {{ font-size:.95rem !important; color:#26302D !important; }}
+.st-key-cal_now button:hover {{ border-color:var(--accent) !important; }}
+.cal {{ border-top:2px solid #26302D; }}
+.cal-dow, .cal-week {{ display:grid; grid-template-columns:repeat(7, 1fr); }}
+.cal-dow div {{ text-align:center; font-weight:700; color:#5B6663; padding:8px 0; border:1px solid #E4E8E6;
+               border-top:0; margin-left:-1px; background:#FAFBFA; }}
+.cal-dow div:first-child {{ color:#E0566B; }} .cal-dow div:last-child {{ color:#4C7BD9; }}
+.cal-week {{ position:relative; }}
+.cal-day {{ border:1px solid #E4E8E6; border-top:0; margin-left:-1px; padding:6px 8px; font-weight:700;
+           color:#3F4A47; font-size:.95rem; background:#fff; }}
+.cal-day.out {{ background:#F4F6F5; color:#B5BDBA; }}
+.cal-day.sun {{ color:#E0566B; }} .cal-day.sat {{ color:#4C7BD9; }}
+.cal-day.out.sun, .cal-day.out.sat {{ color:#C9CFCD; }}
+.cal-day.today {{ background:var(--accent-soft); }}
+.cal-day.today span {{ background:var(--accent); color:#fff; border-radius:999px; padding:1px 7px; }}
+.cal-bar {{ position:absolute; height:20px; line-height:20px; font-size:.78rem; font-weight:700; color:#fff !important;
+           padding:0 7px; border-radius:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+           text-decoration:none !important; box-sizing:border-box; }}
+.cal-bar:hover {{ filter:brightness(.92); }}
+/* 막대에 커서를 올리면 지도의 점처럼 포스터·작품·카페·위치·기간 카드가 막대 아래에 뜬다 */
+.cal-pop {{ position:absolute; z-index:30; width:250px; background:#fff; border-radius:14px; padding:8px;
+           border-top:3px solid var(--accent); box-shadow:0 8px 24px rgba(0,0,0,.18); display:none; gap:9px;
+           pointer-events:none; font-size:12.5px; color:#26302D; line-height:1.4; }}
+.cal-bar:hover + .cal-pop {{ display:flex; }}
+.cal-pop img {{ width:58px; height:78px; object-fit:cover; border-radius:8px; flex:0 0 auto; background:#F4F6F5; }}
+.cal-pop .w {{ font-weight:800; font-size:13.5px; color:var(--accent-deep); margin-bottom:2px; }}
+.cal-pop .c {{ font-weight:600; margin-bottom:3px; }}
+.cal-pop .a {{ color:#5f6b67; font-size:11.5px; }}
+.cal-pop .d {{ color:var(--accent-deep); font-size:11.5px; font-weight:700; }}
+.cal-bar.cl {{ border-top-left-radius:0; border-bottom-left-radius:0; }}
+.cal-bar.cr {{ border-top-right-radius:0; border-bottom-right-radius:0; }}
+.up-head {{ display:flex; align-items:center; gap:14px; margin:34px 0 14px; }}
+.up-head b {{ font-family:"Jua", sans-serif; font-size:1.4rem; font-weight:400; color:#1F2A27; white-space:nowrap; }}
+.up-head i {{ flex:1; height:1px; background:#D5DBD9; }}
+.up-item {{ display:flex; align-items:center; gap:14px; padding:12px 16px; border:1px solid #E4E8E6;
+           border-radius:12px; margin-bottom:10px; background:#fff; text-decoration:none !important; color:inherit !important; }}
+.up-item:hover {{ border-color:var(--accent); background:var(--accent-soft); }}
+.up-thumb {{ flex:0 0 52px; height:52px; border-radius:8px; background:#F4F6F5 center/cover no-repeat; }}
+.up-text {{ flex:1; min-width:0; }}
+.up-name {{ font-weight:800; font-size:1.02rem; color:#1F2A27; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.up-when {{ color:var(--accent-deep); font-weight:700; font-size:.9rem; margin-top:2px; }}
+.up-bar {{ flex:0 0 6px; align-self:stretch; border-radius:3px; }}
+.up-state {{ flex:0 0 auto; font-size:.8rem; font-weight:800; padding:.2rem .6rem; border-radius:.5rem; white-space:nowrap; }}
+.up-state.green {{ background:#E3F6EA; color:#1F7A44; }} .up-state.blue {{ background:#E5EEFC; color:#2C5BC5; }}
+.up-state.red {{ background:#FDE8EC; color:#C23A54; }} .up-state.gray {{ background:#EEF0EF; color:#6B7672; }}
+.up-empty {{ color:#6B7672; padding:18px; border:1px dashed #D5DBD9; border-radius:12px; text-align:center; }}
+/* 지도 옆 작은 캘린더 */
+.st-key-map_cal .cal-month {{ font-size:1.15rem; }}
+.st-key-map_cal .st-key-cal_nav {{ margin:0 0 6px; gap:2px !important; }}
+.st-key-map_cal .st-key-cal_prev button, .st-key-map_cal .st-key-cal_next button {{ height:28px; width:26px; }}
+.st-key-map_cal .st-key-cal_prev button p, .st-key-map_cal .st-key-cal_next button p {{ font-size:1.2rem !important; }}
+.st-key-map_cal .st-key-cal_now button {{ height:30px; padding:0 .6rem !important; margin-left:4px; border-radius:8px !important; }}
+.st-key-map_cal .st-key-cal_now button p {{ font-size:.78rem !important; }}
+.st-key-map_cal .cal-dow div {{ padding:4px 0; font-size:.72rem; }}
+.st-key-map_cal .cal-day {{ padding:3px 5px; font-size:.72rem; }}
+.st-key-map_cal .cal-day.today span {{ padding:0 5px; }}
+.st-key-map_cal .cal-bar {{ height:16px; line-height:16px; font-size:.62rem; padding:0 4px; border-radius:4px; }}
+.st-key-map_cal .up-head {{ margin:18px 0 8px; }}
+.st-key-map_cal .up-head b {{ font-size:1.05rem; }}
+.st-key-map_cal .up-item {{ gap:8px; padding:8px 10px; margin-bottom:6px; border-radius:10px; }}
+.st-key-map_cal .up-thumb {{ flex-basis:36px; height:36px; }}
+.st-key-map_cal .up-name {{ font-size:.8rem; }}
+.st-key-map_cal .up-when {{ font-size:.72rem; }}
+.st-key-map_cal .up-state {{ font-size:.66rem; padding:.12rem .4rem; }}
+@media (max-width: 640px) {{
+  .cal-day {{ padding:4px 4px; font-size:.8rem; }}
+  .cal-bar {{ font-size:.66rem; padding:0 4px; height:17px; line-height:17px; }}
+  .cal-month {{ font-size:1.25rem; }}
+}}
+</style>
+"""
+
+
+def _cal_color(work: str) -> str:
+    """같은 작품은 늘 같은 색."""
+    return CAL_COLORS[int(hashlib.md5(work.encode()).hexdigest(), 16) % len(CAL_COLORS)]
+
+
+def _cal_html(year: int, month: int, events: list, compact: bool = False) -> str:
+    # 막대 한 줄 높이, 날짜 숫자 아래 막대가 시작하는 높이, 날짜 칸 최소 높이 (px). 지도 옆(compact)은 작게
+    lane_h, top, min_h = (18, 22, 44) if compact else (23, 32, 86)
+    dow = "".join(f"<div>{d}</div>" for d in "일월화수목금토")
+    weeks = []
+    for w in mycal.month_weeks(year, month, events):
+        height = max(min_h, top + w.lanes * lane_h + 8)
+        cells = "".join(
+            f'<div class="cal-day{" out" if d.month != month else ""}{" sun" if i == 0 else " sat" if i == 6 else ""}'
+            f'{" today" if d == TODAY else ""}" style="min-height:{height}px"><span>{d.day}</span></div>'
+            for i, d in enumerate(w.days))
+        # 연속된 날은 한 막대. 주를 넘어가면 끊긴 쪽 모서리를 각지게 둔다 (.cl / .cr)
+        bars = "".join(
+            f'<a class="cal-bar{" cl" if b.cont_left else ""}{" cr" if b.cont_right else ""}" href="./?cafe={quote(b.event.cafe_id)}"'
+            f' target="_self"'
+            f' style="left:calc({b.col} * 100% / 7 + 3px); width:calc({b.span} * 100% / 7 - 6px);'
+            f' top:{top + b.lane * lane_h}px; background:{_cal_color(b.event.work)}">'
+            f'{escape(b.event.work)}</a>' + _cal_pop(b, top + (b.lane + 1) * lane_h)
+            for b in w.bars)
+        weeks.append(f'<div class="cal-week">{cells}{bars}</div>')
+    return f'<div class="cal"><div class="cal-dow">{dow}</div>{"".join(weeks)}</div>'
+
+
+def _cal_pop(b, top: int) -> str:
+    """막대 바로 아래에 뜨는 미리보기 카드. 오른쪽 칸(목~토)에서 시작하는 막대는 오른쪽 끝에 맞춰 화면 밖으로 안 나가게."""
+    e = b.event
+    side = (f"right:calc({7 - b.col - b.span} * 100% / 7 + 3px)" if b.col >= 4
+            else f"left:calc({b.col} * 100% / 7 + 3px)")
+    return (f'<div class="cal-pop" style="{side}; top:{top}px">'
+            f'<img src="{_poster_url(e.images)}" alt=""/>'
+            f'<div><div class="w">{escape(e.work)}</div><div class="c">{escape(e.cafe_name)}</div>'
+            f'<div class="a">{escape(e.address or "-")}</div>'
+            f'<div class="d">{e.start:%m.%d} ~ {e.end:%m.%d}</div></div></div>')
+
+
+def _upcoming_html(events: list) -> str:
+    items = []
+    for e in mycal.upcoming(events, TODAY):
+        label, color = mycal.status(e, TODAY)
+        when = _day(e.start, False) + ("" if e.start == e.end else f" - {_day(e.end, False)}")
+        items.append(
+            f'<a class="up-item" href="./?cafe={quote(e.cafe_id)}" target="_self">'
+            f'<span class="up-bar" style="background:{_cal_color(e.work)}"></span>'
+            f'<span class="up-thumb" style="background-image:url(\'{_poster_url(e.images)}\')"></span>'
+            f'<span class="up-text"><div class="up-name">{escape(e.work)} · {escape(e.cafe_name)}</div>'
+            f'<div class="up-when">{when}</div></span>'
+            f'<span class="up-state {color}">{escape(label)}</span></a>')
+    body = "".join(items) or '<div class="up-empty">곧 있는 팔로우한 팝업이 없어요. 메인에서 ♡ 를 눌러 팔로우해 보세요.</div>'
+    return f'<div class="up-head"><b>곧 있는 팝업</b><i></i></div>{body}'
+
+
+def _cal_shift(delta: int) -> None:
+    y, m = st.session_state.get("cal_month") or (TODAY.year, TODAY.month)
+    m += delta
+    st.session_state["cal_month"] = (y + (m - 1) // 12, (m - 1) % 12 + 1)
+
+
+def page_calendar() -> None:
+    st.markdown(GLOBAL_CSS + CAL_CSS, unsafe_allow_html=True)
+    _no_translate()
+    if _brand(home=True, fixed=True):
+        go("map")
+    render_calendar()
+
+
+def render_calendar(compact: bool = False) -> None:
+    """내 캘린더 묶음 (월 머리글·이전/다음 달·달력·곧 있는 팝업). compact 면 지도 옆 좁은 칸용으로 칸 높이를 줄인다."""
+    _, mine, _ = _fav_state()
+    # 기간이 끝나 지도에서 내려간 팔로우도 지난 달력에 남도록, 내린 기록까지 포함한 최신 행에서 고른다
+    events = mycal.fav_events(mycal.latest_rows(store.all_rows()), mine, TODAY)
+
+    year, month = st.session_state.get("cal_month") or (TODAY.year, TODAY.month)
+    # 머리글 한 줄: '2026년 10월'  ‹  ›  [오늘]
+    with st.container(horizontal=True, vertical_alignment="center", key="cal_nav"):
+        st.markdown(f'<span class="cal-month">{year}년 {month}월</span>', unsafe_allow_html=True)
+        st.button("‹", key="cal_prev", type="tertiary", on_click=_cal_shift, args=(-1,), help="이전 달")
+        st.button("›", key="cal_next", type="tertiary", on_click=_cal_shift, args=(1,), help="다음 달")
+        st.button("오늘", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None),
+                  help="이번 달로")
+    if not events:
+        st.info("아직 팔로우한 팝업이 없어요. 메인 리스트에서 ♡ 를 눌러 팔로우하면 여기 달력에 일정이 채워져요.")
+    st.markdown(_cal_html(year, month, events, compact), unsafe_allow_html=True)
+    st.markdown(_upcoming_html(events), unsafe_allow_html=True)
+
+
 
 # 지도와 등록은 주소가 다른 별개 페이지다 (/, /add). 메뉴는 숨기고 버튼으로만 오간다.
 PAGES = {
     "map": st.Page(page_map, title="ANI:WHERE", icon="🗺️", url_path="map", default=True),
     "add": st.Page(page_add, title="팝업 카페 등록하기 · ANI:WHERE", icon="➕", url_path="add"),
+    "calendar": st.Page(page_calendar, title="내 캘린더 · ANI:WHERE", icon="📅", url_path="calendar"),
 }
 st.navigation(list(PAGES.values()), position="hidden").run()

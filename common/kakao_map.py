@@ -20,10 +20,11 @@ def js_key() -> str | None:
 
 
 def kakao_map(points: list[dict], selected: str | None, height: int,
-              key: str = "kakao_map") -> dict | None:
+              key: str = "kakao_map", home: dict | None = None) -> dict | None:
     """카페 점을 지도에 찍고, 점을 누르면 {"id": entry_id, "at": 시각} 을 돌려준다.
 
     points: [{"id", "lat", "lng", "name", "tooltip"}]
+    home: 처음 보여 줄 범위 {"south", "west", "north", "east"}. 없으면 포천~제주 전체.
     """
     return _component(app_key=js_key(), points=points, selected=selected, height=height,
-                      key=key, default=None)
+                      home=home, key=key, default=None)

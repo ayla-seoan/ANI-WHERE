@@ -14,9 +14,20 @@ from .guard import Validation, scan
 HEADERS = [
     "row_id", "entry_id", "revision", "status", "updated_at",
     "cafe_id", "parent_id", "kind", "nickname", "body",
+    "rating",    # 다녀온 후기의 별점 1~5 (없으면 빈칸). 예전 칸 순서가 밀리지 않게 맨 끝에 둔다
 ]
 
 KINDS = ["다녀온 후기", "기대평", "기타"]
+RATED_KIND = "다녀온 후기"   # 별점을 고르는 종류
+
+
+def stars(rating) -> str:
+    """별점 숫자 → '★★★★☆'. 별점이 없거나 이상하면 빈 문자열."""
+    try:
+        n = int(rating)
+    except (TypeError, ValueError):
+        return ""
+    return "★" * n + "☆" * (5 - n) if 1 <= n <= 5 else ""
 MAX_BODY = 1000
 MAX_NICK = 20
 
@@ -52,13 +63,17 @@ def validate(body: str, nickname: str = "") -> Validation:
 
 
 def to_row(cafe_id: str, body: str, nickname: str = "", kind: str = "",
-           parent_id: str = "") -> dict:
+           parent_id: str = "", rating: int | None = None) -> dict:
+    kind = "" if parent_id else (kind if kind in KINDS else KINDS[0])
+    # 별점은 다녀온 후기(원글)에만, 1~5 일 때만 남긴다
+    ok = kind == RATED_KIND and isinstance(rating, int) and 1 <= rating <= 5
     return {
         "cafe_id": str(cafe_id),
         "parent_id": str(parent_id),
-        "kind": "" if parent_id else (kind if kind in KINDS else KINDS[0]),
+        "kind": kind,
         "nickname": nickname.strip() or "익명",
         "body": body.strip(),
+        "rating": rating if ok else "",
     }
 
 
