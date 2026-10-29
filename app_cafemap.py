@@ -124,7 +124,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   box-shadow: none !important; padding: 0 !important; min-height: 0; transform: none !important; }}
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
 .st-key-home_brand button {{ width: 270px !important; height: 76px !important;
-  background: url("/app/static/logo.png") no-repeat left center / contain !important; }}
+  background: url("app/static/logo.png") no-repeat left center / contain !important; }}
 .st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
 .st-key-home_brand button:hover {{ filter: brightness(1.06) saturate(1.1); }}
 @media (max-width: 640px) {{
@@ -1428,7 +1428,7 @@ _LOGO_SWAP_JS = """
 
 def _logo_swap() -> None:
     """제목 로고를 LOGOS 중에서, 화면을 누를 때마다 바꾼다."""
-    js = _LOGO_SWAP_JS.replace("__URLS__", json.dumps([f"/app/static/{name}" for name in LOGOS]))
+    js = _LOGO_SWAP_JS.replace("__URLS__", json.dumps([f"app/static/{name}" for name in LOGOS]))
     components.html(f"<script>window.parent.eval({json.dumps(js)});</script>", height=0)
 
 
@@ -1438,11 +1438,12 @@ def _brand(home: bool = False, fixed: bool = False) -> bool:
     home 이면 'ANIME POP-UP · CAFE · GOODS' 줄 오른쪽 끝에 🏠 홈으로 버튼을 둔다 (등록 화면).
     """
     # 글자 대신 로고 그림을 보여 준다 (GLOBAL_CSS 의 .st-key-home_brand). 글자는 화면 읽기용으로 남긴다.
+    # 로고 주소는 포스터처럼 'app/static/…' 상대 주소로 둔다 ('/' 로 시작하면 하위 경로에 배포했을 때 못 찾는다)
     # 화면 어디든 누를 때마다 로고가 다른 것으로 바뀐다 (_logo_swap — 브라우저에서 처리).
     # 상세·등록 화면은 바뀌지 않고 늘 같은 로고(FIXED_LOGO). 더 강한 선택자로 덮어써서, 목록으로 돌아가면 다시 바뀐다
     _logo_swap()
     if fixed:
-        st.markdown(f'<style>html body .st-key-home_brand button {{ background-image: url("/app/static/{FIXED_LOGO}")'
+        st.markdown(f'<style>html body .st-key-home_brand button {{ background-image: url("app/static/{FIXED_LOGO}")'
                     ' !important; }</style>', unsafe_allow_html=True)
     clicked = st.button("ANI:WHERE", key="home_brand", type="tertiary")
     if not home:
