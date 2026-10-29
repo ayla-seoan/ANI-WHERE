@@ -1867,8 +1867,7 @@ def _quick_report(got: dict) -> None:
 def _quick(w: dict) -> None:
     """간편등록: 공지를 붙여넣고 '읽어오기' → 채워진 칸을 확인·수정 → 바로 등록."""
     raw = st.text_area("공지", key="quick_raw", height=180, label_visibility="collapsed",
-                       placeholder="공지 글을 그대로 붙여넣어 주세요\n\n#OO 콜라보 카페\n카페명: ...\n"
-                                   "주소: ...\n기간: 2026.11.01 ~ 2026.11.30\n특전: ...\n굿즈: ...")
+                       placeholder="공지 글을 그대로 붙여넣어 주세요\n\n읽어오기 클릭 시 자동으로 항목이 입력됩니다.")
     # 비었는지는 화면에서 바로 본다 (_live_send). 입력칸은 칸을 벗어나야 값이 넘어와서
     # 여기서 막으면 글을 붙여넣어도 버튼이 계속 꺼져 있다
     if st.button("읽어오기", type="primary", width="stretch", key="quick_read"):

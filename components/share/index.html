@@ -143,20 +143,28 @@ document.getElementById("insta").onclick = async () => {
   // 인스타그램에는 웹에서 'DM 으로 보내기' 창을 바로 여는 주소가 없다.
   // 대신 휴대폰은 기기 공유 창(navigator.share)을 연다 → 거기서 인스타그램을 고르면
   // 인스타 안의 '보내기(DM)' 창이 뜨고 링크가 담겨 있다. (안드로이드는 'Direct' 가 공유 창에 바로 보이기도 한다)
-  // 공유 창은 바깥 페이지의 것을 쓴다 (이 칸은 iframe 이라 직접 부르면 막힐 수 있다)
-  const nav = P.navigator;
-  if (MOBILE && nav.share) {
-    try {
-      await nav.share({ title: A.title, text: `${A.title}\n${A.text}`, url: link() });
-      say("공유 창을 열었어요. 인스타그램을 고르면 DM 으로 보낼 수 있어요 📷");
-      return;
-    } catch (e) {
-      if (e && e.name === "AbortError") { say(""); return; }    // 사용자가 공유 창을 닫음
-      /* 공유 창을 못 열면 아래 방법으로 */
+  // 누른 곳(이 칸, iframe)의 공유 창을 먼저 쓰고, 막히면 바깥 페이지의 공유 창을 쓴다.
+  // (아이폰 사파리는 iframe 안에서 누른 걸 바깥 페이지의 '사용자 동작'으로 쳐 주지 않기도 하고,
+  //  반대로 iframe 은 web-share 권한이 없어 막히기도 해서 둘 다 해 본다)
+  const data = { title: A.title, text: `${A.title}\n${A.text}`, url: link() };
+  let why = "";
+  if (MOBILE) {
+    for (const nav of [navigator, P.navigator]) {
+      if (!nav.share) continue;
+      try {
+        await nav.share(data);
+        say("공유 창을 열었어요. 인스타그램을 고르면 DM 으로 보낼 수 있어요 📷");
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") { say(""); return; }    // 사용자가 공유 창을 닫음
+        why = (e && (e.name || e.message)) || String(e);
+        console.warn("[ANI:WHERE] share sheet failed:", e);
+      }
     }
+    why = why ? `공유 창을 열 수 없었어요 (${why})` : "이 브라우저는 공유 창을 지원하지 않아요 (앱 안의 브라우저라면 크롬·사파리로 열어 주세요)";
   }
   // PC·공유 창이 없을 때: 링크를 복사하고 인스타 DM 을 연다 (받는 사람을 고르고 붙여 넣으면 된다)
-  await copy("링크를 복사했어요. 인스타그램 DM 에 붙여 넣어 보내 주세요 📷");
+  await copy((why ? why + " · " : "") + "링크를 복사했어요. 인스타그램 DM 에 붙여 넣어 보내 주세요 📷");
   openApp("instagram://direct-inbox",
           "intent://direct-inbox#Intent;scheme=instagram;package=com.instagram.android;end",
           "https://www.instagram.com/direct/new/");
