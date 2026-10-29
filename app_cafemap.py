@@ -2134,13 +2134,35 @@ def render_daily(df: pd.DataFrame) -> None:
     _, _, fcounts = _fav_state()
     rows = sorted(open_.to_dict("records"), key=lambda r: (-fcounts.get(str(r["entry_id"]), 0), r["start_date"]))
     items = "".join(
-        f'<a class="dn-item" href="./?cafe={quote(str(r["entry_id"]))}" target="_self"'
+        f'<a class="dn-item" data-id="{escape(str(r["entry_id"]))}" href="./?cafe={quote(str(r["entry_id"]))}" target="_self"'
         f' title="{escape(str(r["work"]))} · {escape(str(r["cafe_name"]))}">'
         f'<span class="dn-thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\')"></span>'
         f'<div class="dn-body">{_area_badge(r.get("address"))}'
         f'<div class="dn-name">{escape(str(r["work"]))}</div></div></a>'
         for r in rows)
     st.markdown(f'<div class="dn-list">{items}</div>', unsafe_allow_html=True)
+    # 목록을 누르면 상세로 가지 않고, 지도에서 그 팝업 자리를 보여 주며 지도 안 목록 창에 띄운다
+    components.html(f"<script>window.parent.eval({json.dumps(_DAILY_PEEK_JS)});</script>", height=0)
+
+
+_DAILY_PEEK_JS = """
+(function () {
+  if (window.__aniDailyPeek) return;
+  window.__aniDailyPeek = true;
+  document.addEventListener('click', function (e) {
+    const a = e.target.closest && e.target.closest('a.dn-item');
+    if (!a) return;
+    const f = document.querySelector('iframe[src*="kakao_map"]');
+    let ok = false;
+    try { ok = !!(f && f.contentWindow.peek && f.contentWindow.peek(a.dataset.id)); } catch (err) {}
+    if (!ok) return;            // 지도에 없는 팝업이면 원래대로 상세로 간다
+    e.preventDefault();
+    // 모바일처럼 지도가 화면 밖에 있으면 지도가 보이게
+    const r = f.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight) f.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, true);
+})();
+"""
 
 # =================================================================== 등록하기
 # 한 화면에 한 단계씩 묻는다. 진행 막대 + 가운데 카드 하나.
