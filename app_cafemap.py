@@ -112,6 +112,18 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .st-key-add_btn button p, .st-key-back_to_list button p, .st-key-wiz_home button p {{ color: #fff !important; font-weight: 800 !important; font-size: .92rem !important;
   letter-spacing: .01em; white-space: pre; }}
 .st-key-add_btn button:hover, .st-key-back_to_list button:hover, .st-key-wiz_home button:hover {{ background: var(--accent-deep) !important; transform: translateY(-1px); }}
+/* 메인 '등록하기': 위쪽이 아니라 화면 오른쪽 아래에 떠 있는 버튼. 포인트(민트)와 구분되게 코랄 색 */
+.st-key-add_btn {{ position: fixed !important; right: 28px; bottom: 28px; z-index: 1001; width: auto !important; }}
+.st-key-add_btn button {{ background: #FF6B6B !important; height: 50px !important; padding: 0 1.4rem !important;
+  border-radius: 999px !important; box-shadow: 0 8px 22px rgba(255,107,107,.45) !important; }}
+.st-key-add_btn button p {{ font-size: 1rem !important; }}
+.st-key-add_btn button:hover {{ background: #F25454 !important; }}
+@media (max-width: 640px) {{
+  /* 모바일: 아래 가운데 '필터 / 지도보기' 버튼 위로 비켜 둔다 */
+  .st-key-add_btn {{ right: 16px; bottom: 76px; }}
+  .st-key-add_btn button {{ height: 44px !important; padding: 0 1.1rem !important; }}
+  .st-key-add_btn button p {{ font-size: .92rem !important; }}
+}}
 /* '팔로우' 스위치 (팔로우한 곳만 보기). 키에 'fav_' 를 쓰지 않는다 — 카드 팔로우 버튼 규칙([class*="st-key-fav_"])에 걸리지 않게 */
 [class*="st-key-folsw"] button {{ position: relative; min-height: 0 !important; height: 24px; min-width: 70px;
   border-radius: 999px !important; border: 0 !important; background: #E4E8E6 !important;
@@ -2718,7 +2730,8 @@ CAL_CSS = f"""
 .up-state {{ flex:0 0 auto; font-size:.8rem; font-weight:800; padding:.2rem .6rem; border-radius:.5rem; white-space:nowrap; }}
 .up-state.green {{ background:#E3F6EA; color:#1F7A44; }} .up-state.blue {{ background:#E5EEFC; color:#2C5BC5; }}
 .up-state.red {{ background:#FDE8EC; color:#C23A54; }} .up-state.gray {{ background:#EEF0EF; color:#6B7672; }}
-.up-empty {{ color:#6B7672; padding:18px; border:1px dashed #D5DBD9; border-radius:12px; text-align:center; }}
+.cal-empty {{ color:#6B7672; font-size:.76rem; background:#F4F6F5; border-radius:8px; padding:6px 10px; margin-bottom:8px; }}
+.up-empty {{ color:#6B7672; font-size:.76rem; padding:12px; border:1px dashed #D5DBD9; border-radius:10px; text-align:center; }}
 /* 지도 옆 작은 캘린더 */
 .st-key-map_cal .cal-month {{ font-size:1.15rem; }}
 .st-key-map_cal .st-key-cal_nav {{ margin:0 0 6px; gap:2px !important; }}
@@ -2798,7 +2811,7 @@ def _upcoming_html(events: list) -> str:
             f'<span class="up-text"><div class="up-name">{escape(e.work)} · {escape(e.cafe_name)}</div>'
             f'<div class="up-when">{when}</div></span>'
             f'<span class="up-state {color}">{escape(label)}</span></a>')
-    body = "".join(items) or '<div class="up-empty">곧 있는 팔로우한 팝업이 없어요. 메인에서 ♡ 를 눌러 팔로우해 보세요.</div>'
+    body = "".join(items) or '<div class="up-empty">곧 있는 팔로우한 팝업이 없어요. 리스트에서 팔로우를 켜 보세요.</div>'
     return f'<div class="up-head"><b>곧 있는 팝업</b><i></i></div>{body}'
 
 
@@ -2831,7 +2844,8 @@ def render_calendar(compact: bool = False) -> None:
         st.button("오늘", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None),
                   help="이번 달로")
     if not events:
-        st.info("아직 팔로우한 팝업이 없어요. 메인 리스트에서 ♡ 를 눌러 팔로우하면 여기 달력에 일정이 채워져요.")
+        st.markdown('<div class="cal-empty">아직 팔로우한 팝업이 없어요. 리스트에서 팔로우를 켜면 달력에 일정이 채워져요.</div>',
+                    unsafe_allow_html=True)
     st.markdown(_cal_html(year, month, events, compact), unsafe_allow_html=True)
     st.markdown(_upcoming_html(events), unsafe_allow_html=True)
 
