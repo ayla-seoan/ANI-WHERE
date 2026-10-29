@@ -58,5 +58,65 @@
     "kind": "기타",
     "nickname": "반짝이는 판다#225b",
     "body": "ㅕㅛ혀ㅛ효ㅕ"
+  },
+  {
+    "row_id": "9bd1b8ad3c",
+    "entry_id": "77f3622da3",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-29T01:20:45+00:00",
+    "cafe_id": "31a3b3880c",
+    "parent_id": "",
+    "kind": "다녀온 후기",
+    "nickname": "반짝이는 판다#225b",
+    "body": "ㄹㄹㄹ"
+  },
+  {
+    "row_id": "754c87b41d",
+    "entry_id": "5d37f75fd1",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-29T01:20:47+00:00",
+    "cafe_id": "31a3b3880c",
+    "parent_id": "",
+    "kind": "기대평",
+    "nickname": "반짝이는 판다#225b",
+    "body": "ㄹㄹㄹ"
+  },
+  {
+    "row_id": "40b1dff6ea",
+    "entry_id": "57040e0b31",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-29T01:20:50+00:00",
+    "cafe_id": "31a3b3880c",
+    "parent_id": "",
+    "kind": "기타",
+    "nickname": "반짝이는 판다#225b",
+    "body": "ㄹㄹㄹㄹ"
+  },
+  {
+    "row_id": "fb5282ab88",
+    "entry_id": "21f265ea55",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-29T01:20:57+00:00",
+    "cafe_id": "31a3b3880c",
+    "parent_id": "57040e0b31",
+    "kind": "",
+    "nickname": "반짝이는 판다#225b",
+    "body": "ㅊㅊㅊ"
+  },
+  {
+    "row_id": "95c5d89d51",
+    "entry_id": "f6a05c8cef",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-29T01:32:12+00:00",
+    "cafe_id": "31a3b3880c",
+    "parent_id": "77f3622da3",
+    "kind": "",
+    "nickname": "반짝이는 판다#225b",
+    "body": "ㅇㅇㅇ"
   }
 ]

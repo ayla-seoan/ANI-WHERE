@@ -18,7 +18,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import cafe, geo, guard, images
+from . import cafe, geo, guard, images, notice
 from .schema import CafeEntry
 
 DATABASE_ID = os.getenv("NOTION_DATABASE_ID", "3da1fd80371141c697fabf7b742e0edc")
@@ -27,16 +27,6 @@ SYNC_EVERY = timedelta(hours=1)
 SOURCE = "노션 자동 수집"
 UNKNOWN = ("확인 필요", "미확인", "")
 
-# 이벤트 문구 → 앱의 '이벤트 추가 정보' 체크 항목
-TAG_WORDS = {
-    "럭키 드로우": ["럭키드로우", "럭키 드로우", "럭드"],
-    "포토부스": ["포토부스", "네컷", "인생네컷", "포토 부스"],
-    "스탬프 투어": ["스탬프"],
-    "사전 예약": ["사전 예약", "사전예약", "예약제", "예약 후 입장"],
-    "가챠": ["가챠", "캡슐"],
-    "랜덤 특전": ["랜덤 특전"],
-    "미성년자 입장불가": ["미성년자", "19세", "성인만"],
-}
 
 
 def _known(text) -> str:
@@ -84,7 +74,8 @@ def entry_from_row(row: dict) -> tuple[CafeEntry | None, dict, str]:
     # 주소가 비어 있으면 장소명으로 위치를 찾는다 ('애니플러스 서울 합정점' → 합정)
     address = _known(row.get("주소")) or place
     event_text = str(row.get("이벤트") or "") + " " + str(row.get("특전") or "")
-    tags = [t for t, words in TAG_WORDS.items() if any(w in event_text for w in words)]
+    # 이벤트 문구 → 앱의 '이벤트 추가 정보' 항목 (간편등록과 같은 낱말 표를 쓴다)
+    tags = notice.event_tags(event_text)
     entry = CafeEntry(
         cafe_name=place, work=work, characters=_split(row.get("캐릭터"), r",|·"),
         address=address,

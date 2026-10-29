@@ -14,11 +14,38 @@ PATH = Path(__file__).resolve().parent.parent / "data" / "anime_catalog.json"
 
 
 @lru_cache(maxsize=1)
-def characters_by_work() -> dict[str, list[str]]:
+def _works() -> list[dict]:
     if not PATH.exists():
+        return []
+    return json.loads(PATH.read_text(encoding="utf-8")).get("works", [])
+
+
+def characters_by_work() -> dict[str, list[str]]:
+    return {w["work"]: list(w.get("characters", [])) for w in _works()}
+
+
+def work_aliases() -> dict[str, list[str]]:
+    """작품 → 공지에서 찾을 이름들 (목록 이름, 괄호 안 다른 이름, 별칭). 간편등록이 쓴다."""
+    out = {}
+    for w in _works():
+        name = w["work"]
+        base = re.sub(r"\s*\(.*?\)\s*$", "", name)
+        # '하이큐!!' 는 '하이큐' 로도 찾는다
+        names = [name, base, re.sub(r"[!?！？]+$", "", base)]
+        names += [p.strip() for p in re.findall(r"\((.*?)\)", name)]
+        out[name] = list(dict.fromkeys(n for n in names + list(w.get("aliases", [])) if n))
+    return out
+
+
+def character_aliases(work: str) -> dict[str, str]:
+    """그 작품의 캐릭터 이름(별칭 포함) → 목록의 이름. 간편등록이 공지에서 캐릭터를 찾을 때 쓴다."""
+    w = next((x for x in _works() if x["work"] == work), None)
+    if not w:
         return {}
-    data = json.loads(PATH.read_text(encoding="utf-8"))
-    return {w["work"]: list(w.get("characters", [])) for w in data.get("works", [])}
+    out = {c: c for c in w.get("characters", [])}
+    for full, short in (w.get("character_aliases") or {}).items():
+        out.update({s: full for s in short})
+    return out
 
 
 def _key(name: str) -> str:

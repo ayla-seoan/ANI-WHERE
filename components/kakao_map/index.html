@@ -69,6 +69,9 @@ const Streamlit = {
 /* 지도는 아시아 밖으로 나가지 않는다. 등록되는 주소는 한국뿐이라 처음에는 한국을 비춘다 */
 const ASIA = { south: -11, west: 60, north: 56, east: 150 };
 const KOREA = { lat: 36.3, lng: 127.8 };
+// 처음 화면: 북쪽 포천부터 남쪽 제주까지 (서쪽 제주·인천, 동쪽 포항·울산). 이 범위가 다 보이는 가장 큰 확대가
+// 처음 화면이자 '가장 많이 축소한' 화면이다
+const MAINLAND_JEJU = { south: 33.15, west: 126.1, north: 37.95, east: 129.45 };
 
 function showMessage(html) {
   document.getElementById("map").innerHTML = '<div class="msg">' + html + "</div>";
@@ -167,7 +170,7 @@ const Kakao = {
     this.map = new K.Map(document.getElementById("map"), {
       center: new K.LatLng(KOREA.lat, KOREA.lng), level: 12,
     });
-    this.map.setMaxLevel(12);   // 처음 화면(한반도 전체)보다 더 작게는 축소하지 않는다
+    this.overview();
     this.map.addControl(new K.ZoomControl(), K.ControlPosition.RIGHT);
     // 카카오맵에는 이동 범위 옵션이 없어서, 벗어나면 가운데를 범위 안으로 되돌린다
     const clamp = () => {
@@ -180,6 +183,15 @@ const Kakao = {
     K.event.addListener(this.map, "click", closeSpot);
     window.addEventListener("resize", () => this.map.relayout());
     K.event.addListener(this.map, "zoom_changed", clamp);
+  },
+
+  // 포천~제주가 다 보이게 맞추고, 그 화면보다 더 축소하지 못하게 한다
+  overview() {
+    const K = kakao.maps;
+    this.map.setMaxLevel(14);
+    this.map.setBounds(new K.LatLngBounds(new K.LatLng(MAINLAND_JEJU.south, MAINLAND_JEJU.west),
+                                          new K.LatLng(MAINLAND_JEJU.north, MAINLAND_JEJU.east)), 0, 0, 0, 0);
+    this.map.setMaxLevel(this.map.getLevel());
   },
 
   draw(points, selected) {
@@ -208,12 +220,9 @@ const Kakao = {
     });
   },
 
-  focus(p) { this.map.setLevel(4); this.map.panTo(new kakao.maps.LatLng(p.lat, p.lng)); },
-  fit(points) {
-    const b = new kakao.maps.LatLngBounds();
-    points.forEach((p) => b.extend(new kakao.maps.LatLng(p.lat, p.lng)));
-    this.map.setBounds(b);
-  },
+  // 상세: 그 카페 위치로 바로 옮긴다 (부드럽게 옮기는 panTo 대신 setCenter — 전국 보기 이동에 덮이지 않게)
+  focus(p) { this.map.setLevel(4); this.map.setCenter(new kakao.maps.LatLng(p.lat, p.lng)); },
+  fit() { this.overview(); },
 };
 
 /* ---------- 기본 지도 (키가 없을 때: Leaflet + OpenStreetMap) ---------- */
@@ -228,10 +237,13 @@ const Basic = {
   init() {
     const asia = L.latLngBounds([ASIA.south, ASIA.west], [ASIA.north, ASIA.east]);
     this.map = L.map("map", {
-      // 처음 화면(한반도 전체)보다 더 작게는 축소하지 않는다
-      center: [KOREA.lat, KOREA.lng], zoom: 7, minZoom: 7,
+      center: [KOREA.lat, KOREA.lng], zoom: 7,
+      zoomSnap: 0.25,            // 0.25 단위로 맞춰 포천~제주가 지도 칸에 꽉 차게
       maxBounds: asia, maxBoundsViscosity: 1.0,   // 범위 끝에서 더 끌리지 않는다
     });
+    this.overview();
+    // 지도 칸 크기가 바뀌면 축소 한계만 다시 잰다 (보고 있던 위치는 그대로)
+    window.addEventListener("resize", () => this.overview(false));
     // CARTO 타일은 이제 키가 있어야 해서("API KEY REQUIRED"), 키 없이 되는 OpenStreetMap 을 쓴다
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap", maxZoom: 19,
@@ -274,10 +286,24 @@ const Basic = {
     });
   },
 
-  focus(p) { this.map.setView([p.lat, p.lng], 15); },
-  fit(points) {
-    this.map.fitBounds(points.map((p) => [p.lat, p.lng]), { padding: [30, 30], maxZoom: 15 });
+  // 포천~제주가 다 보이는 가장 큰 확대로 맞추고, 그보다 더 축소하지 못하게 한다 (지도 칸 크기가 바뀌면 다시)
+  overview(move = true) {
+    const b = L.latLngBounds([MAINLAND_JEJU.south, MAINLAND_JEJU.west], [MAINLAND_JEJU.north, MAINLAND_JEJU.east]);
+    this.map.invalidateSize();
+    this.map.setMinZoom(this.map.getBoundsZoom(b));
+    if (move) { this.focused = null; this.map.fitBounds(b, { animate: false }); }
+    // 칸 크기가 바뀌어도 상세에서 보던 카페 위치는 그대로 가운데에 둔다
+    else if (this.focused) this.map.setView([this.focused.lat, this.focused.lng], this.map.getZoom(), { animate: false });
   },
+
+  // 상세: 그 카페 위치로 바로 옮긴다. 움직임(애니메이션) 없이 옮겨야, 먼저 시작된 '전국 보기' 이동이
+  // 끝나면서 다시 전국으로 덮어쓰는 일이 없다
+  focus(p) {
+    this.focused = p;
+    this.map.stop();
+    this.map.setView([p.lat, p.lng], 15, { animate: false });
+  },
+  fit() { this.overview(); },
 };
 
 /* ---------- 공통 ---------- */

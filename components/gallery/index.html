@@ -83,7 +83,31 @@ function render() {
   }
   go(0);
   play();
+  stage.querySelectorAll(".slide img").forEach((img) => {
+    if (img.complete) fit(); else img.addEventListener("load", fit);
+  });
 }
+
+/* 모바일(바깥 화면 폭 640px 이하)에서는 칸 높이를 이미지에 맞춘다.
+   폭이 좁으면 420px 칸에 이미지가 작게 들어가 위아래가 비고, 그게 제목과의 큰 간격처럼 보였다.
+   이미지 중 가장 긴 것이 칸 폭에 꽉 찰 때의 높이로 줄인다 (최대 maxH, 잘리는 이미지는 없다) */
+let maxH = 420, fitH = 0;
+function narrow() {
+  try { return window.parent.innerWidth <= 640; } catch (e) { return window.innerWidth <= 640; }
+}
+function fit() {
+  const stage = document.getElementById("stage");
+  const w = stage.clientWidth;
+  if (!narrow() || !w) { fitH = 0; Streamlit.height(maxH); return; }
+  let h = 0;
+  stage.querySelectorAll(".slide img").forEach((img) => {
+    if (img.naturalWidth) h = Math.max(h, w * img.naturalHeight / img.naturalWidth);
+  });
+  if (!h) return;
+  fitH = Math.min(maxH, Math.round(h));
+  Streamlit.height(fitH);
+}
+window.addEventListener("resize", fit);
 
 /* ---------- 확대 보기: 바깥 페이지 전체를 덮는 창을 띄운다 ---------- */
 function openZoom(start) {
@@ -152,7 +176,8 @@ function openZoom(start) {
 window.addEventListener("message", (event) => {
   if (!event.data || event.data.type !== "streamlit:render") return;
   const args = event.data.args || {};
-  Streamlit.height(args.height || 420);
+  maxH = args.height || 420;
+  Streamlit.height(fitH || maxH);    // 모바일에서 이미지에 맞춘 높이가 있으면 그 높이를 유지한다
   const next = JSON.stringify(args.urls || []);
   if (next === sig) return;          // 같은 이미지면 다시 그리지 않는다 (보던 위치 유지)
   sig = next;

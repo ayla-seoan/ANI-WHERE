@@ -25,5 +25,23 @@
     "updated_at": "2026-10-28T11:24:44+00:00",
     "cafe_id": "e7ac4bdbc6",
     "user": "52b1ba0f85744081"
+  },
+  {
+    "row_id": "6c97b1f16b",
+    "entry_id": "b65837ed557a7a99:f2143ec3b3",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-29T01:24:13+00:00",
+    "cafe_id": "f2143ec3b3",
+    "user": "b65837ed557a7a99"
+  },
+  {
+    "row_id": "b40747bca9",
+    "entry_id": "b65837ed557a7a99:31a3b3880c",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-10-29T01:24:14+00:00",
+    "cafe_id": "31a3b3880c",
+    "user": "b65837ed557a7a99"
   }
 ]

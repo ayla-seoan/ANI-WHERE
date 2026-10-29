@@ -197,38 +197,7 @@ def rule_based(raw_text: str, today: date | None = None) -> CafeExtraction:
     return CafeExtraction(entries=entries)
 
 
-def _labeled(text: str, labels: str) -> list[str]:
-    """'특전: 코스터, 엽서' 처럼 라벨이 붙은 줄의 값들. 없으면 빈 목록."""
-    m = re.search(rf"^\s*(?:{labels})\s*[:：]\s*(.+)$", text, re.M)
-    if not m or re.search(r"입력해주세요|확인 필요", m.group(1)):
-        return []
-    return [p.strip() for p in re.split(r"\s*[,/·、]\s*", m.group(1)) if p.strip()][:10]
-
-
-def parse_notice(raw_text: str, today: date | None = None) -> dict:
-    """간편등록: 공지 한 건 → 등록 칸에 채울 값들 (규칙 기반).
-
-    라벨이 붙은 줄(카페명:, 주소:, 특전: ...)을 먼저 믿고, 없으면 rule_based 의 추측을 쓴다.
-    못 찾은 칸은 비워 두어 사람이 채우게 한다.
-    """
-    today = today or date.today()
-    block = _split_blocks(raw_text)[0] if raw_text.strip() else ""
-    start, end = parse_dates(block, today)
-    work = canonical_work(parse_work(block))
-    name = parse_cafe_name(block)
-    links, _ = parse_links(" ".join(re.findall(r"https?://\S+", block)))
-    tag_words = {t: t.replace(" ", "") for t in EVENT_TAGS}
-    return {
-        "work": work,
-        "cafe_name": "" if re.search(r"입력해주세요", name) else mask(name),
-        "address": "" if re.search(r"입력해주세요", parse_address(block)) else mask(parse_address(block)),
-        "characters": _labeled(block, "캐릭터|등장\\s*캐릭터|참여\\s*캐릭터") or parse_characters(block),
-        "start_date": start, "end_date": end or start,
-        "perks": _labeled(block, "특전") or _find_words(block, _PERK_WORDS),
-        "goods": _labeled(block, "굿즈") or _find_words(block, _GOODS_WORDS),
-        "tags": [t for t, compact in tag_words.items() if compact in block.replace(" ", "")],
-        "links": links,
-    }
+# 간편등록(공지 → 등록 칸)은 common/notice.py 의 parse_notice 가 맡는다
 
 
 def _split_blocks(raw_text: str) -> list[str]:

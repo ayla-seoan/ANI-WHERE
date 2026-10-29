@@ -27,7 +27,7 @@ import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 from common import (ai, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
-                    kakao_postcode, notion_sync, review, share)
+                    kakao_postcode, notice, notion_sync, review, share)
 from common.schema import CafeEntry
 from common.storage import Storage
 
@@ -36,13 +36,16 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent
 TODAY = date.today()
 MAP_HEIGHT = 620
-TOPBAR_TOP = "0rem"       # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
-TOPBAR_H = "270px"        # 상단 묶음 높이 (제목 + 문구 + 검색 필터 + 리스트/지도 전환)
+LOGOS = ["logo.png", "logo2.png"]   # static/ 의 제목 로고. 화면을 누를 때마다 다음 것으로 바뀐다
+FIXED_LOGO = "logo2.png"           # 상세·등록 화면에서는 이 로고로 고정
+TOPBAR_TOP = "0rem"      # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
+TOPBAR_H = "282px"        # 상단 묶음 높이 (로고 + 문구 + 검색 필터. '팝업 카페 N곳' 줄은 묶음 밖)
 
 # 바탕은 흰색, 포인트만 우유빛 민트. 기본 색은 .streamlit/config.toml, 여기는 글꼴·모양·카드처럼 설정으로 안 되는 것
 MINT = "#56C2A7"
 MINT_DEEP = "#2E9C82"
 MINT_SOFT = "#E6F6F0"     # 포인트 배경 (배지·선택 상태 등 좁은 곳에만)
+MINT_LINE = "#9EDDCC"     # 카드 테두리: 포인트(MINT)보다 살짝 밝은 민트
 GRAY_SOFT = "#F4F6F5"     # 이미지 없는 칸, 업로드 칸 같은 기본 면
 GLOBAL_CSS = f"""
 <style>
@@ -62,6 +65,17 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .stButton button[kind="primary"]:not(:disabled) {{ color: #fff; box-shadow: 0 3px 10px rgba(86,194,167,.35); }}
 .stButton button:disabled {{ background: #edf5f2 !important; color: #9bb5ad !important;
   border-color: #dcebe6 !important; box-shadow: none; transform: none; }}
+/* 내 리뷰의 '⋯' (누르면 수정·삭제): 글자만 있는 작은 버튼을 칸 오른쪽 끝에 붙이고, 펼침 화살표는 숨긴다 */
+/* 칸(stColumn) 안의 세로 묶음까지 오른쪽으로 붙여야 실제로 오른쪽 끝에 선다 (리스트 전체보기 버튼과 같은 방법) */
+[data-testid="stColumn"]:has([class*="st-key-rv_more_"]) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
+[class*="st-key-rv_more_"] {{ display: flex; justify-content: flex-end; width: auto !important; margin-left: auto; }}
+[class*="st-key-rv_more_"] button {{ background: transparent !important; border: 0 !important;
+  box-shadow: none !important; color: {MINT} !important; min-height: 0 !important;
+  padding: 0 .2rem !important; }}
+[class*="st-key-rv_more_"] button p {{ font-size: 1.6rem !important; font-weight: 400 !important;
+  line-height: 1; letter-spacing: .04em; }}
+[class*="st-key-rv_more_"] button:hover {{ color: {MINT_DEEP} !important; transform: none; }}
+[class*="st-key-rv_more_"] button [data-testid="stIconMaterial"] {{ display: none; }}
 /* 리스트 전체보기·지도보기: 글자에 맞는 너비로 오른쪽에 붙인다 */
 [data-testid="stColumn"]:has(.st-key-list_only_btn, .st-key-show_map) [data-testid="stVerticalBlock"] {{
   align-items: flex-end; }}
@@ -74,6 +88,12 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
    Streamlit 이 키 컨테이너를 같은 높이의 칸으로 한 번 더 감싸서, 바깥 칸에 sticky 를 건다 */
 [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ position: sticky; top: {TOPBAR_TOP};
   z-index: 50; background: #fff; padding-bottom: .5rem; box-shadow: 0 8px 12px -12px rgba(0,0,0,.18); }}
+/* 모바일(폭 640px 이하, 칸이 세로로 쌓이는 화면)에서는 위에 붙는 것 없이 그냥 함께 스크롤한다
+   (메인·등록 화면의 상단 묶음, 메인의 지도 칸) */
+@media (max-width: 640px) {{
+  [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ position: static !important; box-shadow: none !important; }}
+  [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{ position: static !important; }}
+}}
 /* 등록 화면의 홈으로: 둘째 줄 오른쪽 끝, 흰 바탕에 민트 테두리·글자 (지도보기 버튼과 같은 모양) */
 [data-testid="stColumn"]:has(.st-key-wiz_home) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
 .st-key-wiz_home button {{ border: 1.5px solid {MINT} !important; color: {MINT_DEEP} !important;
@@ -102,8 +122,14 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 누르면 메인으로 가는 제목: 버튼이지만 글자처럼 보이게 */
 .st-key-home_brand button, .st-key-home_add button {{ background: none !important; border: 0 !important;
   box-shadow: none !important; padding: 0 !important; min-height: 0; transform: none !important; }}
-.st-key-home_brand button p {{ font-family: "Jua", sans-serif !important; font-size: 2.8rem !important;
-  color: {MINT_DEEP}; line-height: 1.1; }}
+/* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
+.st-key-home_brand button {{ width: 270px !important; height: 76px !important;
+  background: url("/app/static/logo.png") no-repeat left center / contain !important; }}
+.st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
+.st-key-home_brand button:hover {{ filter: brightness(1.06) saturate(1.1); }}
+@media (max-width: 640px) {{
+  .st-key-home_brand button {{ width: 200px !important; height: 56px !important; }}
+}}
 .st-key-home_add, .st-key-home_add .stButton {{ display: flex; justify-content: center; width: 100%; }}
 .st-key-home_add button p {{ font-family: "Jua", sans-serif !important; font-size: 1.8rem !important;
   color: #26302D; }}
@@ -238,53 +264,17 @@ def _postcode_field(key: str, on_pick) -> None:
     on_pick(geo.Candidate(name="", address=address,
                           lat=g.lat or 0.0, lng=g.lng or 0.0, source="카카오 우편번호",
                           precision=g.precision if g.ok else "none"))
-    st.session_state.pop("addr_hits", None)
     st.rerun()
 
 
-def address_field(value: str, key: str, on_pick, placeholder: str = "", search: bool = True) -> str:
-    """주소 입력칸 + 카카오 우편번호 + 카카오맵 검색. 등록과 수정하기가 함께 쓴다.
+def address_field(value: str, key: str, on_pick, placeholder: str = "") -> str:
+    """주소 입력칸 + 카카오 우편번호 찾기. 등록·간편등록·수정하기가 함께 쓴다.
 
-    search=False 면 카카오맵 검색칸 없이 주소 입력칸과 우편번호 찾기만 보여 준다 (등록 화면).
-
-    우편번호 버튼으로 주소를 고르거나, 검색어를 넣고 Enter 를 누르면 카카오 주소·장소 검색 결과가 바로 뜨고, '선택' 한 번이면
-    on_pick(후보) 를 부르고 다시 그린다. 입력칸을 새 값으로 채우는 일(키 바꾸기)과
-    좌표 보관은 부르는 쪽이 맡는다.
+    우편번호 버튼으로 주소를 고르면 on_pick(후보) 를 부르고 다시 그린다.
+    입력칸을 새 값으로 채우는 일(키 바꾸기)과 좌표 보관은 부르는 쪽이 맡는다.
     """
     addr = st.text_input("주소", value=value, key=f"{key}_addr", placeholder=placeholder)
     _postcode_field(key, on_pick)
-
-    if not search:
-        return addr
-    if not geo.search_available():
-        st.caption("카카오 REST API 키를 넣으면 가게 이름으로도 바로 찾을 수 있습니다.")
-        return addr
-
-    q = st.text_input("🔍 카카오맵에서 찾기", key=f"{key}_q",
-                      placeholder="가게 이름이나 주소를 넣고 Enter (예: 홍대 카페 솔)")
-    q = q.strip()
-    cache = st.session_state.get("addr_hits")
-    # 검색어가 바뀔 때만 검색 API 를 부른다
-    if q and (not cache or cache[0] != (key, q)):
-        cache = ((key, q), geo.search(q))
-        st.session_state["addr_hits"] = cache
-    if not q or not cache or cache[0] != (key, q):
-        return addr
-
-    hits = cache[1]
-    if not hits.ok:
-        st.caption(hits.note)
-        return addr
-    for i, c in enumerate(hits.candidates):
-        t, b = st.columns([5, 1], vertical_alignment="center")
-        with t:
-            sub = f"  \n:gray[{_plain(c.address)}]" if c.name else ""
-            st.markdown(f"**{_plain(c.name or c.address)}**{sub}")
-        with b:
-            if st.button("선택", key=f"{key}_use_{i}", width="stretch"):
-                on_pick(c)
-                st.session_state.pop("addr_hits", None)
-                st.rerun()
     return addr
 
 
@@ -319,7 +309,9 @@ def render_detail(current: dict, map_slot=None) -> None:
     gallery.gallery([images.url(p) for p in pics] or [images.DEFAULT_POSTER_URL],
                     key=f"gallery_{entry_id}")
     # 행사(작품) 이름을 크게, 그 아래에 카페 이름과 캐릭터. 오른쪽에 찜 버튼
-    title, heart = st.columns([5, 1], vertical_alignment="center")
+    # (모바일에서도 제목 옆에 나란히 — LIST_CSS 의 .st-key-detail_title)
+    with st.container(key="detail_title"):
+        title, heart = st.columns([5, 1], vertical_alignment="center")
     with title:
         st.markdown(f"### {current.get('work', '')}")
     with heart:
@@ -422,8 +414,9 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
                             width="stretch", disabled=bad, key=f"{slot}_send_{n}")
     if c2 is not None:
         with c2:
+            # 답글 칸 비우기 (키 번호를 올려 빈 입력칸으로 다시 그린다)
             if st.button("취소", width="stretch", key=f"{slot}_cancel_{n}"):
-                st.session_state.pop("reply_to", None)
+                st.session_state[f"{slot}_n"] = n + 1
                 st.rerun()
 
     if clicked:
@@ -435,7 +428,6 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
             return
         reviews.append(review.to_row(cafe_id, body, nick, kind or "", parent_id))
         st.session_state[f"{slot}_n"] = n + 1
-        st.session_state.pop("reply_to", None)
         st.session_state["flash"] = "답글을 남겼습니다." if parent_id else "리뷰를 남겼습니다."
         st.rerun()
 
@@ -444,14 +436,88 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
 KIND_COLORS = {"다녀온 후기": "green", "기대평": "blue", "기타": "gray"}
 
 
-def _review_card(r: dict, reply: bool = False) -> None:
+@st.dialog("리뷰 삭제")
+def confirm_review_delete(entry_id: str, replies: int) -> None:
+    st.write("이 글을 삭제할까요? 삭제하면 다시 볼 수 없어요."
+             + (f" 달린 답글 {replies}개도 함께 안 보이게 돼요." if replies else ""))
+    c1, c2 = st.columns(2)
+    if c1.button("취소", width="stretch", key=f"rv_del_no_{entry_id}"):
+        st.rerun()
+    if c2.button("삭제", type="primary", width="stretch", key=f"rv_del_ok_{entry_id}"):
+        # 버튼이 보였더라도 지우는 순간 한 번 더 확인한다 (내 닉네임과 같은 글만)
+        row = next((r for r in reviews.current_rows() if str(r["entry_id"]) == entry_id), None)
+        if row and review.can_delete(row, review.nickname_for(st.context.ip_address)):
+            reviews.soft_delete(entry_id)       # 저장소는 지우지 않고 '삭제됨' 행을 쌓는다
+            st.session_state["flash"] = "삭제했습니다."
+        else:
+            st.session_state["flash"] = "내가 쓴 글만 삭제할 수 있어요."
+        st.rerun()
+
+
+def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     head = f"**{_plain(r.get('nickname') or '익명')}**"
     if r.get("kind"):
         head = f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] " + head
     if reply:
         head = ":gray-badge[답글] " + head
-    st.markdown(f"{head} · :gray[{_when(r.get('updated_at'))}]")
-    st.markdown(_plain(r.get("body", "")))
+    eid = str(r["entry_id"])
+    when = f" · :gray[{_when(r.get('updated_at'))}]"
+    if int(r.get("revision") or 1) > 1:
+        when += " :gray[(수정됨)]"
+    # 내가 쓴 글(접속 IP 로 정해진 닉네임이 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
+    mine = review.can_delete(r, review.nickname_for(st.context.ip_address))
+    if mine:
+        t, b = st.columns([6, 1], vertical_alignment="center")
+        t.markdown(head + when)
+        with b.popover("⋯", key=f"rv_more_{eid}", type="tertiary", help="수정 · 삭제"):
+            if st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
+                st.session_state["rv_editing"] = eid
+                st.rerun()
+            if st.button("삭제", key=f"rv_del_{eid}", width="stretch"):
+                confirm_review_delete(eid, replies)
+    else:
+        st.markdown(head + when)
+    if mine and st.session_state.get("rv_editing") == eid:
+        _review_edit_box(r)
+    else:
+        st.markdown(_plain(r.get("body", "")))
+
+
+def _review_edit_box(r: dict) -> None:
+    """내 글 고치기: 원글은 종류·내용, 답글은 내용만. 저장하면 새 수정본이 쌓인다 (지난 내용은 남는다)."""
+    eid = str(r["entry_id"])
+    kind = r.get("kind") or ""
+    if not str(r.get("parent_id") or ""):
+        kind = st.pills("종류", review.KINDS, default=kind or review.KINDS[0], key=f"rv_edit_kind_{eid}",
+                        label_visibility="collapsed")
+    body = st.text_area("내용", value=str(r.get("body") or ""), key=f"rv_edit_body_{eid}", height=90,
+                        max_chars=review.MAX_BODY, label_visibility="collapsed")
+    bad = _block_sensitive(body)
+    c1, c2 = st.columns(2)
+    if c1.button("취소", width="stretch", key=f"rv_edit_no_{eid}"):
+        st.session_state.pop("rv_editing", None)
+        st.rerun()
+    if c2.button("저장", type="primary", width="stretch", key=f"rv_edit_ok_{eid}", disabled=bad):
+        nick = review.nickname_for(st.context.ip_address)
+        current = next((x for x in reviews.current_rows() if str(x["entry_id"]) == eid), None)
+        # 저장하는 순간에도 내 글인지 한 번 더 확인한다
+        if not current or not review.can_delete(current, nick):
+            st.error("내가 쓴 글만 수정할 수 있어요.")
+            return
+        v = review.validate(body, nick)
+        if not v.ok:
+            for err in v.errors:
+                st.error(err)
+            return
+        payload = {k: current.get(k, "") for k in review.HEADERS
+                   if k not in ("row_id", "entry_id", "revision", "status", "updated_at")}
+        payload["body"] = body.strip()
+        if not str(current.get("parent_id") or ""):
+            payload["kind"] = kind if kind in review.KINDS else review.KINDS[0]
+        reviews.append(payload, entry_id=eid)
+        st.session_state.pop("rv_editing", None)
+        st.session_state["flash"] = "수정했습니다."
+        st.rerun()
 
 
 def render_reviews(cafe_id: str) -> None:
@@ -477,15 +543,13 @@ def render_reviews(cafe_id: str) -> None:
     for t in shown:
         pid = str(t.post["entry_id"])
         with st.container(border=True):
-            _review_card(t.post)
+            _review_card(t.post, replies=len(t.replies))
             for r in t.replies:
                 _review_card(r, reply=True)
-            if st.session_state.get("reply_to") == pid:
+            # 답글은 입력칸만 보여 주고, 칸을 누르면(또는 글이 있으면) 닉네임과 등록·취소 버튼이 나온다
+            # (LIST_CSS 의 .st-key-rpbox_ — 칸을 눌렀는지는 브라우저만 알아서 CSS 로 처리한다)
+            with st.container(key=f"rpbox_{pid}"):
                 _write_box(cafe_id, parent_id=pid)
-            elif st.button(f"💬 답글 달기{f' ({len(t.replies)})' if t.replies else ''}",
-                           key=f"reply_{pid}", type="tertiary"):
-                st.session_state["reply_to"] = pid
-                st.rerun()
 
 
 # ================================================================ 수정하기
@@ -739,11 +803,44 @@ def _card_more(r) -> str:
     )
 
 
+# 위치 배지 색: 시마다 다르게 (바탕, 글자). 서울의 동네는 모두 서울 색, 경기는 시마다.
+# 자주 나오는 시는 색을 정해 두고, 그 밖의 시는 이름으로 아래 색 묶음 중 하나를 늘 같게 고른다
+CITY_COLORS = {
+    "서울": ("#56C2A7", "#fff"), "부산": ("#3B82C4", "#fff"), "인천": ("#8B6CD1", "#fff"),
+    "대구": ("#E0884A", "#fff"), "대전": ("#D9A400", "#fff"), "광주": ("#4CA36A", "#fff"),
+    "울산": ("#2BA3B5", "#fff"), "제주": ("#F2789B", "#fff"), "세종": ("#7F8C3A", "#fff"),
+    "수원": ("#E06C6C", "#fff"), "고양": ("#5A7BD8", "#fff"), "성남": ("#B0639E", "#fff"),
+}
+_MORE_COLORS = [("#6C9A8B", "#fff"), ("#C77D4E", "#fff"), ("#7A6FB3", "#fff"), ("#4F95A8", "#fff"),
+                ("#B5654A", "#fff"), ("#5E8F4A", "#fff"), ("#A0628B", "#fff"), ("#8A7D3E", "#fff")]
+
+
+def _area_colors(address) -> tuple[str, str]:
+    city = geo.city_name(str(address or ""))
+    if city in CITY_COLORS:
+        return CITY_COLORS[city]
+    return _MORE_COLORS[sum(map(ord, city)) % len(_MORE_COLORS)] if city else ("#9AA5A1", "#fff")
+
+
+def _area_badge(address, cls: str = "abadge") -> str:
+    """📍 지역 배지 HTML (시마다 다른 색). 지역을 모르면 빈 문자열.
+
+    테두리는 시 색 그대로(100%), 바탕은 같은 색을 90% 투명하게(불투명도 10%).
+    흰 카드 위(지도보기)에서는 글자도 시 색, 포스터 위(리스트 전체보기)에서는 사진 위에서 읽히게 흰 글자.
+    """
+    area = geo.area_name(str(address or ""))
+    if not area:
+        return ""
+    color, _ = _area_colors(address)
+    text = "#fff;text-shadow:0 1px 2px rgba(0,0,0,.45)" if cls == "area" else color
+    return (f'<span class="{cls}" style="background:{color}1A;border:1.5px solid {color};color:{text}">'
+            f'{escape(area)}</span>')
+
+
 def _poster_card(r, label: str) -> str:
-    area = geo.area_name(str(r.get("address") or ""))
     return f"""
 <div class="pcard" style="background-image:url('{_poster_url(r.get("images"))}')">
-  {f'<span class="area">{escape(area)}</span>' if area else ''}
+  {_area_badge(r.get("address"), cls="area")}
   <span class="state">{escape(label)}</span>
   <div class="info">
     <div class="t">{escape(str(r['work']))}</div>
@@ -790,11 +887,12 @@ def _sort_view(view: pd.DataFrame, how: str) -> pd.DataFrame:
              .reset_index(drop=True))
 
 
-def _list_bar(count: int, wide: bool) -> None:
-    """'팝업 카페 N곳' + 리스트 전체보기/지도보기 전환. 상단 고정 묶음 안에 그린다."""
+def _list_bar(count: int, wide: bool, note: str = "") -> None:
+    """'팝업 카페 N곳' + 리스트 전체보기/지도보기 전환. 상단 고정 묶음 안에 그린다.
+    note 는 제목 옆 도움말(?)에 커서를 올리면 보인다."""
     head, toggle = st.columns([5, 1.3], vertical_alignment="center")
     with head:
-        st.markdown(f"#### 팝업 카페 :green[**{count}**]곳")   # 숫자만 굵게
+        st.markdown(f"#### 팝업 카페 :green[**{count}**]곳", help=note or None)   # 숫자만 굵게
     with toggle:
         if wide:
             if st.button("🗺️ 지도보기", key="show_map", width="content"):
@@ -828,12 +926,19 @@ def render_list(view: pd.DataFrame, wide: bool = False) -> None:
 
     if wide:
         # 전체보기: dukplace 처럼 포스터가 꽉 찬 카드를 4열로. 카드 비율이 같아 높이가 늘 맞는다
-        grid = st.columns(4, gap="small")
-        for i, (_, r) in enumerate(view.iterrows()):
-            with grid[i % 4], st.container(key=f"card_w_{r['entry_id']}"):
-                st.markdown(_poster_card(r, _status(r)[0]), unsafe_allow_html=True)
-                open_button(r)
-                _heart(r["entry_id"], "w")
+        # 모바일에서는 4개 칸을 하나의 격자로 풀어 2~3열로 작게 보인다 (LIST_CSS 의 .st-key-wide_grid).
+        # 칸마다 i%4 번째 카드가 들어가 있어서, 원래 순서대로 놓이게 카드마다 순번(order)을 준다
+        order_css = "".join(f'[data-testid="stLayoutWrapper"]:has(> .st-key-card_w_{r["entry_id"]}),'
+                            f'.st-key-card_w_{r["entry_id"]}{{order:{i}}}'
+                            for i, (_, r) in enumerate(view.iterrows()))
+        st.markdown(f"<style>@media (max-width: 640px) {{ {order_css} }}</style>", unsafe_allow_html=True)
+        with st.container(key="wide_grid"):
+            grid = st.columns(4, gap="small")
+            for i, (_, r) in enumerate(view.iterrows()):
+                with grid[i % 4], st.container(key=f"card_w_{r['entry_id']}"):
+                    st.markdown(_poster_card(r, _status(r)[0]), unsafe_allow_html=True)
+                    open_button(r)
+                    _heart(r["entry_id"], "w")
         return
 
     # 반반 보기: 페이지를 스크롤하면 리스트만 내려가고 지도는 화면에 붙어 있다 (LIST_CSS 의 sticky)
@@ -847,27 +952,33 @@ def render_list(view: pd.DataFrame, wide: bool = False) -> None:
                     st.markdown(f'<div class="thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\')"></div>',
                                 unsafe_allow_html=True)
                 with top:
-                    area = geo.area_name(str(r.get("address") or ""))
-                    st.markdown((f":green-badge[📍 {area}] " if area else "") + f":{color}-badge[{label}]")
+                    # 📍 지역은 시마다 다른 색 (CITY_COLORS), 그 옆에 진행 상태
+                    badge = _area_badge(r.get("address"))
+                    st.markdown((f"{badge.replace('\">', '\">📍 ', 1)} " if badge else "")
+                                + f":{color}-badge[{label}]", unsafe_allow_html=True)
                     chars = str(r.get("characters") or "").strip()
-                    # 작품 이름을 먼저(굵게), 그 아래에 카페 이름(회색) · 캐릭터(민트)
+                    # 포스터 옆: 작품(굵게) · 캐릭터(민트) → 카페 이름(회색) → 날짜 · 위치.
+                    # 한 덩어리로 그려 카페 이름과 날짜 사이에 칸 간격(빈 줄)이 생기지 않게 한다
+                    meta = [f"🗓️ {r['start_date']} ~ {r['end_date']}",
+                            f"📍 {escape(str(r['address'] or '-'))}"
+                            + ("" if pd.notna(r["lat"]) else " · 지도 표시 안 됨")]
+                    if n_reviews.get(r["entry_id"]):
+                        meta.append(f"💬 리뷰 {n_reviews[r['entry_id']]}")
                     st.markdown(
-                        f'<p class="ctitle"><strong>{escape(str(r["work"]))}</strong><br/>'
-                        f'<span class="ccafe">☕ {escape(str(r["cafe_name"]))}</span>'
-                        + (f'<span class="ccafe"> · </span><span class="cchars">{escape(chars)}</span>' if chars else "")
-                        + "</p>", unsafe_allow_html=True)
-                    st.markdown(f'<div class="chips">{_chips(r)}</div>', unsafe_allow_html=True)
-                st.caption(
-                    f"🗓️ {r['start_date']} ~ {r['end_date']}  \n"
-                    f"📍 {r['address'] or '-'}"
-                    + ("" if pd.notna(r["lat"]) else " · 지도 표시 안 됨")
-                    + (f"  \n💬 리뷰 {n_reviews[r['entry_id']]}" if n_reviews.get(r["entry_id"]) else "")
-                )
-                # 특전은 기간·주소 아래(원래 자리)에 칩으로 보여 준다
+                        f'<p class="ctitle"><strong>{escape(str(r["work"]))}</strong>'
+                        + (f'<br/><span class="cchars">{escape(chars)}</span>' if chars else "")
+                        + f'<br/><span class="ccafe">☕ {escape(str(r["cafe_name"]))}</span></p>'
+                        + f'<p class="cmeta">{"<br/>".join(meta)}</p>',
+                        unsafe_allow_html=True)
+                # 포스터 아래(카드 전체 폭): 이벤트 정보·굿즈 칩, 그 아래 특전 칩.
+                # 두 줄을 한 묶음(.cbottom)으로 그려, 어느 줄만 있든 카드 아래 테두리와 같은 여백을 둔다
+                chips = _chips(r)
                 gifts = "".join(f'<span class="chip perk">🎁 {escape(x)}</span>'
                                 for x in _split(r.get("perks") or ""))
-                if gifts:
-                    st.markdown(f'<div class="chips gifts">{gifts}</div>', unsafe_allow_html=True)
+                rows = ((f'<div class="chips below">{chips}</div>' if chips else "")
+                        + (f'<div class="chips gifts">{gifts}</div>' if gifts else ""))
+                # 굿즈·특전이 없어도 빈 묶음을 두어, 다른 카드처럼 아래 테두리와 여백이 생기게 한다
+                st.markdown(f'<div class="cbottom{"" if rows else " none"}">{rows}</div>', unsafe_allow_html=True)
                 open_button(r)
 
 
@@ -882,7 +993,9 @@ LIST_CSS = f"""
   width:100%; height:100%; opacity:0; cursor:pointer; }}
 /* 찜 하트: 카드 오른쪽 위 동그란 버튼. 찜하면 빨간 하트 */
 [class*="st-key-card_"] [class*="st-key-fav_"] {{ position:absolute; z-index:7; width:auto; }}
-[class*="st-key-card_w_"] [class*="st-key-fav_"] {{ top:42px; right:10px; }}
+/* 리스트 전체보기: 찜(♥)은 카드 맨 아래 오른쪽 모서리. 글자 칸 오른쪽을 비워 긴 제목이 ♥ 밑으로 들어가지 않게 */
+[class*="st-key-card_w_"] [class*="st-key-fav_"] {{ top:auto; bottom:16px; right:20px; }}
+[class*="st-key-card_w_"] .pcard .info {{ padding-right:64px; }}
 [class*="st-key-card_s_"] [class*="st-key-fav_"] {{ top:12px; right:12px; }}
 [class*="st-key-fav_"] button {{ min-height:0 !important; height:36px; min-width:36px; padding:0 10px !important;
   border-radius:999px !important; background:#fff !important; border:1px solid #e3e8e6 !important;
@@ -890,8 +1003,10 @@ LIST_CSS = f"""
 [class*="st-key-fav_"] button p {{ font-size:18px !important; }}
 [class*="st-key-fav_on_"] button {{ color:#ff3b5c !important; border-color:#ffc2cd !important; }}
 [class*="st-key-fav_"] button:hover {{ color:#ff3b5c !important; transform:scale(1.08); }}
-[class*="st-key-card_s_"] {{ transition:transform .18s ease, background-color .18s ease,
-  border-color .18s ease, box-shadow .18s ease; }}
+/* 카드 테두리: 회색 대신 포인트(민트)보다 살짝 밝은 민트. 커서를 올리면 아래 :hover 처럼 연한 민트 바탕 + 진한 테두리 */
+[class*="st-key-card_s_"] {{ border: 2.5px solid {MINT_LINE} !important; transition:transform .18s ease,
+  background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }}
+[class*="st-key-card_w_"] .pcard {{ border: 2.5px solid {MINT_LINE}; box-sizing: border-box; }}
 [class*="st-key-card_s_"] strong {{ font-size:1.2rem; }}
 [class*="st-key-card_s_"] [data-testid="stMarkdownContainer"] p {{ font-size:1rem; }}
 [class*="st-key-card_s_"] [data-testid="stCaptionContainer"],
@@ -909,8 +1024,14 @@ LIST_CSS = f"""
 .pcard .more {{ display:none; }}
 .pcard .area, .pcard .state {{ z-index:2; }}   /* 펼친 막 위에서도 지역·상태 배지가 보이게 */
 .pcard .info {{ transition:height .25s ease, background-color .25s ease; }}
+/* 펼친 막: 위는 검정에 가까운 아주 어두운 초록, 아래로 갈수록 밝은 민트가 되는 그라데이션.
+   색 90%(포스터는 10% 만 비친다)로 덮어 흰 글자가 잘 읽히게 한다 */
 [class*="st-key-card_w_"]:hover .pcard .info {{ height:100%; padding-top:44px; overflow-y:auto;
-  background:rgba(22,32,29,.86); }}
+  background:linear-gradient(180deg, rgba(4,28,22,.9) 0%, rgba(12,62,50,.9) 40%,
+                             rgba(30,120,98,.9) 75%, rgba(60,170,142,.9) 100%); }}
+/* 어두운 막 위에서 읽히게: 항목 이름은 밝은 민트, 민트로 채운 칩은 포인트 색 그대로 */
+[class*="st-key-card_w_"]:hover .pcard .more .m b {{ color:#B8EBDD; }}
+[class*="st-key-card_w_"]:hover .pcard .chip.tag {{ background:{MINT}; border-color:{MINT}; color:#fff; }}
 [class*="st-key-card_w_"]:hover .pcard .chips.short {{ display:none; }}
 [class*="st-key-card_w_"]:hover .pcard .more {{ display:block; margin-top:8px; }}
 [class*="st-key-card_w_"]:hover .pcard .t {{ white-space:normal; }}
@@ -927,6 +1048,119 @@ LIST_CSS = f"""
 /* 지도 높이는 남은 화면 높이에 맞춘다 (화면이 작아도 지도 아래가 잘리지 않게) */
 iframe[src*="kakao_map"] {{
   height: max(360px, calc(100vh - {TOPBAR_TOP} - {TOPBAR_H} - 1.75rem)) !important; }}
+/* 필터 판 안의 '찜한 곳만' · '지역 고르기' 는 모바일에서만. 모바일에서는 목록 위의 같은 칸을 숨긴다 */
+.st-key-m_only {{ display: none !important; }}
+@media (max-width: 640px) {{
+  .st-key-m_only {{ display: flex !important; }}
+  /* 필터 판 맨 위에 둔다 (그리는 순서는 아래지만 화면에서는 앞으로) */
+  .st-key-filters > [data-testid="stLayoutWrapper"]:has(> .st-key-m_only),
+  .st-key-filters > .st-key-m_only {{ order: -1; }}
+  .st-key-listtools .st-key-fav_only, .st-key-listtools .st-key-regions {{ display: none !important; }}
+  /* 비어 버린 칸(필터 판으로 옮긴 찜·지역)은 칸째 빼고, '팝업 카페 N곳' ~ 정렬 사이 줄 간격을 좁힌다 */
+  .st-key-listtools [data-testid="stColumn"]:has(.st-key-fav_only),
+  .st-key-listtools [data-testid="stColumn"]:has(.st-key-regions),
+  .st-key-listtools [data-testid="stColumn"]:not(:has([data-testid="stElementContainer"])) {{ display: none !important; }}
+  .st-key-listbar [data-testid="stHorizontalBlock"] {{ gap: .35rem !important; }}
+  /* '팝업 카페 N곳' 과 정렬 칸 사이, 정렬 칸과 목록 사이를 붙지 않게 띄운다 */
+  .st-key-listtools > [data-testid="stHorizontalBlock"],
+  .st-key-listtools [data-testid="stHorizontalBlock"]:has(.st-key-sort) {{ gap: .8rem !important; }}
+  .st-key-listtools {{ margin-bottom: .6rem; }}
+  /* 지도보기·리스트 전체보기 칸: 버튼은 화면 아래에 떠 있으니 칸 자체는 높이 0 (숨기면 버튼까지 사라져서 크기만 없앤다) */
+  .st-key-listbar [data-testid="stColumn"]:has(.st-key-show_map),
+  .st-key-listbar [data-testid="stColumn"]:has(.st-key-list_only_btn) {{
+    height: 0 !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }}
+  .st-key-listbar h4 {{ padding-bottom: 0 !important; margin-bottom: 0 !important; }}
+}}
+/* 지도보기 · 리스트 전체보기 전환 버튼: PC·모바일 모두 화면 아래 가운데에 떠 있는 버튼 */
+.st-key-show_map, .st-key-list_only_btn {{ position: fixed !important; left: 50%; bottom: 24px;
+  transform: translateX(-50%); z-index: 1000; width: auto !important; }}
+/* 평소: 흰 바탕 + 포인트(민트) 테두리·글자 / 커서를 올리거나 누르면: 포인트 바탕 + 흰 글자 */
+.st-key-show_map button, .st-key-list_only_btn button, .st-key-m_filter_btn button {{ background: #fff !important;
+  color: {MINT_DEEP} !important; border: 2px solid {MINT} !important; padding: .55rem 1.5rem !important;
+  min-height: 0 !important; box-shadow: 0 6px 18px rgba(0,0,0,.16) !important; white-space: nowrap; }}
+.st-key-show_map button p, .st-key-list_only_btn button p, .st-key-m_filter_btn button p {{ font-weight: 700; }}
+.st-key-show_map button:hover, .st-key-list_only_btn button:hover, .st-key-m_filter_btn button:hover,
+.st-key-show_map button:active, .st-key-list_only_btn button:active, .st-key-m_filter_btn button:active {{
+  background: {MINT} !important; color: #fff !important; border-color: {MINT} !important; }}
+/* 떠 있는 버튼이 맨 아래 카드를 가리지 않게 페이지 아래에 여백 */
+.stMainBlockContainer {{ padding-bottom: 6rem !important; }}
+@media (max-width: 640px) {{
+  /* 모바일: '필터' 와 '지도보기 / 리스트 전체보기' 를 화면 아래 가운데에 나란히 (가운데에서 6px 씩 떨어져) */
+  .st-key-show_map, .st-key-list_only_btn {{ bottom: 20px; transform: translateX(6px); }}
+  .st-key-m_filter_btn {{ position: fixed !important; left: 50%; bottom: 20px;
+    transform: translateX(calc(-100% - 6px)); z-index: 1000; width: auto !important; }}
+  .st-key-show_map button, .st-key-list_only_btn button, .st-key-m_filter_btn button {{
+    padding: .55rem 1.3rem !important; }}
+  /* 상세의 '← 리스트로 돌아가기' 도 같은 모양으로 화면 아래 가운데에 띄운다 */
+  .st-key-back_to_list {{ position: fixed !important; left: 50%; bottom: 20px;
+    transform: translateX(-50%); z-index: 1000; width: auto !important; }}
+  .st-key-back_to_list button {{ background: #fff !important; color: {MINT_DEEP} !important;
+    border: 2px solid {MINT} !important; padding: .55rem 1.5rem !important; min-height: 0 !important;
+    box-shadow: 0 6px 18px rgba(0,0,0,.16) !important; white-space: nowrap; width: auto !important; }}
+  .st-key-back_to_list button p {{ font-weight: 700; }}
+  .st-key-back_to_list button:hover, .st-key-back_to_list button:active {{ background: {MINT} !important;
+    color: #fff !important; border-color: {MINT} !important; }}
+  /* 떠 있는 버튼이 맨 아래 카드를 가리지 않게 페이지 아래에 여백 */
+  .stMainBlockContainer {{ padding-bottom: 6rem !important; }}
+}}
+/* 모바일 리스트 전체보기: 4개 칸을 풀어 하나의 격자로 (폭 480px 이하 2열, 그 위 3열), 카드 글자도 작게 */
+@media (max-width: 640px) {{
+  .st-key-wide_grid [data-testid="stHorizontalBlock"] {{ display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: .6rem !important; row-gap: 2rem !important;
+    height: auto !important; align-items: start; }}
+  /* 카드(격자 칸)는 내용 높이만큼만 차지하고, 목록 전체 아래에 여유를 둬 다음 영역과 겹치지 않게 */
+  .st-key-wide_grid [data-testid="stLayoutWrapper"]:has(> [class*="st-key-card_w_"]),
+  .st-key-wide_grid [class*="st-key-card_w_"] {{ height: auto !important; min-height: 0 !important;
+    position: relative; }}
+  .st-key-wide_grid {{ padding-bottom: 3.5rem; margin-bottom: 1.5rem; }}
+  .st-key-wide_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+  .st-key-wide_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] {{
+    display: contents !important; }}
+  .st-key-wide_grid .pcard {{ border-radius: 12px; margin-bottom: 0; }}
+  .st-key-wide_grid .pcard .info {{ height: 84px; padding: 8px 9px; }}
+  .st-key-wide_grid .pcard .t {{ font-size: 14.5px; }}
+  .st-key-wide_grid .pcard .s {{ font-size: 11.5px; }}
+  .st-key-wide_grid .pcard .d {{ font-size: 12px; margin: 2px 0 0; }}
+  .st-key-wide_grid .pcard .chips {{ display: none; }}
+  .st-key-wide_grid .pcard .area {{ top: 6px; left: 6px; font-size: 10.5px; padding: 2px 6px; }}
+  .st-key-wide_grid .pcard .state {{ top: 6px; right: 6px; font-size: 10.5px; padding: 2px 7px; }}
+  .st-key-wide_grid [class*="st-key-fav_"] {{ top: auto !important; bottom: 8px !important; right: 12px !important; }}
+  .st-key-wide_grid .pcard .info {{ padding-right: 44px; }}
+  .st-key-wide_grid [class*="st-key-fav_"] button {{ height: 28px; min-width: 28px; padding: 0 6px !important; }}
+  .st-key-wide_grid [class*="st-key-fav_"] button p {{ font-size: 14px !important; }}
+}}
+@media (max-width: 480px) {{
+  .st-key-wide_grid [data-testid="stHorizontalBlock"] {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+}}
+/* 모바일 상세: 이미지 슬라이드와 작품 제목 사이 간격을 절반으로 (칸 사이 기본 간격 + 제목 위 여백을 줄인다) */
+@media (max-width: 640px) {{
+  .st-key-detail_left [data-testid="stElementContainer"]:has(iframe[src*="gallery"]) {{ margin-bottom: -.5rem; }}
+  .st-key-detail_left h3 {{ padding-top: .2rem !important; }}
+  /* 작품 제목과 찜(♥) 버튼을 한 줄에: 제목은 글자 길이만큼, 찜은 그 바로 뒤에 한 칸 띄워서 (오른쪽 끝이 아니라) */
+  .st-key-detail_title [data-testid="stHorizontalBlock"] {{ flex-direction: row !important;
+    flex-wrap: nowrap !important; align-items: center !important; justify-content: flex-start !important;
+    gap: .35rem !important; }}
+  .st-key-detail_title [data-testid="stColumn"]:first-child {{ flex: 0 1 auto !important; width: auto !important;
+    min-width: 0 !important; }}
+  .st-key-detail_title [data-testid="stColumn"]:last-child {{ flex: 0 0 auto !important; width: auto !important;
+    min-width: 0 !important; }}
+}}
+/* 모바일 지도보기: 지도를 맨 위에, 그 아래 리스트는 왼쪽 작은 포스터 + 오른쪽 정보 (PC 는 그대로 반반) */
+@media (max-width: 640px) {{
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] iframe[src*="kakao_map"]):not(:has(.st-key-detail_left)) {{
+    flex-direction: column; }}
+  [data-testid="stHorizontalBlock"]:not(:has(.st-key-detail_left)) > [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{
+    order: -1; }}
+  /* 카드: 왼쪽에 작은 포스터(고정 폭), 오른쪽에 정보. 칸이 세로로 쌓이지 않고 가로로 나란히 */
+  [class*="st-key-card_s_"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .thumb) {{
+    flex-direction: row !important; flex-wrap: nowrap !important; gap: .8rem !important; align-items: center; }}
+  [class*="st-key-card_s_"] [data-testid="stColumn"]:has(.thumb) {{
+    flex: 0 0 84px !important; width: 84px !important; min-width: 84px !important; }}
+  [class*="st-key-card_s_"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .thumb)
+    > [data-testid="stColumn"]:not(:has(.thumb)) {{ flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; }}
+  [class*="st-key-card_s_"] .thumb {{ border-radius: 10px; }}
+  iframe[src*="kakao_map"] {{ height: 58vh !important; min-height: 320px; }}
+}}
 /* 상세 화면: 왼쪽 칸(정보 + 지도)은 길어서 화면에 붙이지 않고, 지도는 고정 높이로 둔다 */
 [data-testid="stColumn"]:has(.st-key-detail_left) {{ position: static !important; }}
 [data-testid="stColumn"] .st-key-detail_left iframe[src*="kakao_map"] {{ height: 420px !important; }}
@@ -935,6 +1169,22 @@ iframe[src*="kakao_map"] {{
   background: #fff !important; border: 1.5px solid {MINT} !important; color: {MINT_DEEP} !important; }}
 .st-key-detail_left .stLinkButton a:hover {{ background: {MINT_SOFT} !important; }}
 .thumb {{ aspect-ratio:3/4; border-radius:14px; background-size:cover; background-position:center; }}
+/* 리뷰 답글: 평소엔 한 줄짜리 입력칸만. 칸을 누르거나 글이 들어 있으면 닉네임 줄과 등록·취소 버튼이 나오고 칸이 커진다 */
+[class*="st-key-rpbox_"] [data-testid="stElementContainer"]:has([data-testid="stCaptionContainer"]),
+[class*="st-key-rpbox_"] [data-testid="stHorizontalBlock"] {{ display: none; }}
+[class*="st-key-rpbox_"]:focus-within [data-testid="stElementContainer"]:has([data-testid="stCaptionContainer"]),
+[class*="st-key-rpbox_"]:has(textarea:not(:placeholder-shown)) [data-testid="stElementContainer"]:has([data-testid="stCaptionContainer"]) {{
+  display: block; }}
+[class*="st-key-rpbox_"]:focus-within [data-testid="stHorizontalBlock"],
+[class*="st-key-rpbox_"]:has(textarea:not(:placeholder-shown)) [data-testid="stHorizontalBlock"] {{ display: flex; }}
+[class*="st-key-rpbox_"] [data-baseweb="textarea"], [class*="st-key-rpbox_"] textarea {{
+  min-height: 2.6rem !important; height: 2.6rem !important; transition: height .15s; }}
+[class*="st-key-rpbox_"]:focus-within [data-baseweb="textarea"], [class*="st-key-rpbox_"]:focus-within textarea,
+[class*="st-key-rpbox_"]:has(textarea:not(:placeholder-shown)) [data-baseweb="textarea"],
+[class*="st-key-rpbox_"]:has(textarea:not(:placeholder-shown)) textarea {{ height: 5rem !important; }}
+/* 지도보기 카드의 📍 지역 배지 (색은 시마다 다르게 글자에 직접 넣는다) — 옆의 상태 배지와 같은 크기 */
+.abadge {{ display:inline-block; font-size:.8rem; font-weight:600; line-height:1.4; padding:.1rem .45rem;
+          border-radius:.5rem; margin-right:.2rem; vertical-align:middle; }}
 .chips {{ display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 4px; }}
 /* 칩: 이벤트 정보는 민트로 채우고, 굿즈는 민트 테두리 + 진한 민트 글자 */
 .chip {{ font-size:12.5px; font-weight:600; padding:3px 10px; border-radius:999px; background:{MINT_SOFT};
@@ -943,8 +1193,15 @@ iframe[src*="kakao_map"] {{
 /* 반반 보기 카드: 카페 이름은 회색, 캐릭터 이름은 민트 포인트 */
 .ctitle .ccafe {{ color: #6b7672; }}
 .ctitle .cchars {{ color: {MINT_DEEP}; font-weight: 600; }}
-/* 반반 보기 카드 맨 아래 특전 칩 줄: 카드 아래 테두리와 한 칸 띄운다 */
-.chips.gifts {{ margin: 2px 0 22px; }}
+/* 반반 보기 카드: 카페 이름 바로 아래 날짜·위치 (예전 작은 회색 글씨와 같은 모양, 사이 간격 없이) */
+.ctitle {{ margin-bottom: 4px !important; }}
+[class*="st-key-card_s_"] .cmeta {{ font-size: 15px !important; color: #3f4a47; line-height: 1.7;
+  margin: 0 !important; }}
+/* 반반 보기 카드: 포스터 아래 칩 묶음(이벤트·굿즈 줄 + 특전 줄). 묶음 전체 아래에 카드 테두리와 한 칸 여백 */
+.cbottom {{ margin: 4px 0 22px; }}
+.cbottom .chips.below, .cbottom .chips.gifts {{ margin: 2px 0; }}
+/* 칩이 하나도 없는 카드: 빈 묶음 칸(위 칸 간격) + 약간의 여백으로 다른 카드와 같은 아래 여백을 만든다 */
+.cbottom.none {{ margin: 0 0 6px; height: 0; }}
 .chip.perk {{ background:{MINT}; color:#fff; border-color:{MINT}; white-space:normal; line-height:1.4; }}
 /* 상세 화면의 특전·굿즈 칩: 크게, 긴 문구는 줄바꿈 */
 .dchips {{ margin:4px 0 14px; }}
@@ -961,9 +1218,9 @@ iframe[src*="kakao_map"] {{
 .pcard .area {{ position:absolute; top:10px; left:10px; background:{MINT}; color:#fff;
                 font-size:12px; font-weight:700; padding:3px 9px; border-radius:8px; }}
 .pcard .state {{ position:absolute; top:10px; right:10px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.1);
-                 color:{MINT_DEEP}; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }}
+                 color:{MINT_DEEP}; font-size:13.5px; font-weight:800; padding:4px 12px; border-radius:999px; }}
 /* 글자 칸은 높이를 고정한다. 특전·굿즈 칩이 없어도 카드마다 제목·날짜 줄이 같은 높이에 온다 */
-.pcard .info {{ position:absolute; left:0; right:0; bottom:0; height:132px; padding:12px 14px;
+.pcard .info {{ position:absolute; left:0; right:0; bottom:0; height:138px; padding:12px 14px;
                 box-sizing:border-box; color:#fff; z-index:1; }}
 /* 사진 카드는 글자가 잘 보이도록 아래쪽을 어둡게 (글자 칸 높이와 상관없이 같은 그라데이션) */
 .pcard::after {{ content:""; position:absolute; left:0; right:0; bottom:0; height:55%;
@@ -975,7 +1232,7 @@ iframe[src*="kakao_map"] {{
              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
 .pcard .s {{ font-size:14.5px; opacity:.92; font-weight:600; overflow:hidden; text-overflow:ellipsis;
              white-space:nowrap; }}
-.pcard .d {{ font-size:14px; font-weight:600; opacity:.95; margin:3px 0 7px; }}
+.pcard .d {{ font-size:16.5px; font-weight:700; opacity:1; margin:3px 0 7px; }}
 .pcard .chip {{ background:#fff; }}
 .pcard .chip.tag {{ background:{MINT}; }}
 </style>
@@ -1150,12 +1407,44 @@ def _detail_history(in_detail: bool) -> None:
     )
 
 
-def _brand(home: bool = False) -> bool:
+_LOGO_SWAP_JS = """
+(function () {
+  const urls = __URLS__;
+  if (window.__aniLogo || urls.length < 2) return;
+  window.__aniLogo = true;
+  // 처음엔 아무거나 하나, 그 뒤로는 누를 때마다 다음 로고로. 서버를 거치면 클릭 한 번에 화면이
+  // 두 번 그려져 바뀌었다 되돌아가기도 해서, 바깥 페이지에서 직접 바꾼다
+  const s = document.createElement('style');
+  document.head.appendChild(s);
+  let i = Math.floor(Math.random() * urls.length);
+  const show = () => {
+    s.textContent = `.st-key-home_brand button { background-image: url("${urls[i]}") !important; }`;
+  };
+  show();
+  document.addEventListener('pointerdown', () => { i = (i + 1) % urls.length; show(); }, true);
+})();
+"""
+
+
+def _logo_swap() -> None:
+    """제목 로고를 LOGOS 중에서, 화면을 누를 때마다 바꾼다."""
+    js = _LOGO_SWAP_JS.replace("__URLS__", json.dumps([f"/app/static/{name}" for name in LOGOS]))
+    components.html(f"<script>window.parent.eval({json.dumps(js)});</script>", height=0)
+
+
+def _brand(home: bool = False, fixed: bool = False) -> bool:
     """ANI:WHERE 제목 + 문구. 제목(또는 home 일 때 '홈으로')을 눌렀으면 True.
 
     home 이면 'ANIME POP-UP · CAFE · GOODS' 줄 오른쪽 끝에 🏠 홈으로 버튼을 둔다 (등록 화면).
     """
-    clicked = st.button("ANI:WHERE 🗺️", key="home_brand", type="tertiary")
+    # 글자 대신 로고 그림을 보여 준다 (GLOBAL_CSS 의 .st-key-home_brand). 글자는 화면 읽기용으로 남긴다.
+    # 화면 어디든 누를 때마다 로고가 다른 것으로 바뀐다 (_logo_swap — 브라우저에서 처리).
+    # 상세·등록 화면은 바뀌지 않고 늘 같은 로고(FIXED_LOGO). 더 강한 선택자로 덮어써서, 목록으로 돌아가면 다시 바뀐다
+    _logo_swap()
+    if fixed:
+        st.markdown(f'<style>html body .st-key-home_brand button {{ background-image: url("/app/static/{FIXED_LOGO}")'
+                    ' !important; }</style>', unsafe_allow_html=True)
+    clicked = st.button("ANI:WHERE", key="home_brand", type="tertiary")
     if not home:
         st.markdown(
             '<div class="brand-tag">함께 만드는 애니 팝업 지도!! 찾고, 공유하고, 함께 기록해요!<br/>'
@@ -1186,6 +1475,9 @@ def _reset_filters() -> None:
         st.session_state[k] = []
     st.session_state["regions"] = []
     st.session_state["fav_only"] = False
+    # 모바일 필터 판의 같은 칸도 함께 비운다
+    st.session_state["regions_m"] = []
+    st.session_state["fav_only_m"] = False
 
 
 def page_map() -> None:
@@ -1213,7 +1505,7 @@ def page_map() -> None:
     if current:
         # 상세에서는 등록하기·검색 필터·카페 수·리스트 전체보기를 숨긴다.
         # 지우지 않고 숨기기만 해서, 돌아가면 골라 둔 필터·지역·정렬이 그대로 남는다
-        st.markdown("<style>.st-key-filters, .st-key-listbar, .st-key-listtools "
+        st.markdown("<style>.st-key-filters, .st-key-listbar, .st-key-listtools, .st-key-m_filter_btn "
                     "{ display: none !important; }</style>", unsafe_allow_html=True)
 
     # 제목·등록하기(상세에서는 돌아가기)·검색 필터는 스크롤해도 늘 위에 붙어 있다 (LIST_CSS 의 .st-key-topbar)
@@ -1222,7 +1514,7 @@ def page_map() -> None:
         head, btn = st.columns([5, 1], vertical_alignment="bottom")
     with head:
         # 제목을 누르면 상세를 닫고 보던 모드(리스트 전체보기 / 지도보기)의 첫 화면으로 돌아간다
-        if _brand():
+        if _brand(fixed=current is not None):     # 상세에서는 로고 고정
             st.session_state["selected"] = None
             st.session_state["scroll_top"] = True
             st.rerun()
@@ -1260,7 +1552,37 @@ def page_map() -> None:
     # '스파이패밀리' 와 '스파이 패밀리' 가 따로 걸리지 않게 목록의 작품명으로 맞춘다
     df["work"] = df["work"].fillna("").astype(str).map(catalog.canonical_work)
 
-    with top, st.container(key="filters"):
+    # 모바일(폭 640px 이하)에서는 검색 필터를 접어 두고 '검색 필터' 버튼으로 연다. PC 에서는 버튼을 숨기고 늘 보인다.
+    # 화면 폭은 서버가 모르니, 열림 상태는 서버가 기억하고 '좁은 화면일 때만 숨기기' 는 CSS 가 맡는다
+    ss = st.session_state
+    active = sum([
+        bool(str(ss.get("f_query") or "").strip()), ss.get("f_work", "전체") != "전체",
+        ss.get("f_span", "진행중 + 예정") != "진행중 + 예정",
+        bool(ss.get(f"f_date_{ss.get('date_ver', 0)}")),
+        any(ss.get(k) for k in list(ss) if str(k).startswith("filter_chars_")),
+        bool(ss.get("regions")), bool(ss.get("fav_only")),
+    ])
+    m_open = ss.get("m_filters", False)
+    with top:
+        # 모바일에서는 화면 아래 '지도보기 / 리스트 전체보기' 옆에 떠 있는 버튼 (LIST_CSS 의 .st-key-m_filter_btn)
+        label = "필터 닫기" if m_open else f"필터{f' · {active}' if active else ''}"
+        if st.button(label, key="m_filter_btn"):
+            ss["m_filters"] = not m_open
+            st.rerun()
+    # 열면 필터 묶음이 화면 아래에서 떠오르는 판(바텀 시트)으로 보인다. 닫으면 모바일에서는 숨긴다
+    sheet = (".st-key-filters { position: fixed !important; left: 12px; right: 12px; bottom: 76px; z-index: 999;"
+             " max-height: 62vh; overflow-y: auto; background: #fff; border-radius: 18px;"
+             " padding: .9rem 1rem 1rem; box-shadow: 0 -4px 24px rgba(0,0,0,.18); }")
+    st.markdown(
+        "<style>.st-key-m_filter_btn { display: none; }"
+        "@media (max-width: 640px) { .st-key-m_filter_btn { display: block; }"
+        + (sheet if m_open else " .st-key-filters { display: none !important; }") + " }</style>",
+        unsafe_allow_html=True,
+    )
+
+    with top:
+        fbox = st.container(key="filters")      # 모바일 전용 칸(찜·지역)도 아래에서 이 묶음에 넣는다
+    with fbox:
         c0, c1, c4, c2, c3, c5 = st.columns([2.4, 2, 2, 2, 2, 1.1], vertical_alignment="bottom")
     with c5:
         # 검색어·작품·캐릭터·기간·특전과 목록 위의 지역·찜 필터를 한 번에 처음 값으로 돌린다 (정렬은 그대로)
@@ -1286,6 +1608,19 @@ def page_map() -> None:
         pick_day = st.date_input("날짜", value=None, key=f"f_date_{st.session_state.get('date_ver', 0)}",
                                  format="YYYY.MM.DD", help="이 날짜에 진행 중인 곳만 봅니다")
 
+    # 지역 이름 (카드 배지와 같은 이름). 지역 고르기 칸 두 곳(필터 판·목록 위)이 함께 쓴다
+    df["area"] = df["address"].map(lambda a: geo.area_name(str(a or "")))
+    areas = sorted({a for a in df["area"] if a})
+    # 모바일 필터 판에만 '찜한 곳만' · '지역 고르기' 를 한 번 더 둔다 (PC 는 목록 위에만, LIST_CSS 의 .st-key-m_only).
+    # 같은 키를 두 번 쓸 수 없어 따로 키를 두고, 어느 쪽을 바꿔도 원래 값(fav_only·regions)에 맞춘다
+    ss["fav_only_m"] = bool(ss.get("fav_only", False))
+    ss["regions_m"] = [r for r in ss.get("regions", []) if r in areas]
+    with fbox, st.container(key="m_only"):
+        st.toggle("♥ 찜한 곳만", key="fav_only_m",
+                  on_change=lambda: ss.update(fav_only=ss["fav_only_m"]))
+        st.multiselect("지역", areas, key="regions_m", placeholder="📍 지역 고르기 (여러 곳 가능)",
+                       on_change=lambda: ss.update(regions=ss["regions_m"]))
+
     view = df.copy()
     if query.strip():
         q = query.strip()
@@ -1307,7 +1642,6 @@ def page_map() -> None:
     if pick_day:
         view = view[(view["start_date"] <= pick_day) & (view["end_date"] >= pick_day)]
     # 지역·정렬 고르기는 목록 바로 위에 있다. 고른 값은 지난 실행의 것을 쓴다 (정렬 기본: 최신순)
-    df["area"] = df["address"].map(lambda a: geo.area_name(str(a or "")))
     view = view.assign(area=df.loc[view.index, "area"])
     regions = st.session_state.get("regions", [])
     if regions:
@@ -1318,22 +1652,19 @@ def page_map() -> None:
 
     mapped = view.dropna(subset=["lat", "lng"])
     wide = bool(st.session_state.get("list_only")) and not current
-    with top, st.container(key="listbar"):
-        _list_bar(len(view), wide)
-    # 정렬은 상단에 고정하지 않고 목록 바로 위에 둔다 (스크롤하면 함께 올라간다)
+    # 조건에 맞는 수·지도 표시 수·안내는 '팝업 카페 N곳' 옆 도움말(?)에 커서를 올리면 보인다
+    note = (f"조건에 맞는 카페 {len(view)}곳 · 지도에 표시 가능 {len(mapped)}곳"
+            + (f" · 좌표 없음 {len(view) - len(mapped)}곳" if len(view) > len(mapped) else "")
+            + " · 카드나 지도의 점을 누르면 상세를 보고 리뷰를 남기거나 수정할 수 있습니다.")
+    # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
     with st.container(key="listtools"):
-        note, fav_only, region, sort = st.columns([3, 1.1, 2, 1.3], vertical_alignment="center")
+        head, fav_only, region, sort = st.columns([3, 1.1, 2, 1.3], vertical_alignment="center")
+    with head, st.container(key="listbar"):
+        _list_bar(len(view), wide, note)
     with fav_only:
         st.toggle("♥ 찜한 곳만", key="fav_only")
-    with note:
-        st.caption(
-            f"조건에 맞는 카페 {len(view)}곳 · 지도에 표시 가능 {len(mapped)}곳"
-            + (f" · 좌표 없음 {len(view) - len(mapped)}곳" if len(view) > len(mapped) else "")
-            + " · 카드나 지도의 점을 누르면 상세를 보고 리뷰를 남기거나 수정할 수 있습니다."
-        )
     with region:
         # 지금 등록된 카페가 있는 지역만, 카드 배지와 같은 이름으로. 여러 곳을 함께 고를 수 있다
-        areas = sorted({a for a in df["area"] if a})
         st.multiselect("지역", areas, key="regions", label_visibility="collapsed",
                        placeholder="📍 지역 고르기 (여러 곳 가능)")
     with sort:
@@ -1392,14 +1723,14 @@ def page_map() -> None:
 
 # =================================================================== 등록하기
 # 한 화면에 한 단계씩 묻는다. 진행 막대 + 가운데 카드 하나.
-# 마지막 공지설정 단계에서 앞에서 넣은 정보로 공지 예시를 만들어 보여 주고 등록한다.
+# 마지막 '등록 확인' 단계에서 앞에서 넣은 정보를 한눈에 보여 주고 등록한다.
 STEPS = [
     ("작품 · 캐릭터", "🎬"),
     ("카페 정보", "☕"),
     ("이미지", "🖼️"),
     ("기간", "📅"),
     ("특전 · 굿즈", "🎁"),
-    ("공지설정", "📝"),
+    ("등록 확인", "✅"),
 ]
 ACCENT = MINT
 
@@ -1412,6 +1743,19 @@ WIZARD_CSS = f"""
 /* 이미지 올리는 칸: 회색 상자 + 민트 점선 */
 [data-testid="stFileUploaderDropzone"] {{ background:{GRAY_SOFT}; border:1.5px dashed {ACCENT};
              border-radius:8px; min-height:140px; }}
+/* 모바일: '🏠 홈으로' 를 화면 아래 가운데에 떠 있는 버튼으로 (메인의 떠 있는 버튼과 같은 모양, PC 는 원래 자리) */
+@media (max-width: 640px) {{
+  .st-key-wiz_home {{ position: fixed !important; left: 50%; bottom: 20px; transform: translateX(-50%);
+    z-index: 1000; width: auto !important; }}
+  .st-key-wiz_home button {{ background: #fff !important; color: {MINT_DEEP} !important;
+    border: 2px solid {ACCENT} !important; padding: .55rem 1.5rem !important; min-height: 0 !important;
+    box-shadow: 0 6px 18px rgba(0,0,0,.16) !important; white-space: nowrap; }}
+  .st-key-wiz_home button p {{ font-weight: 700; }}
+  .st-key-wiz_home button:hover, .st-key-wiz_home button:active {{ background: {ACCENT} !important;
+    color: #fff !important; border-color: {ACCENT} !important; }}
+  /* 떠 있는 버튼이 맨 아래 '이전 / 다음' 버튼을 가리지 않게 페이지 아래에 여백 */
+  .stMainBlockContainer {{ padding-bottom: 6rem !important; }}
+}}
 .wiz-icon {{ width:140px; height:140px; margin:0 auto 1.2rem; border-radius:50%;
              background:{GRAY_SOFT};
              display:flex; align-items:center; justify-content:center; font-size:64px; }}
@@ -1488,6 +1832,37 @@ def _step_work(w: dict) -> None:
         st.rerun()
 
 
+def _quick_report(got: dict) -> None:
+    """읽어온 결과 요약: 상태(자동등록/검토대기)와 이유, 칸별 신뢰도(초록·노랑·빨강), 지역·운영시간·기타 이벤트."""
+    if not got:
+        return
+    st.caption("🔧 규칙 기반으로 읽었어요 (AI 아님). 비었거나 틀린 칸은 직접 고쳐 주세요.")
+    # 무엇을 읽어 왔는지만 알려 준다: '작품명, 카페명, 기간을 읽어왔어요' (항목 이름은 포인트 색)
+    fields = [("작품명", got.get("work")), ("카페명", got.get("cafe_name")), ("주소", got.get("address")),
+              ("기간", got.get("start_date") and got.get("end_date")), ("캐릭터", got.get("characters")),
+              ("특전", got.get("perks")), ("굿즈", got.get("goods")), ("이벤트", got.get("tags")),
+              ("참고 웹사이트", got.get("links"))]
+    found = [name for name, value in fields if value]
+    if found:
+        last = found[-1][-1]
+        josa = "을" if "가" <= last <= "힣" and (ord(last) - ord("가")) % 28 else "를"
+        # :primary[] 는 테마의 포인트 색(민트)
+        read = ", ".join(f":primary[{n}]" for n in found) + f"{josa} 읽어왔어요"
+    else:
+        read = "읽어 온 항목이 없어요. 칸을 직접 채워 주세요"
+    if got.get("status") == "자동등록":
+        # 규칙서는 카페명을 필수로 보지 않지만, 앱은 지도에 이름을 보여야 해서 직접 넣게 한다
+        need = "" if got.get("cafe_name") else "\n\n- 공지에 가게 이름이 없어요. **카페명**만 직접 넣어 주세요"
+        st.success(f"**{read}**{need}")
+    else:
+        st.warning(f"**{read}**\n\n" + "\n".join(f"- {r}" for r in got.get("reasons", [])))
+    extra = [f"📍 지역 {got['area']}" if got.get("area") else "",
+             f"🕒 운영시간 {got['hours']}" if got.get("hours") else "",
+             f"🎪 그 밖의 이벤트 {', '.join(got['events'])}" if got.get("events") else ""]
+    if any(extra):
+        st.caption(" · ".join(e for e in extra if e) + " (저장 칸이 없어 참고로만 보여 줘요)")
+
+
 def _quick(w: dict) -> None:
     """간편등록: 공지를 붙여넣고 '읽어오기' → 채워진 칸을 확인·수정 → 바로 등록."""
     raw = st.text_area("공지", key="quick_raw", height=180, label_visibility="collapsed",
@@ -1497,14 +1872,14 @@ def _quick(w: dict) -> None:
     # 여기서 막으면 글을 붙여넣어도 버튼이 계속 꺼져 있다
     if st.button("읽어오기", type="primary", width="stretch", key="quick_read"):
         if raw.strip() and not _block_sensitive(raw):
-            got = cafe.parse_notice(raw, today=TODAY)
+            got = notice.parse_notice(raw, today=TODAY)
+            # 못 찾은 칸은 비워 둔다 (오늘 날짜 같은 값으로 채우지 않는다 — 추측 금지)
             w.update({
-                "work": got["work"], "characters": ", ".join(got["characters"]),
-                "cafe_name": got["cafe_name"], "address": got["address"], "picked": None,
-                "start_date": got["start_date"] or TODAY,
-                "end_date": got["end_date"] or got["start_date"] or TODAY + timedelta(days=27),
+                "work": got["work"] or "", "characters": ", ".join(got["characters"]),
+                "cafe_name": got["cafe_name"] or "", "address": got["address"] or "", "picked": None,
+                "start_date": got["start_date"], "end_date": got["end_date"],
                 "perks": ", ".join(got["perks"]), "goods": ", ".join(got["goods"]),
-                "tags": got["tags"], "links": got["links"], "quick_read": True,
+                "tags": got["tags"], "links": got["links"], "quick_read": True, "quick_got": got,
             })
             w["v"] += 1
             st.rerun()
@@ -1512,7 +1887,8 @@ def _quick(w: dict) -> None:
         return
 
     # 결과 화면에는 늘 어떤 방식으로 읽었는지 적는다 (지금은 AI 없이 규칙으로만 읽는다)
-    st.caption("🔧 규칙 기반으로 읽었어요. 비었거나 틀린 칸은 직접 고쳐 주세요.")
+    got = w.get("quick_got") or {}
+    _quick_report(got)
     v_ = w["v"]
     work, chars = pick_work_and_characters(w["work"], _split(w["characters"]), key=f"quick_{v_}")
     name = st.text_input("카페명", value=w["cafe_name"], key=f"quick_cafe_{v_}", placeholder=_ask("카페명"))
@@ -1523,25 +1899,54 @@ def _quick(w: dict) -> None:
         w["picked"] = _picked(c)
         w["v"] += 1
 
+    # 주소는 유추하지 않는다. 지역만 찾았으면 칸은 비워 두고 지역을 힌트로 보여 준다
+    area = got.get("area")
     addr = address_field(w["address"], key=f"quick_{v_}", on_pick=pick,
-                         placeholder=f"{_ask('주소')} (예: 서울 마포구 ...)")
+                         placeholder=(f"주소를 찾지 못했어요 · 지역: {area}" if area and not w["address"]
+                                      else f"{_ask('주소')} (예: 서울 마포구 ...)"))
     d1, d2 = st.columns(2)
-    start = d1.date_input("시작", value=w["start_date"], key=f"quick_start_{v_}")
-    end = d2.date_input("종료", value=w["end_date"], key=f"quick_end_{v_}")
+    start = d1.date_input("시작", value=w["start_date"], key=f"quick_start_{v_}", format="YYYY.MM.DD")
+    end = d2.date_input("종료", value=w["end_date"], key=f"quick_end_{v_}", format="YYYY.MM.DD")
     perks = st.text_input("특전", value=w["perks"], key=f"quick_perks_{v_}", help="쉼표로 구분")
     goods = st.text_input("굿즈", value=w["goods"], key=f"quick_goods_{v_}", help="쉼표로 구분")
     tags = st.pills("이벤트 추가 정보", cafe.EVENT_TAGS, selection_mode="multi", default=w["tags"],
                     key=f"quick_tags_{v_}")
     links, bad_links = _links_field("\n".join(w["links"]), key=f"quick_links_{v_}")
-    poster = st.file_uploader(f"포스터 (선택, 1장 · ~ {images.POSTER_MB} MB)", type=images.TYPES,
-                              key=f"quick_poster_{v_}")
-    big = bool(poster) and images.too_big(poster.getvalue(), images.POSTER_MB)
-    if big:
-        st.error(f"포스터는 {images.POSTER_MB} MB 까지 올릴 수 있습니다.")
+    # 이미지: 단계별 등록과 같은 구성 (메인 이미지 1장 + 추가 이미지). 없어도 등록할 수 있다
+    st.markdown("**🖼️ 메인 이미지 (포스터)** :gray[(1장만)]")
+    poster = st.file_uploader(f"메인 이미지 (1장, ~ {images.POSTER_MB} MB)", type=images.TYPES,
+                              key=f"quick_poster_{v_}", label_visibility="collapsed")
+    if poster:
+        st.image(poster.getvalue(), width=160)
+    else:
+        st.caption("포스터가 없어도 등록할 수 있어요. 있으면 목록에서 훨씬 눈에 띄어요!")
+    st.markdown(f"**이미지 추가 등록** :gray[(최대 {images.MAX_EXTRAS}장)]")
+    extras = st.file_uploader(f"추가 이미지 (~ {images.EXTRA_MB} MB)", type=images.TYPES,
+                              accept_multiple_files=True, key=f"quick_extras_{v_}",
+                              label_visibility="collapsed") or []
+    if extras:
+        st.caption(f"추가 이미지 미리보기 ({len(extras)}장)")
+        _thumbs([f.getvalue() for f in extras[:images.MAX_EXTRAS]])
+    img_errors = []
+    if poster and images.too_big(poster.getvalue(), images.POSTER_MB):
+        img_errors.append(f"메인 이미지는 {images.POSTER_MB} MB 까지 올릴 수 있습니다.")
+    if len(extras) > images.MAX_EXTRAS:
+        img_errors.append(f"추가 이미지는 {images.MAX_EXTRAS}장까지 올릴 수 있습니다.")
+    if any(images.too_big(f.getvalue(), images.EXTRA_MB) for f in extras):
+        img_errors.append(f"추가 이미지는 한 장에 {images.EXTRA_MB} MB 까지 올릴 수 있습니다.")
+    for e in img_errors:
+        st.error(e)
+    big = bool(img_errors)
 
     entry = None
-    ready = bool(work and name.strip() and addr.strip())
+    ready = bool(work and name.strip() and addr.strip() and start and end)
     if ready:
+        # 작품 + 장소 + 기간이 모두 같은 카페가 이미 있으면 알려 준다 (막지는 않는다)
+        dupes = notice.possible_duplicates({"work": work, "cafe_name": name.strip(), "area": area,
+                                            "start_date": start, "end_date": end}, store.current_rows())
+        if dupes:
+            st.warning("같은 작품·장소·기간의 카페가 이미 있어요: "
+                       + ", ".join(f"{d['work']} · {d['cafe_name']}" for d in dupes[:3]))
         entry = CafeEntry(cafe_name=name.strip(), work=work, characters=chars, address=addr.strip(),
                           start_date=start, end_date=end, perks=_split(perks), goods=_split(goods),
                           confidence="high")
@@ -1552,7 +1957,7 @@ def _quick(w: dict) -> None:
             st.error(err)
         ready = v.ok
     else:
-        st.caption("작품 · 카페명 · 주소를 채우면 등록할 수 있어요.")
+        st.caption("작품 · 카페명 · 주소 · 기간을 채우면 등록할 수 있어요.")
     bad = _block_sensitive(name, addr, perks, goods)
 
     if st.button("등록하기", type="primary", width="stretch", key="quick_save",
@@ -1561,12 +1966,14 @@ def _quick(w: dict) -> None:
         if not g.ok:
             st.error(g.note)
             return
-        saved = [images.save(poster.name, poster.getvalue())] if poster else []
+        # 첫 장이 포스터. 포스터 없이 추가 이미지만 올리면 그 첫 장이 포스터가 된다 (단계별 등록과 같다)
+        files = ([(poster.name, poster.getvalue())] if poster else []) + [(f.name, f.getvalue()) for f in extras]
+        saved = [images.save(name, data) for name, data in files]
         store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="간편 등록",
                                        note=f"{g.badge} ({g.matched})",
                                        images=saved, tags=tags, links=links))
         st.session_state["save_report"] = {"saved": [(entry.cafe_name, g.badge)], "blocked": []}
-        for k in ("wiz", "raw", "quick_raw", "addr_hits"):
+        for k in ("wiz", "quick_raw"):
             st.session_state.pop(k, None)
         go("map")
 
@@ -1597,22 +2004,6 @@ def _site_name(url: str) -> str:
     return host or url
 
 
-def _sample_notice(w: dict) -> str:
-    """앞 단계에서 넣은 정보로 만든 공지 예시. 비어 있는 칸은 입력해 달라고 남겨 둔다."""
-    span = f"{w['start_date']:%Y.%m.%d} ~ {w['end_date']:%Y.%m.%d}"
-    return "\n".join([
-        f"#{w['work']} 콜라보 카페",
-        f"카페명: {w['cafe_name'] or _ask('카페명')}",
-        f"주소: {w['address'] or _ask('주소')}",
-        f"기간: {span}",
-        f"캐릭터: {w['characters'] or _ask('캐릭터')}",
-        f"특전: {w['perks'] or _ask('특전')}",
-        f"굿즈: {w['goods'] or _ask('굿즈')}",
-        # 특전·굿즈 단계에서 체크한 항목. 하나도 없으면 '없음'
-        f"이벤트 추가 정보: {' · '.join(w['tags']) or '없음'}",
-    ] + [f"참고: {u}" for u in w["links"]])
-
-
 def _wiz_geo(w: dict) -> geo.GeoResult:
     return locate(w["address"], w.get("picked"))
 
@@ -1628,7 +2019,7 @@ def _step_cafe(w: dict) -> None:
         w["picked"] = _picked(c)
         w["v"] += 1
 
-    addr = address_field(w["address"], key=f"wiz_{w['v']}", on_pick=pick, search=False,
+    addr = address_field(w["address"], key=f"wiz_{w['v']}", on_pick=pick,
                          placeholder=f"{_ask('주소')} (예: 서울 마포구 ...)")
 
     def save():
@@ -1744,15 +2135,16 @@ def _step_extras(w: dict) -> None:
     _nav(next_ok=not _block_sensitive(perks, goods) and not bad_links, on_next=save)
 
 
-def _step_notice(w: dict) -> None:
-    """마지막 단계. 앞에서 넣은 정보를 공지 형태로 보여 주고, 확인되면 등록한다."""
-    st.caption("앞에서 넣은 정보로 공지를 만들어 볼까요? **샘플예시** 를 누르면 주소·기간·특전·굿즈가 "
-               "쏙 들어가요 🙌 마음에 들게 고쳐서 트윗·인스타에 그대로 써도 좋아요!")
-    if st.button("샘플예시", width="stretch", help="앞 단계에서 넣은 정보로 공지 예시를 만듭니다"):
-        st.session_state["raw"] = _sample_notice(w)
-    raw = st.text_area("공지", key="raw", height=200, label_visibility="collapsed",
-                       placeholder="#OO 콜라보 카페\n카페명: ...\n주소: ...\n기간: ...")
-    bad = _block_sensitive(raw)
+def _step_confirm(w: dict) -> None:
+    """마지막 단계. 앞에서 넣은 정보를 한눈에 보여 주고, 확인되면 등록한다.
+    (공지 붙여넣기는 첫 단계의 '공지로 간편등록' 에서만 한다)"""
+    span = f"{w['start_date']:%Y.%m.%d} ~ {w['end_date']:%Y.%m.%d}"
+    rows = [("작품", w["work"]), ("캐릭터", w["characters"]), ("카페명", w["cafe_name"]),
+            ("주소", w["address"]), ("기간", span), ("특전", w["perks"]), ("굿즈", w["goods"]),
+            ("이벤트", " · ".join(w["tags"])),
+            ("이미지", f"{len([f for f in [w['poster'], *w['extras']] if f])}장")]
+    st.markdown("  \n".join(f"**{k}** · {_plain(v)}" for k, v in rows if v))
+    st.caption("고칠 곳이 있으면 '이전' 으로 돌아가 바꿔 주세요.")
 
     entry = CafeEntry(
         cafe_name=w["cafe_name"], work=w["work"], characters=_split(w["characters"]),
@@ -1778,11 +2170,10 @@ def _step_notice(w: dict) -> None:
                                        note=f"{g.badge} ({g.matched})",
                                        images=saved, tags=w["tags"], links=w["links"]))
         st.session_state["save_report"] = {"saved": [(entry.cafe_name, g.badge)], "blocked": []}
-        for k in ("wiz", "raw", "addr_hits"):
-            st.session_state.pop(k, None)
+        st.session_state.pop("wiz", None)
         go("map")
 
-    _nav("등록하기", next_ok=v.ok and not bad, on_next=save)
+    _nav("등록하기", next_ok=v.ok, on_next=save)
 
 
 def page_add() -> None:
@@ -1796,7 +2187,7 @@ def page_add() -> None:
     _live_send()    # 간편등록 '읽어오기' 버튼을 공지 입력칸에 맞춰 바로 켜고 끈다
     # 메인과 같은 상단(제목·문구)이 스크롤해도 떠 있고, 'ANIME POP-UP · CAFE · GOODS' 줄 오른쪽에 홈으로
     with st.container(key="topbar"):
-        if _brand(home=True):
+        if _brand(home=True, fixed=True):         # 등록 화면은 로고 고정
             st.session_state.pop("wiz", None)
             go("map")
 
@@ -1842,7 +2233,7 @@ def page_add() -> None:
             if note:
                 st.caption(note)
             [_step_work, _step_cafe, _step_images, _step_dates, _step_extras,
-             _step_notice][step](w)
+             _step_confirm][step](w)
 
 
 # 지도와 등록은 주소가 다른 별개 페이지다 (/, /add). 메뉴는 숨기고 버튼으로만 오간다.

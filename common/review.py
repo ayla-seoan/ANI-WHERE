@@ -96,8 +96,12 @@ def threads(rows: list[dict], cafe_id: str) -> list[Thread]:
 
 
 def counts(rows: list[dict]) -> dict[str, int]:
-    """카페별 리뷰 수 (답글 포함). 카드 목록에 붙인다."""
-    out: dict[str, int] = {}
-    for r in rows:
-        out[str(r.get("cafe_id"))] = out.get(str(r.get("cafe_id")), 0) + 1
-    return out
+    """카페별 리뷰 수 (답글 포함). 카드 목록에 붙인다.
+    화면에 보이는 것만 센다 — 원글이 지워져 함께 숨겨진 답글은 빼고."""
+    return {cafe: sum(1 + len(t.replies) for t in threads(rows, cafe))
+            for cafe in {str(r.get("cafe_id")) for r in rows}}
+
+
+def can_delete(row: dict, nickname: str) -> bool:
+    """내가 쓴 글인지: 접속 IP 로 정해지는 닉네임이 글의 닉네임과 같을 때만 지울 수 있다."""
+    return bool(nickname) and str(row.get("nickname") or "") == nickname
