@@ -675,7 +675,7 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
     kind = ""
     nick = review.nickname_for(st.context.ip_address)
     # 닉네임 → 종류 → 내용 순으로 한 줄씩, 같은 왼쪽 선에 맞춰 둔다
-    st.caption(f":material/person: 닉네임 **{nick}**", help="접속한 IP 에 따라 자동으로 정해지는 닉네임입니다")
+    st.caption(f":material/person: **{nick}**", help="접속한 IP 에 따라 자동으로 정해지는 닉네임입니다")
     rating = None
     if not parent_id:
         kind = st.pills("종류", review.KINDS, default=review.KINDS[0], key=f"{slot}_kind_{n}",
