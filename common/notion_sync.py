@@ -24,7 +24,7 @@ from .schema import CafeEntry
 DATABASE_ID = os.getenv("NOTION_DATABASE_ID", "3da1fd80371141c697fabf7b742e0edc")
 STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "notion_sync.json"
 SYNC_EVERY = timedelta(hours=1)
-SOURCE = "노션 자동 수집"
+SOURCE = "AI 자동 수집"
 UNKNOWN = ("확인 필요", "미확인", "")
 
 
@@ -211,7 +211,7 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
             continue
         saved = _download(extra["images"])
         store.append(cafe.entry_to_row(
-            entry, g.lat, g.lng, source=SOURCE,
+            entry, g.lat, g.lng, source=SOURCE, editor="AI",
             note=f"{g.badge} ({g.matched}) | notion:{extra['notion_id']}",
             images=saved, tags=extra["tags"], links=extra["links"]))
         report["added"].append(name)

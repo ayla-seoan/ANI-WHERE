@@ -260,8 +260,9 @@ def order_links(links: list[str]) -> list[str]:
 def entry_to_row(entry: CafeEntry, lat: float | None, lng: float | None,
                  source: str = "", note: str = "",
                  images: list[str] | None = None, tags: list[str] | None = None,
-                 links: list[str] | None = None) -> dict:
+                 links: list[str] | None = None, editor: str = "") -> dict:
     return {
+        "editor": editor[:40],
         "links": " ".join((links or [])[:MAX_LINKS]),
         "images": ", ".join(images or []),
         "tags": ", ".join(t for t in (tags or []) if t in EVENT_TAGS),
@@ -285,7 +286,7 @@ def rows_to_frame(rows: list[dict]) -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
     # 나중에 생긴 칸(images·tags 등)은 옛 행에 없어서 NaN 이 된다. 화면에 'nan' 이 뜨지 않게 빈 글자로 둔다
-    for col in ("characters", "address", "perks", "goods", "images", "tags", "links", "note", "source"):
+    for col in ("characters", "address", "perks", "goods", "images", "tags", "links", "note", "source", "editor"):
         df[col] = df[col].fillna("").astype(str) if col in df else ""
     for col in ("lat", "lng"):
         df[col] = pd.to_numeric(df.get(col), errors="coerce")
@@ -306,6 +307,6 @@ def expire_ended(store, today: date) -> list[str]:
         except ValueError:
             continue
         if end < today:
-            store.soft_delete(str(r["entry_id"]))
+            store.soft_delete(str(r["entry_id"]), extra={"source": "기간 종료", "editor": "자동"})
             done.append(str(r.get("cafe_name") or ""))
     return done

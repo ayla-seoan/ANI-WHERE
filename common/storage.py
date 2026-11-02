@@ -22,6 +22,7 @@ HEADERS = [
     "start_date", "end_date", "perks", "goods", "source", "note",
     "images", "tags",     # images: static/uploads/ 의 파일 이름들 (첫 번째가 포스터), tags: 이벤트 추가 정보
     "links",              # 참고 웹사이트 주소들 (공백으로 구분)
+    "editor",             # 이 기록을 남긴 사람 (리뷰와 같은 IP 닉네임, 자동 수집은 'AI'). 예전 행은 비어 있다
 ]
 
 
@@ -60,8 +61,12 @@ class Storage:
         except Exception:
             ws = doc.add_worksheet(self.worksheet, rows=1000, cols=len(self.headers))
             ws.append_row(self.headers)
-        if not ws.row_values(1):
+        head = ws.row_values(1)
+        if not head:
             ws.append_row(self.headers)
+        elif missing := [h for h in self.headers if h not in head]:
+            # 나중에 생긴 칸(editor 등)은 제목 줄 오른쪽 끝에만 붙인다. 데이터 줄은 건드리지 않는다
+            ws.update([head + missing], "A1")
         return ws
 
     # ------------------------------------------------------------- local
@@ -126,7 +131,7 @@ class Storage:
             self._write_local(rows)
         return record
 
-    def revert(self, entry_id: str) -> dict | None:
+    def revert(self, entry_id: str, extra: dict | None = None) -> dict | None:
         """직전 revision 을 새 행으로 다시 쌓아 되돌린다. 이력은 지우지 않는다."""
         history = sorted(
             [r for r in self.all_rows() if str(r.get("entry_id")) == str(entry_id)],
@@ -137,12 +142,25 @@ class Storage:
         target = history[-2]
         payload = {k: target.get(k, "") for k in self.headers
                    if k not in ("row_id", "entry_id", "revision", "status", "updated_at")}
+        payload.update(extra or {})      # 되돌린 사람·방법처럼 이번 기록에만 붙는 값
         return self.append(payload, entry_id=str(entry_id), status=target.get("status", "active"))
 
-    def soft_delete(self, entry_id: str) -> dict:
+    def restore(self, entry_id: str, revision: int, extra: dict | None = None) -> dict | None:
+        """골라 둔 revision 의 내용을 새 행으로 다시 쌓는다 (수정 이력에서 원하는 버전으로 돌아가기)."""
+        target = next((r for r in self.all_rows() if str(r.get("entry_id")) == str(entry_id)
+                       and int(r.get("revision", 0)) == int(revision)), None)
+        if target is None:
+            return None
+        payload = {k: target.get(k, "") for k in self.headers
+                   if k not in ("row_id", "entry_id", "revision", "status", "updated_at")}
+        payload.update(extra or {})
+        return self.append(payload, entry_id=str(entry_id), status=target.get("status", "active"))
+
+    def soft_delete(self, entry_id: str, extra: dict | None = None) -> dict:
         current = next(
             (r for r in self.current_rows() if str(r.get("entry_id")) == str(entry_id)), {}
         )
         payload = {k: current.get(k, "") for k in self.headers
                    if k not in ("row_id", "entry_id", "revision", "status", "updated_at")}
+        payload.update(extra or {})
         return self.append(payload, entry_id=str(entry_id), status="deleted")

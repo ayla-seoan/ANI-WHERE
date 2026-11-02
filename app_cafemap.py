@@ -229,6 +229,42 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 흰 바탕 글줄 안의 아이콘(혜택 목록·카드 날짜·위치 등)은 포인트 색, 포스터·배지 위에서는 글자색 그대로 */
 .dbox .mi, .cmeta .mi, .ccafe .mi, .dbtn .mi, .wiz-icon .mi {{ color: var(--accent-deep); }}
 .wiz-icon .mi {{ font-size: 64px; margin: 0; vertical-align: middle; }}
+/* 수정 이력: 왼쪽 세로선 위 점 + 카드 (최근 것이 위, 지금 내용은 포인트 색) */
+[class*="st-key-hx_"] {{ position: relative; padding: 4px 0 2px 22px; gap: 10px; }}
+[class*="st-key-hx_"]::before {{ content: ""; position: absolute; left: 7px; top: 14px; bottom: 14px; width: 2px;
+  background: var(--accent-soft); border-radius: 2px; }}
+[class*="st-key-hxi_"], [class*="st-key-hxnow_"] {{ position: relative; overflow: visible; gap: 2px;
+  background: #fff; border: 1.5px solid #E6ECEA; border-radius: 14px; padding: 10px 14px; }}
+[class*="st-key-hxnow_"] {{ border-color: var(--accent); box-shadow: 0 4px 14px rgba(20,184,166,.12); }}
+/* 세로선 위의 점 (지금 것은 포인트 색으로 채움) */
+[class*="st-key-hxi_"]::before, [class*="st-key-hxnow_"]::before {{ content: ""; position: absolute; left: -22px; top: 15px;
+  width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid {MINT_LINE}; box-sizing: border-box; }}
+[class*="st-key-hxnow_"]::before {{ background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }}
+/* 이 버전으로 돌아가기: 카드 오른쪽 아래 작은 포인트 색 글자 버튼 */
+[class*="st-key-hxi_"] [data-testid="stMarkdownContainer"], [class*="st-key-hxnow_"] [data-testid="stMarkdownContainer"],
+[class*="st-key-hxi_"] [data-testid="stMarkdown"], [class*="st-key-hxnow_"] [data-testid="stMarkdown"] {{ margin-bottom: 0 !important; }}
+[class*="st-key-restore_"] {{ display: flex; justify-content: flex-end; width: 100% !important; margin-top: 6px; }}
+[class*="st-key-restore_"] .stButton {{ width: auto !important; margin-left: auto; }}
+[class*="st-key-restore_"] button {{ min-height: 0 !important; padding: 4px 10px !important; border-radius: 999px !important;
+  border: 1.5px solid var(--accent) !important; color: var(--accent-deep) !important; background: #fff !important; }}
+[class*="st-key-restore_"] button:hover {{ background: var(--accent-soft) !important; }}
+[class*="st-key-restore_"] button p {{ font-size: .8rem !important; font-weight: 700; }}
+.hx-top {{ display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: .9rem; }}
+.hx-top b {{ color: #1F2A27; }}
+.hx-when {{ color: #7A8A86; font-size: .82rem; }}
+.hx-now {{ background: var(--accent); color: #fff; font-size: .72rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; }}
+.hx-src {{ margin-left: auto; background: var(--accent-soft); color: var(--accent-deep); font-size: .78rem; font-weight: 700;
+  padding: 2px 10px; border-radius: 999px; }}
+.hx-who {{ margin: 4px 0 6px; font-size: .82rem; font-weight: 700; color: #3E4C48; }}
+.hx-chg {{ margin: 0 0 4px; font-size: .85rem; font-weight: 700; color: var(--accent-deep); }}
+.hx-diff {{ display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px; font-size: .84rem; line-height: 1.5;
+  padding: 5px 0; border-top: 1px dashed #E6ECEA; word-break: keep-all; overflow-wrap: anywhere; }}
+.hx-k {{ flex: 0 0 auto; min-width: 72px; font-weight: 700; color: #3E4C48; }}
+.hx-old {{ color: #98A5A1; text-decoration: line-through; }}
+.hx-arrow .mi {{ font-size: 1em; margin: 0; }}
+.hx-new {{ color: var(--accent-deep); font-weight: 700; }}
+.hx-meta {{ font-size: .82rem; color: #5B6B67; line-height: 1.6; word-break: keep-all; }}
+.hx-card .mi {{ color: var(--accent-deep); font-size: 1.05em; }}
 /* 등록 화면의 홈으로 돌아가기: 둘째 줄 오른쪽 끝 */
 [data-testid="stColumn"]:has(.st-key-wiz_home) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
 /* 화면에 안 보이는 칸(스타일만 담은 칸, 스크립트용 iframe)은 줄 간격을 차지하지 않게 흐름에서 뺀다 */
@@ -251,8 +287,8 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .brand-tag {{ margin-top: .4rem; margin-bottom: 1rem; font-family: "Jua", sans-serif; font-size: 1.25rem; color: #26302D; }}   /* 아래 한 칸 띄움 */
 .brand-tag span {{ font-family: "Pretendard", sans-serif; font-size: .78rem; font-weight: 700;
   letter-spacing: .14em; color: {MINT}; }}
-/* 누르면 메인으로 가는 제목: 버튼이지만 글자처럼 보이게 */
-.st-key-home_brand button, .st-key-home_add button {{ background: none !important; border: 0 !important;
+/* 누르면 메인으로 가는 로고: 버튼이지만 바탕·테두리 없이 */
+.st-key-home_brand button {{ background: none !important; border: 0 !important;
   box-shadow: none !important; padding: 0 !important; min-height: 0; transform: none !important; }}
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
 /* 로고 그림 아래 'ANIME POP-UP · CAFE · GOODS' 글씨까지 읽히게 로고 칸을 키운다 */
@@ -266,10 +302,10 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 @media (max-width: 640px) {{
   .st-key-home_brand button {{ width: 240px !important; height: 73px !important; }}
 }}
-.st-key-home_add, .st-key-home_add .stButton {{ display: flex; justify-content: center; width: 100%; }}
-.st-key-home_add button p {{ font-family: "Jua", sans-serif !important; font-size: 1.8rem !important;
+/* 등록 화면 제목 (글자만, 누를 수 없음) */
+.add-title {{ text-align: center; font-family: "Jua", sans-serif !important; font-size: 1.8rem; line-height: 1.6;
   color: #26302D; }}
-.st-key-home_brand button:hover p, .st-key-home_add button:hover p {{ color: {MINT}; }}
+.st-key-home_brand button:hover p {{ color: {MINT}; }}
 </style>
 """
 
@@ -425,6 +461,11 @@ def address_field(value: str, key: str, on_pick, placeholder: str = "") -> str:
 
 # ================================================================ 카페 상세
 _WEEKDAYS = "월화수목금토일"
+
+
+def _me() -> str:
+    """지금 접속한 사람의 닉네임 (리뷰와 같은 IP 기반). 수정 이력에 누가 고쳤는지 남길 때 쓴다."""
+    return review.nickname_for(st.context.ip_address)
 
 
 def _toast(msg: str, icon: str = ":material/check_circle:") -> None:
@@ -933,7 +974,7 @@ def confirm_delete(entry_id: str) -> None:
             st.rerun()
     with c2:
         if st.button("삭제", type="primary", width="stretch", key=f"delete_ok_{entry_id}"):
-            store.soft_delete(entry_id)
+            store.soft_delete(entry_id, extra={"source": "지도에서 내림", "editor": _me()})
             st.session_state["selected"] = None
             st.session_state["flash"] = "지도에서 내렸습니다. 이력은 남아 있습니다."
             st.session_state["scroll_top"] = True
@@ -1027,6 +1068,59 @@ def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]],
     return result, errors
 
 
+def _clear_buttons() -> None:
+    """수정하기·등록하기 글자 입력칸 오른쪽 안에 × 를 붙여, 누르면 내용을 한 번에 비운다 (내용이 있을 때만 보임)."""
+    components.html(f"<script>window.parent.eval({json.dumps(_CLEAR_JS)});</script>", height=0)
+
+
+_CLEAR_JS = """
+(function () {
+  if (window.__aniClear) return;
+  window.__aniClear = true;
+  // 위젯 키로 고른다. 수정하기: 카페명·주소·특전·굿즈·참고 웹사이트 / 등록하기: 단계별(cafe_·wiz_ 주소)·간편등록(quick_)
+  const SEL = ['name_', 'edit_', 'perks_', 'goods_', 'links_', 'cafe_', 'wiz_', 'quick_']
+    .map((k) => `[class*="st-key-${k}"] input[type="text"], [class*="st-key-${k}"] textarea`).join(', ');
+  const css = document.createElement('style');
+  css.textContent = `
+    .ani-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 2;
+      width: 22px; height: 22px; border: 0; border-radius: 50%; padding: 0; cursor: pointer;
+      background: #E6ECEA; color: #5B6B67; display: none; align-items: center; justify-content: center; }
+    .ani-clear.on { display: flex; }
+    .ani-clear:hover { background: #14b8a6; color: #fff; }
+    .ani-clear svg { width: 12px; height: 12px; }
+    .ani-clear.ta { top: 10px; transform: none; }
+    .ani-has-clear input, .ani-has-clear textarea { padding-right: 36px !important; }`;
+  document.head.appendChild(css);
+  const setValue = (el, v) => {
+    const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const attach = (el) => {
+    if (el.dataset.aniClear) return;
+    el.dataset.aniClear = '1';
+    const box = el.closest('[data-baseweb="input"], [data-baseweb="textarea"]') || el.parentElement;
+    box.style.position = 'relative';
+    box.classList.add('ani-has-clear');
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'ani-clear' + (el.tagName === 'TEXTAREA' ? ' ta' : '');
+    b.title = '입력 내용 지우기'; b.setAttribute('aria-label', '입력 내용 지우기');
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    const sync = () => b.classList.toggle('on', !!el.value);
+    // 누르는 순간 입력칸이 포커스를 잃지 않게(mousedown 막기) 하고, 비운 뒤 바로 다시 입력할 수 있게 포커스를 둔다
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); setValue(el, ''); el.focus(); sync(); });
+    el.addEventListener('input', sync);
+    box.appendChild(b);
+    sync();
+  };
+  const scan = () => document.querySelectorAll(SEL).forEach(attach);
+  new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
+  scan();
+})();
+"""
+
+
 def render_edit(current: dict) -> None:
     entry_id = str(current["entry_id"])
     st.caption("누구나 수정할 수 있습니다. 기존 기록은 남기고 새 줄로 쌓여서 언제든 되돌릴 수 있습니다.")
@@ -1068,6 +1162,7 @@ def render_edit(current: dict) -> None:
     new_links, bad_links = _links_field("\n".join(cafe.parse_links(current.get("links") or "")[0]),
                                         key=f"links_{k}")
     new_images, img_errors = _edit_images(current, k)
+    _clear_buttons()
     bad = _block_sensitive(new_name, new_addr, new_perks, new_goods)
     submitted = st.button("수정 저장", type="primary", width="stretch", key=f"save_{k}",
                           disabled=bad or bool(img_errors) or bad_links)
@@ -1086,7 +1181,7 @@ def render_edit(current: dict) -> None:
         if v.ok:
             # 새로 올린 파일만 저장한다. 지운 이미지 파일은 남겨 둔다 (되돌리기가 옛 행을 쓸 수 있다)
             saved = [name if data is None else images.save(name, data) for name, data in new_images]
-            store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=g.badge,
+            store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=g.badge, editor=_me(),
                                            images=saved, tags=new_tags, links=new_links),
                          entry_id=entry_id)
             # 저장해도 상세에 그대로 머물고, 맨 위로 올려 바뀐 내용을 처음부터 보여 준다
@@ -1096,40 +1191,98 @@ def render_edit(current: dict) -> None:
         for err in v.errors:
             st.error(err)
 
-    b1, b2 = st.columns(2)
-    with b1:
-        if st.button("되돌리기", width="stretch", key=f"revert_{k}",
-                     help="직전 내용으로 복구합니다"):
-            if store.revert(entry_id):
-                st.session_state["flash"] = "직전 내용으로 되돌렸습니다."
-                st.rerun()
-            st.warning("되돌릴 이전 기록이 없습니다.")
-    with b2:
-        if st.button("지도에서 내리기", width="stretch", key=f"delete_{k}"):
-            confirm_delete(entry_id)
+    if st.button("지도에서 내리기", width="stretch", key=f"delete_{k}"):
+        confirm_delete(entry_id)
 
     with st.expander("수정 이력"):
         history = [r for r in store.all_rows() if str(r["entry_id"]) == entry_id]
-        h = pd.DataFrame(history).sort_values("revision", key=lambda s: s.astype(int),
-                                              ascending=False)
-        # 저장은 UTC 로 하므로 한국 시간으로 바꿔 보여 준다
-        when = pd.to_datetime(h["updated_at"], utc=True).dt.tz_convert("Asia/Seoul")
-        st.dataframe(
-            pd.DataFrame({
-                "번호": h["revision"].astype(int).map(lambda n: f"{n}번째"),
-                "상태": h["status"].map({"active": "지도에 표시", "deleted": "지도에서 내림"})
-                                   .fillna(h["status"]),
-                "수정 시각": when.dt.strftime("%Y-%m-%d %H:%M"),
-                "카페명": h["cafe_name"],
-                "작품": h["work"],
-                "주소": h["address"],
-                "기간": pd.to_datetime(h["start_date"]).dt.strftime("%m/%d") + " ~ "
-                        + pd.to_datetime(h["end_date"]).dt.strftime("%m/%d"),
-                "방법": h["source"],
-            }),
-            width="stretch", hide_index=True,
-        )
-        st.caption("맨 위가 가장 최근 기록입니다. 되돌리기를 누르면 바로 아래 기록으로 돌아갑니다.")
+        history.sort(key=lambda r: int(r["revision"]), reverse=True)
+        # 기록 하나가 카드 하나. 지금 것 말고는 카드 안에 '이 버전으로 돌아가기' 버튼을 둔다
+        with st.container(key=f"hx_{entry_id}"):
+            for i, r in enumerate(history):
+                rev = int(r["revision"])
+                older = history[i + 1] if i + 1 < len(history) else None
+                with st.container(key=f"{'hxnow' if i == 0 else 'hxi'}_{entry_id}_{rev}"):
+                    st.markdown(_history_card_html(r, older, now=i == 0), unsafe_allow_html=True)
+                    if i > 0 and r.get("status") != "deleted" and st.button(
+                            "이 버전으로 돌아가기", icon=":material/restore:", type="tertiary",
+                            key=f"restore_{entry_id}_{rev}"):
+                        store.restore(entry_id, rev, extra={"source": f"{rev}번째로 되돌리기", "editor": _me()})
+                        st.session_state["flash"] = (f"{rev}번째 버전으로 되돌렸어요.", ":material/restore:")
+                        st.session_state["scroll_top"] = True
+                        st.rerun()
+
+
+# 수정 이력에 보이는 '방법' 이름과 아이콘. 저장된 값은 그대로 두고(append-only) 보여 줄 때만 바꾼다
+_SOURCE_VIEW = {
+    "노션 자동 수집": ("AI 자동 수집", "auto_awesome"),
+    "AI 자동 수집": ("AI 자동 수집", "auto_awesome"),
+    "직접 등록": ("직접 등록", "add_circle"),
+    "직접 수정": ("직접 수정", "edit"),
+    "간편 등록": ("간편 등록", "edit_note"),
+    "붙여넣기": ("붙여넣기", "content_paste"),
+    "되돌리기": ("되돌리기", "undo"),
+    "지도에서 내림": ("지도에서 내림", "visibility_off"),
+    "기간 종료": ("기간 종료", "event_busy"),
+    "샘플": ("샘플", "science"),
+}
+# 바로 앞 기록과 비교해서 '(이전) → (이후)' 로 보여 줄 칸
+_HISTORY_FIELDS = [("status", "상태"), ("cafe_name", "카페명"), ("work", "작품"), ("characters", "캐릭터"),
+                   ("address", "주소"), ("start_date", "시작일"), ("end_date", "종료일"), ("perks", "특전"),
+                   ("goods", "굿즈"), ("tags", "이벤트"), ("images", "사진"), ("links", "참고 웹사이트")]
+
+
+def _editor(r: dict) -> str:
+    """기록을 남긴 사람. editor 칸이 생기기 전 기록은 방법으로 짐작한다."""
+    who = str(r.get("editor") or "").strip()
+    if who:
+        return who
+    return {"노션 자동 수집": "AI", "AI 자동 수집": "AI", "샘플": "샘플"}.get(str(r.get("source") or ""), "닉네임 기록 전")
+
+
+def _history_value(col: str, value) -> str:
+    """바뀐 칸의 값을 짧게: 사진은 장 수, 참고 웹사이트는 사이트 이름, 긴 글은 줄여서."""
+    text = str(value or "").strip()
+    if col == "status":
+        return {"active": "지도에 표시", "deleted": "지도에서 내림"}.get(text, text or "없음")
+    if not text:
+        return "없음"
+    if col == "images":
+        return f"{len([x for x in text.split(',') if x.strip()])}장"
+    if col == "links":
+        return ", ".join(_site_name(u) for u in text.split())
+    if col in ("start_date", "end_date"):
+        return text[:10].replace("-", ".")
+    return text if len(text) <= 60 else text[:60] + "…"
+
+
+def _history_card_html(r: dict, older: dict | None, now: bool) -> str:
+    """수정 이력 카드 안쪽. 처음 기록만 카페·기간·주소를 다 보여 주고,
+    그다음 기록부터는 바로 앞 기록과 달라진 칸만 '(이전) → (이후)' 로 보여 준다."""
+    source = str(r.get("source") or "")
+    label, icon = _SOURCE_VIEW.get(source, (source or "기록", "undo" if source.endswith("되돌리기") else "history"))
+    when = pd.to_datetime(r["updated_at"], utc=True).tz_convert("Asia/Seoul").strftime("%Y.%m.%d %H:%M")
+    if older is None:
+        period = (pd.to_datetime(r["start_date"]).strftime("%Y.%m.%d") + " ~ "
+                  + pd.to_datetime(r["end_date"]).strftime("%Y.%m.%d"))
+        body = (f'<div class="hx-chg">처음 등록</div>'
+                f'<div class="hx-meta">{_mi("local_cafe")}{escape(str(r.get("cafe_name") or "-"))}'
+                f' · {escape(str(r.get("work") or "-"))}</div>'
+                f'<div class="hx-meta">{_mi("calendar_month")}{period}</div>'
+                f'<div class="hx-meta">{_mi("location_on")}{escape(str(r.get("address") or "-"))}</div>')
+    else:
+        diffs = [(name, _history_value(col, older.get(col)), _history_value(col, r.get(col)))
+                 for col, name in _HISTORY_FIELDS if str(r.get(col) or "") != str(older.get(col) or "")]
+        body = "".join(
+            f'<div class="hx-diff"><span class="hx-k">{name}</span>'
+            f'<span class="hx-old">{escape(a)}</span><span class="hx-arrow">{_mi("arrow_forward")}</span>'
+            f'<span class="hx-new">{escape(b)}</span></div>' for name, a, b in diffs)             or '<div class="hx-meta">바뀐 내용 없음</div>'
+    return (f'<div class="hx-card">'
+            f'<div class="hx-top"><b>{int(r["revision"])}번째</b><span class="hx-when">{when}</span>'
+            + ('<span class="hx-now">지금</span>' if now else "")
+            + f'<span class="hx-src">{_mi(icon)}{escape(label)}</span></div>'
+            f'<div class="hx-who">{_mi("person")}{escape(_editor(r))}</div>'
+            f'{body}</div>')
 
 
 # ================================================================ 카드 리스트
@@ -2854,7 +3007,7 @@ def _quick(w: dict) -> None:
         # 첫 장이 포스터. 포스터 없이 추가 이미지만 올리면 그 첫 장이 포스터가 된다 (단계별 등록과 같다)
         files = ([(poster.name, poster.getvalue())] if poster else []) + [(f.name, f.getvalue()) for f in extras]
         saved = [images.save(name, data) for name, data in files]
-        store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="간편 등록",
+        store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="간편 등록", editor=_me(),
                                        note=f"{g.badge} ({g.matched})",
                                        images=saved, tags=tags, links=links))
         st.session_state["save_report"] = {"saved": [(entry.cafe_name, g.badge)], "blocked": []}
@@ -3051,7 +3204,7 @@ def _step_confirm(w: dict) -> None:
             return False
         files = [f for f in [w["poster"], *w["extras"]] if f]
         saved = [images.save(name, data) for name, data in files]
-        store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 등록",
+        store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 등록", editor=_me(),
                                        note=f"{g.badge} ({g.matched})",
                                        images=saved, tags=w["tags"], links=w["links"]))
         st.session_state["save_report"] = {"saved": [(entry.cafe_name, g.badge)], "blocked": []}
@@ -3070,6 +3223,7 @@ def page_add() -> None:
     _no_translate()
     _history_guard(on_main=False)
     _live_send()    # 간편등록 '읽어오기' 버튼을 공지 입력칸에 맞춰 바로 켜고 끈다
+    _clear_buttons()    # 입력칸 오른쪽 × 로 한 번에 지우기
     # 메인과 같은 상단(제목·문구)이 스크롤해도 떠 있고, 문구 줄 오른쪽에 홈으로
     with st.container(key="topbar"):
         if _brand(home=True, fixed=True, logo=ADD_LOGO):   # 등록 화면은 등록 화면 전용 로고로 고정
@@ -3083,10 +3237,8 @@ def page_add() -> None:
         if step > 0 and st.button("돌아가기", key="wiz_back", help="이전 단계로", width="stretch"):
             _move(-1)
     with head:
-        # 제목을 누르면 메인(지도)으로 돌아간다
-        if st.button("팝업 카페 등록하기", key="home_add", type="tertiary", help="메인으로"):
-            st.session_state.pop("wiz", None)
-            go("map")
+        # 제목은 글자만 (누를 수 없다. 메인으로는 위의 '홈으로 돌아가기')
+        st.markdown('<div class="add-title">팝업 카페 등록하기</div>', unsafe_allow_html=True)
 
     _, mid, _ = st.columns([1, 2, 1])
     if w.get("quick"):
