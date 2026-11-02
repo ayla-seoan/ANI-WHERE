@@ -2625,7 +2625,7 @@ DAILY_CSS = f"""
            background:#F4F6F5; border-radius:999px; padding:.2rem .6rem; white-space:nowrap; }}
 .dn-area span {{ color:#8A9490; font-weight:500; margin-left:3px; }}
 /* 목록: 포스터 · 위치 · 작품명만. 포스터를 점선으로 잇는다 */
-.dn-list {{ max-height:{MAP_HEIGHT - 120}px; overflow-y:auto; margin-top:12px; padding:0 2px; }}
+.dn-list {{ margin-top:12px; padding:0 2px; }}   /* 스크롤 없이 아래로 모두 보인다 */
 .dn-item {{ display:flex; align-items:center; gap:10px; position:relative; padding:0 0 12px;
            text-decoration:none !important; color:inherit !important; }}
 .dn-item:not(:last-child)::before {{ content:""; position:absolute; left:17px; top:38px; bottom:2px;
@@ -2676,10 +2676,6 @@ DAILY_CSS = f"""
   .dn-thumb {{ flex-basis: 30px; height: 30px; }}
   .dn-item {{ gap: 6px; }}
   .dn-item:not(:last-child)::before {{ left: 14px; top: 32px; }}
-  /* 데일리 팝업 노트는 옆 지도(높이 58vh, 최소 320px)와 딱 같은 높이까지만, 목록은 그 안에서 스크롤 */
-  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {{
-    height: max(320px, 58vh) !important; overflow: hidden !important; }}
-  .dn-list {{ max-height: calc(max(320px, 58vh) - 104px); }}   /* 104px = 위 상자(약 88) + 목록 위 여백(14) */
 }}
 </style>
 """
