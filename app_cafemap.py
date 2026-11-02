@@ -222,6 +222,8 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 [data-testid="stToast"] [data-testid="stToastDynamicIcon"] {{ line-height: 1 !important; }}
 [data-testid="stToast"] [data-testid="stMarkdownContainer"] {{ margin: 0 !important; display: flex; align-items: center; }}
 [data-testid="stToast"] button {{ display: none !important; }}   /* 토스트는 닫기 버튼 없이 잠깐 떴다 사라진다 */
+/* 입력칸에 글자를 쓸 때 오른쪽 아래에 뜨는 'Press Enter / Ctrl+Enter to apply' 안내는 모두 숨긴다 */
+[data-testid="InputInstructions"] {{ display: none !important; }}
 /* 이모지 대신 쓰는 아이콘 (_mi). 사이트 글꼴 규칙이 아이콘 글꼴을 덮어쓰지 않게 !important */
 .mi {{ font-family: "Material Symbols Rounded" !important; font-weight: normal; font-style: normal; font-size: 1.15em;
   line-height: 1; display: inline-block; vertical-align: -0.18em; letter-spacing: normal; text-transform: none;
@@ -533,8 +535,21 @@ def _map_link(current: dict) -> str:
     return f"https://map.kakao.com/link/search/{quote(str(current.get('address') or name))}"
 
 
+def _intro_body(text: str) -> str:
+    """팝업 소개 본문 HTML. 줄 맨 앞의 '[배경]' 같은 소제목은 굵게 (나머지는 글자 그대로).
+    빈 줄을 HTML 안에 그대로 두면 Streamlit 이 그 뒤를 따로 된 문단으로 처리해 간격이 크게 벌어져서,
+    줄은 <br>, 빈 줄(문단 사이)은 작은 간격 칸으로 바꾼다."""
+    parts = []
+    for line in text.splitlines():
+        if not line.strip():
+            parts.append('<span class="dintro-gap"></span>')
+            continue
+        parts.append(re.sub(r"^\[([^\]]{1,40})\]", r'<b class="dintro-h">\1</b>', escape(line)) + "<br>")
+    return "".join(parts)
+
+
 def _detail_info_html(current: dict) -> str:
-    """상세 정보 블록: 위치(주소 + 지도에서 확인하기) · 일정 → 혜택(특전·굿즈·이벤트) → 참고 웹사이트 카드."""
+    """상세 정보 블록: 위치(주소 + 지도에서 확인하기) · 일정 → 혜택(특전·굿즈·이벤트) → 참고 웹사이트 카드 → 팝업 소개."""
     # 위치 · 일정: 왼쪽에 항목 이름, 오른쪽에 내용 (오른쪽 정렬)
     addr = str(current.get("address") or "-")
     start, end = pd.to_datetime(current.get("start_date")), pd.to_datetime(current.get("end_date"))
@@ -572,7 +587,14 @@ def _detail_info_html(current: dict) -> str:
             f'<div class="dlink-url">{escape(u)}</div></div><span class="dlink-go">↗</span></a>'
             for u in links)
         link_html = f'<div class="dsec"><div class="dsec-title">참고 웹사이트</div>{cards}</div>'
-    return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}'
+    # 팝업 소개: 쓴 글(간편등록은 공지)을 줄바꿈 그대로. 없으면 칸을 만들지 않는다
+    intro = str(current.get("intro") or "").strip()
+    src = str(current.get("intro_src") or "").strip()
+    src_btn = (f'<a class="dsrc" href="{escape(src)}" target="_blank" rel="noopener">'
+               f'{_mi("open_in_new")}출처 보기</a>' if src.startswith(("http://", "https://")) else "")
+    intro_html = (f'<div class="dsec"><div class="dsec-head"><div class="dsec-title">팝업 소개</div>{src_btn}</div>'
+                  f'<div class="dintro">{_intro_body(intro)}</div></div>' if intro else "")
+    return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
 
 
 def render_detail(current: dict) -> None:
@@ -1083,7 +1105,7 @@ _CLEAR_JS = """
   window.__aniClear = true;
   // 위젯 키로 고른다. 수정하기: 카페명·주소·특전·굿즈·참고 웹사이트 / 등록하기: 단계별(cafe_·wiz_ 주소)·간편등록(quick_)
   // 메인: 상단 검색칸(f_query) — 지우면 바로 검색 결과에 반영(입력칸을 벗어나 값을 확정)한다
-  const SEL = ['name_', 'edit_', 'perks_', 'goods_', 'links_', 'cafe_', 'wiz_', 'quick_', 'f_query']
+  const SEL = ['name_', 'edit_', 'perks_', 'goods_', 'links_', 'intro_', 'cafe_', 'wiz_', 'quick_', 'f_query']
     .map((k) => `[class*="st-key-${k}"] input[type="text"], [class*="st-key-${k}"] textarea`).join(', ');
   const css = document.createElement('style');
   css.textContent = `
@@ -1132,6 +1154,12 @@ _CLEAR_JS = """
 """
 
 
+def _keep_notion(note: str, current: dict) -> str:
+    """고쳐 저장해도 Notion 에서 가져온 표시('| notion:…')는 남긴다 (다음 가져오기 때 같은 팝업으로 알아보게)."""
+    m = re.search(r"\|\s*notion:\S+", str(current.get("note") or ""))
+    return f"{note} {m.group(0)}" if m else note
+
+
 def render_edit(current: dict) -> None:
     entry_id = str(current["entry_id"])
     st.caption("누구나 수정할 수 있습니다. 기존 기록은 남기고 새 줄로 쌓여서 언제든 되돌릴 수 있습니다.")
@@ -1172,9 +1200,10 @@ def render_edit(current: dict) -> None:
                         key=f"tags_{k}")
     new_links, bad_links = _links_field("\n".join(cafe.parse_links(current.get("links") or "")[0]),
                                         key=f"links_{k}")
+    new_intro = _intro_field(str(current.get("intro") or ""), key=f"intro_{k}")
     new_images, img_errors = _edit_images(current, k)
     _clear_buttons()
-    bad = _block_sensitive(new_name, new_addr, new_perks, new_goods)
+    bad = _block_sensitive(new_name, new_addr, new_perks, new_goods, new_intro)
     # 수정 저장 · 지도에서 내리기를 한 줄에 (가로 묶음이라 모바일에서도 세로로 쌓이지 않는다)
     with st.container(horizontal=True, key=f"edit_btns_{k}"):
         submitted = st.button("수정 저장", type="primary", width="stretch", key=f"save_{k}",
@@ -1196,7 +1225,8 @@ def render_edit(current: dict) -> None:
         if v.ok:
             # 새로 올린 파일만 저장한다. 지운 이미지 파일은 남겨 둔다 (되돌리기가 옛 행을 쓸 수 있다)
             saved = [name if data is None else images.save(name, data) for name, data in new_images]
-            store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=g.badge, editor=_me(),
+            store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=_keep_notion(g.badge, current), editor=_me(), intro=new_intro,
+                                           intro_src=str(current.get("intro_src") or "") if new_intro.strip() else "",
                                            images=saved, tags=new_tags, links=new_links),
                          entry_id=entry_id)
             # 저장해도 상세에 그대로 머물고, 맨 위로 올려 바뀐 내용을 처음부터 보여 준다
@@ -1241,7 +1271,8 @@ _SOURCE_VIEW = {
 # 바로 앞 기록과 비교해서 '(이전) → (이후)' 로 보여 줄 칸
 _HISTORY_FIELDS = [("status", "상태"), ("cafe_name", "카페명"), ("work", "작품"), ("characters", "캐릭터"),
                    ("address", "주소"), ("start_date", "시작일"), ("end_date", "종료일"), ("perks", "특전"),
-                   ("goods", "굿즈"), ("tags", "이벤트"), ("images", "사진"), ("links", "참고 웹사이트")]
+                   ("goods", "굿즈"), ("tags", "이벤트"), ("images", "사진"), ("links", "참고 웹사이트"),
+                   ("intro", "팝업 소개"), ("intro_src", "소개 출처")]
 
 
 def _editor(r: dict) -> str:
@@ -1951,6 +1982,17 @@ iframe[src*="kakao_map"] {{
 .dband {{ height:0; margin:0 0 22px; }}
 /* 혜택 · 참고 웹사이트 묶음: 굵은 제목, 검은 알약 라벨, 연회색 상자 목록 */
 .dsec {{ margin-bottom:18px; }}
+.dsec-head {{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 10px; }}
+.dsec-head .dsec-title {{ margin:0; }}
+.dsrc {{ flex:0 0 auto; display:inline-flex; align-items:center; gap:2px; height:30px; padding:0 12px; border-radius:999px;
+  border:1.5px solid var(--accent); color:var(--accent-deep) !important; background:#fff; font-size:.82rem; font-weight:700;
+  text-decoration:none !important; }}
+.dsrc:hover {{ background:var(--accent-soft); }}
+.dsrc .mi {{ font-size:1.05em; margin-right:2px; }}
+.dintro-h {{ color:var(--accent-deep); font-weight:800; margin-right:4px; }}
+.dintro {{ background:#F4F6F5; border-radius:14px; padding:14px 18px; font-size:.95rem; line-height:1.7; color:#2E3A37;
+  word-break:keep-all; overflow-wrap:anywhere; }}
+.dintro-gap {{ display:block; height:8px; }}
 .dsec-title {{ font-family:"Jua", sans-serif; font-size:1.45rem; color:#26302D; margin:0 0 10px; }}
 /* 라벨(왼쪽, 고정 폭) | 내용 상자(오른쪽, 남는 폭)를 한 줄에 */
 .dgroup {{ display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }}
@@ -2800,6 +2842,7 @@ STEPS = [
     ("이미지", "image"),
     ("기간", "calendar_month"),
     ("특전 · 굿즈", "redeem"),
+    ("팝업 소개", "article"),
     ("등록 확인", "task_alt"),
 ]
 ACCENT = MINT
@@ -2809,6 +2852,28 @@ WIZARD_CSS = f"""
 .wiz-bar {{ height:6px; background:#eceff0; border-radius:2px; overflow:hidden; margin-bottom:.4rem; }}
 .wiz-bar > div {{ height:100%; background:{ACCENT}; transition:width .3s; }}
 .wiz-count {{ text-align:right; font-size:.8rem; color:#8a8d96; margin-bottom:.6rem; }}
+/* 단계 표시줄: 동그라미(번호/체크)를 선으로 잇고 아래에 단계 이름 */
+.wiz-steps {{ list-style:none; display:flex; margin:.2rem 0 1rem; padding:0; counter-reset:none; }}
+.wiz-steps li {{ flex:1 1 0; position:relative; display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; }}
+.wiz-steps li::before {{ content:""; position:absolute; top:14px; left:-50%; width:100%; height:3px; background:#E6ECEA; z-index:0; }}
+.wiz-steps li:first-child::before {{ display:none; }}
+.wiz-steps li.ws-done::before, .wiz-steps li.ws-now::before {{ background:var(--accent); }}
+.ws-dot {{ position:relative; z-index:1; width:30px; height:30px; border-radius:50%; display:flex; align-items:center;
+  justify-content:center; font-weight:800; font-size:.85rem; background:#fff; border:2px solid #D5DBD9; color:#98A5A1; }}
+.ws-dot .mi {{ margin:0; font-size:18px; color:#fff; vertical-align:middle; }}
+.ws-done .ws-dot {{ background:var(--accent); border-color:var(--accent); color:#fff; }}
+.ws-now .ws-dot {{ background:#fff; border-color:var(--accent); color:var(--accent-deep); box-shadow:0 0 0 5px var(--accent-soft); }}
+.ws-name {{ font-size:.74rem; color:#98A5A1; text-align:center; word-break:keep-all; line-height:1.3; }}
+.ws-done .ws-name {{ color:#4F5D59; }}
+.ws-now .ws-name {{ color:var(--accent-deep); font-weight:800; }}
+@media (max-width:640px) {{
+  /* 좁은 화면: 지금 단계 이름만 동그라미 아래에 (나머지는 동그라미만) */
+  .ws-name {{ display:none; }}
+  .ws-now .ws-name {{ display:block; position:absolute; top:38px; white-space:nowrap; }}
+  .wiz-steps {{ margin-bottom:1.7rem; }}
+  .ws-dot {{ width:26px; height:26px; font-size:.78rem; }}
+  .wiz-steps li::before {{ top:12px; }}
+}}
 .wiz-title {{ text-align:center; font-weight:700; font-size:1.15rem; margin:.6rem 0 1rem; }}
 /* 이미지 올리는 칸: 회색 상자 + 민트 점선 */
 [data-testid="stFileUploaderDropzone"] {{ background:{GRAY_SOFT}; border:1.5px dashed {ACCENT};
@@ -2841,7 +2906,9 @@ def _wiz() -> dict:
             "poster": None, "extras": [],   # (파일 이름, 바이트). 등록할 때 data/images/ 에 저장한다
             "tags": [],
             "links": [],                # 참고 웹사이트 주소들
+            "intro": "",                # 팝업 소개 글 (간편등록은 붙여넣은 공지)
         }
+    st.session_state["wiz"].setdefault("intro", "")   # 이 칸이 생기기 전에 시작한 등록도 이어서 쓸 수 있게
     return st.session_state["wiz"]
 
 
@@ -2961,6 +3028,7 @@ def _quick(w: dict) -> None:
                 "start_date": got["start_date"], "end_date": got["end_date"],
                 "perks": ", ".join(got["perks"]), "goods": ", ".join(got["goods"]),
                 "tags": got["tags"], "links": got["links"], "quick_read": True, "quick_got": got,
+                "intro": raw.strip(),   # 붙여넣은 공지 그대로를 팝업 소개로 (칸 값은 따로 뽑는다)
             })
             w["v"] += 1
             st.rerun()
@@ -2993,6 +3061,9 @@ def _quick(w: dict) -> None:
     tags = st.pills("이벤트 추가 정보", cafe.EVENT_TAGS, selection_mode="multi", default=w["tags"],
                     key=f"quick_tags_{v_}")
     links, bad_links = _links_field("\n".join(w["links"]), key=f"quick_links_{v_}")
+    intro = _intro_field(w.get("intro", ""), key=f"quick_intro_{v_}")
+    st.caption("붙여넣은 공지가 그대로 팝업 소개로 보여요. 필요하면 고쳐 주세요.")
+    w["intro"] = intro      # '단계별로 등록하기' 로 넘어가도 고친 소개가 따라간다
     # 이미지: 단계별 등록과 같은 구성 (메인 이미지 1장 + 추가 이미지). 없어도 등록할 수 있다
     st.markdown(":material/image: **메인 이미지 (포스터)** :gray[(1장만)]")
     poster = st.file_uploader(f"메인 이미지 (1장, ~ {images.POSTER_MB} MB)", type=images.TYPES,
@@ -3039,7 +3110,7 @@ def _quick(w: dict) -> None:
         ready = v.ok
     else:
         st.caption("작품 · 카페명 · 주소 · 기간을 채우면 등록할 수 있어요.")
-    bad = _block_sensitive(name, addr, perks, goods)
+    bad = _block_sensitive(name, addr, perks, goods, intro)
 
     if st.button("등록하기", type="primary", width="stretch", key="quick_save",
                  disabled=not ready or bad or bad_links or big):
@@ -3051,7 +3122,7 @@ def _quick(w: dict) -> None:
         files = ([(poster.name, poster.getvalue())] if poster else []) + [(f.name, f.getvalue()) for f in extras]
         saved = [images.save(name, data) for name, data in files]
         store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="간편 등록", editor=_me(),
-                                       note=f"{g.badge} ({g.matched})",
+                                       note=f"{g.badge} ({g.matched})", intro=intro,
                                        images=saved, tags=tags, links=links))
         st.session_state["save_report"] = {"saved": [(entry.cafe_name, g.badge)], "blocked": []}
         for k in ("wiz", "quick_raw"):
@@ -3216,6 +3287,25 @@ def _step_extras(w: dict) -> None:
     _nav(next_ok=not _block_sensitive(perks, goods) and not bad_links, on_next=save)
 
 
+def _intro_field(value: str, key: str, label: str = "visible") -> str:
+    """팝업 소개 입력칸. 등록(단계별·간편)·수정하기가 함께 쓴다."""
+    return st.text_area(
+        "팝업 소개", value=(value or "")[:cafe.MAX_INTRO], key=key, height=220, max_chars=cafe.MAX_INTRO,
+        placeholder="어떤 팝업인지 자유롭게 소개해 주세요 (콘셉트, 메뉴, 운영 방식, 입장 방법 등)",
+        help="상세 화면의 '팝업 소개' 에 그대로 보여요. 비워 둬도 등록할 수 있어요", label_visibility=label)
+
+
+def _step_intro(w: dict) -> None:
+    intro = _intro_field(w["intro"], key=f"intro_{w['v']}", label="collapsed")   # 카드 제목이 이미 '팝업 소개'
+
+    st.caption("비워 둬도 괜찮아요. 쓴 내용은 상세 화면에 '팝업 소개' 로 보여요.")
+
+    def save():
+        w["intro"] = intro
+
+    _nav(next_ok=not _block_sensitive(intro), on_next=save)
+
+
 def _step_confirm(w: dict) -> None:
     """마지막 단계. 앞에서 넣은 정보를 한눈에 보여 주고, 확인되면 등록한다.
     (공지 붙여넣기는 첫 단계의 '공지로 간편등록' 에서만 한다)"""
@@ -3223,7 +3313,8 @@ def _step_confirm(w: dict) -> None:
     rows = [("작품", w["work"]), ("캐릭터", w["characters"]), ("카페명", w["cafe_name"]),
             ("주소", w["address"]), ("기간", span), ("특전", w["perks"]), ("굿즈", w["goods"]),
             ("이벤트", " · ".join(w["tags"])),
-            ("이미지", f"{len([f for f in [w['poster'], *w['extras']] if f])}장")]
+            ("이미지", f"{len([f for f in [w['poster'], *w['extras']] if f])}장"),
+            ("팝업 소개", (w["intro"][:60] + "…") if len(w["intro"]) > 60 else w["intro"])]
     st.markdown("  \n".join(f"**{k}** · {_plain(v)}" for k, v in rows if v))
     st.caption("고칠 곳이 있으면 '이전' 으로 돌아가 바꿔 주세요.")
 
@@ -3248,13 +3339,23 @@ def _step_confirm(w: dict) -> None:
         files = [f for f in [w["poster"], *w["extras"]] if f]
         saved = [images.save(name, data) for name, data in files]
         store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 등록", editor=_me(),
-                                       note=f"{g.badge} ({g.matched})",
+                                       note=f"{g.badge} ({g.matched})", intro=w["intro"],
                                        images=saved, tags=w["tags"], links=w["links"]))
         st.session_state["save_report"] = {"saved": [(entry.cafe_name, g.badge)], "blocked": []}
         st.session_state.pop("wiz", None)
         go("map")
 
     _nav("등록하기", next_ok=v.ok, on_next=save)
+
+
+def _stepper_html(step: int) -> str:
+    """등록 단계 표시줄: 번호 동그라미 + 단계 이름이 선으로 이어지고, 끝난 단계는 체크, 지금 단계는 포인트 색."""
+    items = []
+    for i, (name, _) in enumerate(STEPS):
+        state = "done" if i < step else "now" if i == step else "todo"
+        mark = _mi("check") if state == "done" else str(i + 1)
+        items.append(f'<li class="ws-{state}"><span class="ws-dot">{mark}</span><span class="ws-name">{name}</span></li>')
+    return f'<ol class="wiz-steps">{"".join(items)}</ol>'
 
 
 def page_add() -> None:
@@ -3296,12 +3397,7 @@ def page_add() -> None:
                 st.rerun()
         return
     with mid:
-        pct = (step + 1) / len(STEPS) * 100
-        st.markdown(
-            f'<div class="wiz-bar"><div style="width:{pct:.0f}%"></div></div>'
-            f'<div class="wiz-count">{step + 1} / {len(STEPS)}</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(_stepper_html(step), unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown(f'<div class="wiz-title">{title}</div>', unsafe_allow_html=True)
             if step in (0, len(STEPS) - 1):
@@ -3312,7 +3408,7 @@ def page_add() -> None:
             note = st.session_state.pop("wiz_note", None)
             if note:
                 st.caption(note)
-            [_step_work, _step_cafe, _step_images, _step_dates, _step_extras,
+            [_step_work, _step_cafe, _step_images, _step_dates, _step_extras, _step_intro,
              _step_confirm][step](w)
 
 # ================================================================ 내 캘린더

@@ -14,6 +14,10 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
 - 포인트 색은 CSS 변수 `--accent`(#14b8a6) · `--accent-soft` · `--accent-deep` 를 쓴다. `@import`(글꼴) 는 `<style>` 맨 앞에 둔다 — 앞에 다른 규칙이 있으면 글꼴이 무시된다.
 - 모바일은 폭 640px 이하. PC 와 모바일 화면을 모두 확인한다.
 - 참고 웹사이트에서 `recal.kr` 은 다른 사이트 뒤로 보낸다 (`cafe.order_links`).
+- Notion 가져오기 규칙은 `docs/notion-import.md` 가 기준이다. 규칙을 바꾸면 그 문서도 같이 고친다.
+  - 가져온 기록의 `note` 끝 `| notion:<번호>` 는 지우지 않는다 (앱에서 고쳐도 `_keep_notion` 으로 남김).
+  - 팝업 소개는 Notion 기준으로 맞추되, 사람이 앱에서 쓴 소개는 덮어쓰지 않는다.
+  - 실제 데이터에 넣기 전에 임시 복사본으로 먼저 돌려 본다.
 - 북마크(`favorites`)·리뷰(`reviews`)도 카페와 같은 append-only 저장소다.
 - 카페 기록을 쌓을 때는 수정한 사람을 `editor=_me()` (리뷰와 같은 IP 닉네임) 로 남긴다. 자동 수집은 `"AI"`.
 - 닉네임 규칙(`review.nickname_for`)을 바꿔도 끝의 `#네 글자`(IP 해시) 는 그대로 둔다. 내 글 확인(`can_delete`)이 여기에 걸려 있다.

@@ -221,6 +221,7 @@ EVENT_TAGS = ["사전 예약", "럭키 드로우", "가챠", "미성년자 입�
 
 
 MAX_LINKS = 5
+MAX_INTRO = 3000   # 팝업 소개 글 최대 글자 수 (공지 한 편이 넉넉히 들어가게)
 
 
 def parse_links(text: str) -> tuple[list[str], list[str]]:
@@ -260,9 +261,12 @@ def order_links(links: list[str]) -> list[str]:
 def entry_to_row(entry: CafeEntry, lat: float | None, lng: float | None,
                  source: str = "", note: str = "",
                  images: list[str] | None = None, tags: list[str] | None = None,
-                 links: list[str] | None = None, editor: str = "") -> dict:
+                 links: list[str] | None = None, editor: str = "", intro: str = "",
+                 intro_src: str = "") -> dict:
     return {
+        "intro_src": intro_src.strip()[:500] if intro_src.strip().startswith(("http://", "https://")) else "",
         "editor": editor[:40],
+        "intro": mask(intro.strip())[:MAX_INTRO],   # 전화번호·이메일 등은 저장 전에 가린다
         "links": " ".join((links or [])[:MAX_LINKS]),
         "images": ", ".join(images or []),
         "tags": ", ".join(t for t in (tags or []) if t in EVENT_TAGS),
@@ -286,7 +290,8 @@ def rows_to_frame(rows: list[dict]) -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
     # 나중에 생긴 칸(images·tags 등)은 옛 행에 없어서 NaN 이 된다. 화면에 'nan' 이 뜨지 않게 빈 글자로 둔다
-    for col in ("characters", "address", "perks", "goods", "images", "tags", "links", "note", "source", "editor"):
+    for col in ("characters", "address", "perks", "goods", "images", "tags", "links", "note", "source", "editor",
+                "intro", "intro_src"):
         df[col] = df[col].fillna("").astype(str) if col in df else ""
     for col in ("lat", "lng"):
         df[col] = pd.to_numeric(df.get(col), errors="coerce")
