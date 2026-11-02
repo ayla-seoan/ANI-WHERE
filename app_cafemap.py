@@ -92,7 +92,10 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 상단 고정 묶음(제목·문구·버튼): 스크롤해도 늘 위에 붙어 있다.
    Streamlit 이 키 컨테이너를 같은 높이의 칸으로 한 번 더 감싸서, 바깥 칸에 sticky 를 건다 */
 [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ position: sticky; top: {TOPBAR_TOP};
-  z-index: 50; background: #fff; padding-bottom: .5rem; box-shadow: 0 8px 12px -12px rgba(0,0,0,.18); }}
+  z-index: 50; background: #fff; padding-bottom: .5rem;
+  /* 흰 바탕을 화면 양옆 끝까지 넓힌다 (가운데 폭만 칠하면 스크롤할 때 양옆 여백으로 카드가 비쳐 그림자처럼 보였다).
+     아래로는 넓히지 않게 위아래는 자른다. 그림자는 두지 않는다 */
+  box-shadow: 0 0 0 100vmax #fff; clip-path: inset(0 -100vmax); }}
 /* 모바일(폭 640px 이하, 칸이 세로로 쌓이는 화면)에서는 위에 붙는 것 없이 그냥 함께 스크롤한다
    (메인·등록 화면의 상단 묶음, 메인의 지도 칸) */
 @media (max-width: 640px) {{
@@ -216,7 +219,10 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .st-key-home_brand button {{ width: 330px !important; height: 100px !important;
   background: url("app/static/logo_mint.png") no-repeat left center / contain !important; }}
 .st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
-.st-key-home_brand button:hover {{ filter: brightness(1.06) saturate(1.1); }}
+/* 로고는 눌러도·커서를 올려도 바탕·그림자·밝기 변화 없이 그대로 (모바일 탭 하이라이트도 끈다) */
+.st-key-home_brand button, .st-key-home_brand button:hover, .st-key-home_brand button:focus,
+.st-key-home_brand button:active, .st-key-home_brand button:focus-visible {{ filter: none !important; box-shadow: none !important;
+  outline: none !important; background-color: transparent !important; -webkit-tap-highlight-color: transparent; }}
 @media (max-width: 640px) {{
   .st-key-home_brand button {{ width: 240px !important; height: 73px !important; }}
 }}
