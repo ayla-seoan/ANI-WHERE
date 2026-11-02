@@ -263,6 +263,10 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .hx-old {{ color: #98A5A1; text-decoration: line-through; }}
 .hx-arrow .mi {{ font-size: 1em; margin: 0; }}
 .hx-new {{ color: var(--accent-deep); font-weight: 700; }}
+.hx-act {{ font-size: .78rem; font-weight: 700; padding: 1px 9px; border-radius: 999px; }}
+.hx-act.add {{ background: var(--accent-soft); color: var(--accent-deep); }}
+.hx-act.del {{ background: #FDE8EC; color: #C23A54; }}
+.hx-act.chg {{ background: #EEF0EF; color: #4F5D59; }}
 .hx-meta {{ font-size: .82rem; color: #5B6B67; line-height: 1.6; word-break: keep-all; }}
 .hx-card .mi {{ color: var(--accent-deep); font-size: 1.05em; }}
 /* 등록 화면의 홈으로 돌아가기: 둘째 줄 오른쪽 끝 */
@@ -782,7 +786,7 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     if mine:
         t, b = st.columns([6, 1], vertical_alignment="center")
         t.markdown(head + when)
-        with b.popover("⋯", key=f"rv_more_{eid}", type="tertiary", help="수정 · 삭제"):
+        with b.popover("⋯", key=f"rv_more_{eid}", type="tertiary"):
             if st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
                 st.session_state["rv_editing"] = eid
                 st.rerun()
@@ -887,7 +891,7 @@ _REVIEW_LIGHTBOX_JS = """
     let i = start, scale = 1, tx = 0, ty = 0, drag = null;
     const box = document.createElement('div'); box.className = 'ani-lb';
     const img = document.createElement('img'); img.alt = '리뷰 사진';
-    const btn = (cls, text, title) => { const b = document.createElement('button'); b.className = cls; b.textContent = text; b.title = title; return b; };
+    const btn = (cls, text, label) => { const b = document.createElement('button'); b.className = cls; b.textContent = text; b.setAttribute('aria-label', label); return b; };
     const x = btn('x', '×', '닫기');
     const tools = document.createElement('div'); tools.className = 'tools';
     const zin = btn('in', '+', '확대'), zout = btn('out', '−', '축소'), reset = btn('reset', '⟲', '원래 크기');
@@ -1104,7 +1108,7 @@ _CLEAR_JS = """
     box.classList.add('ani-has-clear');
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'ani-clear' + (el.tagName === 'TEXTAREA' ? ' ta' : '');
-    b.title = '입력 내용 지우기'; b.setAttribute('aria-label', '입력 내용 지우기');
+    b.setAttribute('aria-label', '입력 내용 지우기');
     b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     const sync = () => b.classList.toggle('on', !!el.value);
     // 누르는 순간 입력칸이 포커스를 잃지 않게(mousedown 막기) 하고, 비운 뒤 바로 다시 입력할 수 있게 포커스를 둔다
@@ -1256,6 +1260,32 @@ def _history_value(col: str, value) -> str:
     return text if len(text) <= 60 else text[:60] + "…"
 
 
+def _image_changes(old, new) -> list[tuple[str, str, str]]:
+    """사진 칸이 어떻게 바뀌었는지 [(포스터|이미지, add|del|chg, '포스터 삭제' 같은 글)]. 첫 장이 포스터, 나머지가 이미지."""
+    before, after = images.split(old), images.split(new)
+    p0, p1 = (before[:1] or [""])[0], (after[:1] or [""])[0]
+    out = []
+    if p0 != p1:
+        if p0 and (not p1 or (p1 in before and p0 not in after)):
+            # 포스터를 지우면 다음 이미지가 포스터 자리로 올라온다 → 그래도 '포스터 삭제'
+            out.append(("포스터", "del", "포스터 삭제"))
+        elif p1 and not p0:
+            out.append(("포스터", "add", "포스터 추가"))
+        else:
+            out.append(("포스터", "chg", "포스터 변경"))
+    # 포스터 자리로 옮겨 간(또는 포스터였다 내려온) 파일은 이미지 추가·삭제로 세지 않는다
+    moved = {p0, p1} - {""}
+    gone = [x for x in before[1:] if x not in after and x not in moved]
+    came = [x for x in after[1:] if x not in before and x not in moved]
+    if gone:
+        out.append(("이미지", "del", f"이미지 {len(gone)}장 삭제"))
+    if came:
+        out.append(("이미지", "add", f"이미지 {len(came)}장 추가"))
+    if not out:
+        out.append(("이미지", "chg", "이미지 순서 변경"))
+    return out
+
+
 def _history_card_html(r: dict, older: dict | None, now: bool) -> str:
     """수정 이력 카드 안쪽. 처음 기록만 카페·기간·주소를 다 보여 주고,
     그다음 기록부터는 바로 앞 기록과 달라진 칸만 '(이전) → (이후)' 로 보여 준다."""
@@ -1271,12 +1301,21 @@ def _history_card_html(r: dict, older: dict | None, now: bool) -> str:
                 f'<div class="hx-meta">{_mi("calendar_month")}{period}</div>'
                 f'<div class="hx-meta">{_mi("location_on")}{escape(str(r.get("address") or "-"))}</div>')
     else:
-        diffs = [(name, _history_value(col, older.get(col)), _history_value(col, r.get(col)))
-                 for col, name in _HISTORY_FIELDS if str(r.get(col) or "") != str(older.get(col) or "")]
-        body = "".join(
-            f'<div class="hx-diff"><span class="hx-k">{name}</span>'
-            f'<span class="hx-old">{escape(a)}</span><span class="hx-arrow">{_mi("arrow_forward")}</span>'
-            f'<span class="hx-new">{escape(b)}</span></div>' for name, a, b in diffs)             or '<div class="hx-meta">바뀐 내용 없음</div>'
+        rows = []
+        for col, name in _HISTORY_FIELDS:
+            if str(r.get(col) or "") == str(older.get(col) or ""):
+                continue
+            if col == "images":
+                # 사진은 '사진 1장 → 2장' 대신 포스터·이미지 중 무엇을 지우고 넣었는지로
+                rows += [f'<div class="hx-diff"><span class="hx-k">{"포스터" if what == "포스터" else "이미지"}</span>'
+                         f'<span class="hx-act {kind}">{escape(text)}</span></div>'
+                         for what, kind, text in _image_changes(older.get(col), r.get(col))]
+                continue
+            a, b = _history_value(col, older.get(col)), _history_value(col, r.get(col))
+            rows.append(f'<div class="hx-diff"><span class="hx-k">{name}</span>'
+                        f'<span class="hx-old">{escape(a)}</span><span class="hx-arrow">{_mi("arrow_forward")}</span>'
+                        f'<span class="hx-new">{escape(b)}</span></div>')
+        body = "".join(rows) or '<div class="hx-meta">바뀐 내용 없음</div>'
     return (f'<div class="hx-card">'
             f'<div class="hx-top"><b>{int(r["revision"])}번째</b><span class="hx-when">{when}</span>'
             + ('<span class="hx-now">지금</span>' if now else "")
@@ -2230,7 +2269,7 @@ def _brand(home: bool = False, fixed: bool = False, logo: str = FIXED_LOGO) -> b
     sub.markdown('<div class="brand-tag">함께 만드는 애니 팝업 지도!! 찾고, 공유하고, 함께 기록해요!</div>',
                  unsafe_allow_html=True)
     with btn:
-        clicked = st.button("홈으로 돌아가기", icon=":material/arrow_back:", key="wiz_home", help="등록을 그만두고 메인으로") or clicked
+        clicked = st.button("홈으로 돌아가기", icon=":material/arrow_back:", key="wiz_home") or clicked
     return clicked
 
 
@@ -2413,8 +2452,7 @@ def page_map() -> None:
         c0, c1, c4, c2, c3, c5 = st.columns([2.4, 2, 2, 2, 2, 1.1], vertical_alignment="bottom")
     with c5:
         # 검색어·작품·캐릭터·기간·특전과 목록 위의 지역·찜 필터를 한 번에 처음 값으로 돌린다 (정렬은 그대로)
-        st.button("↺ 초기화", key="filter_reset", width="stretch", on_click=_reset_filters,
-                  help="검색 조건을 모두 지웁니다")
+        st.button("↺ 초기화", key="filter_reset", width="stretch", on_click=_reset_filters)
     with c0:
         query = st.text_input("검색", placeholder="작품·카페명·캐릭터·주소", key="f_query")
     with c1:
@@ -2698,17 +2736,17 @@ def render_daily(df: pd.DataFrame) -> None:
         st.markdown(f'<div class="dn-title">데일리 팝업 노트<span class="dn-help" tabindex="0">?'
                     f'<span class="dn-tip">{guide}</span></span></div>', unsafe_allow_html=True)
         with st.container(horizontal=True, key="daily_nav"):
-            st.button("‹", key="daily_prev", type="tertiary", on_click=_daily_shift, args=(-1,), help="전날")
+            st.button("‹", key="daily_prev", type="tertiary", on_click=_daily_shift, args=(-1,))
             st.markdown(('<span class="dn-today">오늘</span>' if off == 0 else "")
                         + f'<span class="dn-date">{day:%y. %m. %d.} {_WEEKDAYS[day.weekday()]}</span>',
                         unsafe_allow_html=True)
-            st.button("›", key="daily_next", type="tertiary", on_click=_daily_shift, args=(1,), help="다음 날")
+            st.button("›", key="daily_next", type="tertiary", on_click=_daily_shift, args=(1,))
         with st.container(horizontal=True, key="daily_areas"):
             st.button("‹", key="daily_area_prev", type="tertiary", on_click=_daily_area_shift,
-                      args=(-1, len(choices)), help="이전 지역", disabled=len(choices) < 2)
+                      args=(-1, len(choices)), disabled=len(choices) < 2)
             st.markdown(f'<span class="dn-area">{escape(area)}<span>{count}</span></span>', unsafe_allow_html=True)
             st.button("›", key="daily_area_next", type="tertiary", on_click=_daily_area_shift,
-                      args=(1, len(choices)), help="다음 지역", disabled=len(choices) < 2)
+                      args=(1, len(choices)), disabled=len(choices) < 2)
 
     if area != "전체":
         open_ = open_[open_["area"].replace("", "기타") == area]
@@ -2719,7 +2757,7 @@ def render_daily(df: pd.DataFrame) -> None:
     rows = sorted(open_.to_dict("records"), key=lambda r: (-fcounts.get(str(r["entry_id"]), 0), r["start_date"]))
     items = "".join(
         f'<a class="dn-item" data-id="{escape(str(r["entry_id"]))}" href="./?cafe={quote(str(r["entry_id"]))}" target="_self"'
-        f' title="{escape(str(r["work"]))} · {escape(str(r["cafe_name"]))}">'
+        f'>'
         f'<span class="dn-thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\')"></span>'
         f'<div class="dn-body">{_area_badge(r.get("address"))}'
         f'<div class="dn-name">{escape(str(r["work"]))}</div></div></a>'
@@ -3091,7 +3129,7 @@ def _step_images(w: dict) -> None:
             st.image(w["poster"][1], width="stretch")
         with act:
             st.caption("포스터 미리보기")
-            if st.button("변경", key="poster_change", help="다른 이미지로 바꿉니다"):
+            if st.button("변경", key="poster_change"):
                 st.session_state["poster_changing"] = True
                 st.rerun()
     else:
@@ -3109,7 +3147,7 @@ def _step_images(w: dict) -> None:
                 st.session_state["poster_ver"] = ver + 1
                 st.rerun()
         if changing:
-            if st.button("취소", key="poster_change_cancel", help="기존 포스터를 그대로 둡니다"):
+            if st.button("취소", key="poster_change_cancel"):
                 st.session_state["poster_changing"] = False
                 st.rerun()
         elif not w["poster"]:
@@ -3234,7 +3272,7 @@ def page_add() -> None:
     with back:
         # 첫 단계에서는 지도로, 그 뒤로는 한 단계 앞으로
         # 첫 단계에서는 돌아갈 곳이 없어 숨긴다 (메인은 위의 홈으로)
-        if step > 0 and st.button("돌아가기", key="wiz_back", help="이전 단계로", width="stretch"):
+        if step > 0 and st.button("돌아가기", key="wiz_back", width="stretch"):
             _move(-1)
     with head:
         # 제목은 글자만 (누를 수 없다. 메인으로는 위의 '홈으로 돌아가기')
@@ -3277,7 +3315,7 @@ def page_add() -> None:
 CAL_COLORS = ["#14b8a6", "#F59E0B", "#8B5CF6", "#EC4899", "#3B82F6", "#22A06B", "#EF6C4D", "#64748B"]
 CAL_CSS = f"""
 <style>
-/* 달력 머리글: 큰 '2026년 10월' · ‹ › · 테두리 있는 '오늘' */
+/* 달력 머리글: 큰 '2026년 10월' · ‹ › · 테두리 있는 '이번달' */
 .st-key-cal_nav {{ align-items:center !important; flex-wrap:nowrap !important; gap:6px !important; margin:4px 0 12px; }}
 .st-key-cal_nav > div {{ width:auto !important; flex:0 0 auto !important; }}
 .st-key-cal_nav > div:first-child {{ flex:1 1 auto !important; }}
@@ -3345,6 +3383,7 @@ CAL_CSS = f"""
 .up-state {{ flex:0 0 auto; font-size:.8rem; font-weight:800; padding:.2rem .6rem; border-radius:.5rem; white-space:nowrap; }}
 .up-state.green {{ background:#E3F6EA; color:#1F7A44; }} .up-state.blue {{ background:#E5EEFC; color:#2C5BC5; }}
 .up-state.red {{ background:#FDE8EC; color:#C23A54; }} .up-state.gray {{ background:#EEF0EF; color:#6B7672; }}
+.cal-nick {{ color:#98A5A1; font-size:.78rem; margin:-12px 0 6px; }}
 .cal-empty {{ color:#6B7672; font-size:.76rem; background:#F4F6F5; border-radius:8px; padding:6px 10px; margin-bottom:8px; }}
 .up-empty {{ color:#6B7672; font-size:.76rem; padding:12px; border:1px dashed #D5DBD9; border-radius:10px; text-align:center; }}
 /* 지도 옆 작은 캘린더 */
@@ -3458,10 +3497,11 @@ def render_calendar(compact: bool = False) -> None:
         st.markdown(f'<span class="cal-label">내 캘린더</span><span class="cal-month">{year}년 {month}월</span>'
                     '<span class="cal-help" tabindex="0">?<span class="cal-tip">내가 북마크한 팝업만 달력에 보여요. '
                     '리스트나 상세의 북마크 아이콘을 누르면 여기에 추가돼요.</span></span>', unsafe_allow_html=True)
-        st.button("‹", key="cal_prev", type="tertiary", on_click=_cal_shift, args=(-1,), help="이전 달")
-        st.button("›", key="cal_next", type="tertiary", on_click=_cal_shift, args=(1,), help="다음 달")
-        st.button("오늘", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None),
-                  help="이번 달로")
+        st.button("‹", key="cal_prev", type="tertiary", on_click=_cal_shift, args=(-1,))
+        st.button("›", key="cal_next", type="tertiary", on_click=_cal_shift, args=(1,))
+        st.button("이번달", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None))
+    # '내 캘린더' 줄 바로 아래: 내 닉네임(리뷰와 같은 IP 기반). 북마크도 이 사람 것만 보인다
+    st.markdown(f'<div class="cal-nick">{escape(_me())}</div>', unsafe_allow_html=True)
     if not events:
         st.markdown('<div class="cal-empty">아직 북마크한 팝업이 없어요. 리스트에서 북마크하면 달력에 일정이 채워져요.</div>',
                     unsafe_allow_html=True)

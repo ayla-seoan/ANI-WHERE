@@ -160,7 +160,7 @@ function showSpot(p) {
   const head = document.createElement("div"); head.className = "head";
   const t = document.createElement("span");
   t.textContent = here.length > 1 ? `이 자리의 팝업 ${here.length}곳` : "팝업 미리보기";
-  const x = document.createElement("button"); x.className = "x"; x.textContent = "×"; x.title = "닫기";
+  const x = document.createElement("button"); x.className = "x"; x.textContent = "×"; x.setAttribute("aria-label", "닫기");
   x.onclick = (e) => { e.stopPropagation(); closeSpot(); };
   head.appendChild(t); head.appendChild(x); box.appendChild(head);
   here.forEach((q) => {

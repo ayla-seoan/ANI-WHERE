@@ -9,6 +9,7 @@ import hashlib
 import os
 from dataclasses import dataclass, field
 
+from . import catalog
 from .guard import Validation, scan
 
 HEADERS = [
@@ -33,23 +34,42 @@ def stars(rating) -> str:
         return ""
     return "★" * n + "☆" * (5 - n) if 1 <= n <= 5 else ""
 MAX_BODY = 1000
-MAX_NICK = 20
+MAX_NICK = 40      # 캐릭터 이름이 길 수 있다 ('반짝이는 소류 아스카 랑그레이#a3f9')
 
 # ------------------------------------------------------------ 자동 닉네임
 # 접속 IP 마다 늘 같은 닉네임이 나오게 한다. IP 자체는 저장하지 않고 소금 친 해시만 쓴다.
+# '꾸벅꾸벅 조는 고죠 사토루#a3f9' 처럼 앞은 여러 꾸밈말 중 하나, 뒤는 작품 목록의 캐릭터 중 하나.
+# 뒤의 #네 글자는 IP 로만 정해져서, 꾸밈말·캐릭터 목록이 바뀌어도 '내 글' 확인(can_delete)은 그대로 된다.
 _ADJ = ["졸린", "배고픈", "신난", "수줍은", "용감한", "느긋한", "반짝이는", "꼼꼼한",
-        "엉뚱한", "다정한", "씩씩한", "조용한", "행복한", "부지런한", "말랑한", "새침한"]
-_NOUN = ["고양이", "토끼", "펭귄", "여우", "수달", "다람쥐", "판다", "햄스터",
-         "너구리", "부엉이", "강아지", "오리", "고슴도치", "알파카", "코알라", "돌고래"]
+        "엉뚱한", "다정한", "씩씩한", "조용한", "행복한", "부지런한", "말랑한", "새침한",
+        "꾸벅꾸벅 조는", "덕질하는", "굿즈 줍는", "줄 서는", "특전 노리는", "오픈런하는", "설레는", "두근두근",
+        "방방 뛰는", "몰래 웃는", "커피 마시는", "산책하는", "노래하는", "춤추는", "길 잃은", "모험하는",
+        "꿈꾸는", "반쯤 깬", "포근한", "까칠한", "쿨한", "수상한", "비밀스러운", "명랑한",
+        "빛나는", "통통 튀는", "느릿느릿", "재빠른", "엉금엉금", "콧노래 부르는", "볼 빵빵한", "눈 반짝",
+        "든든한", "귀여운", "멋쟁이", "낭만적인", "호기심 많은", "똑똑한", "덤벙대는", "늦잠 잔",
+        "야식 먹는", "사진 찍는", "포카 모으는", "아크릴 든", "티켓 쥔", "응원하는", "기다리는", "웃음 많은"]
+_NOUN_FALLBACK = ["고양이", "토끼", "펭귄", "여우", "수달", "다람쥐", "판다", "햄스터"]
+
+
+def _characters() -> list[str]:
+    """닉네임 뒤에 붙일 캐릭터 이름들 (작품 목록에서, 중복 없이 같은 순서로)."""
+    names = sorted({n.strip() for v in catalog.characters_by_work().values() for n in v if n.strip()})
+    return names or _NOUN_FALLBACK
 
 
 def nickname_for(ip: str | None) -> str:
-    """'졸린 수달#a3f9' 처럼 IP 로 정해지는 닉네임. 로컬 접속(IP 없음)은 모두 같은 이름이 된다."""
+    """'꾸벅꾸벅 조는 고죠 사토루#a3f9' 처럼 IP 로 정해지는 닉네임. 로컬 접속(IP 없음)은 모두 같은 이름이 된다."""
     if not isinstance(ip, str):
         ip = None
     salt = os.getenv("REVIEW_NICK_SALT", "popup-cafe-map")
     h = hashlib.sha256(f"{salt}:{ip or 'local'}".encode()).hexdigest()
-    return f"{_ADJ[int(h[0:4], 16) % len(_ADJ)]} {_NOUN[int(h[4:8], 16) % len(_NOUN)]}#{h[8:12]}"
+    names = _characters()
+    return f"{_ADJ[int(h[12:20], 16) % len(_ADJ)]} {names[int(h[20:28], 16) % len(names)]}#{h[8:12]}"
+
+
+def _tag(nickname: str) -> str:
+    """닉네임 끝의 '#a3f9' (IP 로만 정해지는 부분). 없으면 닉네임 전체."""
+    return nickname.rsplit("#", 1)[-1] if "#" in nickname else nickname
 
 
 def validate(body: str, nickname: str = "", allow_empty: bool = False) -> Validation:
@@ -124,5 +144,6 @@ def counts(rows: list[dict]) -> dict[str, int]:
 
 
 def can_delete(row: dict, nickname: str) -> bool:
-    """내가 쓴 글인지: 접속 IP 로 정해지는 닉네임이 글의 닉네임과 같을 때만 지울 수 있다."""
-    return bool(nickname) and str(row.get("nickname") or "") == nickname
+    """내가 쓴 글인지: 접속 IP 로 정해지는 '#네 글자' 가 같을 때만 고치고 지울 수 있다.
+    (닉네임 앞부분 규칙이 바뀌기 전에 쓴 글도 그대로 내 글로 알아본다)"""
+    return bool(nickname) and _tag(str(row.get("nickname") or "")) == _tag(nickname)
