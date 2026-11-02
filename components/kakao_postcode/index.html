@@ -19,7 +19,7 @@
 </style>
 </head>
 <body>
-<button id="open">📮 우편번호로 주소 찾기</button>
+<button id="open">우편번호로 주소 찾기</button>
 <div id="box"></div>
 
 <script>
@@ -51,7 +51,7 @@ function loadSdk() {
 function close() {
   box.style.display = "none";
   box.innerHTML = "";
-  btn.textContent = "📮 우편번호로 주소 찾기";
+  btn.textContent = "우편번호로 주소 찾기";
   Streamlit.height(CLOSED);
 }
 

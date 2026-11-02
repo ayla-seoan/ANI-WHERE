@@ -155,7 +155,7 @@ document.getElementById("kakao").onclick = async () => {
                    link: { mobileWebUrl: url, webUrl: url } },
         buttons: [{ title: "자세히 보기", link: { mobileWebUrl: url, webUrl: url } }],
       });
-      say("카카오톡 공유 창을 열었어요 💬");
+      say("카카오톡 공유 창을 열었어요");
       return;
     } catch (e) {
       // 키·도메인 설정이 안 맞으면 아래 방법으로. 왜 안 됐는지는 화면과 콘솔에 남긴다
@@ -167,8 +167,8 @@ document.getElementById("kakao").onclick = async () => {
   }
   // 2) 키가 없거나 공유 창을 못 열면: 링크를 복사하고 카카오톡을 연다 (채팅방에 붙여 넣으면 된다)
   await copy((why ? why + " · " : "")
-             + (MOBILE ? "링크를 복사했어요. 카카오톡이 열리면 채팅방에 붙여 넣어 주세요 💬"
-                       : "링크를 복사했어요. 카카오톡 PC 에서 채팅방에 붙여 넣어 주세요 💬"));
+             + (MOBILE ? "링크를 복사했어요. 카카오톡이 열리면 채팅방에 붙여 넣어 주세요"
+                       : "링크를 복사했어요. 카카오톡 PC 에서 채팅방에 붙여 넣어 주세요"));
   openApp("kakaotalk://launch",
           "intent://launch#Intent;scheme=kakaotalk;package=com.kakao.talk;end", null);
 };
@@ -187,7 +187,7 @@ document.getElementById("insta").onclick = async () => {
       if (!nav.share) continue;
       try {
         await nav.share(data);
-        say("공유 창을 열었어요. 인스타그램을 고르면 DM 으로 보낼 수 있어요 📷");
+        say("공유 창을 열었어요. 인스타그램을 고르면 DM 으로 보낼 수 있어요");
         return;
       } catch (e) {
         if (e && e.name === "AbortError") { say(""); return; }    // 사용자가 공유 창을 닫음
@@ -198,13 +198,13 @@ document.getElementById("insta").onclick = async () => {
     why = why ? `공유 창을 열 수 없었어요 (${why})` : "이 브라우저는 공유 창을 지원하지 않아요 (앱 안의 브라우저라면 크롬·사파리로 열어 주세요)";
   }
   // PC·공유 창이 없을 때: 링크를 복사하고 인스타 DM 을 연다 (받는 사람을 고르고 붙여 넣으면 된다)
-  await copy((why ? why + " · " : "") + "링크를 복사했어요. 인스타그램 DM 에 붙여 넣어 보내 주세요 📷");
+  await copy((why ? why + " · " : "") + "링크를 복사했어요. 인스타그램 DM 에 붙여 넣어 보내 주세요");
   openApp("instagram://direct-inbox",
           "intent://direct-inbox#Intent;scheme=instagram;package=com.instagram.android;end",
           "https://www.instagram.com/direct/new/");
 };
 
-document.getElementById("copy").onclick = () => copy("링크를 복사했어요 ✨");
+document.getElementById("copy").onclick = () => copy("링크를 복사했어요");
 
 window.addEventListener("message", (event) => {
   if (!event.data || event.data.type !== "streamlit:render") return;

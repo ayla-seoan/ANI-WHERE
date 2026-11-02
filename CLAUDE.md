@@ -3,8 +3,17 @@
 AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
 
 ## 구조
-- 두 앱(`app_priority.py`, 추후 `app_cafemap.py`)이 `common/` 모듈을 **공유**한다. 한쪽에만 필요한 로직도 양쪽에서 쓸 가능성이 있으면 `common/` 에 둔다.
-- 주제별 전용 로직은 `common/<주제>.py` 로 분리한다 (`priority.py` 처럼).
+- 두 앱(`app_priority.py`, `app_cafemap.py`)이 `common/` 모듈을 **공유**한다. 한쪽에만 필요한 로직도 양쪽에서 쓸 가능성이 있으면 `common/` 에 둔다.
+- 주제별 전용 로직은 `common/<주제>.py` 로 분리한다 (`priority.py`, `cafe.py`, `review.py`, `mycal.py`, `locate.py` 처럼).
+- 브라우저 쪽 화면 조각은 빌드 없이 `components/<이름>/index.html` 하나로 만들고, `common/<이름>.py` 의 얇은 래퍼로 붙인다.
+
+## ANI:WHERE 화면 작업
+- `common/` 파일을 고쳤으면 실행 중인 Streamlit 을 **껐다 다시 켠다**. 새로고침만 하면 예전 모듈이 그대로 남는다.
+- 화면 글자는 한국어. 새로 만드는 버튼·안내에는 이모지 대신 `:material/...:` 아이콘을 쓴다.
+- 포인트 색은 CSS 변수 `--accent`(#14b8a6) · `--accent-soft` · `--accent-deep` 를 쓴다. `@import`(글꼴) 는 `<style>` 맨 앞에 둔다 — 앞에 다른 규칙이 있으면 글꼴이 무시된다.
+- 모바일은 폭 640px 이하. PC 와 모바일 화면을 모두 확인한다.
+- 참고 웹사이트에서 `recal.kr` 은 다른 사이트 뒤로 보낸다 (`cafe.order_links`).
+- 북마크(`favorites`)·리뷰(`reviews`)도 카페와 같은 append-only 저장소다.
 
 ## 프롬프트
 - 프롬프트는 **절대 코드 안에 문자열로 두지 않는다.** `common/prompts/<이름>.<버전>.txt` 로 둔다.

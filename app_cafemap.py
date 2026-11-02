@@ -72,7 +72,8 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   border-color: #dcebe6 !important; box-shadow: none; transform: none; }}
 /* 내 리뷰의 '⋯' (누르면 수정·삭제): 글자만 있는 작은 버튼을 칸 오른쪽 끝에 붙이고, 펼침 화살표는 숨긴다 */
 /* 칸(stColumn) 안의 세로 묶음까지 오른쪽으로 붙여야 실제로 오른쪽 끝에 선다 (리스트 전체보기 버튼과 같은 방법) */
-[data-testid="stColumn"]:has([class*="st-key-rv_more_"]) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
+/* (⋯ 가 바로 들어 있는 작은 칸만 오른쪽 정렬. 그냥 :has 로 잡으면 리뷰 칸 전체가 오른쪽으로 붙었다) */
+[data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] > [class*="st-key-rv_more_"]) > [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
 [class*="st-key-rv_more_"] {{ display: flex; justify-content: flex-end; width: auto !important; margin-left: auto; }}
 [class*="st-key-rv_more_"] button {{ background: transparent !important; border: 0 !important;
   box-shadow: none !important; color: {MINT} !important; min-height: 0 !important;
@@ -92,10 +93,14 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 상단 고정 묶음(제목·문구·버튼): 스크롤해도 늘 위에 붙어 있다.
    Streamlit 이 키 컨테이너를 같은 높이의 칸으로 한 번 더 감싸서, 바깥 칸에 sticky 를 건다 */
 [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ position: sticky; top: {TOPBAR_TOP};
-  z-index: 50; background: #fff; padding-bottom: .5rem;
-  /* 흰 바탕을 화면 양옆 끝까지 넓힌다 (가운데 폭만 칠하면 스크롤할 때 양옆 여백으로 카드가 비쳐 그림자처럼 보였다).
-     아래로는 넓히지 않게 위아래는 자른다. 그림자는 두지 않는다 */
-  box-shadow: 0 0 0 100vmax #fff; clip-path: inset(0 -100vmax); }}
+  z-index: 50; background: #fff; padding-bottom: .5rem; box-shadow: none; }}
+/* 흰 바탕을 화면 양옆 끝까지 넓힌다 (가운데 폭만 칠하면 스크롤할 때 양옆 여백으로 카드가 비쳐 그림자처럼 보였다).
+   clip-path 로 자르면 안에 있는 화면 고정 버튼(오른쪽 아래 '+')까지 잘려 사라져서, 뒤에 깔리는 흰 띠로 칠한다 */
+/* (PC 만: 모바일은 상단 묶음이 위에 붙지 않아 기준 칸이 없어서, 띠가 화면 전체를 덮어 카드가 안 보였다) */
+@media (min-width: 641px) {{
+  [data-testid="stLayoutWrapper"]:has(> .st-key-topbar)::before {{ content: ""; position: absolute; top: 0; bottom: 0;
+    left: -100vmax; right: -100vmax; background: #fff; z-index: -1; pointer-events: none; }}
+}}
 /* 모바일(폭 640px 이하, 칸이 세로로 쌓이는 화면)에서는 위에 붙는 것 없이 그냥 함께 스크롤한다
    (메인·등록 화면의 상단 묶음, 메인의 지도 칸) */
 @media (max-width: 640px) {{
@@ -103,7 +108,10 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
      지도·리스트가 왼쪽으로 쏠려 보였다. 한 줄로 둔 칸(카드 포스터·상세 제목 등)은 더 구체적인 규칙이 덮어쓴다 */
   [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
     width: 100% !important; min-width: 100% !important; flex: 1 1 100% !important; }}
-  [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ position: static !important; box-shadow: none !important; }}
+  /* 위에 붙지 않으니 흰 바탕도 필요 없다. 바탕이 남아 있으면 바로 아래 '리스트로 보기' 버튼 윗부분을 가렸다 */
+  [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ position: static !important; box-shadow: none !important;
+    background: transparent !important; pointer-events: none; }}
+  [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) > * {{ pointer-events: auto; }}
   [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{ position: static !important; }}
 }}
 /* 메인 '등록하기'·상세 '리스트로 돌아가기'·등록 화면 '홈으로 돌아가기' 버튼:
@@ -170,12 +178,16 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 리스트 전체보기의 지도 아이콘 버튼: 정렬 칸 위 오른쪽 끝, 테두리 있는 작은 정사각형 */
 /* 보기 전환 버튼 위아래 간격을 다른 칸들 사이 간격(16px)과 같게: 버튼 ↔ 정렬 칸, 위(검색 필터 묶음),
    지도보기에서는 버튼 ↔ 데일리 팝업 노트·지도 줄 */
-[data-testid="stColumn"]:has(.st-key-map_icon) [data-testid="stVerticalBlock"] {{ gap: 16px; }}
+[data-testid="stColumn"]:has(.st-key-map_icon) [data-testid="stVerticalBlock"] {{ gap: 8px; }}   /* 버튼 ↔ 최신순: 반 칸 */
 @media (min-width: 641px) {{
-  /* PC 는 위(검색 필터 묶음)와 반 칸 더 띄운다 (24px) */
-  [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ margin-top: 0; }}
+  /* PC: 검색 필터 묶음 아래 여백은 반 칸(8px)만 (상단 묶음 아래 안쪽 여백 0 + 칸 사이 간격을 반으로) */
+  [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {{ padding-bottom: 8px !important; }}   /* 날짜 줄 아래 반 칸 */
+  [data-testid="stLayoutWrapper"]:has(> .st-key-listtools) {{ margin-top: -8px; }}   /* 검색 줄 아래 반 칸 */
 }}
 @media (max-width: 640px) {{
+  /* 모바일: '함께 만드는 애니 팝업 지도…' 문구 아래 여백을 반으로 (문구 아래 여백 없애고 아래 줄을 조금 끌어올림) */
+  .brand-tag {{ margin-bottom: 0 !important; }}
+  [data-testid="stLayoutWrapper"]:has(> .st-key-listtools) {{ margin-top: -15px; }}
   /* 모바일 지도보기: 위(상단 묶음)·아래(데일리 팝업 노트·지도 줄)와 16px */
   .stMain:has(.st-key-map_row) [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ margin-top: -9px; }}
   [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: -11px; }}
@@ -189,6 +201,34 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .st-key-map_icon button span {{ color: #fff !important; font-size: 1.2rem !important; }}
 .st-key-map_icon button p {{ color: #fff !important; font-size: .92rem !important; font-weight: 800 !important; white-space: nowrap; }}
 .st-key-map_icon button:hover {{ background: var(--accent-deep) !important; }}
+/* 토스트 알림(북마크·리뷰 등)은 화면 정가운데에 */
+[data-testid="stToastContainer"] {{ position: fixed !important; top: 50% !important; left: 50% !important;
+  right: auto !important; bottom: auto !important; transform: translate(-50%, -50%) !important;
+  align-items: center !important; z-index: 2000 !important; }}
+/* 토스트가 여러 개면 위아래로 쌓지 않고 같은 자리에 겹쳐서, 가장 최근 것이 맨 위에 보이게 */
+[data-testid="stToastContainer"] {{ display: grid !important; }}
+[data-testid="stToastContainer"] > * {{ grid-area: 1 / 1; justify-self: center; align-self: center; }}
+[data-testid="stToast"] {{ background: #fff !important; border: 1.5px solid var(--accent) !important; border-radius: 14px !important;
+  box-shadow: 0 10px 28px rgba(20,184,166,.28) !important; padding: 12px 16px 12px 18px !important; min-width: 0 !important;
+  width: max-content !important; max-width: min(90vw, 420px) !important; }}
+[data-testid="stToast"] [data-testid="stMarkdownContainer"] p {{ white-space: normal; word-break: keep-all; }}
+[data-testid="stToast"] [data-testid="stMarkdownContainer"] p, [data-testid="stToast"] p {{ color: #1F2A27 !important;
+  font-weight: 700 !important; font-size: .95rem !important; margin: 0 !important; }}
+/* 토스트 아이콘: 사이트 전체 글꼴(Pretendard) 규칙이 아이콘 글꼴을 덮어써 'bookmark_added' 글자로 보였다 */
+[data-testid="stToast"] [data-testid="stToastDynamicIcon"], [data-testid="stToast"] [data-testid="stIconMaterial"] {{
+  font-family: "Material Symbols Rounded" !important; color: var(--accent) !important; font-size: 1.4rem !important; }}
+/* 아이콘과 글자를 세로 가운데로 맞춘다 (아이콘을 감싼 줄이 위쪽 정렬이라 아이콘이 6px 떠 있었다) */
+[data-testid="stToast"] div:has(> span > [data-testid="stToastDynamicIcon"]) {{ align-items: center !important; gap: 10px; }}
+[data-testid="stToast"] [data-testid="stToastDynamicIcon"] {{ line-height: 1 !important; }}
+[data-testid="stToast"] [data-testid="stMarkdownContainer"] {{ margin: 0 !important; display: flex; align-items: center; }}
+[data-testid="stToast"] button {{ display: none !important; }}   /* 토스트는 닫기 버튼 없이 잠깐 떴다 사라진다 */
+/* 이모지 대신 쓰는 아이콘 (_mi). 사이트 글꼴 규칙이 아이콘 글꼴을 덮어쓰지 않게 !important */
+.mi {{ font-family: "Material Symbols Rounded" !important; font-weight: normal; font-style: normal; font-size: 1.15em;
+  line-height: 1; display: inline-block; vertical-align: -0.18em; letter-spacing: normal; text-transform: none;
+  white-space: nowrap; direction: ltr; -webkit-font-smoothing: antialiased; color: inherit; margin-right: 3px; }}
+/* 흰 바탕 글줄 안의 아이콘(혜택 목록·카드 날짜·위치 등)은 포인트 색, 포스터·배지 위에서는 글자색 그대로 */
+.dbox .mi, .cmeta .mi, .ccafe .mi, .dbtn .mi, .wiz-icon .mi {{ color: var(--accent-deep); }}
+.wiz-icon .mi {{ font-size: 64px; margin: 0; vertical-align: middle; }}
 /* 등록 화면의 홈으로 돌아가기: 둘째 줄 오른쪽 끝 */
 [data-testid="stColumn"]:has(.st-key-wiz_home) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
 /* 화면에 안 보이는 칸(스타일만 담은 칸, 스크립트용 iframe)은 줄 간격을 차지하지 않게 흐름에서 뺀다 */
@@ -233,7 +273,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 </style>
 """
 
-st.set_page_config(page_title="ANI:WHERE", page_icon="🗺️", layout="wide")
+st.set_page_config(page_title="ANI:WHERE", page_icon=":material/map:", layout="wide")
 
 store = Storage(worksheet="cafes")
 reviews = Storage(worksheet="reviews", headers=review.HEADERS)
@@ -272,6 +312,9 @@ def _heart(cafe_id: str, where: str, label_count: bool = False) -> None:
 def _toggle_fav(cafe_id: str, me: str, on: bool) -> None:
     favorite.toggle(favs, cafe_id, me, on)
     st.session_state.pop("_fav_cache", None)
+    # 다시 그릴 때 화면 위에 토스트로 알린다 (page_map 의 flash)
+    st.session_state["flash"] = (("북마크했어요. 내 캘린더에서 볼 수 있어요.", ":material/bookmark_added:") if on
+                                 else ("북마크를 해제했어요.", ":material/bookmark_remove:"))
 # 왼쪽 사이드바는 쓰지 않는다 (저장소 상태 안내도 화면에 띄우지 않는다)
 
 
@@ -384,6 +427,52 @@ def address_field(value: str, key: str, on_pick, placeholder: str = "") -> str:
 _WEEKDAYS = "월화수목금토일"
 
 
+def _toast(msg: str, icon: str = ":material/check_circle:") -> None:
+    """화면 가운데 잠깐 떴다 사라지는 알림 (사이트 디자인, 닫기 버튼 없음).
+
+    Streamlit 의 st.toast 는 연달아 부르면 새 알림이 안 뜨기도 해서 직접 그린다.
+    새 알림이 뜨면 이전 알림은 바로 사라지고 최신 알림만 보인다.
+    """
+    name = icon.removeprefix(":material/").removesuffix(":")
+    payload = json.dumps({"msg": msg, "icon": name, "t": datetime.now().timestamp()})
+    components.html("<script>window.parent.eval(" + json.dumps(_TOAST_JS.replace("__P__", payload)) + ");</script>",
+                    height=0)
+
+
+_TOAST_JS = """
+(function () {
+  const p = __P__;
+  if (!document.getElementById('ani-toast-css')) {
+    const css = document.createElement('style'); css.id = 'ani-toast-css';
+    css.textContent = `
+      .ani-toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(.96); opacity: 0;
+        display: flex; align-items: center; gap: 10px; background: #fff; border: 1.5px solid #14b8a6; border-radius: 14px;
+        box-shadow: 0 10px 28px rgba(20,184,166,.28); padding: 12px 18px; max-width: min(90vw, 420px); width: max-content;
+        transition: opacity .18s ease, transform .18s ease; pointer-events: none; }
+      .ani-toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      .ani-toast .ic { font-family: "Material Symbols Rounded"; font-size: 1.4rem; line-height: 1; color: #14b8a6; }
+      .ani-toast .tx { font-family: "Pretendard", sans-serif; font-weight: 700; font-size: .95rem; color: #1F2A27;
+        word-break: keep-all; line-height: 1.4; }`;
+    document.head.appendChild(css);
+  }
+  document.querySelectorAll('.ani-toast').forEach((t) => t.remove());   // 새 알림이 뜨면 이전 알림은 바로 지운다
+  window.__aniToastZ = (window.__aniToastZ || 3000) + 1;
+  const box = document.createElement('div'); box.className = 'ani-toast'; box.style.zIndex = window.__aniToastZ;
+  const ic = document.createElement('span'); ic.className = 'ic'; ic.textContent = p.icon;
+  const tx = document.createElement('span'); tx.className = 'tx'; tx.textContent = p.msg;
+  box.append(ic, tx); document.body.appendChild(box);
+  requestAnimationFrame(() => box.classList.add('show'));
+  setTimeout(() => box.classList.remove('show'), 2800);
+  setTimeout(() => box.remove(), 3100);
+})();
+"""
+
+
+def _mi(name: str, cls: str = "") -> str:
+    """이모지 대신 쓰는 아이콘 (Material Symbols). HTML 문자열 안에 넣는다. 크기·색은 둘러싼 글자를 따른다."""
+    return f'<span class="mi {cls}" aria-hidden="true">{name}</span>'
+
+
 def _day(d, with_year: bool) -> str:
     """'26.10.27(화)' / '11.11(수)'."""
     d = pd.to_datetime(d).date()
@@ -413,14 +502,14 @@ def _detail_info_html(current: dict) -> str:
         '<div class="drow"><div class="dlabel">위치</div><div class="dval">'
         f'<div class="dcafe">{escape(str(current.get("cafe_name") or "-"))}</div>'
         f'<div class="daddr">{escape(addr)}</div></div>'
-        f'<a class="dbtn" href="{escape(_map_link(current))}" target="_blank" rel="noopener">📍 지도에서 확인하기</a>'
+        f'<a class="dbtn" href="{escape(_map_link(current))}" target="_blank" rel="noopener">{_mi("location_on")}지도에서 확인하기</a>'
         '</div>'
         f'<div class="drow"><div class="dlabel">일정</div><div class="dval">{escape(span)}</div></div>'
     )
     # 혜택: 특전 · 굿즈 · 이벤트마다 검은 알약 라벨, 그 옆에 회색 상자 안 목록 (라벨 | 내용 한 줄)
-    groups = [("특전", "🎁", _split(current.get("perks") or "")),
-              ("굿즈", "🛍️", _split(current.get("goods") or "")),
-              ("이벤트", "🎪", _split(current.get("tags") or ""))]
+    groups = [("특전", _mi("redeem"), _split(current.get("perks") or "")),
+              ("굿즈", _mi("shopping_bag"), _split(current.get("goods") or "")),
+              ("이벤트", _mi("celebration"), _split(current.get("tags") or ""))]
     perks = "".join(
         f'<div class="dgroup"><span class="dpill">{name}</span><ul class="dbox">'
         + "".join(f"<li>{icon} {escape(x)}</li>" for x in items) + "</ul></div>"
@@ -495,7 +584,7 @@ def _detail_head_html(current: dict) -> tuple[str, str, str]:
         state = "진행 중"
     chars = str(current.get("characters") or "").strip()
     top = ('<div class="dhead dtop">'
-           + f'<span class="dregion" style="color:{color}">{"📍 " + escape(area) if area else ""}</span>'
+           + f'<span class="dregion" style="color:{color}">{_mi("location_on") + escape(area) if area else ""}</span>'
            + f'<span class="dstate{" ended" if state == "종료" else ""}">{state}</span></div>')
     title = f'<div class="dtitle">{escape(str(current.get("work") or ""))}</div>'
     sub = f'<div class="dsub"><span class="dchars">{escape(chars)}</span></div>' if chars else ""
@@ -509,7 +598,7 @@ def render_detail_tabs(current: dict) -> None:
     n = review.counts(reviews.current_rows()).get(entry_id, 0)
     # 키를 주고 고른 탭을 서버가 기억하게 한다. 그렇지 않으면 수정하기에서 이미지를 지우거나 올려
     # 다시 그릴 때마다 첫 탭(리뷰)으로 돌아가 버린다
-    tab_review, tab_edit = st.tabs([f"💬 리뷰 {n}", "✏️ 수정하기"], key=f"detail_tabs_{entry_id}",
+    tab_review, tab_edit = st.tabs([f":material/chat_bubble: 리뷰 {n}", ":material/edit: 수정하기"], key=f"detail_tabs_{entry_id}",
                                    on_change="rerun")
     with tab_review:
         render_reviews(entry_id)
@@ -541,7 +630,7 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
     kind = ""
     nick = review.nickname_for(st.context.ip_address)
     # 닉네임 → 종류 → 내용 순으로 한 줄씩, 같은 왼쪽 선에 맞춰 둔다
-    st.caption(f"✍️ 닉네임 **{nick}**", help="접속한 IP 에 따라 자동으로 정해지는 닉네임입니다")
+    st.caption(f":material/person: 닉네임 **{nick}**", help="접속한 IP 에 따라 자동으로 정해지는 닉네임입니다")
     rating = None
     if not parent_id:
         kind = st.pills("종류", review.KINDS, default=review.KINDS[0], key=f"{slot}_kind_{n}",
@@ -598,7 +687,8 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
 
     if clicked:
         # 입력 직후 바로 누르면 위의 비활성화보다 먼저 들어올 수 있어서 한 번 더 검사한다
-        v = review.validate(body, nick)
+        # 다녀온 후기는 별점만 골라도, 사진만 올려도 등록할 수 있다 (내용은 비워도 된다)
+        v = review.validate(body, nick, allow_empty=kind == review.RATED_KIND and (rating is not None or bool(photos)))
         if not v.ok:
             for err in v.errors:
                 st.error(err)
@@ -639,10 +729,7 @@ def confirm_review_delete(entry_id: str, replies: int) -> None:
 def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     head = f"**{_plain(r.get('nickname') or '익명')}**"
     if r.get("kind"):
-        # 다녀온 후기는 종류 배지 옆에 별점 (★★★★☆)
-        rated = review.stars(r.get("rating")) if r.get("kind") == review.RATED_KIND else ""
-        head = (f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] "
-                + (f":orange[{rated}] " if rated else "") + head)
+        head = f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] " + head
     if reply:
         head = ":gray-badge[답글] " + head
     eid = str(r["entry_id"])
@@ -662,9 +749,13 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
                 confirm_review_delete(eid, replies)
     else:
         st.markdown(head + when)
+    # 다녀온 후기 별점: 머리 줄 다음 줄에, 내용보다 위에 크게
+    rated = review.stars(r.get("rating")) if r.get("kind") == review.RATED_KIND else ""
+    if rated and not (mine and st.session_state.get("rv_editing") == eid):
+        st.markdown(f'<div class="rv-stars">{rated}</div>', unsafe_allow_html=True)
     if mine and st.session_state.get("rv_editing") == eid:
         _review_edit_box(r)
-    else:
+    elif str(r.get("body") or "").strip():
         st.markdown(_plain(r.get("body", "")))
     pics = images.paths(r.get("images"))
     if pics:
@@ -704,7 +795,7 @@ def _review_edit_box(r: dict) -> None:
         if not current or not review.can_delete(current, nick):
             st.error("내가 쓴 글만 수정할 수 있어요.")
             return
-        v = review.validate(body, nick)
+        v = review.validate(body, nick, allow_empty=kind == review.RATED_KIND and rating is not None)
         if not v.ok:
             for err in v.errors:
                 st.error(err)
@@ -722,7 +813,85 @@ def _review_edit_box(r: dict) -> None:
         st.rerun()
 
 
+def _review_lightbox() -> None:
+    """리뷰 사진 확대 보기. 바깥 페이지에서 직접 돌아서(eval), 사진을 누르면 새 탭 대신 팝업으로 연다."""
+    components.html(f"<script>window.parent.eval({json.dumps(_REVIEW_LIGHTBOX_JS)});</script>", height=0)
+
+
+_REVIEW_LIGHTBOX_JS = """
+(function () {
+  if (window.__aniLightbox) return;
+  window.__aniLightbox = true;
+  const css = document.createElement('style');
+  css.textContent = `
+    .ani-lb { position: fixed; inset: 0; z-index: 3000; background: rgba(15,20,19,.86); display: flex;
+      align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
+    .ani-lb img { max-width: 92vw; max-height: 86vh; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.45);
+      transform-origin: center center; transition: transform .15s ease; cursor: zoom-in; user-select: none; -webkit-user-drag: none; }
+    .ani-lb.zoomed img { cursor: grab; transition: none; }
+    .ani-lb button { position: absolute; border: 0; cursor: pointer; background: rgba(255,255,255,.95); color: #1F2A27;
+      width: 42px; height: 42px; border-radius: 50%; font-size: 22px; line-height: 42px; text-align: center; padding: 0;
+      box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+    .ani-lb button:hover { background: #fff; color: #0d9488; }
+    .ani-lb .x { top: 18px; right: 18px; font-size: 26px; }
+    .ani-lb .tools { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+    .ani-lb .tools button { position: static; }
+    .ani-lb .prev { left: 18px; top: 50%; transform: translateY(-50%); }
+    .ani-lb .next { right: 18px; top: 50%; transform: translateY(-50%); }
+    .ani-lb .count { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); color: #fff; font-weight: 700;
+      font-size: 14px; background: rgba(0,0,0,.35); padding: 3px 10px; border-radius: 999px; }`;
+  document.head.appendChild(css);
+
+  const open = (urls, start) => {
+    let i = start, scale = 1, tx = 0, ty = 0, drag = null;
+    const box = document.createElement('div'); box.className = 'ani-lb';
+    const img = document.createElement('img'); img.alt = '리뷰 사진';
+    const btn = (cls, text, title) => { const b = document.createElement('button'); b.className = cls; b.textContent = text; b.title = title; return b; };
+    const x = btn('x', '×', '닫기');
+    const tools = document.createElement('div'); tools.className = 'tools';
+    const zin = btn('in', '+', '확대'), zout = btn('out', '−', '축소'), reset = btn('reset', '⟲', '원래 크기');
+    tools.append(zout, reset, zin);
+    const count = document.createElement('div'); count.className = 'count';
+    const prev = btn('prev', '‹', '이전 사진'), next = btn('next', '›', '다음 사진');
+    box.append(img, x, tools);
+    if (urls.length > 1) box.append(prev, next, count);
+    const apply = () => { img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; box.classList.toggle('zoomed', scale > 1); };
+    const zoom = (k) => { scale = Math.min(5, Math.max(1, scale * k)); if (scale === 1) { tx = 0; ty = 0; } apply(); };
+    const show = () => { img.src = urls[i]; scale = 1; tx = 0; ty = 0; apply(); count.textContent = `${i + 1} / ${urls.length}`; };
+    const close = () => { box.remove(); document.removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); if (e.key === 'ArrowLeft') { prev.click(); } if (e.key === 'ArrowRight') { next.click(); } };
+    x.onclick = close;
+    zin.onclick = (e) => { e.stopPropagation(); zoom(1.4); };
+    zout.onclick = (e) => { e.stopPropagation(); zoom(1 / 1.4); };
+    reset.onclick = (e) => { e.stopPropagation(); scale = 1; tx = 0; ty = 0; apply(); };
+    prev.onclick = (e) => { e.stopPropagation(); i = (i - 1 + urls.length) % urls.length; show(); };
+    next.onclick = (e) => { e.stopPropagation(); i = (i + 1) % urls.length; show(); };
+    // 사진 밖(어두운 곳)을 누르면 닫고, 사진을 누르면 확대 ↔ 원래 크기
+    box.onclick = (e) => { if (e.target === box) close(); };
+    img.onclick = (e) => { e.stopPropagation(); if (drag && drag.moved) return; if (scale > 1) { scale = 1; tx = 0; ty = 0; apply(); } else zoom(2); };
+    box.addEventListener('wheel', (e) => { e.preventDefault(); zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+    // 확대했을 때 끌어서 보기 (마우스·손가락)
+    img.addEventListener('pointerdown', (e) => { if (scale <= 1) return; drag = { x: e.clientX - tx, y: e.clientY - ty, moved: false }; img.setPointerCapture(e.pointerId); });
+    img.addEventListener('pointermove', (e) => { if (!drag) return; tx = e.clientX - drag.x; ty = e.clientY - drag.y; drag.moved = true; apply(); });
+    img.addEventListener('pointerup', () => { setTimeout(() => { drag = null; }, 0); });
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(box);
+    show();
+  };
+
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('.rv-pics a');
+    if (!a) return;
+    e.preventDefault();
+    const links = [...a.closest('.rv-pics').querySelectorAll('a')];
+    open(links.map((l) => l.href), links.indexOf(a));
+  }, true);
+})();
+"""
+
+
 def render_reviews(cafe_id: str) -> None:
+    _review_lightbox()      # 리뷰 사진을 누르면 확대 보기 팝업
     # 맨 위 리뷰 쓰기: 닉네임·종류·별점·입력칸·리뷰 등록 버튼을 처음부터 펼쳐 둔다. 그 아래에 리뷰를 보여 준다
     with st.container(border=True, key=f"rvbox_{cafe_id}"):
         _write_box(cafe_id)
@@ -830,7 +999,7 @@ def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]],
         st.caption("아직 이미지가 없어요.")
     if removed:
         note, undo = st.columns([3, 1], vertical_alignment="center")
-        note.caption(f"🗑️ {len(removed)}장 삭제 예정 · **수정 저장**을 눌러야 반영돼요.")
+        note.caption(f":material/delete: {len(removed)}장 삭제 예정 · **수정 저장**을 눌러야 반영돼요.")
         if undo.button("삭제 취소", key=f"img_undo_{k}", width="stretch"):
             removed.clear()
             st.rerun()
@@ -848,7 +1017,7 @@ def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]],
 
     # 포스터는 한 장: 새 포스터로 변경하면 원래 포스터(맨 앞)를 빼고 그 자리에 둔다
     if poster:
-        st.caption("✅ 새 포스터로 변경돼요. **수정 저장**을 눌러야 반영돼요.")
+        st.caption(":material/check_circle: 새 포스터로 변경돼요. **수정 저장**을 눌러야 반영돼요.")
         st.image(poster[1], width=160)
     result = (([poster] + keep[1:]) if poster else keep) + [(f.name, f.getvalue()) for f in extras or []]
     if len(result) - 1 > images.MAX_EXTRAS:
@@ -997,10 +1166,10 @@ def _card_more(r) -> str:
         return f'<div class="m"><b>{icon} {label}</b><span>{escape(v)}</span></div>' if v else ""
     perks = "".join(f"<li>{escape(x)}</li>" for x in _split(r.get("perks") or ""))
     return (
-        line("🎭", "캐릭터", r.get("characters"))
-        + line("📍", "주소", r.get("address"))
-        + (f'<div class="m"><b>🎁 특전</b><ul>{perks}</ul></div>' if perks else "")
-        + (f'<div class="m"><b>🏷️ 이벤트 · 굿즈</b><div class="chips">{_chips(r, full=True)}</div></div>'
+        line(_mi("theater_comedy"), "캐릭터", r.get("characters"))
+        + line(_mi("location_on"), "주소", r.get("address"))
+        + (f'<div class="m"><b>{_mi("redeem")} 특전</b><ul>{perks}</ul></div>' if perks else "")
+        + (f'<div class="m"><b>{_mi("sell")} 이벤트 · 굿즈</b><div class="chips">{_chips(r, full=True)}</div></div>'
            if _chips(r, full=True) else "")
     )
 
@@ -1070,7 +1239,7 @@ def _poster_card(r, label: str) -> str:
   <span class="state">{escape(label)}</span>
   <div class="info">
     <div class="t">{escape(str(r['work']))}</div>
-    <div class="s">☕ {escape(str(r['cafe_name']))}</div>
+    <div class="s">{_mi("local_cafe")}{escape(str(r['cafe_name']))}</div>
     <div class="d"><span class="d-long">{r['start_date']:%m월 %d일} - {r['end_date']:%m월 %d일}</span><span class="d-short">{r['start_date']:%m/%d}-{r['end_date']:%m/%d}</span></div>
     <div class="chips short">{_chips(r)}</div>
     <div class="more">{_card_more(r)}</div>
@@ -1195,26 +1364,26 @@ def render_list(view: pd.DataFrame, wide: bool = False) -> None:
                     # 📍 지역은 시마다 다른 색 (CITY_COLORS). 진행 상태는 아래 작품 이름 오른쪽에
                     badge = _area_badge(r.get("address"))
                     if badge:
-                        st.markdown(badge.replace('">', '">📍 ', 1), unsafe_allow_html=True)
+                        st.markdown(badge.replace('">', '">' + _mi("location_on"), 1), unsafe_allow_html=True)
                     chars = str(r.get("characters") or "").strip()
                     # 포스터 옆: 작품(굵게) · 캐릭터(민트) → 카페 이름(회색) → 날짜 · 위치.
                     # 한 덩어리로 그려 카페 이름과 날짜 사이에 칸 간격(빈 줄)이 생기지 않게 한다
-                    meta = [f"🗓️ {r['start_date']} ~ {r['end_date']}",
-                            f"📍 {escape(str(r['address'] or '-'))}"
+                    meta = [f"{_mi('calendar_month')} {r['start_date']} ~ {r['end_date']}",
+                            f"{_mi('location_on')} {escape(str(r['address'] or '-'))}"
                             + ("" if pd.notna(r["lat"]) else " · 지도 표시 안 됨")]
                     if n_reviews.get(r["entry_id"]):
-                        meta.append(f"💬 리뷰 {n_reviews[r['entry_id']]}")
+                        meta.append(f"{_mi('chat_bubble')} 리뷰 {n_reviews[r['entry_id']]}")
                     st.markdown(
                         f'<p class="ctitle"><strong>{escape(str(r["work"]))}</strong>'
                         + f' <span class="cstate {color}">{escape(label)}</span>'
                         + (f'<br/><span class="cchars">{escape(chars)}</span>' if chars else "")
-                        + f'<br/><span class="ccafe">☕ {escape(str(r["cafe_name"]))}</span></p>'
+                        + f'<br/><span class="ccafe">{_mi("local_cafe")}{escape(str(r["cafe_name"]))}</span></p>'
                         + f'<p class="cmeta">{"<br/>".join(meta)}</p>',
                         unsafe_allow_html=True)
                 # 포스터 아래(카드 전체 폭): 이벤트 정보·굿즈 칩, 그 아래 특전 칩.
                 # 두 줄을 한 묶음(.cbottom)으로 그려, 어느 줄만 있든 카드 아래 테두리와 같은 여백을 둔다
                 chips = _chips(r)
-                gifts = "".join(f'<span class="chip perk">🎁 {escape(x)}</span>'
+                gifts = "".join(f'<span class="chip perk">{_mi("redeem")}{escape(x)}</span>'
                                 for x in _split(r.get("perks") or ""))
                 rows = ((f'<div class="chips below">{chips}</div>' if chips else "")
                         + (f'<div class="chips gifts">{gifts}</div>' if gifts else ""))
@@ -1311,7 +1480,7 @@ LIST_CSS = f"""
 iframe[src*="kakao_map"] {{
   height: max(360px, calc(100vh - {TOPBAR_TOP} - {TOPBAR_H} - 1.75rem)) !important; }}
 /* 필터 판 안의 '팔로우한 곳만' · '지역 고르기' 는 모바일에서만. 모바일에서는 목록 위의 같은 칸을 숨긴다 */
-.st-key-m_only, .st-key-m_sheet_head, .st-key-m_sheet_foot,
+.st-key-m_only, .st-key-m_sheet_head, .st-key-m_sheet_foot, [data-testid="stLayoutWrapper"]:has(> .st-key-m_only),
 [data-testid="stLayoutWrapper"]:has(> .st-key-m_sheet_head), [data-testid="stLayoutWrapper"]:has(> .st-key-m_sheet_foot) {{ display: none !important; }}
 @media (max-width: 640px) {{
   .st-key-m_only {{ display: flex !important; }}
@@ -1447,6 +1616,16 @@ iframe[src*="kakao_map"] {{
   padding: .4rem 0 .2rem; }}
 [class*="_rate_box_"] [data-testid="stElementContainer"] {{ width: 100% !important; display: flex;
   justify-content: center; height: auto !important; }}
+/* 리뷰 카드의 별점 줄 (★ 채움은 노랑, ☆ 빈 칸은 연한 회색으로 보이게 글꼴 크게) */
+/* 반짝이는 효과: 별 위로 밝은 빛줄기가 지나가고(rvShine), 노란 빛이 은은하게 커졌다 작아진다(rvGlow) */
+.rv-stars {{ display: inline-block; font-size: 1.35rem; letter-spacing: 2px; line-height: 1; margin: 2px 0 12px;
+  color: #14b8a6; background: linear-gradient(110deg, #14b8a6 35%, #9FF0E1 48%, #FFFFFF 50%, #9FF0E1 52%, #14b8a6 65%);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: rvShine 2.6s ease-in-out infinite, rvGlow 1.8s ease-in-out infinite alternate; }}
+@keyframes rvShine {{ 0% {{ background-position: 150% 0; }} 60%, 100% {{ background-position: -100% 0; }} }}
+@keyframes rvGlow {{ from {{ filter: drop-shadow(0 0 1px rgba(20,184,166,.4)); }}
+                    to {{ filter: drop-shadow(0 0 7px rgba(20,184,166,.85)); }} }}
+@media (prefers-reduced-motion: reduce) {{ .rv-stars {{ animation: none; }} }}
 /* 리뷰 사진: 내용 아래 작은 정사각 썸네일, 누르면 원본 */
 .rv-pics {{ display:flex; gap:6px; flex-wrap:wrap; margin:-4px 0 6px; }}
 .rv-pics img {{ width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid #E4E8E6; display:block; }}
@@ -1473,7 +1652,7 @@ iframe[src*="kakao_map"] {{
 [class*="_rate_box_"] [data-testid="stFeedbackButtonActive"] img {{ display: none !important; }}
 [class*="_rate_box_"] [data-testid="stFeedbackButtonActive"] > span::before {{ content: "★";
   font-family: "Segoe UI Symbol", "Apple Color Emoji", sans-serif; font-size: 2.6rem; line-height: 1;
-  color: #FFC94D; transition: color .12s; }}
+  color: var(--accent); transition: color .12s; }}
 /* 고른 상태에서 더 앞의 별에 커서를 올리면, 그 뒤의 고른 별은 회색으로 미리 보여 준다 */
 [class*="_rate_box_"] [role="radiogroup"]:hover [data-testid^="stFeedbackButton"]:hover
   ~ [data-testid="stFeedbackButtonActive"] > span::before {{ color: #CDD3DE; }}
@@ -1485,7 +1664,7 @@ iframe[src*="kakao_map"] {{
 [class*="_rate_box_"] [data-testid="stFeedbackButton"][aria-checked="true"] [data-testid="stIconMaterial"],
 [class*="_rate_box_"] [data-testid="stFeedbackButton"]:has(~ [aria-checked="true"]) [data-testid="stIconMaterial"],
 [class*="_rate_box_"] [role="radiogroup"]:hover [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"] {{
-  color: #FFC94D !important; }}
+  color: var(--accent) !important; }}
 [class*="_rate_box_"] [role="radiogroup"]:hover [data-testid="stFeedbackButton"]:hover ~ [data-testid="stFeedbackButton"]
   [data-testid="stIconMaterial"] {{ color: #CDD3DE !important; }}
 /* 지도보기 카드의 📍 지역 배지 (색은 시마다 다르게 글자에 직접 넣는다) — 옆의 상태 배지와 같은 크기 */
@@ -1753,8 +1932,10 @@ _PIN_ICON_JS = """
     if (!r.width) return;                       // 상세 화면처럼 숨어 있으면 그대로
     const mobile = window.innerWidth <= 640;
     const bar = document.querySelector('.st-key-topbar');
-    const limit = mobile ? 10 : (bar ? Math.max(bar.getBoundingClientRect().bottom, 0) + 10 : 10);
-    if (r.top < limit) {
+    // 원래 자리가 위에 붙은 상단 묶음(PC) / 화면 맨 위(모바일) 밑으로 들어가기 시작하면 붙이고, 붙일 때는 조금 띄운다
+    const edge = mobile ? 0 : (bar ? Math.max(bar.getBoundingClientRect().bottom, 0) : 0);
+    const limit = edge + 10;
+    if (r.top < edge) {
       btn.style.position = 'fixed';
       btn.style.top = limit + 'px';
       btn.style.width = 'auto';
@@ -1778,10 +1959,11 @@ _LIVE_SEND_JS = """
 (function () {
   if (window.__aniLiveSend) return;
   window.__aniLiveSend = true;
-  // 입력칸에 한 글자라도 있으면 버튼을 켜고, 비면 끈다 (칸을 벗어나지 않아도 바로)
-  const toggle = (b, ta) => {
+  // 입력칸에 한 글자라도 있으면 버튼을 켜고, 비면 끈다 (칸을 벗어나지 않아도 바로).
+  // 다녀온 후기는 별점을 골랐으면 내용이 비어도 켠다 (rated)
+  const toggle = (b, ta, rated) => {
     if (!b || !ta) return;
-    if (!ta.value.trim()) { if (!b.disabled) { b.disabled = true; b.dataset.aniEmpty = '1'; } }
+    if (!ta.value.trim() && !rated) { if (!b.disabled) { b.disabled = true; b.dataset.aniEmpty = '1'; } }
     else if (b.dataset.aniEmpty) { b.disabled = false; delete b.dataset.aniEmpty; }
   };
   const sync = () => {
@@ -1789,7 +1971,13 @@ _LIVE_SEND_JS = """
     document.querySelectorAll('[class*="st-key-rv_"][class*="_send_"] button').forEach((b) => {
       const box = b.closest('[class*="_send_"]');
       const cls = [...box.classList].find((c) => c.startsWith('st-key-rv_') && c.includes('_send_'));
-      toggle(b, cls && document.querySelector('.' + CSS.escape(cls.replace('_send_', '_body_')) + ' textarea'));
+      // 다녀온 후기: 별점을 골랐거나 사진을 올렸으면 내용이 비어도 켠다 (사진 칸은 다녀온 후기일 때 별점 칸과 함께 있다)
+      const rateBox = cls && document.querySelector('.' + CSS.escape(cls.replace('_send_', '_rate_box_')));
+      const rated = rateBox && (rateBox.querySelector('[data-testid="stFeedbackButtonActive"]')
+        || document.querySelector('.' + CSS.escape(cls.replace('_send_', '_img_'))
+                                  + ' [data-testid="stFileChip"], .' + CSS.escape(cls.replace('_send_', '_img_'))
+                                  + ' [data-testid="stFileUploaderFile"]'));
+      toggle(b, cls && document.querySelector('.' + CSS.escape(cls.replace('_send_', '_body_')) + ' textarea'), !!rated);
     });
     // 공지로 간편등록: 공지 입력칸 ↔ 읽어오기 버튼
     toggle(document.querySelector('.st-key-quick_read button'),
@@ -1977,7 +2165,7 @@ def page_map() -> None:
     # Notion 트래커 DB 에 새로 쌓인 행사를 가져온다 (NOTION_TOKEN 이 있을 때, 최대 1시간에 한 번)
     synced = notion_sync.maybe_sync(store, TODAY)
     if synced and synced.get("added"):
-        st.toast(f"노션에서 {len(synced['added'])}곳을 새로 가져왔어요 🎀")
+        _toast(f"노션에서 {len(synced['added'])}곳을 새로 가져왔어요", ":material/cloud_download:")
     # 기간이 지난 카페는 자동으로 지도에서 내린다 (기록은 남아서 수정 이력에서 되돌릴 수 있다)
     cafe.expire_ended(store, TODAY)    # 조용히 처리한다 (안내는 띄우지 않는다)
     rows = store.current_rows()
@@ -2022,7 +2210,9 @@ def page_map() -> None:
         _scroll_top()
     flash = st.session_state.pop("flash", None)
     if flash:
-        st.toast(flash)
+        # ('문구', 아이콘) 이면 아이콘과 함께, 글자만이면 기본 체크 아이콘
+        msg, icon = flash if isinstance(flash, tuple) else (flash, ":material/check_circle:")
+        _toast(msg, icon)
 
     df = cafe.rows_to_frame(rows)
 
@@ -2100,7 +2290,7 @@ def page_map() -> None:
     ss["regions_m"] = [r for r in ss.get("regions", []) if r in areas]
     with fbox, st.container(key="m_only"):
         _follow_switch("folswm")
-        st.multiselect("지역", areas, key="regions_m", placeholder="📍 지역 고르기 (여러 곳 가능)",
+        st.multiselect("지역", areas, key="regions_m", placeholder="지역 고르기 (여러 곳 가능)",
                        on_change=lambda: ss.update(regions=ss["regions_m"]))
 
     view = df.copy()
@@ -2162,7 +2352,7 @@ def page_map() -> None:
     with region:
         # 지금 등록된 카페가 있는 지역만, 카드 배지와 같은 이름으로. 여러 곳을 함께 고를 수 있다
         st.multiselect("지역", areas, key="regions", label_visibility="collapsed",
-                       placeholder="📍 지역 고르기 (여러 곳 가능)")
+                       placeholder="지역 고르기 (여러 곳 가능)")
     with sort:
         _view_icon_button(wide, active, m_open)
         st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
@@ -2409,12 +2599,12 @@ _DAILY_PEEK_JS = """
 # 한 화면에 한 단계씩 묻는다. 진행 막대 + 가운데 카드 하나.
 # 마지막 '등록 확인' 단계에서 앞에서 넣은 정보를 한눈에 보여 주고 등록한다.
 STEPS = [
-    ("작품 · 캐릭터", "🎬"),
-    ("카페 정보", "☕"),
-    ("이미지", "🖼️"),
-    ("기간", "📅"),
-    ("특전 · 굿즈", "🎁"),
-    ("등록 확인", "✅"),
+    ("작품 · 캐릭터", "movie"),
+    ("카페 정보", "local_cafe"),
+    ("이미지", "image"),
+    ("기간", "calendar_month"),
+    ("특전 · 굿즈", "redeem"),
+    ("등록 확인", "task_alt"),
 ]
 ACCENT = MINT
 
@@ -2507,7 +2697,7 @@ def _step_work(w: dict) -> None:
     # 공지 글이 이미 있으면 단계를 밟지 않고 한 화면에서 바로 등록한다
     st.divider()
     st.caption("공지 글이 있나요? 붙여넣기만 하면 한 화면에서 바로 등록할 수 있어요.")
-    if st.button("📝 공지로 간편등록", width="stretch", key="quick_start"):
+    if st.button("공지로 간편등록", icon=":material/edit_note:", width="stretch", key="quick_start"):
         w["quick"] = True
         st.rerun()
 
@@ -2608,7 +2798,7 @@ def _quick(w: dict) -> None:
                     key=f"quick_tags_{v_}")
     links, bad_links = _links_field("\n".join(w["links"]), key=f"quick_links_{v_}")
     # 이미지: 단계별 등록과 같은 구성 (메인 이미지 1장 + 추가 이미지). 없어도 등록할 수 있다
-    st.markdown("**🖼️ 메인 이미지 (포스터)** :gray[(1장만)]")
+    st.markdown(":material/image: **메인 이미지 (포스터)** :gray[(1장만)]")
     poster = st.file_uploader(f"메인 이미지 (1장, ~ {images.POSTER_MB} MB)", type=images.TYPES,
                               key=f"quick_poster_{v_}", label_visibility="collapsed")
     if poster:
@@ -2682,7 +2872,7 @@ def _ask(label: str) -> str:
 
 def _links_field(value: str, key: str) -> tuple[list[str], bool]:
     """참고 웹사이트 입력칸 (한 줄에 하나). (주소들, 잘못된 값이 있는지) 를 돌려준다."""
-    text = st.text_area("🔗 참고 웹사이트", value=value, key=key, height=90,
+    text = st.text_area(":material/link: 참고 웹사이트", value=value, key=key, height=90,
                         placeholder="https://x.com/... (공지 트윗·인스타·공식 사이트, 한 줄에 하나)",
                         help=f"http:// 또는 https:// 로 시작하는 주소를 최대 {cafe.MAX_LINKS}개까지")
     links, bad = cafe.parse_links(text)
@@ -2723,7 +2913,7 @@ def _step_cafe(w: dict) -> None:
         if not g.ok:
             st.session_state["wiz_err"] = g.note
             return False
-        st.session_state["wiz_note"] = f"📍 {g.badge} ({g.matched})"
+        st.session_state["wiz_note"] = f":material/location_on: {g.badge} ({g.matched})"
 
     bad = _block_sensitive(name, addr)
     _nav(next_ok=bool(name.strip() and addr.strip()) and not bad, on_next=save)
@@ -2920,7 +3110,7 @@ def page_add() -> None:
         with st.container(border=True):
             st.markdown(f'<div class="wiz-title">{title}</div>', unsafe_allow_html=True)
             if step in (0, len(STEPS) - 1):
-                st.markdown(f'<div class="wiz-icon">{icon}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="wiz-icon">{_mi(icon)}</div>', unsafe_allow_html=True)
             err = st.session_state.pop("wiz_err", None)
             if err:
                 st.error(err)
@@ -2949,6 +3139,8 @@ CAL_CSS = f"""
   border-radius:8px; background:#26302D; color:#fff; font-size:.74rem; font-weight:500; line-height:1.45;
   letter-spacing:0; white-space:normal; word-break:keep-all; box-shadow:0 4px 12px rgba(0,0,0,.18); }}
 .cal-help:hover .cal-tip, .cal-help:focus .cal-tip {{ display:block; }}
+.cal-label {{ font-weight:800; font-size:.9rem; color:var(--accent-deep); background:var(--accent-soft);
+  border-radius:999px; padding:.15rem .6rem; margin-right:8px; vertical-align:4px; white-space:nowrap; }}
 .cal-month {{ font-weight:900; font-size:1.6rem; color:#111; letter-spacing:-.01em; white-space:nowrap; }}
 .st-key-cal_prev button, .st-key-cal_next button {{ min-height:0 !important; height:40px; width:40px; padding:0 !important; }}
 .st-key-cal_prev button p, .st-key-cal_next button p {{ font-size:1.6rem !important; line-height:1 !important;
@@ -3004,7 +3196,9 @@ CAL_CSS = f"""
 .cal-empty {{ color:#6B7672; font-size:.76rem; background:#F4F6F5; border-radius:8px; padding:6px 10px; margin-bottom:8px; }}
 .up-empty {{ color:#6B7672; font-size:.76rem; padding:12px; border:1px dashed #D5DBD9; border-radius:10px; text-align:center; }}
 /* 지도 옆 작은 캘린더 */
-.st-key-map_cal .cal-month {{ font-size:1.15rem; }}
+.st-key-map_cal .cal-month {{ font-size:1.1rem; }}
+.st-key-map_cal .cal-label {{ font-size:.74rem; padding:.12rem .5rem; margin-right:6px; vertical-align:3px; }}
+.st-key-cal_nav [data-testid="stMarkdownContainer"] p {{ white-space: nowrap; }}
 .st-key-map_cal .st-key-cal_nav {{ margin:0 0 6px; gap:2px !important; }}
 .st-key-map_cal .st-key-cal_prev button, .st-key-map_cal .st-key-cal_next button {{ height:28px; width:26px; }}
 .st-key-map_cal .st-key-cal_prev button p, .st-key-map_cal .st-key-cal_next button p {{ font-size:1.2rem !important; }}
@@ -3109,7 +3303,7 @@ def render_calendar(compact: bool = False) -> None:
     year, month = st.session_state.get("cal_month") or (TODAY.year, TODAY.month)
     # 머리글 한 줄: '2026년 10월'  ‹  ›  [오늘]
     with st.container(horizontal=True, vertical_alignment="center", key="cal_nav"):
-        st.markdown(f'<span class="cal-month">{year}년 {month}월</span>'
+        st.markdown(f'<span class="cal-label">내 캘린더</span><span class="cal-month">{year}년 {month}월</span>'
                     '<span class="cal-help" tabindex="0">?<span class="cal-tip">내가 북마크한 팝업만 달력에 보여요. '
                     '리스트나 상세의 북마크 아이콘을 누르면 여기에 추가돼요.</span></span>', unsafe_allow_html=True)
         st.button("‹", key="cal_prev", type="tertiary", on_click=_cal_shift, args=(-1,), help="이전 달")
@@ -3126,8 +3320,8 @@ def render_calendar(compact: bool = False) -> None:
 
 # 지도와 등록은 주소가 다른 별개 페이지다 (/, /add). 메뉴는 숨기고 버튼으로만 오간다.
 PAGES = {
-    "map": st.Page(page_map, title="ANI:WHERE", icon="🗺️", url_path="map", default=True),
-    "add": st.Page(page_add, title="팝업 카페 등록하기 · ANI:WHERE", icon="➕", url_path="add"),
-    "calendar": st.Page(page_calendar, title="내 캘린더 · ANI:WHERE", icon="📅", url_path="calendar"),
+    "map": st.Page(page_map, title="ANI:WHERE", icon=":material/map:", url_path="map", default=True),
+    "add": st.Page(page_add, title="팝업 카페 등록하기 · ANI:WHERE", icon=":material/add:", url_path="add"),
+    "calendar": st.Page(page_calendar, title="내 캘린더 · ANI:WHERE", icon=":material/calendar_month:", url_path="calendar"),
 }
 st.navigation(list(PAGES.values()), position="hidden").run()

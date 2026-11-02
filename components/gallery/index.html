@@ -68,7 +68,7 @@ function render() {
   const many = urls.length > 1;
   stage.innerHTML =
     `<div class="track">${urls.map((u) => `<div class="slide"><img src="${abs(u)}" alt=""/></div>`).join("")}</div>` +
-    `<span class="zoomhint">🔍 눌러서 크게 보기</span>` +
+    `<span class="zoomhint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="vertical-align:-1px;margin-right:3px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>눌러서 크게 보기</span>` +
     (many ? `<span class="count"></span>
              <button class="nav prev" aria-label="이전 이미지">‹</button>
              <button class="nav next" aria-label="다음 이미지">›</button>

@@ -52,9 +52,10 @@ def nickname_for(ip: str | None) -> str:
     return f"{_ADJ[int(h[0:4], 16) % len(_ADJ)]} {_NOUN[int(h[4:8], 16) % len(_NOUN)]}#{h[8:12]}"
 
 
-def validate(body: str, nickname: str = "") -> Validation:
+def validate(body: str, nickname: str = "", allow_empty: bool = False) -> Validation:
+    """allow_empty: 다녀온 후기에 별점을 골랐으면 내용 없이도 등록할 수 있다."""
     v = Validation(ok=True)
-    if not body.strip():
+    if not body.strip() and not allow_empty:
         v.fail("내용을 입력해 주세요.")
     if len(body) > MAX_BODY:
         v.fail(f"내용은 {MAX_BODY}자까지 쓸 수 있습니다.")
