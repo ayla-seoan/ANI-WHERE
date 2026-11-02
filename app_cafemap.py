@@ -1073,7 +1073,7 @@ def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]],
 
 
 def _clear_buttons() -> None:
-    """수정하기·등록하기 글자 입력칸 오른쪽 안에 × 를 붙여, 누르면 내용을 한 번에 비운다 (내용이 있을 때만 보임)."""
+    """메인 검색칸·수정하기·등록하기 글자 입력칸 오른쪽 안에 × 를 붙여, 누르면 내용을 한 번에 비운다 (내용이 있을 때만 보임)."""
     components.html(f"<script>window.parent.eval({json.dumps(_CLEAR_JS)});</script>", height=0)
 
 
@@ -1082,7 +1082,8 @@ _CLEAR_JS = """
   if (window.__aniClear) return;
   window.__aniClear = true;
   // 위젯 키로 고른다. 수정하기: 카페명·주소·특전·굿즈·참고 웹사이트 / 등록하기: 단계별(cafe_·wiz_ 주소)·간편등록(quick_)
-  const SEL = ['name_', 'edit_', 'perks_', 'goods_', 'links_', 'cafe_', 'wiz_', 'quick_']
+  // 메인: 상단 검색칸(f_query) — 지우면 바로 검색 결과에 반영(입력칸을 벗어나 값을 확정)한다
+  const SEL = ['name_', 'edit_', 'perks_', 'goods_', 'links_', 'cafe_', 'wiz_', 'quick_', 'f_query']
     .map((k) => `[class*="st-key-${k}"] input[type="text"], [class*="st-key-${k}"] textarea`).join(', ');
   const css = document.createElement('style');
   css.textContent = `
@@ -1113,10 +1114,16 @@ _CLEAR_JS = """
     const sync = () => b.classList.toggle('on', !!el.value);
     // 누르는 순간 입력칸이 포커스를 잃지 않게(mousedown 막기) 하고, 비운 뒤 바로 다시 입력할 수 있게 포커스를 둔다
     b.addEventListener('mousedown', (e) => e.preventDefault());
-    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); setValue(el, ''); el.focus(); sync(); });
+    const commit = !!el.closest('.st-key-f_query');
+    b.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation(); setValue(el, ''); sync();
+      if (commit) { el.focus(); el.blur(); } else el.focus();
+    });
     el.addEventListener('input', sync);
     box.appendChild(b);
     sync();
+    // 초기화 버튼 등으로 값이 바뀌어도 × 가 맞게 보이도록 가끔 다시 확인
+    setInterval(sync, 700);
   };
   const scan = () => document.querySelectorAll(SEL).forEach(attach);
   new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
@@ -1168,8 +1175,12 @@ def render_edit(current: dict) -> None:
     new_images, img_errors = _edit_images(current, k)
     _clear_buttons()
     bad = _block_sensitive(new_name, new_addr, new_perks, new_goods)
-    submitted = st.button("수정 저장", type="primary", width="stretch", key=f"save_{k}",
-                          disabled=bad or bool(img_errors) or bad_links)
+    # 수정 저장 · 지도에서 내리기를 한 줄에 (가로 묶음이라 모바일에서도 세로로 쌓이지 않는다)
+    with st.container(horizontal=True, key=f"edit_btns_{k}"):
+        submitted = st.button("수정 저장", type="primary", width="stretch", key=f"save_{k}",
+                              disabled=bad or bool(img_errors) or bad_links)
+        if st.button("지도에서 내리기", width="stretch", key=f"delete_{k}"):
+            confirm_delete(entry_id)
 
     if submitted:
         entry = CafeEntry(
@@ -1194,9 +1205,6 @@ def render_edit(current: dict) -> None:
             st.rerun()
         for err in v.errors:
             st.error(err)
-
-    if st.button("지도에서 내리기", width="stretch", key=f"delete_{k}"):
-        confirm_delete(entry_id)
 
     with st.expander("수정 이력"):
         history = [r for r in store.all_rows() if str(r["entry_id"]) == entry_id]
@@ -2343,6 +2351,7 @@ def page_map() -> None:
     st.markdown(GLOBAL_CSS + LIST_CSS, unsafe_allow_html=True)
     _no_translate()
     _history_guard(on_main=True)
+    _clear_buttons()    # 상단 검색칸 오른쪽 × 로 검색어 한 번에 지우기
     _keep_scroll()
     _pin_view_icon()
     _live_send()
