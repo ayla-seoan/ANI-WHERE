@@ -592,8 +592,10 @@ def _detail_info_html(current: dict) -> str:
     src = str(current.get("intro_src") or "").strip()
     src_btn = (f'<a class="dsrc" href="{escape(src)}" target="_blank" rel="noopener">'
                f'{_mi("open_in_new")}출처 보기</a>' if src.startswith(("http://", "https://")) else "")
-    intro_html = (f'<div class="dsec"><div class="dsec-head"><div class="dsec-title">팝업 소개</div>{src_btn}</div>'
-                  f'<div class="dintro">{_intro_body(intro)}</div></div>' if intro else "")
+    # 출처 보기는 소개 상자 안 오른쪽 맨 아래
+    src_foot = f'<div class="dintro-foot">{src_btn}</div>' if src_btn else ""
+    intro_html = (f'<div class="dsec"><div class="dsec-title">팝업 소개</div>'
+                  f'<div class="dintro">{_intro_body(intro)}{src_foot}</div></div>' if intro else "")
     return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
 
 
@@ -1982,8 +1984,7 @@ iframe[src*="kakao_map"] {{
 .dband {{ height:0; margin:0 0 22px; }}
 /* 혜택 · 참고 웹사이트 묶음: 굵은 제목, 검은 알약 라벨, 연회색 상자 목록 */
 .dsec {{ margin-bottom:18px; }}
-.dsec-head {{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 10px; }}
-.dsec-head .dsec-title {{ margin:0; }}
+.dintro-foot {{ display:flex; justify-content:flex-end; margin-top:10px; }}
 .dsrc {{ flex:0 0 auto; display:inline-flex; align-items:center; gap:2px; height:30px; padding:0 12px; border-radius:999px;
   border:1.5px solid var(--accent); color:var(--accent-deep) !important; background:#fff; font-size:.82rem; font-weight:700;
   text-decoration:none !important; }}
