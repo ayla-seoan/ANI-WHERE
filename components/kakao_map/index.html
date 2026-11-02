@@ -64,6 +64,19 @@
   #spot .w { font-weight: 800; font-size: 13.5px; color: #0d9488; margin-bottom: 2px; }
   #spot .c { font-weight: 600; margin-bottom: 3px; }
   #spot .a { color: #5f6b67; font-size: 11.5px; }
+  /* 지도 칸이 좁을 때(모바일에서 데일리 팝업 노트 옆): 목록 창이 지도 안에 다 들어오게 작게 */
+  @media (max-width: 320px) {
+    #spot { left: 6px; top: 6px; width: calc(100% - 12px); max-height: calc(100% - 12px); padding: 6px; border-radius: 10px; }
+    #spot .head { font-size: 10.5px; margin: 0 0 4px; }
+    #spot .x { width: 18px; height: 18px; font-size: 11px; }
+    #spot .item { gap: 6px; padding: 3px; }
+    #spot .item + .item { padding-top: 6px; }
+    #spot img { width: 38px; height: 52px; border-radius: 6px; }
+    #spot .w { font-size: 11.5px; margin-bottom: 1px; }
+    #spot .c { font-size: 10.5px; margin-bottom: 1px; }
+    #spot .a, #spot .d { font-size: 9.5px; }
+    #spot .a { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  }
   #spot .go { margin-left: auto; color: var(--accent); font-size: 18px; }
   .leaflet-tooltip.tip-l { background: transparent; border: 0; box-shadow: none; padding: 0; }
   .leaflet-tooltip.tip-l::before { display: none; }

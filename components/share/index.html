@@ -20,6 +20,8 @@
   #panel.open { display: flex; }
   .msg { font-size: 12.5px; color: #2E9C82; min-height: 0; margin-top: 4px; text-align: right; }
   .msg:empty { display: none; }
+  /* 모바일에서 작품 이름 위에 겹쳐 펼칠 때: 뒤의 글자가 비치지 않게 흰 바탕 */
+  body.overlay .row { background: #fff; border-radius: 10px; }
 </style>
 </head>
 <body>
@@ -61,8 +63,23 @@ send("streamlit:setFrameHeight", { height: 40 });   // 버튼 높이 40 과 똑�
 // 이 iframe 은 같은 주소라 바깥 페이지의 칸(stColumn) 폭을 직접 바꿀 수 있다
 function widenColumn(open) {
   try {
-    const col = window.frameElement && window.frameElement.closest('[data-testid="stColumn"]');
+    const f = window.frameElement;
+    const col = f && f.closest('[data-testid="stColumn"]');
     if (!col) return;
+    // 모바일(좁은 화면)에서는 칸을 넓히면 작품 이름이 밀려나서, 칸은 그대로 두고
+    // 공유 버튼 줄(iframe)만 작품 이름 위에 겹쳐 왼쪽으로 펼친다
+    if (window.parent.innerWidth <= 640) {
+      col.style.setProperty("position", "relative", "important");
+      col.style.setProperty("overflow", "visible", "important");
+      const set = (k, v) => v ? f.style.setProperty(k, v, "important") : f.style.removeProperty(k);
+      // 자리는 그대로(40px) 두고 왼쪽으로만 넓힌다 — 줄 높이·위치가 흔들리지 않게
+      set("position", open ? "relative" : "");
+      set("width", open ? "184px" : "");
+      set("margin-left", open ? "-144px" : "");
+      set("z-index", open ? "20" : "");
+      document.body.classList.toggle("overlay", open);
+      return;
+    }
     const w = open ? "184px" : "40px";
     col.style.setProperty("flex", `0 0 ${w}`, "important");
     col.style.setProperty("width", w, "important");

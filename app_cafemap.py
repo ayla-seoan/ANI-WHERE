@@ -114,15 +114,15 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .st-key-add_btn button:hover, .st-key-back_to_list button:hover, .st-key-wiz_home button:hover {{ background: var(--accent-deep) !important; transform: translateY(-1px); }}
 /* 메인 '등록하기': 위쪽이 아니라 화면 오른쪽 아래에 떠 있는 버튼. 포인트(민트)와 구분되게 코랄 색 */
 .st-key-add_btn {{ position: fixed !important; right: 28px; bottom: 28px; z-index: 1001; width: auto !important; }}
-.st-key-add_btn button {{ background: #FF6B6B !important; height: 50px !important; padding: 0 1.4rem !important;
-  border-radius: 999px !important; box-shadow: 0 8px 22px rgba(255,107,107,.45) !important; }}
-.st-key-add_btn button p {{ font-size: 1rem !important; }}
+.st-key-add_btn button {{ background: #FF6B6B !important; width: 56px !important; height: 56px !important; padding: 0 !important;
+  border-radius: 50% !important; box-shadow: 0 8px 22px rgba(255,107,107,.45) !important; }}
+.st-key-add_btn button p {{ font-size: 2rem !important; font-weight: 500 !important; line-height: 1 !important; margin-top: -3px !important; }}
 .st-key-add_btn button:hover {{ background: #F25454 !important; }}
 @media (max-width: 640px) {{
   /* 모바일: 아래 가운데 '필터 / 지도보기' 버튼 위로 비켜 둔다 */
   .st-key-add_btn {{ right: 16px; bottom: 76px; }}
-  .st-key-add_btn button {{ height: 44px !important; padding: 0 1.1rem !important; }}
-  .st-key-add_btn button p {{ font-size: .92rem !important; }}
+  .st-key-add_btn button {{ width: 50px !important; height: 50px !important; }}
+  .st-key-add_btn button p {{ font-size: 1.8rem !important; }}
 }}
 /* '팔로우' 스위치 (팔로우한 곳만 보기). 키에 'fav_' 를 쓰지 않는다 — 카드 팔로우 버튼 규칙([class*="st-key-fav_"])에 걸리지 않게 */
 [class*="st-key-folsw"] button {{ position: relative; min-height: 0 !important; height: 24px; min-width: 70px;
@@ -205,11 +205,14 @@ def _heart(cafe_id: str, where: str, label_count: bool = False) -> None:
     on = str(cafe_id) in mine
     n = counts.get(str(cafe_id), 0)
     label = ("팔로잉" if on else "팔로우") + (f" {n}" if label_count else "")
-    if st.button(label, key=f"fav_{'on' if on else 'off'}_{where}_{cafe_id}",
-                 help="팔로우 취소" if on else "팔로우"):
-        favorite.toggle(favs, str(cafe_id), me, not on)
-        st.session_state.pop("_fav_cache", None)
-        st.rerun()
+    # 누른 순간 콜백에서 저장하고 한 번만 다시 그린다 (st.rerun 으로 두 번 그리면 화면이 버벅이며 위로 튀었다)
+    st.button(label, key=f"fav_{'on' if on else 'off'}_{where}_{cafe_id}",
+              on_click=_toggle_fav, args=(str(cafe_id), me, not on))
+
+
+def _toggle_fav(cafe_id: str, me: str, on: bool) -> None:
+    favorite.toggle(favs, cafe_id, me, on)
+    st.session_state.pop("_fav_cache", None)
 # 왼쪽 사이드바는 쓰지 않는다 (저장소 상태 안내도 화면에 띄우지 않는다)
 
 
@@ -498,6 +501,27 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
         "다녀온 후기나 기대하는 점을 남겨 주세요 (대기 시간, 특전 소진 여부 등)",
     )
     bad = _block_sensitive(body)
+    # 사진 첨부 (선택, 원글만 — 답글 칸은 가볍게 둔다). 처음엔 작은 '사진 첨부' 버튼만, 누르면 올리는 칸이 열린다.
+    # 저장은 등록을 누를 때 한다
+    photos = []
+    if not parent_id:
+        open_key = f"{slot}_pic_open_{n}"
+        opened = st.session_state.get(open_key, False)
+        # 열고 나면 버튼은 감추고 올리는 칸만 둔다
+        if not opened:
+            st.button("+ 사진 첨부", key=f"{slot}_pic_btn_{n}", type="tertiary",
+                      on_click=lambda: st.session_state.update({open_key: True}))
+        else:
+            photos = list(st.file_uploader(
+                f"최대 {review.MAX_IMAGES}장 · 한 장 {review.IMAGE_MB}MB", type=images.TYPES,
+                accept_multiple_files=True, key=f"{slot}_img_{n}") or [])
+    if len(photos) > review.MAX_IMAGES:
+        st.caption(f":red[사진은 {review.MAX_IMAGES}장까지 올릴 수 있어요. 앞의 {review.MAX_IMAGES}장만 올라갑니다.]")
+        photos = photos[:review.MAX_IMAGES]
+    heavy = [p.name for p in photos if images.too_big(p.getvalue(), review.IMAGE_MB)]
+    if heavy:
+        st.caption(f":red[{review.IMAGE_MB}MB 를 넘는 사진은 올릴 수 없어요: {', '.join(heavy)}]")
+        bad = True
 
     c1, c2 = st.columns(2) if parent_id else (st.container(), None)
     with c1:
@@ -519,7 +543,12 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
             for err in v.errors:
                 st.error(err)
             return
-        reviews.append(review.to_row(cafe_id, body, nick, kind or "", parent_id, rating=rating))
+        try:
+            saved = [images.save(p.name, p.getvalue()) for p in photos]
+        except ValueError as err:
+            st.error(str(err))
+            return
+        reviews.append(review.to_row(cafe_id, body, nick, kind or "", parent_id, rating=rating, images=saved))
         st.session_state[f"{slot}_n"] = n + 1
         st.session_state["flash"] = "답글을 남겼습니다." if parent_id else "리뷰를 남겼습니다."
         st.rerun()
@@ -577,6 +606,11 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
         _review_edit_box(r)
     else:
         st.markdown(_plain(r.get("body", "")))
+    pics = images.paths(r.get("images"))
+    if pics:
+        st.markdown('<div class="rv-pics">' + "".join(
+            f'<a href="{images.url(p)}" target="_blank" rel="noopener"><img src="{images.url(p)}" alt="리뷰 사진"/></a>'
+            for p in pics) + "</div>", unsafe_allow_html=True)
 
 
 def _review_edit_box(r: dict) -> None:
@@ -977,7 +1011,7 @@ def _poster_card(r, label: str) -> str:
   <div class="info">
     <div class="t">{escape(str(r['work']))}</div>
     <div class="s">☕ {escape(str(r['cafe_name']))}</div>
-    <div class="d">{r['start_date']:%m월 %d일} - {r['end_date']:%m월 %d일}</div>
+    <div class="d"><span class="d-long">{r['start_date']:%m월 %d일} - {r['end_date']:%m월 %d일}</span><span class="d-short">{r['start_date']:%m/%d}-{r['end_date']:%m/%d}</span></div>
     <div class="chips short">{_chips(r)}</div>
     <div class="more">{_card_more(r)}</div>
   </div>
@@ -1151,6 +1185,11 @@ LIST_CSS = f"""
 [class*="st-key-fav_on_"] button p {{ color:#fff !important; }}
 [class*="st-key-fav_off_"] button:hover {{ background:#D5DBD9 !important; }}
 [class*="st-key-fav_on_"] button:hover {{ background:var(--accent-deep) !important; }}
+/* 리스트 카드의 팔로우는 스위치가 아니라 그냥 버튼: 회색 바탕 '팔로우' → 누르면 포인트 색 '팔로잉' */
+[class*="st-key-card_"] [class*="st-key-fav_"] button {{ height:26px; padding:0 12px !important; min-width:0; border-radius:8px !important; }}
+[class*="st-key-card_"] [class*="st-key-fav_"] button::before {{ display:none; }}
+[class*="st-key-card_"] [class*="st-key-fav_on_"] button {{ padding:0 12px !important; }}
+[class*="st-key-card_"] [class*="st-key-fav_"] button p {{ font-size:.75rem !important; }}
 /* 카드 테두리: 회색 대신 포인트(민트)보다 살짝 밝은 민트. 커서를 올리면 아래 :hover 처럼 연한 민트 바탕 + 진한 테두리 */
 [class*="st-key-card_s_"] {{ border: 2.5px solid {MINT_LINE} !important; transition:transform .18s ease,
   background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }}
@@ -1262,17 +1301,25 @@ iframe[src*="kakao_map"] {{
   .st-key-wide_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] {{
     display: contents !important; }}
   .st-key-wide_grid .pcard {{ border-radius: 12px; margin-bottom: 0; }}
-  .st-key-wide_grid .pcard .info {{ height: 84px; padding: 8px 9px; }}
+  .st-key-wide_grid .pcard .info {{ height: 90px; padding: 8px 9px 14px 11px; }}   /* 아래·왼쪽 여백을 조금 더 */
   .st-key-wide_grid .pcard .t {{ font-size: 14.5px; }}
   .st-key-wide_grid .pcard .s {{ font-size: 11.5px; }}
-  .st-key-wide_grid .pcard .d {{ font-size: 12px; margin: 2px 0 0; }}
+  .st-key-wide_grid .pcard .d {{ font-size: 12px; margin: 2px 0 0; white-space: nowrap; }}
+  .st-key-wide_grid .pcard .d-long {{ display: none; }}
+  [class*="st-key-card_w_"]:hover .st-key-wide_grid .pcard .info, .st-key-wide_grid [class*="st-key-card_w_"]:hover .pcard .info {{ padding-top: 30px; }}
+  .st-key-wide_grid [class*="st-key-card_w_"]:hover .pcard .t {{ font-size: 13px; }}
+  .st-key-wide_grid .pcard .more .m {{ font-size: 10.5px; line-height: 1.4; margin: 0 0 5px; }}
+  .st-key-wide_grid .pcard .more .m b {{ font-size: 10px; margin-bottom: 1px; }}
+  .st-key-wide_grid .pcard .more ul {{ padding-left: .9em; }}
+  .st-key-wide_grid .pcard .more .chip {{ font-size: 9.5px; padding: 1px 6px; }}
+  .st-key-wide_grid .pcard .d-short {{ display: inline; }}
   .st-key-wide_grid .pcard .chips {{ display: none; }}
   .st-key-wide_grid .pcard .area {{ top: 6px; left: 6px; font-size: 10.5px; padding: 2px 6px; }}
   .st-key-wide_grid .pcard .state {{ top: 6px; right: 6px; font-size: 10.5px; padding: 2px 7px; }}
   .st-key-wide_grid [class*="st-key-fav_"] {{ top: auto !important; bottom: 8px !important; right: 12px !important; }}
   .st-key-wide_grid .pcard .info {{ padding-right: 76px; }}
-  .st-key-wide_grid [class*="st-key-fav_"] button {{ height: 20px; min-width: 56px; padding: 0 6px 0 20px !important; }}
-  .st-key-wide_grid [class*="st-key-fav_on_"] button {{ padding: 0 20px 0 6px !important; }}
+  .st-key-wide_grid [class*="st-key-fav_"] button {{ height: 20px; min-width: 0; padding: 0 7px !important; }}
+  .st-key-wide_grid [class*="st-key-fav_on_"] button {{ padding: 0 7px !important; }}
   .st-key-wide_grid [class*="st-key-fav_"] button::before {{ width: 14px; height: 14px; }}
   .st-key-wide_grid [class*="st-key-fav_on_"] button::before {{ left: calc(100% - 17px); }}
   .st-key-wide_grid [class*="st-key-fav_"] button p {{ font-size: .6rem !important; }}
@@ -1327,6 +1374,18 @@ iframe[src*="kakao_map"] {{
   padding: .4rem 0 .2rem; }}
 [class*="_rate_box_"] [data-testid="stElementContainer"] {{ width: 100% !important; display: flex;
   justify-content: center; height: auto !important; }}
+/* 리뷰 사진: 내용 아래 작은 정사각 썸네일, 누르면 원본 */
+.rv-pics {{ display:flex; gap:6px; flex-wrap:wrap; margin:-4px 0 6px; }}
+.rv-pics img {{ width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid #E4E8E6; display:block; }}
+.rv-pics a:hover img {{ border-color:var(--accent); }}
+/* 리뷰 '+ 사진 첨부' 버튼: 내용 아래 왼쪽에 작은 테두리 버튼 (누르면 사라지고 올리는 칸이 열린다) */
+[class*="st-key-rv_"][class*="_pic_btn_"] button {{ min-height:0 !important; height:26px; min-width:30px; padding:0 10px !important;
+  border:1.5px solid var(--accent) !important; border-radius:8px !important; background:#fff !important; }}
+[class*="st-key-rv_"][class*="_pic_btn_"] button:hover {{ background:var(--accent-soft) !important; }}
+[class*="st-key-rv_"][class*="_pic_btn_"] button p {{ font-size:.8rem !important; font-weight:700; color:var(--accent-deep) !important; }}
+/* 리뷰 사진 올리는 칸: 작게 */
+[class*="st-key-rv_"][class*="_img_"] [data-testid="stFileUploaderDropzone"] {{ padding:.5rem .75rem; min-height:0; }}
+[class*="st-key-rv_"][class*="_img_"] label p {{ font-size:.82rem; color:#6B7672; }}
 .rv-rate-q {{ font-weight: 800; font-size: 1.15rem; color: #26302D; text-align: center; width: 100%; }}
 .rv-rate-sub {{ color: #8A9490; font-size: .95rem; margin-top: 4px; text-align: center; width: 100%; }}
 [class*="_rate_box_"] [data-testid="stFeedback"] {{ margin-top: .5rem; }}
@@ -1478,6 +1537,8 @@ iframe[src*="kakao_map"] {{
 .pcard .s {{ font-size:14.5px; opacity:.92; font-weight:600; overflow:hidden; text-overflow:ellipsis;
              white-space:nowrap; }}
 .pcard .d {{ font-size:16.5px; font-weight:700; opacity:1; margin:3px 0 7px; }}
+/* 기간: PC 는 '10월 30일 - 11월 22일', 모바일 리스트는 짧게 '10/30-11/22' (아래 모바일 규칙) */
+.pcard .d-short {{ display:none; }}
 .pcard .chip {{ background:#fff; }}
 .pcard .chip.tag {{ background:{MINT}; }}
 </style>
@@ -1550,7 +1611,7 @@ _KEEP_SCROLL_JS = """
   // 선택 버튼(리뷰 종류·탭·체크·스위치)이나 상세 탭(리뷰·수정하기) 안을 누르는 순간의 스크롤 위치를 기억한다.
   // 수정하기에서 이미지 삭제·추가 같은 걸 누를 때마다 화면이 맨 아래로 튀지 않게 한다
   const PICKS = '[data-testid=stButtonGroup], [data-baseweb=tab], [data-testid=stCheckbox], [data-testid=stToggle],'
-              + ' [role=tabpanel], [data-baseweb=tab-panel]';
+              + ' [role=tabpanel], [data-baseweb=tab-panel], [class*=st-key-fav_], [class*=st-key-folsw]';
   const remember = (e) => {
     if (!e.target.closest || !e.target.closest(PICKS)) return;
     const m = main(); if (!m) return;
@@ -1712,10 +1773,8 @@ def _follow_switch(key: str) -> None:
     """'팔로우한 곳만' 스위치. 글자가 스위치 안에 들어 있고 꺼지면 '팔로우', 켜지면 포인트 색 '팔로잉'.
     목록 위(PC)와 모바일 필터 판에 같은 스위치를 두고, 둘 다 같은 값(fav_only)을 바꾼다."""
     on = bool(st.session_state.get("fav_only"))
-    if st.button("팔로잉" if on else "팔로우", key=f"{key}_{'on' if on else 'off'}",
-                 help="팔로우한 곳만 보는 중 · 누르면 모두 보기" if on else "팔로우한 곳만 보기"):
-        st.session_state["fav_only"] = not on
-        st.rerun()
+    st.button("팔로잉" if on else "팔로우", key=f"{key}_{'on' if on else 'off'}",
+              on_click=lambda: st.session_state.update(fav_only=not on))
 
 
 def _reset_filters() -> None:
@@ -1778,14 +1837,14 @@ def page_map() -> None:
     with btn:
         # 상세에서는 등록하기 자리에 '리스트로 돌아가기' (상단에 늘 떠 있다)
         if current:
-            if st.button("리스트로 돌아가기", key="back_to_list", type="primary", width="stretch"):
+            if st.button("<  리스트로 돌아가기", key="back_to_list", type="primary", width="stretch"):
                 st.session_state["selected"] = None
                 st.session_state["scroll_top"] = True
                 st.rerun()
         else:
             # 내 캘린더는 지도보기 오른쪽에 바로 보여서 따로 버튼을 두지 않는다
             with st.container(horizontal=True, horizontal_alignment="right", key="top_btns"):
-                if st.button("등록하기  ↗", key="add_btn", type="primary"):
+                if st.button("+", key="add_btn", type="primary", help="팝업 등록하기"):
                     st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
                     go("add")
 
@@ -2023,6 +2082,10 @@ DAILY_CSS = f"""
            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
 .dn-item:hover .dn-name {{ color:var(--accent-deep); }}
 .dn-empty {{ color:#6B7672; text-align:center; padding:16px 4px; font-size:.76rem; margin-top:8px; }}
+/* 위의 보이지 않는 칸들(스타일·내 위치 칸) 사이 기본 간격 때문에 머리 상자가 16px 내려가 있었다.
+   칸 사이 간격을 없애서 지도·캘린더와 위쪽 선을 맞춘다 (목록과의 사이는 .dn-list 의 margin-top) */
+.st-key-map_daily {{ gap: 0 !important; }}
+.st-key-map_daily .dn-list {{ margin-top: 14px; }}
 /* 내 위치를 묻는 칸은 보이지 않게 흐름에서 뺀다 (스크립트만 돈다) */
 .st-key-daily_loc {{ position:absolute !important; width:0 !important; height:0 !important; overflow:hidden; }}
 /* 제목 옆 ? : 커서를 올리거나(모바일은 누르면) 안내 말풍선 */
@@ -2060,7 +2123,7 @@ DAILY_CSS = f"""
   /* 데일리 팝업 노트는 옆 지도(높이 58vh, 최소 320px)와 딱 같은 높이까지만, 목록은 그 안에서 스크롤 */
   .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {{
     height: max(320px, 58vh) !important; overflow: hidden !important; }}
-  .dn-list {{ max-height: calc(max(320px, 58vh) - 136px); }}   /* 136px = 위 상자 + 목록 위 여백 */
+  .dn-list {{ max-height: calc(max(320px, 58vh) - 104px); }}   /* 104px = 위 상자(약 88) + 목록 위 여백(14) */
 }}
 </style>
 """

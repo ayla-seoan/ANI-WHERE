@@ -15,7 +15,11 @@ HEADERS = [
     "row_id", "entry_id", "revision", "status", "updated_at",
     "cafe_id", "parent_id", "kind", "nickname", "body",
     "rating",    # 다녀온 후기의 별점 1~5 (없으면 빈칸). 예전 칸 순서가 밀리지 않게 맨 끝에 둔다
+    "images",    # 리뷰에 붙인 사진 파일 이름들 (쉼표로 이음, static/uploads/). 역시 맨 끝에 덧붙인다
 ]
+
+MAX_IMAGES = 4       # 리뷰 한 건에 붙일 수 있는 사진 수
+IMAGE_MB = 10        # 사진 한 장 최대 크기
 
 KINDS = ["다녀온 후기", "기대평", "기타"]
 RATED_KIND = "다녀온 후기"   # 별점을 고르는 종류
@@ -63,7 +67,7 @@ def validate(body: str, nickname: str = "") -> Validation:
 
 
 def to_row(cafe_id: str, body: str, nickname: str = "", kind: str = "",
-           parent_id: str = "", rating: int | None = None) -> dict:
+           parent_id: str = "", rating: int | None = None, images: list[str] | None = None) -> dict:
     kind = "" if parent_id else (kind if kind in KINDS else KINDS[0])
     # 별점은 다녀온 후기(원글)에만, 1~5 일 때만 남긴다
     ok = kind == RATED_KIND and isinstance(rating, int) and 1 <= rating <= 5
@@ -74,6 +78,7 @@ def to_row(cafe_id: str, body: str, nickname: str = "", kind: str = "",
         "nickname": nickname.strip() or "익명",
         "body": body.strip(),
         "rating": rating if ok else "",
+        "images": ",".join(images or []),
     }
 
 
