@@ -37,8 +37,9 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent
 TODAY = date.today()
 MAP_HEIGHT = 620
-LOGOS = ["logo.png", "logo2.png"]   # static/ 의 제목 로고. 화면을 누를 때마다 다음 것으로 바뀐다
-FIXED_LOGO = "logo2.png"           # 상세·등록 화면에서는 이 로고로 고정
+LOGOS = ["logo_mint.png", "logo.png", "logo2.png"]   # static/ 의 제목 로고. 화면을 누를 때마다 다음 것으로 바뀐다
+FIXED_LOGO = "logo_mint.png"
+ADD_LOGO = "logo_add.png"          # 등록 화면 로고 (흰 글자 + 민트 테두리)           # 상세·등록 화면에서는 이 로고로 고정
 TOPBAR_TOP = "0rem"      # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
 TOPBAR_H = "282px"        # 상단 묶음 높이 (로고 + 문구 + 검색 필터. '팝업 카페 N곳' 줄은 묶음 밖)
 
@@ -109,6 +110,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   box-shadow: 0 3px 10px rgba(20,184,166,.3) !important; }}
 .st-key-add_btn, .st-key-back_to_list, .st-key-wiz_home, .st-key-add_btn > div, .st-key-back_to_list > div, .st-key-wiz_home > div {{ display: flex !important; justify-content: flex-end !important; }}
 .st-key-add_btn button, .st-key-back_to_list button, .st-key-wiz_home button {{ margin-left: auto !important; }}
+.st-key-back_to_list button span, .st-key-wiz_home button span {{ color: #fff !important; }}
 .st-key-add_btn button p, .st-key-back_to_list button p, .st-key-wiz_home button p {{ color: #fff !important; font-weight: 800 !important; font-size: .92rem !important;
   letter-spacing: .01em; white-space: pre; }}
 .st-key-add_btn button:hover, .st-key-back_to_list button:hover, .st-key-wiz_home button:hover {{ background: var(--accent-deep) !important; transform: translateY(-1px); }}
@@ -116,26 +118,74 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .st-key-add_btn {{ position: fixed !important; right: 28px; bottom: 28px; z-index: 1001; width: auto !important; }}
 .st-key-add_btn button {{ background: #FF6B6B !important; width: 56px !important; height: 56px !important; padding: 0 !important;
   border-radius: 50% !important; box-shadow: 0 8px 22px rgba(255,107,107,.45) !important; }}
-.st-key-add_btn button p {{ font-size: 2rem !important; font-weight: 500 !important; line-height: 1 !important; margin-top: -3px !important; }}
+.st-key-add_btn button {{ display: flex !important; align-items: center !important; justify-content: center !important; }}
+.st-key-add_btn button span {{ font-size: 2rem !important; color: #fff !important; margin: 0 !important; }}
 .st-key-add_btn button:hover {{ background: #F25454 !important; }}
 @media (max-width: 640px) {{
   /* 모바일: 아래 가운데 '필터 / 지도보기' 버튼 위로 비켜 둔다 */
   .st-key-add_btn {{ right: 16px; bottom: 76px; }}
   .st-key-add_btn button {{ width: 50px !important; height: 50px !important; }}
-  .st-key-add_btn button p {{ font-size: 1.8rem !important; }}
+  .st-key-add_btn button span {{ font-size: 1.8rem !important; }}
 }}
 /* '팔로우' 스위치 (팔로우한 곳만 보기). 키에 'fav_' 를 쓰지 않는다 — 카드 팔로우 버튼 규칙([class*="st-key-fav_"])에 걸리지 않게 */
-[class*="st-key-folsw"] button {{ position: relative; min-height: 0 !important; height: 24px; min-width: 70px;
-  border-radius: 999px !important; border: 0 !important; background: #E4E8E6 !important;
-  padding: 0 9px 0 25px !important; transition: background .15s; }}
-[class*="st-key-folsw"] button::before {{ content: ""; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px;
-  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: left .15s; }}
-[class*="st-key-folsw"] button p {{ font-size: .7rem !important; font-weight: 800 !important; color: #5B6663 !important; }}
-[class*="st-key-folsw"][class*="_on"] button {{ background: var(--accent) !important; padding: 0 25px 0 9px !important; }}
-[class*="st-key-folsw"][class*="_on"] button::before {{ left: calc(100% - 21px); }}
-[class*="st-key-folsw"][class*="_on"] button p {{ color: #fff !important; }}
+/* (상세·카드의 북마크 버튼과 같은 모양: 흰 바탕·회색 테두리, 켜지면 포인트 색으로 채움) */
+[class*="st-key-folsw"] button {{ min-height: 0 !important; height: 40px; padding: 0 14px !important; gap: 4px;
+  border-radius: 999px !important; border: 1.5px solid #DDE2E0 !important; background: #fff !important; }}
+[class*="st-key-folsw"] button span {{ font-size: 1.2rem !important; color: #26302D !important; }}
+[class*="st-key-folsw"] button p {{ white-space: nowrap; overflow: visible !important; font-size: .88rem !important; font-weight: 800 !important; color: #26302D !important; }}
+[class*="st-key-folsw"][class*="_on"] button {{ background: var(--accent) !important; border-color: var(--accent) !important; }}
+[class*="st-key-folsw"][class*="_on"] button span, [class*="st-key-folsw"][class*="_on"] button p {{ color: #fff !important; }}
+[class*="st-key-folsw"][class*="_off"] button:hover {{ border-color: var(--accent) !important; }}
+/* PC 리스트 보기: 북마크 · 지역 고르기 · 최신순을 '지도로 보기' 버튼과 같은 높이(32px)로 */
+@media (min-width: 641px) {{
+  .st-key-listtools [class*="st-key-folsw"] button {{ height: 32px !important; }}
+  /* (Streamlit 1.66 의 고르기 칸: stSelectbox/stMultiSelect > div > div 안에 입력칸·화살표) */
+  .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]),
+  .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div {{ height: 32px !important; min-height: 32px !important; }}
+  .st-key-listtools .st-key-sort input {{ height: 30px !important; font-size: .88rem !important; }}
+  .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]),
+  .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]) > div {{ min-height: 32px !important; }}
+  .st-key-listtools .st-key-regions [data-testid="stMultiSelectTagsContainer"] {{ min-height: 30px !important; padding-top: 0 !important;
+    padding-bottom: 0 !important; }}
+  .st-key-listtools .st-key-regions input {{ height: 26px !important; font-size: .88rem !important; }}
+}}
 /* 목록 위 '팔로우' 스위치는 칸 오른쪽 끝, 바로 옆 '지역 고르기' 에 붙인다 */
 .st-key-listtools [data-testid="stColumn"]:has([class*="st-key-folsw_"]) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
+/* 보기 전환·필터 아이콘 묶음: 정렬 칸 위 오른쪽 끝. 떠 있어도 원래 자리 높이는 남긴다 */
+[data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ min-height: 32px; }}
+.st-key-view_tools {{ justify-content: flex-end !important; align-items: center; gap: 6px !important; flex-wrap: nowrap !important; }}
+.st-key-view_tools > div {{ width: auto !important; flex: 0 0 auto !important; }}
+.st-key-view_tools.pinned button {{ box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }}
+/* 필터 아이콘: 모바일에서만 (예전 '화면 아래 떠 있는 필터 버튼' 규칙을 덮어쓴다) */
+.st-key-view_tools .st-key-m_filter_btn {{ position: static !important; transform: none !important; left: auto !important;
+  bottom: auto !important; width: auto !important; }}
+.st-key-view_tools .st-key-m_filter_btn button {{ min-height: 0 !important; height: 32px; min-width: 32px; width: auto !important;
+  padding: 0 9px !important; gap: 2px; border: 1.5px solid var(--accent) !important; border-radius: 10px !important;
+  background: #fff !important; box-shadow: none; }}
+.st-key-view_tools .st-key-m_filter_btn button span {{ color: var(--accent-deep) !important; font-size: 1.2rem !important; }}
+.st-key-view_tools .st-key-m_filter_btn button p {{ color: var(--accent-deep) !important; font-size: .8rem !important; font-weight: 800 !important; }}
+/* 리스트 전체보기의 지도 아이콘 버튼: 정렬 칸 위 오른쪽 끝, 테두리 있는 작은 정사각형 */
+/* 보기 전환 버튼 위아래 간격을 다른 칸들 사이 간격(16px)과 같게: 버튼 ↔ 정렬 칸, 위(검색 필터 묶음),
+   지도보기에서는 버튼 ↔ 데일리 팝업 노트·지도 줄 */
+[data-testid="stColumn"]:has(.st-key-map_icon) [data-testid="stVerticalBlock"] {{ gap: 16px; }}
+@media (min-width: 641px) {{
+  /* PC 는 위(검색 필터 묶음)와 반 칸 더 띄운다 (24px) */
+  [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ margin-top: 0; }}
+}}
+@media (max-width: 640px) {{
+  /* 모바일 지도보기: 위(상단 묶음)·아래(데일리 팝업 노트·지도 줄)와 16px */
+  .stMain:has(.st-key-map_row) [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ margin-top: -9px; }}
+  [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: -11px; }}
+}}
+.st-key-map_icon {{ display: flex !important; justify-content: flex-end; width: 100% !important; min-height: 32px; }}
+.st-key-map_icon .stButton {{ width: 100% !important; display: flex !important; justify-content: flex-end !important; }}
+/* 크기는 '홈으로 돌아가기' 버튼과 같게 (높이 32px · 좌우 .9rem · 글자 .92rem 굵게) */
+.st-key-map_icon button {{ min-height: 0 !important; height: 32px; width: auto !important; flex: 0 0 auto !important;
+  padding: 0 .9rem !important; gap: 4px; box-shadow: 0 3px 10px rgba(20,184,166,.3) !important;
+  border: 0 !important; border-radius: 10px !important; background: var(--accent) !important; }}
+.st-key-map_icon button span {{ color: #fff !important; font-size: 1.2rem !important; }}
+.st-key-map_icon button p {{ color: #fff !important; font-size: .92rem !important; font-weight: 800 !important; white-space: nowrap; }}
+.st-key-map_icon button:hover {{ background: var(--accent-deep) !important; }}
 /* 등록 화면의 홈으로 돌아가기: 둘째 줄 오른쪽 끝 */
 [data-testid="stColumn"]:has(.st-key-wiz_home) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
 /* 화면에 안 보이는 칸(스타일만 담은 칸, 스크립트용 iframe)은 줄 간격을 차지하지 않게 흐름에서 뺀다 */
@@ -155,19 +205,20 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 [data-baseweb="input"], [data-baseweb="select"] > div, [data-baseweb="textarea"] {{
   border-radius: 14px !important; }}
 /* 머리글 */
-.brand-tag {{ margin-top: .4rem; font-family: "Jua", sans-serif; font-size: 1.25rem; color: #26302D; }}
+.brand-tag {{ margin-top: .4rem; margin-bottom: 1rem; font-family: "Jua", sans-serif; font-size: 1.25rem; color: #26302D; }}   /* 아래 한 칸 띄움 */
 .brand-tag span {{ font-family: "Pretendard", sans-serif; font-size: .78rem; font-weight: 700;
   letter-spacing: .14em; color: {MINT}; }}
 /* 누르면 메인으로 가는 제목: 버튼이지만 글자처럼 보이게 */
 .st-key-home_brand button, .st-key-home_add button {{ background: none !important; border: 0 !important;
   box-shadow: none !important; padding: 0 !important; min-height: 0; transform: none !important; }}
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
-.st-key-home_brand button {{ width: 270px !important; height: 76px !important;
-  background: url("app/static/logo.png") no-repeat left center / contain !important; }}
+/* 로고 그림 아래 'ANIME POP-UP · CAFE · GOODS' 글씨까지 읽히게 로고 칸을 키운다 */
+.st-key-home_brand button {{ width: 330px !important; height: 100px !important;
+  background: url("app/static/logo_mint.png") no-repeat left center / contain !important; }}
 .st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
 .st-key-home_brand button:hover {{ filter: brightness(1.06) saturate(1.1); }}
 @media (max-width: 640px) {{
-  .st-key-home_brand button {{ width: 200px !important; height: 56px !important; }}
+  .st-key-home_brand button {{ width: 240px !important; height: 73px !important; }}
 }}
 .st-key-home_add, .st-key-home_add .stButton {{ display: flex; justify-content: center; width: 100%; }}
 .st-key-home_add button p {{ font-family: "Jua", sans-serif !important; font-size: 1.8rem !important;
@@ -199,14 +250,16 @@ def _fav_state() -> tuple[str, set[str], dict[str, int]]:
 
 
 def _heart(cafe_id: str, where: str, label_count: bool = False) -> None:
-    """팔로우 버튼. 팔로우하면 포인트 색으로 채운 '팔로잉', 아니면 테두리만 있는 '+ 팔로우'.
+    """팔로우 버튼 (북마크 아이콘). 팔로우하면 포인트 색으로 채운 체크 북마크, 아니면 흰 바탕 북마크+.
     where 는 위치(w: 전체보기 카드, s: 반반 카드, d: 상세)."""
     me, mine, counts = _fav_state()
     on = str(cafe_id) in mine
     n = counts.get(str(cafe_id), 0)
-    label = ("팔로잉" if on else "팔로우") + (f" {n}" if label_count else "")
+    # 글자 대신 북마크 아이콘 (상세·리스트 카드 모두). 팔로우하면 체크된 북마크
+    label = f"{n}" if label_count else ""
+    icon = ":material/bookmark_added:" if on else ":material/bookmark_add:"
     # 누른 순간 콜백에서 저장하고 한 번만 다시 그린다 (st.rerun 으로 두 번 그리면 화면이 버벅이며 위로 튀었다)
-    st.button(label, key=f"fav_{'on' if on else 'off'}_{where}_{cafe_id}",
+    st.button(label, icon=icon, key=f"fav_{'on' if on else 'off'}_{where}_{cafe_id}",
               on_click=_toggle_fav, args=(str(cafe_id), me, not on))
 
 
@@ -369,7 +422,8 @@ def _detail_info_html(current: dict) -> str:
     perks_html = (f'<div class="dsec"><div class="dsec-title">혜택</div>{perks}</div>' if perks else
                   '<div class="dsec"><div class="dsec-title">혜택</div><div class="dnone">등록된 특전·굿즈가 없어요</div></div>')
     # 참고 웹사이트: 연회색 카드 (사이트 이름 + 주소 + ↗), 카드 전체를 누르면 새 탭
-    links = cafe.parse_links(current.get("links") or "")[0]
+    # recal.kr 은 맨 뒤로 (다른 사이트가 없으면 그대로 첫 번째) — 예전에 가져온 행사에도 같은 순서로 보인다
+    links = cafe.order_links(cafe.parse_links(current.get("links") or "")[0])
     link_html = ""
     if links:
         cards = "".join(
@@ -1061,18 +1115,30 @@ def _list_bar(count: int, wide: bool, note: str = "") -> None:
         # 지도보기에서는 개수 제목을 두지 않는다 (리스트 전체보기에서만)
         if wide:
             st.markdown(f"#### 팝업 카페 :green[**{count}**]곳", help=note or None)   # 숫자만 굵게
-    with toggle:
-        if wide:
-            if st.button("지도보기", key="show_map", width="content"):
-                st.session_state["list_only"] = False
-                st.session_state["scroll_top"] = True    # 화면 길이가 바뀌어도 맨 위부터 보이게
-                st.rerun()
-        elif st.button("리스트 전체보기", key="list_only_btn", width="content",
-                       help="지도 없이 리스트만 크게 봅니다"):
-            st.session_state["list_only"] = True
-            st.session_state["selected"] = None    # 상세를 보던 중이면 닫고 리스트로
-            st.session_state["scroll_top"] = True
+    # 리스트 전체보기 ↔ 지도보기 전환은 정렬(최신순) 칸 위 오른쪽 끝의 아이콘 버튼 (_view_icon_button)
+
+
+def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None:
+    """보기 전환 아이콘: 리스트 전체보기에서는 '지도로 보기'(→ 지도보기), 지도보기에서는 '리스트로 보기'(→ 리스트 전체보기).
+    정렬(최신순) 칸 위 오른쪽 끝, 두 화면에서 같은 자리. 모바일에서는 그 왼쪽에 필터 아이콘도 둔다
+    (누르면 검색 필터 판이 열린다. 걸린 조건 수가 있으면 아이콘 옆에 숫자). 둘이 함께 화면 위에 붙는다 (_pin_view_icon)."""
+    tools = st.container(horizontal=True, key="view_tools")
+    with tools:
+        if st.button(str(active) if active else "", icon=":material/close:" if m_open else ":material/tune:",
+                     key="m_filter_btn"):
+            st.session_state["m_filters"] = not m_open
             st.rerun()
+        _view_switch(wide)
+
+
+def _view_switch(wide: bool) -> None:
+    if st.button("지도로 보기" if wide else "리스트로 보기",
+                 icon=":material/map:" if wide else ":material/format_list_bulleted:", key="map_icon"):
+        st.session_state["list_only"] = not wide
+        if not wide:
+            st.session_state["selected"] = None    # 상세를 보던 중이면 닫고 리스트로
+        st.session_state["scroll_top"] = True    # 화면 길이가 바뀌어도 맨 위부터 보이게
+        st.rerun()
 
 
 def render_list(view: pd.DataFrame, wide: bool = False) -> None:
@@ -1164,7 +1230,7 @@ LIST_CSS = f"""
 [class*="st-key-card_"] [class*="st-key-fav_"] {{ position:absolute; z-index:7; width:auto; }}
 /* 리스트 전체보기: 팔로우는 카드 맨 아래 오른쪽 모서리. 글자 칸 오른쪽을 비워 긴 제목이 버튼 밑으로 들어가지 않게 */
 [class*="st-key-card_w_"] [class*="st-key-fav_"] {{ top:auto; bottom:16px; right:20px; }}
-[class*="st-key-card_w_"] .pcard .info {{ padding-right:100px; }}
+[class*="st-key-card_w_"] .pcard .info {{ padding-right:52px; }}
 [class*="st-key-card_s_"] [class*="st-key-fav_"] {{ top:12px; right:12px; }}
 /* 카드 작품 이름 오른쪽의 진행 상태 배지 */
 .cstate {{ display:inline-block; vertical-align:middle; margin-left:6px; font-size:.78rem; font-weight:700;
@@ -1186,10 +1252,13 @@ LIST_CSS = f"""
 [class*="st-key-fav_off_"] button:hover {{ background:#D5DBD9 !important; }}
 [class*="st-key-fav_on_"] button:hover {{ background:var(--accent-deep) !important; }}
 /* 리스트 카드의 팔로우는 스위치가 아니라 그냥 버튼: 회색 바탕 '팔로우' → 누르면 포인트 색 '팔로잉' */
-[class*="st-key-card_"] [class*="st-key-fav_"] button {{ height:26px; padding:0 12px !important; min-width:0; border-radius:8px !important; }}
+[class*="st-key-card_"] [class*="st-key-fav_"] button {{ width:30px; height:30px; min-width:0; padding:0 !important;
+  border-radius:8px !important; background:#fff !important; }}
 [class*="st-key-card_"] [class*="st-key-fav_"] button::before {{ display:none; }}
-[class*="st-key-card_"] [class*="st-key-fav_on_"] button {{ padding:0 12px !important; }}
-[class*="st-key-card_"] [class*="st-key-fav_"] button p {{ font-size:.75rem !important; }}
+[class*="st-key-card_"] [class*="st-key-fav_on_"] button {{ padding:0 !important; background:var(--accent) !important; }}
+[class*="st-key-card_"] [class*="st-key-fav_"] button span {{ font-size:1.25rem !important; color:#26302D !important; }}
+[class*="st-key-card_"] [class*="st-key-fav_on_"] button span {{ color:#fff !important; }}
+[class*="st-key-card_"] [class*="st-key-fav_off_"] button:hover {{ background:#fff !important; box-shadow:0 0 0 2px var(--accent); }}
 /* 카드 테두리: 회색 대신 포인트(민트)보다 살짝 밝은 민트. 커서를 올리면 아래 :hover 처럼 연한 민트 바탕 + 진한 테두리 */
 [class*="st-key-card_s_"] {{ border: 2.5px solid {MINT_LINE} !important; transition:transform .18s ease,
   background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }}
@@ -1236,7 +1305,8 @@ LIST_CSS = f"""
 iframe[src*="kakao_map"] {{
   height: max(360px, calc(100vh - {TOPBAR_TOP} - {TOPBAR_H} - 1.75rem)) !important; }}
 /* 필터 판 안의 '팔로우한 곳만' · '지역 고르기' 는 모바일에서만. 모바일에서는 목록 위의 같은 칸을 숨긴다 */
-.st-key-m_only {{ display: none !important; }}
+.st-key-m_only, .st-key-m_sheet_head, .st-key-m_sheet_foot,
+[data-testid="stLayoutWrapper"]:has(> .st-key-m_sheet_head), [data-testid="stLayoutWrapper"]:has(> .st-key-m_sheet_foot) {{ display: none !important; }}
 @media (max-width: 640px) {{
   .st-key-m_only {{ display: flex !important; }}
   /* 필터 판 맨 위에 둔다 (그리는 순서는 아래지만 화면에서는 앞으로) */
@@ -1317,12 +1387,9 @@ iframe[src*="kakao_map"] {{
   .st-key-wide_grid .pcard .area {{ top: 6px; left: 6px; font-size: 10.5px; padding: 2px 6px; }}
   .st-key-wide_grid .pcard .state {{ top: 6px; right: 6px; font-size: 10.5px; padding: 2px 7px; }}
   .st-key-wide_grid [class*="st-key-fav_"] {{ top: auto !important; bottom: 8px !important; right: 12px !important; }}
-  .st-key-wide_grid .pcard .info {{ padding-right: 76px; }}
-  .st-key-wide_grid [class*="st-key-fav_"] button {{ height: 20px; min-width: 0; padding: 0 7px !important; }}
-  .st-key-wide_grid [class*="st-key-fav_on_"] button {{ padding: 0 7px !important; }}
-  .st-key-wide_grid [class*="st-key-fav_"] button::before {{ width: 14px; height: 14px; }}
-  .st-key-wide_grid [class*="st-key-fav_on_"] button::before {{ left: calc(100% - 17px); }}
-  .st-key-wide_grid [class*="st-key-fav_"] button p {{ font-size: .6rem !important; }}
+  .st-key-wide_grid .pcard .info {{ padding-right: 40px; }}
+  .st-key-wide_grid [class*="st-key-fav_"] button {{ width: 26px; height: 26px; padding: 0 !important; }}
+  .st-key-wide_grid [class*="st-key-fav_"] button span {{ font-size: 1.1rem !important; }}
 }}
 @media (max-width: 480px) {{
   .st-key-wide_grid [data-testid="stHorizontalBlock"] {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
@@ -1460,18 +1527,31 @@ iframe[src*="kakao_map"] {{
           padding: .18rem .55rem; border-radius: 6px; white-space: nowrap; }}
 .dstate.ended {{ background: #9AA5A1; }}
 /* 상세 팔로우 스위치: 공유 버튼(40px) 옆에 세로 가운데로 */
-.st-key-detail_actions [class*="st-key-fav_"] button {{ width: 70px !important; height: 24px !important;
+/* 상세 팔로우: 글자 대신 팔로우 아이콘, 옆 공유 버튼과 같은 28px 정사각형 (흰 바탕·회색 테두리).
+   팔로우하면 포인트 색으로 채우고 흰 아이콘 */
+.st-key-detail_actions [class*="st-key-fav_"] button {{ width: 34px !important; min-width: 34px !important; height: 34px !important;
+  min-height: 34px !important; padding: 0 !important; border-radius: 8px !important; display: flex !important;
+  align-items: center !important; justify-content: center !important; border: 1.5px solid #DDE2E0 !important; background: #fff !important;
   box-shadow: none !important; transform: none !important; }}
-.st-key-detail_actions [class*="st-key-fav_"] button p {{ font-size: .7rem !important; }}
+.st-key-detail_actions [class*="st-key-fav_"] button::before {{ display: none; }}
+.st-key-detail_actions [class*="st-key-fav_"] button span {{ font-size: 1.4rem !important; color: #26302D !important; margin: 0 !important; }}
+/* 공유(iframe)·북마크 칸 높이를 버튼 높이(34px)로 딱 맞춰 세로 위치를 같게 */
+.st-key-detail_actions [data-testid="stColumn"]:not(:first-child) [data-testid="stElementContainer"] {{ height: 34px; }}
+.st-key-detail_actions [class*="st-key-fav_"] .stButton {{ line-height: 0; }}
+.st-key-detail_actions [class*="st-key-fav_on_"] button {{ background: var(--accent) !important; border-color: var(--accent) !important; }}
+.st-key-detail_actions [class*="st-key-fav_on_"] button span {{ color: #fff !important; }}
+.st-key-detail_actions [class*="st-key-fav_off_"] button:hover {{ border-color: var(--accent) !important; background: #fff !important; }}
 /* 2줄을 화면 폭과 상관없이 한 줄에: 작품 이름 칸이 남는 폭, 공유·찜 칸은 버튼 크기(40px)만큼 오른쪽 끝.
    공유를 누르면 공유 칸이 넓어진다(공유 컴포넌트가 바깥 칸 폭을 직접 바꾼다) */
 .st-key-detail_actions [data-testid="stHorizontalBlock"] {{ flex-direction: row !important; flex-wrap: nowrap !important;
-  gap: 8px !important; align-items: center !important; }}
+  gap: 8px !important; align-items: flex-start !important; }}   /* 공유·북마크는 작품 이름 윗선에 맞춘다 */
+/* 작품 이름 글자는 줄 높이 때문에 상자 위쪽에 7px 쯤 빈 곳이 있어서, 버튼도 그만큼 내려 글자 윗선과 맞춘다 */
+.st-key-detail_actions [data-testid="stColumn"]:not(:first-child) {{ margin-top: 7px; }}
 .st-key-detail_actions [data-testid="stColumn"]:first-child {{ flex: 1 1 auto !important; width: auto !important;
   min-width: 0 !important; }}
-.st-key-detail_actions [data-testid="stColumn"]:not(:first-child) {{ flex: 0 0 40px !important; width: 40px !important;
+.st-key-detail_actions [data-testid="stColumn"]:not(:first-child) {{ flex: 0 0 34px !important; width: 34px !important;
   min-width: 0 !important; transition: flex-basis .2s, width .2s; }}
-.st-key-detail_actions [data-testid="stColumn"]:last-child {{ flex: 0 0 70px !important; width: 70px !important; }}
+.st-key-detail_actions [data-testid="stColumn"]:last-child {{ flex: 0 0 34px !important; width: 34px !important; }}
 /* 공유 iframe 은 글자처럼 줄에 놓여 아래 8px 빈칸이 생기고, 그만큼 찜 버튼보다 위로 떠 보였다 → 블록으로 */
 .st-key-detail_actions iframe {{ display: block; }}
 /* 위치 안의 카페 이름: 굵게 (주소보다 돋보이게), 주소는 그 아래 */
@@ -1646,6 +1726,48 @@ def _keep_scroll() -> None:
     components.html(f"<script>window.parent.eval({json.dumps(_KEEP_SCROLL_JS)});</script>", height=0)
 
 
+def _pin_view_icon() -> None:
+    """보기 전환 아이콘(지도·리스트)을 스크롤해도 화면 위에 붙어 있게 한다.
+
+    PC 는 위에 붙어 있는 상단 묶음(제목·검색 필터) 바로 아래, 모바일은 상단 묶음이 같이 스크롤되므로 화면 맨 위.
+    모바일에서 위에 붙는 건 이 아이콘 하나뿐이다. 원래 자리에는 칸 높이를 남겨 두어 목록이 들썩이지 않는다.
+    """
+    components.html(f"<script>window.parent.eval({json.dumps(_PIN_ICON_JS)});</script>", height=0)
+
+
+_PIN_ICON_JS = """
+(function () {
+  if (window.__aniPinIcon) return;
+  window.__aniPinIcon = true;
+  const update = () => {
+    const btn = document.querySelector('.st-key-view_tools');      // 필터·보기 전환 아이콘 묶음
+    const box = btn && btn.parentElement;                          // 원래 자리 (높이를 남겨 둔다)
+    if (!btn || !box) return;
+    const r = box.getBoundingClientRect();
+    if (!r.width) return;                       // 상세 화면처럼 숨어 있으면 그대로
+    const mobile = window.innerWidth <= 640;
+    const bar = document.querySelector('.st-key-topbar');
+    const limit = mobile ? 10 : (bar ? Math.max(bar.getBoundingClientRect().bottom, 0) + 10 : 10);
+    if (r.top < limit) {
+      btn.style.position = 'fixed';
+      btn.style.top = limit + 'px';
+      btn.style.width = 'auto';
+      btn.style.left = (r.right - btn.offsetWidth) + 'px';
+      btn.style.zIndex = '1002';
+      btn.classList.add('pinned');
+    } else if (btn.style.position) {
+      ['position', 'top', 'left', 'width', 'zIndex'].forEach((k) => { btn.style[k] = ''; });
+      btn.classList.remove('pinned');
+    }
+  };
+  // 메인 칸이 스크롤된다. 다시 그리면 버튼이 새로 생기므로 화면이 바뀔 때마다도 확인한다
+  document.addEventListener('scroll', update, true);
+  window.addEventListener('resize', update);
+  new MutationObserver(() => requestAnimationFrame(update)).observe(document.body, { childList: true, subtree: true });
+})();
+"""
+
+
 _LIVE_SEND_JS = """
 (function () {
   if (window.__aniLiveSend) return;
@@ -1718,11 +1840,11 @@ _LOGO_SWAP_JS = """
   const urls = __URLS__;
   if (window.__aniLogo || urls.length < 2) return;
   window.__aniLogo = true;
-  // 처음엔 아무거나 하나, 그 뒤로는 누를 때마다 다음 로고로. 서버를 거치면 클릭 한 번에 화면이
+  // 처음엔 기본 로고(LOGOS 의 첫 번째), 그 뒤로는 누를 때마다 다음 로고로. 서버를 거치면 클릭 한 번에 화면이
   // 두 번 그려져 바뀌었다 되돌아가기도 해서, 바깥 페이지에서 직접 바꾼다
   const s = document.createElement('style');
   document.head.appendChild(s);
-  let i = Math.floor(Math.random() * urls.length);
+  let i = 0;
   const show = () => {
     s.textContent = `.st-key-home_brand button { background-image: url("${urls[i]}") !important; }`;
   };
@@ -1738,10 +1860,10 @@ def _logo_swap() -> None:
     components.html(f"<script>window.parent.eval({json.dumps(js)});</script>", height=0)
 
 
-def _brand(home: bool = False, fixed: bool = False) -> bool:
+def _brand(home: bool = False, fixed: bool = False, logo: str = FIXED_LOGO) -> bool:
     """ANI:WHERE 제목 + 문구. 제목(또는 home 일 때 '홈으로')을 눌렀으면 True.
 
-    home 이면 'ANIME POP-UP · CAFE · GOODS' 줄 오른쪽 끝에 홈으로 돌아가기 버튼을 둔다 (등록 화면).
+    home 이면 문구 줄 오른쪽 끝에 홈으로 돌아가기 버튼을 둔다 (등록 화면).
     """
     # 글자 대신 로고 그림을 보여 준다 (GLOBAL_CSS 의 .st-key-home_brand). 글자는 화면 읽기용으로 남긴다.
     # 로고 주소는 포스터처럼 'app/static/…' 상대 주소로 둔다 ('/' 로 시작하면 하위 경로에 배포했을 때 못 찾는다)
@@ -1749,32 +1871,69 @@ def _brand(home: bool = False, fixed: bool = False) -> bool:
     # 상세·등록 화면은 바뀌지 않고 늘 같은 로고(FIXED_LOGO). 더 강한 선택자로 덮어써서, 목록으로 돌아가면 다시 바뀐다
     _logo_swap()
     if fixed:
-        st.markdown(f'<style>html body .st-key-home_brand button {{ background-image: url("app/static/{FIXED_LOGO}")'
+        st.markdown(f'<style>html body .st-key-home_brand button {{ background-image: url("app/static/{logo}")'
                     ' !important; }</style>', unsafe_allow_html=True)
     clicked = st.button("ANI:WHERE", key="home_brand", type="tertiary")
     if not home:
-        st.markdown(
-            '<div class="brand-tag">함께 만드는 애니 팝업 지도!! 찾고, 공유하고, 함께 기록해요!<br/>'
-            '<span>ANIME POP-UP · CAFE · GOODS</span></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="brand-tag">함께 만드는 애니 팝업 지도!! 찾고, 공유하고, 함께 기록해요!</div>',
+                    unsafe_allow_html=True)
         return clicked
-    st.markdown('<div class="brand-tag">함께 만드는 애니 팝업 지도!! 찾고, 공유하고, 함께 기록해요!</div>',
-                unsafe_allow_html=True)
+    # 등록 화면: 문구 줄 오른쪽 끝에 홈으로 돌아가기
     sub, btn = st.columns([5, 1], vertical_alignment="center")
-    sub.markdown('<div class="brand-tag"><span>ANIME POP-UP · CAFE · GOODS</span></div>',
+    sub.markdown('<div class="brand-tag">함께 만드는 애니 팝업 지도!! 찾고, 공유하고, 함께 기록해요!</div>',
                  unsafe_allow_html=True)
     with btn:
-        clicked = st.button("홈으로 돌아가기", key="wiz_home", help="등록을 그만두고 메인으로") or clicked
+        clicked = st.button("홈으로 돌아가기", icon=":material/arrow_back:", key="wiz_home", help="등록을 그만두고 메인으로") or clicked
     return clicked
 
 
 def _follow_switch(key: str) -> None:
-    """'팔로우한 곳만' 스위치. 글자가 스위치 안에 들어 있고 꺼지면 '팔로우', 켜지면 포인트 색 '팔로잉'.
+    """'북마크한 곳만' 버튼 (북마크 아이콘 + '북마크'). 켜지면 포인트 색으로 채운다.
     목록 위(PC)와 모바일 필터 판에 같은 스위치를 두고, 둘 다 같은 값(fav_only)을 바꾼다."""
     on = bool(st.session_state.get("fav_only"))
-    st.button("팔로잉" if on else "팔로우", key=f"{key}_{'on' if on else 'off'}",
+    st.button("북마크", icon=":material/bookmark_added:" if on else ":material/bookmark:",
+              key=f"{key}_{'on' if on else 'off'}",
               on_click=lambda: st.session_state.update(fav_only=not on))
+
+
+# 모바일 필터 시트 (필터 아이콘을 눌렀을 때만 page_map 이 붙인다). PC 에는 머리·아래 줄을 늘 숨긴다
+MOBILE_SHEET_CSS = """
+.st-key-filters { position: fixed !important; left: 0; right: 0; top: 44px; bottom: 0; z-index: 1005;
+  overflow-y: auto; background: #fff; border-radius: 22px 22px 0 0; padding: 18px 20px 0 !important;
+  box-shadow: 0 0 0 100vmax rgba(0,0,0,.38); gap: 0 !important; }
+.st-key-filters > div, .st-key-filters [data-testid="stHorizontalBlock"] { gap: 0 !important; }
+.st-key-m_sheet_head { display: flex !important; flex-direction: row !important; align-items: center;
+  justify-content: space-between; margin-bottom: 6px; }
+.st-key-filters > [data-testid="stLayoutWrapper"]:has(> .st-key-m_sheet_head), .st-key-filters > .st-key-m_sheet_head { order: -2; display: block !important; }
+.st-key-filters > [data-testid="stLayoutWrapper"]:has(> .st-key-m_sheet_foot) { display: block !important; }
+.st-key-m_sheet_head > div { width: auto !important; }
+.sheet-title { font-size: 1.6rem; font-weight: 800; color: #111; }
+.st-key-m_sheet_close button { min-height: 0 !important; padding: 4px !important; }
+.st-key-m_sheet_close button span { font-size: 1.6rem !important; color: #111 !important; }
+/* 항목마다: 굵은 제목, 아래 구분선 */
+.st-key-filters [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+.st-key-filters .st-key-m_only > div { padding: 14px 0 16px; border-bottom: 1px solid #ECEFEE; }
+.st-key-filters label p, .st-key-filters [data-testid="stWidgetLabel"] p { font-size: 1.05rem !important;
+  font-weight: 800 !important; color: #1F2A27 !important; }
+.st-key-filters .st-key-m_only > div { width: 100% !important; }
+.st-key-filters [class*="st-key-folsw"] button { width: auto !important; min-width: 0 !important; }
+/* 시트가 열려 있는 동안 위에 붙은 필터·보기 아이콘은 감춘다 (시트의 × 로 닫는다) */
+.st-key-view_tools { display: none !important; }
+/* 시트에서는 아래 줄의 '전체 삭제' 가 대신해서 '초기화' 칸은 숨긴다 */
+.st-key-filters [data-testid="stColumn"]:has(.st-key-filter_reset) { display: none !important; }
+/* 맨 아래 고정 줄 */
+.st-key-filters > [data-testid="stLayoutWrapper"]:has(> .st-key-m_sheet_foot) { position: sticky; bottom: 0; z-index: 2;
+  order: 10; margin-top: 8px; }
+.st-key-m_sheet_foot { display: flex !important; flex-direction: column !important; align-items: stretch !important;
+  gap: 6px !important; background: #fff; border-top: 1px solid #ECEFEE; padding: 10px 0 16px;
+  box-shadow: 20px 0 0 #fff, -20px 0 0 #fff; }   /* 양옆 시트 여백까지 흰 바탕으로 덮는다 */
+.st-key-m_sheet_foot > div, .st-key-m_sheet_foot .stButton, .st-key-m_sheet_foot [class*="st-key-m_sheet_"] { width: 100% !important; }
+.st-key-m_sheet_reset button { width: 100% !important; min-height: 0 !important; height: 40px; }
+.st-key-m_sheet_reset button p { font-size: 1rem !important; font-weight: 700 !important; color: #26302D !important; }
+.st-key-m_sheet_done button { width: 100% !important; min-height: 0 !important; height: 50px; border-radius: 12px !important;
+  background: #26302D !important; border: 0 !important; }
+.st-key-m_sheet_done button p { font-size: 1.02rem !important; font-weight: 700 !important; color: #fff !important; }
+"""
 
 
 def _reset_filters() -> None:
@@ -1799,6 +1958,7 @@ def page_map() -> None:
     _no_translate()
     _history_guard(on_main=True)
     _keep_scroll()
+    _pin_view_icon()
     _live_send()
     # 처음 들어오면 기본은 리스트 전체보기 (지도보기는 버튼으로)
     st.session_state.setdefault("list_only", True)
@@ -1837,14 +1997,15 @@ def page_map() -> None:
     with btn:
         # 상세에서는 등록하기 자리에 '리스트로 돌아가기' (상단에 늘 떠 있다)
         if current:
-            if st.button("<  리스트로 돌아가기", key="back_to_list", type="primary", width="stretch"):
+            if st.button("리스트로 돌아가기", icon=":material/arrow_back:", key="back_to_list", type="primary", width="stretch"):
                 st.session_state["selected"] = None
                 st.session_state["scroll_top"] = True
                 st.rerun()
         else:
             # 내 캘린더는 지도보기 오른쪽에 바로 보여서 따로 버튼을 두지 않는다
             with st.container(horizontal=True, horizontal_alignment="right", key="top_btns"):
-                if st.button("+", key="add_btn", type="primary", help="팝업 등록하기"):
+                # 글자 '+' 는 글꼴 때문에 동그라미 가운데에서 살짝 비껴 보여서, 가운데에 정확히 놓이는 아이콘을 쓴다
+                if st.button("", icon=":material/add:", key="add_btn", type="primary"):
                     st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
                     go("add")
 
@@ -1882,16 +2043,9 @@ def page_map() -> None:
         bool(ss.get("regions")), bool(ss.get("fav_only")),
     ])
     m_open = ss.get("m_filters", False)
-    with top:
-        # 모바일에서는 화면 아래 '지도보기 / 리스트 전체보기' 옆에 떠 있는 버튼 (LIST_CSS 의 .st-key-m_filter_btn)
-        label = "필터 닫기" if m_open else f"필터{f' · {active}' if active else ''}"
-        if st.button(label, key="m_filter_btn"):
-            ss["m_filters"] = not m_open
-            st.rerun()
-    # 열면 필터 묶음이 화면 아래에서 떠오르는 판(바텀 시트)으로 보인다. 닫으면 모바일에서는 숨긴다
-    sheet = (".st-key-filters { position: fixed !important; left: 12px; right: 12px; bottom: 76px; z-index: 999;"
-             " max-height: 62vh; overflow-y: auto; background: #fff; border-radius: 18px;"
-             " padding: .9rem 1rem 1rem; box-shadow: 0 -4px 24px rgba(0,0,0,.18); }")
+    # 모바일 필터 버튼은 보기 전환 아이콘(지도·리스트) 바로 왼쪽의 필터 아이콘 (_view_icon_button)
+    # 열면 필터 묶음이 화면을 거의 다 덮는 시트로 보인다 (MOBILE_SHEET_CSS). 닫으면 모바일에서는 숨긴다
+    sheet = MOBILE_SHEET_CSS
     st.markdown(
         "<style>.st-key-m_filter_btn { display: none; }"
         "@media (max-width: 640px) { .st-key-m_filter_btn { display: block; }"
@@ -1901,6 +2055,11 @@ def page_map() -> None:
 
     with top:
         fbox = st.container(key="filters")      # 모바일 전용 칸(찜·지역)도 아래에서 이 묶음에 넣는다
+    with fbox, st.container(key="m_sheet_head"):
+        # 모바일 필터 시트 머리: '필터' 제목과 닫기(×). PC 에서는 숨긴다
+        st.markdown('<div class="sheet-title">필터</div>', unsafe_allow_html=True)
+        st.button("", icon=":material/close:", key="m_sheet_close", type="tertiary",
+                  on_click=lambda: ss.update(m_filters=False))
     with fbox:
         c0, c1, c4, c2, c3, c5 = st.columns([2.4, 2, 2, 2, 2, 1.1], vertical_alignment="bottom")
     with c5:
@@ -1970,8 +2129,16 @@ def page_map() -> None:
         view = _sort_view(view, st.session_state.get("sort", SORTS[0]))
     else:
         # 칸을 위젯으로 집어서 숨긴다 (':not(:first-child)' 로 잡으면 '팝업 카페 N곳' 칸 안의 리스트 전체보기 버튼 칸까지 숨는다)
-        st.markdown("<style>.st-key-listtools [data-testid='stColumn']:has([class*='st-key-folsw_'], .st-key-regions, .st-key-sort),"
-                    " .st-key-m_only { display: none !important; }</style>", unsafe_allow_html=True)
+        # 정렬 칸은 남기고(보기 전환 아이콘이 그 위에 있다) 정렬 고르기만 숨긴다
+        st.markdown("<style>.st-key-listtools [data-testid='stColumn']:has([class*='st-key-folsw_'], .st-key-regions),"
+                    " .st-key-listtools .st-key-sort, .st-key-m_only { display: none !important; }</style>",
+                    unsafe_allow_html=True)
+
+    # 모바일 필터 시트 맨 아래 고정 줄: 조건을 모두 지우기 + 지금 조건에 맞는 수로 결과 보기(시트 닫기)
+    with fbox, st.container(horizontal=True, key="m_sheet_foot"):
+        st.button("전체 삭제", key="m_sheet_reset", type="tertiary", on_click=_reset_filters)
+        st.button(f"팝업 {len(view)}곳 표시", key="m_sheet_done", type="primary",
+                  on_click=lambda: ss.update(m_filters=False))
 
     mapped = view.dropna(subset=["lat", "lng"])
     # 조건에 맞는 수·지도 표시 수·안내는 '팝업 카페 N곳' 옆 도움말(?)에 커서를 올리면 보인다
@@ -1980,7 +2147,8 @@ def page_map() -> None:
             + " · 카드나 지도의 점을 누르면 상세를 보고 리뷰를 남기거나 수정할 수 있습니다.")
     # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
     with st.container(key="listtools"):
-        head, fav_only, region, sort = st.columns([3.5, 0.6, 2, 1.3], vertical_alignment="center")
+        # 정렬 칸 위에 보기 전환 아이콘이 있어서, 팔로우·지역 고르기는 아래(정렬과 같은 줄)에 맞춘다
+        head, fav_only, region, sort = st.columns([3.2, 0.9, 2, 1.3], vertical_alignment="bottom")
     with head, st.container(key="listbar"):
         _list_bar(len(view), wide, note)
     with fav_only:
@@ -1990,6 +2158,7 @@ def page_map() -> None:
         st.multiselect("지역", areas, key="regions", label_visibility="collapsed",
                        placeholder="📍 지역 고르기 (여러 곳 가능)")
     with sort:
+        _view_icon_button(wide, active, m_open)
         st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
 
     # '리스트 전체보기' 를 누르면 지도 없이 리스트만 크게 본다. '지도보기' 를 누르면 다시 반반으로
@@ -2705,9 +2874,9 @@ def page_add() -> None:
     _no_translate()
     _history_guard(on_main=False)
     _live_send()    # 간편등록 '읽어오기' 버튼을 공지 입력칸에 맞춰 바로 켜고 끈다
-    # 메인과 같은 상단(제목·문구)이 스크롤해도 떠 있고, 'ANIME POP-UP · CAFE · GOODS' 줄 오른쪽에 홈으로
+    # 메인과 같은 상단(제목·문구)이 스크롤해도 떠 있고, 문구 줄 오른쪽에 홈으로
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):         # 등록 화면은 로고 고정
+        if _brand(home=True, fixed=True, logo=ADD_LOGO):   # 등록 화면은 등록 화면 전용 로고로 고정
             st.session_state.pop("wiz", None)
             go("map")
 
@@ -2766,6 +2935,14 @@ CAL_CSS = f"""
 .st-key-cal_nav > div:first-child {{ flex:1 1 auto !important; }}
 .st-key-cal_nav [data-testid="stMarkdownContainer"] {{ margin:0 !important; }}
 .st-key-cal_nav [data-testid="stMarkdownContainer"] p {{ margin:0; }}
+/* 달력 제목 옆 ? : 커서를 올리거나(모바일은 누르면) 안내 말풍선 */
+.cal-help {{ position:relative; display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px;
+  margin-left:6px; border:1px solid #B5BDBA; border-radius:50%; color:#8A9490; font-size:.66rem; font-weight:700;
+  line-height:1; cursor:help; vertical-align:4px; }}
+.cal-tip {{ display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:60; width:210px; padding:8px 10px;
+  border-radius:8px; background:#26302D; color:#fff; font-size:.74rem; font-weight:500; line-height:1.45;
+  letter-spacing:0; white-space:normal; word-break:keep-all; box-shadow:0 4px 12px rgba(0,0,0,.18); }}
+.cal-help:hover .cal-tip, .cal-help:focus .cal-tip {{ display:block; }}
 .cal-month {{ font-weight:900; font-size:1.6rem; color:#111; letter-spacing:-.01em; white-space:nowrap; }}
 .st-key-cal_prev button, .st-key-cal_next button {{ min-height:0 !important; height:40px; width:40px; padding:0 !important; }}
 .st-key-cal_prev button p, .st-key-cal_next button p {{ font-size:1.6rem !important; line-height:1 !important;
@@ -2899,7 +3076,7 @@ def _upcoming_html(events: list) -> str:
             f'<span class="up-text"><div class="up-name">{escape(e.work)} · {escape(e.cafe_name)}</div>'
             f'<div class="up-when">{when}</div></span>'
             f'<span class="up-state {color}">{escape(label)}</span></a>')
-    body = "".join(items) or '<div class="up-empty">곧 있는 팔로우한 팝업이 없어요. 리스트에서 팔로우를 켜 보세요.</div>'
+    body = "".join(items) or '<div class="up-empty">곧 있는 북마크한 팝업이 없어요. 리스트에서 북마크해 보세요.</div>'
     return f'<div class="up-head"><b>곧 있는 팝업</b><i></i></div>{body}'
 
 
@@ -2926,13 +3103,15 @@ def render_calendar(compact: bool = False) -> None:
     year, month = st.session_state.get("cal_month") or (TODAY.year, TODAY.month)
     # 머리글 한 줄: '2026년 10월'  ‹  ›  [오늘]
     with st.container(horizontal=True, vertical_alignment="center", key="cal_nav"):
-        st.markdown(f'<span class="cal-month">{year}년 {month}월</span>', unsafe_allow_html=True)
+        st.markdown(f'<span class="cal-month">{year}년 {month}월</span>'
+                    '<span class="cal-help" tabindex="0">?<span class="cal-tip">내가 북마크한 팝업만 달력에 보여요. '
+                    '리스트나 상세의 북마크 아이콘을 누르면 여기에 추가돼요.</span></span>', unsafe_allow_html=True)
         st.button("‹", key="cal_prev", type="tertiary", on_click=_cal_shift, args=(-1,), help="이전 달")
         st.button("›", key="cal_next", type="tertiary", on_click=_cal_shift, args=(1,), help="다음 달")
         st.button("오늘", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None),
                   help="이번 달로")
     if not events:
-        st.markdown('<div class="cal-empty">아직 팔로우한 팝업이 없어요. 리스트에서 팔로우를 켜면 달력에 일정이 채워져요.</div>',
+        st.markdown('<div class="cal-empty">아직 북마크한 팝업이 없어요. 리스트에서 북마크하면 달력에 일정이 채워져요.</div>',
                     unsafe_allow_html=True)
     st.markdown(_cal_html(year, month, events, compact), unsafe_allow_html=True)
     st.markdown(_upcoming_html(events), unsafe_allow_html=True)

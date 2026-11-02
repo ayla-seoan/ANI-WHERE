@@ -244,6 +244,19 @@ def parse_links(text: str) -> tuple[list[str], list[str]]:
     return good, bad
 
 
+# 참고 웹사이트에서 맨 뒤로 보낼 모음 사이트 (공식 공지·주최 링크를 먼저 보이게)
+AGGREGATOR_HOSTS = ("recal.kr",)
+
+
+def order_links(links: list[str]) -> list[str]:
+    """참고 웹사이트 순서: recal.kr 같은 모음 사이트는 맨 뒤로. 다른 사이트가 없으면 그대로(맨 앞에) 둔다.
+    나머지 주소끼리의 순서는 바꾸지 않는다."""
+    def is_aggregator(url: str) -> bool:
+        host = re.sub(r"^https?://(www\.)?", "", str(url), flags=re.I).split("/")[0].lower()
+        return any(host == h or host.endswith("." + h) for h in AGGREGATOR_HOSTS)
+    return [u for u in links if not is_aggregator(u)] + [u for u in links if is_aggregator(u)]
+
+
 def entry_to_row(entry: CafeEntry, lat: float | None, lng: float | None,
                  source: str = "", note: str = "",
                  images: list[str] | None = None, tags: list[str] | None = None,
