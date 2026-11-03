@@ -959,6 +959,15 @@ _REVIEW_LIGHTBOX_JS = """
 """
 
 
+def _avg_rating_html(avg: float, n: int) -> str:
+    """평균 별점 요약: 큰 숫자 + 평균만큼 채운 별 다섯 개 + '다녀온 후기 N개 평균'."""
+    pct = max(0.0, min(100.0, avg / 5 * 100))
+    return (f'<div class="rv-avg"><span class="rv-avg-num">{avg:.1f}</span>'
+            f'<span class="rv-avg-stars" aria-label="5점 만점에 {avg:.1f}점">'
+            f'<span class="rv-avg-bg">★★★★★</span><span class="rv-avg-fg" style="width:{pct:.0f}%">★★★★★</span></span>'
+            f'<span class="rv-avg-cnt">다녀온 후기 {n}개 평균</span></div>')
+
+
 def render_reviews(cafe_id: str) -> None:
     _review_lightbox()      # 리뷰 사진을 누르면 확대 보기 팝업
     # 맨 위 리뷰 쓰기: 닉네임·종류·별점·입력칸·리뷰 등록 버튼을 처음부터 펼쳐 둔다. 그 아래에 리뷰를 보여 준다
@@ -969,6 +978,11 @@ def render_reviews(cafe_id: str) -> None:
     if not threads:
         st.caption("아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.")
         return
+
+    # 다녀온 후기에 별점이 있으면 목록 위에 평균 별점
+    avg, n_rated = review.average_rating(threads)
+    if n_rated:
+        st.markdown(_avg_rating_html(avg, n_rated), unsafe_allow_html=True)
 
     # 다녀온 후기와 기대평을 따로 볼 수 있게 나눈다 (개수 함께 표시)
     count = {k: sum(1 for t in threads if t.post.get("kind") == k) for k in review.KINDS}
@@ -1859,6 +1873,14 @@ iframe[src*="kakao_map"] {{
 @keyframes rvGlow {{ from {{ filter: drop-shadow(0 0 1px rgba(20,184,166,.4)); }}
                     to {{ filter: drop-shadow(0 0 7px rgba(20,184,166,.85)); }} }}
 @media (prefers-reduced-motion: reduce) {{ .rv-stars {{ animation: none; }} }}
+/* 리뷰 목록 위 평균 별점: 큰 숫자 · 평균만큼 채운 별(회색 별 위에 민트 별을 폭만큼 겹침) · 후기 수 */
+.rv-avg {{ display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin: 4px 0 10px;
+  background: var(--accent-soft); border-radius: 14px; }}
+.rv-avg-num {{ font-size: 1.7rem; font-weight: 800; color: var(--accent-deep); line-height: 1; }}
+.rv-avg-stars {{ position: relative; display: inline-block; font-size: 1.3rem; letter-spacing: 2px; line-height: 1; }}
+.rv-avg-bg {{ color: #D5DBD9; }}
+.rv-avg-fg {{ position: absolute; left: 0; top: 0; overflow: hidden; white-space: nowrap; color: var(--accent); }}
+.rv-avg-cnt {{ margin-left: auto; font-size: .82rem; color: #5B6B67; }}
 /* 리뷰 사진: 내용 아래 작은 정사각 썸네일, 누르면 원본 */
 .rv-pics {{ display:flex; gap:6px; flex-wrap:wrap; margin:-4px 0 6px; }}
 .rv-pics img {{ width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid #E4E8E6; display:block; }}

@@ -103,6 +103,21 @@ def to_row(cafe_id: str, body: str, nickname: str = "", kind: str = "",
     }
 
 
+def average_rating(threads: list) -> tuple[float, int]:
+    """다녀온 후기 원글의 평균 별점과 개수. 별점 있는 후기가 없으면 (0.0, 0). 답글은 세지 않는다."""
+    scores = []
+    for t in threads:
+        if t.post.get("kind") != RATED_KIND:
+            continue
+        try:
+            n = int(t.post.get("rating"))
+        except (TypeError, ValueError):
+            continue
+        if 1 <= n <= 5:
+            scores.append(n)
+    return (round(sum(scores) / len(scores), 1), len(scores)) if scores else (0.0, 0)
+
+
 @dataclass
 class Thread:
     post: dict
