@@ -5,3 +5,6 @@ service_account.json
 # 파이썬 임시 파일
 __pycache__/
 *.pyc
+
+# Notion 을 마지막으로 확인한 시각 (컴퓨터마다 따로)
+data/notion_sync.json
