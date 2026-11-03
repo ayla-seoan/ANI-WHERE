@@ -155,11 +155,18 @@ def _intro_by_person(store, entry_id: str) -> bool:
 def expand_branches(row: dict) -> list[dict]:
     """'지점' 칸에 여러 곳이 적힌 행을 지점마다 한 행으로 나눈다. 한 곳뿐이거나 비었으면 그대로.
 
+    주간 수집은 '행사 × 지점 = 1행' 으로 저장하고 '지점' 칸에는 형제 지점 전체를 적는다.
+    그래서 이 행의 장소명이 목록 안에 있으면 형제 목록일 뿐이라 나누지 않는다 (형제는 각자 행으로 들어온다).
+    장소명이 목록에 없을 때(예전 방식으로 한 행에 여러 지점을 적은 경우)만 나눈다.
+
     첫 지점은 원래 페이지 번호를 그대로 써서 예전에 가져온 행과 맞춰 보고,
     둘째부터는 '페이지번호-2' 처럼 따로 번호를 붙여 지점끼리 서로 '이미 있음' 으로 걸리지 않게 한다.
     """
     lines = [x.strip() for x in str(row.get("지점") or "").splitlines() if x.strip() and "|" in x]
     if len(lines) < 2:
+        return [row]
+    norm = lambda t: re.sub(r"\s+", "", str(t or ""))
+    if norm(row.get("장소명")) in {norm(x.split("|")[0]) for x in lines}:
         return [row]
     base = _page_id(row.get("url"))
     out = []
