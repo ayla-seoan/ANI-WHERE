@@ -85,9 +85,23 @@ ANI:WHERE 의 팝업 데이터는 두 단계로 들어옵니다.
 
 ### 2-1. 언제
 
-- `.env` 에 `NOTION_TOKEN` 이 있으면 메인 화면을 열 때 가져옵니다. 최대 1시간에 한 번(`data/notion_sync.json` 에 마지막 시각).
-- 키가 없으면 Notion 연결(Claude 의 Notion 도구)로 표를 읽어 같은 함수(`import_rows`, `sync_intros`)에 넣습니다.
-- 먼저 임시 복사본에 넣어 보고(dry run) 결과를 확인한 뒤 실제 `data/cafes.json` 에 넣습니다.
+- **매주 자동 (GitHub Actions)**: `.github/workflows/notion-sync.yml` 이 **매주 월요일 오전 10:00 (KST)** 에 돕니다.
+  주간 수집(08:43, 약 20분)이 끝난 뒤입니다.
+  1. Notion API 로 DB 전체를 읽고 (`scripts/notion_import.py`)
+  2. 새 팝업 추가 · 빈 이미지 채움 · 팝업 소개 맞춤 · 기간 끝난 팝업 내림
+  3. 바뀐 게 있으면 `data/cafes.json` 과 새 포스터(`static/uploads/`)를 커밋해 `main` 에 올립니다 → Streamlit Cloud 가 다시 배포
+  - 필요한 저장소 Secret: `NOTION_TOKEN` (필수), `KAKAO_REST_API_KEY` (선택, 좌표 없는 곳 위치 찾기)
+  - 저장소 **Actions** 탭 → 'Notion 주간 가져오기' → **Run workflow** 로 아무 때나 바로 돌릴 수 있습니다. 실행 기록에 추가·건너뜀 개수가 남습니다.
+- **앱을 열 때**: `.env` 에 `NOTION_TOKEN` 이 있으면 메인 화면을 열 때도 가져옵니다. 최대 1시간에 한 번(`data/notion_sync.json` 에 마지막 시각).
+- **손으로**: `python scripts/notion_import.py --dry` 로 결과만 본 뒤 `python scripts/notion_import.py` 로 넣습니다.
+  키가 없으면 Notion 연결(Claude 의 Notion 도구)로 표를 읽어 같은 함수(`import_rows`, `sync_intros`)에 넣습니다.
+
+#### NOTION_TOKEN 만들기 (한 번만)
+
+1. https://www.notion.so/profile/integrations 에서 **새 통합(Internal)** 을 만들고, 기능은 **콘텐츠 읽기**만 켭니다. 만들면 나오는 키(`ntn_…`)를 복사합니다.
+2. Notion 에서 '🎀 애니 팝업·콜라보 트래커' DB 페이지 → 오른쪽 위 `⋯` → **연결** → 방금 만든 통합을 추가합니다. (이걸 안 하면 읽을 수 없음)
+3. GitHub 저장소 → Settings → Secrets and variables → Actions → **New repository secret** 이름 `NOTION_TOKEN`, 값에 키를 붙여 넣습니다.
+4. 키는 `.env` 와 Secret 에만 둡니다. 코드·문서에 적거나 커밋하지 않습니다.
 
 ### 2-2. 어떤 행을 가져오나
 

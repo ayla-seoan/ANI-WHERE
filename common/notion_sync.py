@@ -165,9 +165,18 @@ def expand_branches(row: dict) -> list[dict]:
     lines = [x.strip() for x in str(row.get("지점") or "").splitlines() if x.strip() and "|" in x]
     if len(lines) < 2:
         return [row]
+    # 이 행이 목록 속 한 지점이면 형제 목록이다: 이름이 같거나 한쪽이 다른 쪽을 품거나
+    # ('AK&홍대 (스페이스 갤레리아)' ⊃ 'AK&홍대'), 좌표가 같으면
     norm = lambda t: re.sub(r"\s+", "", str(t or ""))
-    if norm(row.get("장소명")) in {norm(x.split("|")[0]) for x in lines}:
-        return [row]
+    me = norm(row.get("장소명"))
+    here = (str(row.get("위도") or ""), str(row.get("경도") or ""))
+    for x in lines:
+        parts = [p.strip() for p in x.split("|")]
+        name = norm(parts[0])
+        if name and me and (name in me or me in name):
+            return [row]
+        if here[0] and len(parts) >= 3 and (parts[1], parts[2]) == here:
+            return [row]
     base = _page_id(row.get("url"))
     out = []
     for i, line in enumerate(lines):

@@ -1,0 +1,50 @@
+# 매주 월요일 Notion 트래커 → 앱 데이터 가져오기
+# Notion 주간 수집(월 08:43 KST, 약 20분)이 끝난 뒤 10:00 KST 에 돌고, 바뀐 게 있으면 data/cafes.json · 포스터를 커밋한다.
+# 필요한 Secret: NOTION_TOKEN (필수), KAKAO_REST_API_KEY (선택 — Notion 에 좌표가 없는 곳의 위치 찾기)
+name: Notion 주간 가져오기
+
+on:
+  schedule:
+    - cron: "0 1 * * 1"        # 매주 월요일 01:00 UTC = 10:00 KST
+  workflow_dispatch:            # Actions 탭에서 'Run workflow' 로 바로 돌릴 수 있다
+
+permissions:
+  contents: write
+
+concurrency:
+  group: notion-sync
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 패키지 설치
+        run: pip install -r requirements.txt
+
+      - name: Notion 에서 가져오기
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          STORAGE_MODE: local
+        run: python scripts/notion_import.py
+
+      - name: 바뀐 데이터 올리기
+        run: |
+          git add data/cafes.json static/uploads
+          if git diff --cached --quiet; then
+            echo "바뀐 내용이 없습니다."
+            exit 0
+          fi
+          git config user.name "ani-where-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Notion 주간 가져오기 ($(TZ=Asia/Seoul date +%Y-%m-%d))"
+          git push
