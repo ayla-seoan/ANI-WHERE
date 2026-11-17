@@ -6,6 +6,7 @@
 | | 주소 |
 | --- | --- |
 | 🌐 바로 써 보기 (배포된 사이트) | https://ani-where.streamlit.app |
+| 📱 공개 웹 (폰에 설치되는 PWA) | https://ani-where.vercel.app |
 | 💻 소스 코드 (GitHub) | https://github.com/ayla-seoan/ANI-WHERE |
 
 > 설치 없이 구경만 하려면 위 **배포된 사이트**를 열면 됩니다. 내 컴퓨터에서 직접 실행해 보려면 아래 순서를 그대로 따라 하세요.
@@ -62,7 +63,7 @@
 | --- | --- | --- |
 | 역할 | **참여**: 등록·수정·리뷰·북마크·로그인·물어보기·지표·관리자 | **찾기·판단**: 빠른 목록·상세·이번 주, 폰에 설치 |
 | 쓰기 | O (append-only) | X (읽기 전용) |
-| 배포 | Streamlit Community Cloud — https://ani-where.streamlit.app | Vercel (Root Directory = `web`) |
+| 배포 | Streamlit Community Cloud — https://ani-where.streamlit.app | Vercel — https://ani-where.vercel.app (Root Directory = `web`) |
 | 로컬 | `streamlit run app_cafemap.py` → http://localhost:8501 | `cd web && npm run dev` → http://localhost:3000 |
 | 데이터 | 같은 저장소 (`STORAGE_MODE`: local / supabase) | Supabase `popups_current` 뷰, 없으면 GitHub 의 `data/cafes.json` |
 
