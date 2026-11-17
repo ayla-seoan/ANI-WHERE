@@ -38,6 +38,7 @@ MAX_NICK = 16
 
 HEADERS = ["row_id", "entry_id", "revision", "status", "updated_at",
            "provider", "nickname", "agreed_at"]
+PROVIDER_LABEL = {"kakao": "카카오", "naver": "네이버", "local": "아이디"}
 
 PROVIDERS = {
     "kakao": {
@@ -245,3 +246,149 @@ def display_name(row: dict) -> str:
     """리뷰·수정 이력에 쓸 이름. 끝의 #네 글자는 회원 번호로 정해져 '내 글' 확인에 쓰인다."""
     # 회원은 '#m' + 4자 — 손님의 IP 표식(16진수 4자)과 절대 겹치지 않는다
     return f'{row.get("nickname", "")}#m{str(row.get("entry_id"))[:4]}'
+
+
+# ================================================================== 아이디·비밀번호 가입 (간편 로그인과 별개)
+# 받는 것: 아이디 · 비밀번호 · 닉네임 · 약관 동의. 이메일·전화번호·실명은 받지 않는다.
+# 비밀번호 원문은 저장하지 않는다.
+#   - supabase 모드: DB 함수(register_login / check_login …)가 bcrypt 로 해시하고 비교한다. 해시는 DB 밖으로 안 나온다 (005)
+#   - local 모드: data/credentials.json 에 scrypt 해시 (깃 제외)
+import re as _re
+from pathlib import Path as _Path
+
+LOGIN_ID_RE = _re.compile(r"^[a-z0-9_]{4,20}$")
+PW_MIN, PW_MAX = 8, 72
+MAX_FAILS, LOCK_SECONDS = 5, 300          # 같은 화면에서 5번 틀리면 5분 잠금 (무작위 대입 늦추기)
+_CRED_FILE = _Path(os.getenv("ANIWHERE_DATA_DIR") or _Path(__file__).resolve().parent.parent / "data") / "credentials.json"
+
+
+def validate_signup(login_id: str, pw: str, pw2: str, nickname: str) -> list[str]:
+    errors = []
+    lid = (login_id or "").strip().lower()
+    if not LOGIN_ID_RE.match(lid):
+        errors.append("아이디는 영어 소문자·숫자·밑줄(_)로 4~20자예요.")
+    if scan(lid):
+        errors.append("아이디에 전화번호 같은 개인정보는 쓸 수 없어요.")
+    if not (PW_MIN <= len(pw or "") <= PW_MAX):
+        errors.append(f"비밀번호는 {PW_MIN}~{PW_MAX}자예요.")
+    elif not (_re.search(r"[A-Za-z]", pw) and _re.search(r"\d", pw)):
+        errors.append("비밀번호에 영문과 숫자를 함께 넣어 주세요.")
+    elif lid and lid in pw.lower():
+        errors.append("비밀번호에 아이디를 넣지 말아 주세요.")
+    if pw != pw2:
+        errors.append("비밀번호 확인이 달라요.")
+    errors += validate_nick(nickname)
+    return errors
+
+
+def _supabase() -> tuple[str, dict] | None:
+    url, key = os.getenv("SUPABASE_URL", "").rstrip("/"), os.getenv("SUPABASE_KEY", "")
+    if os.getenv("STORAGE_MODE", "local").lower() != "supabase" or not url or not key:
+        return None
+    headers = {"apikey": key, "Content-Type": "application/json"}
+    if key.startswith("eyJ"):
+        headers["Authorization"] = f"Bearer {key}"
+    return url, headers
+
+
+def _rpc(name: str, **params):
+    url, headers = _supabase()
+    try:
+        r = requests.post(f"{url}/rest/v1/rpc/{name}", headers=headers, json=params, timeout=10)
+    except requests.RequestException:
+        raise AuthError("서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.") from None
+    if r.status_code >= 400:
+        raise AuthError("요청을 처리하지 못했어요. 입력을 확인해 주세요.")
+    return r.json()
+
+
+# ---- local 모드 (scrypt) ----
+def _scrypt(pw: str, salt: bytes) -> str:
+    return hashlib.scrypt(pw.encode(), salt=salt, n=2 ** 14, r=8, p=1, dklen=32).hex()
+
+
+def _cred_load() -> dict:
+    try:
+        return json.loads(_CRED_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _cred_save(data: dict) -> None:
+    _CRED_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _CRED_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def login_exists(login_id: str) -> bool:
+    lid = (login_id or "").strip().lower()
+    if _supabase():
+        return bool(_rpc("login_exists", p_login_id=lid))
+    return lid in _cred_load()
+
+
+def register_password(store, login_id: str, pw: str, pw2: str, nickname: str) -> dict:
+    """아이디 가입: 비밀번호를 해시로 저장하고 회원 기록(members, provider='local')을 쌓는다."""
+    errors = validate_signup(login_id, pw, pw2, nickname)
+    if errors:
+        raise AuthError(errors[0])
+    lid = login_id.strip().lower()
+    key = member_key("local", lid)
+    if _supabase():
+        if not _rpc("register_login", p_login_id=lid, p_password=pw, p_member_key=key):
+            raise AuthError("이미 있는 아이디예요. 다른 아이디를 골라 주세요.")
+    else:
+        data = _cred_load()
+        if lid in data:
+            raise AuthError("이미 있는 아이디예요. 다른 아이디를 골라 주세요.")
+        salt = secrets.token_bytes(16)
+        data[lid] = {"member_key": key, "salt": salt.hex(), "hash": _scrypt(pw, salt)}
+        _cred_save(data)
+    return signup(store, Identity(provider="local", member_key=key, nickname=nickname), nickname)
+
+
+def check_password(login_id: str, pw: str) -> str | None:
+    """맞으면 회원 번호, 틀리면 None. 아이디가 없는지 비밀번호가 틀렸는지는 알려 주지 않는다."""
+    lid = (login_id or "").strip().lower()
+    if not lid or not pw:
+        return None
+    if _supabase():
+        return _rpc("check_login", p_login_id=lid, p_password=pw) or None
+    rec = _cred_load().get(lid)
+    if not rec:
+        _scrypt(pw, b"0" * 16)        # 없는 아이디도 같은 시간이 걸리게
+        return None
+    ok = hmac.compare_digest(rec["hash"], _scrypt(pw, bytes.fromhex(rec["salt"])))
+    return rec["member_key"] if ok else None
+
+
+def change_password(login_id: str, old: str, new: str, new2: str) -> None:
+    lid = (login_id or "").strip().lower()
+    if new != new2:
+        raise AuthError("새 비밀번호 확인이 달라요.")
+    errs = [e for e in validate_signup(lid, new, new, "닉네임") if "비밀번호" in e]
+    if errs:
+        raise AuthError(errs[0])
+    if _supabase():
+        if not _rpc("change_password", p_login_id=lid, p_old=old, p_new=new):
+            raise AuthError("아이디나 지금 비밀번호가 맞지 않아요.")
+        return
+    if not check_password(lid, old):
+        raise AuthError("아이디나 지금 비밀번호가 맞지 않아요.")
+    data = _cred_load()
+    salt = secrets.token_bytes(16)
+    data[lid].update({"salt": salt.hex(), "hash": _scrypt(new, salt)})
+    _cred_save(data)
+
+
+def drop_password(login_id: str, pw: str) -> None:
+    """탈퇴할 때 아이디·비밀번호 해시를 지운다 (비밀번호 확인 필요)."""
+    lid = (login_id or "").strip().lower()
+    if _supabase():
+        if not _rpc("drop_login", p_login_id=lid, p_password=pw):
+            raise AuthError("아이디나 비밀번호가 맞지 않아요.")
+        return
+    if not check_password(lid, pw):
+        raise AuthError("아이디나 비밀번호가 맞지 않아요.")
+    data = _cred_load()
+    data.pop(lid, None)
+    _cred_save(data)
