@@ -769,3 +769,130 @@ details.more[open] .close-label {
   -webkit-appearance: none;
   appearance: none;
 }
+
+/* ======================================================================
+   앱(Streamlit, ani-where.streamlit.app) 모바일 화면과 같은 모양 (11/18)
+   위 규칙을 덮어쓴다. 색·글꼴·카드 모양을 앱과 맞춘다.
+   ====================================================================== */
+:root {
+  --accent: #56c2a7;
+  --accent-deep: #2e9c82;
+  --accent-soft: #e6f6f0;
+  --mint-line: #9eddcc;
+  --coral: #ff6b6b;
+  --field: #f1f4f3;
+  --jua: "Jua", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* 머리: 큰 로고 + Jua 문구 + 둥근 테두리 버튼 (스크롤하면 같이 올라간다 — 앱과 같음) */
+.header {
+  position: static;
+  background: #fff;
+  border-bottom: 0;
+  backdrop-filter: none;
+  padding: 18px 0 4px;
+}
+.brand { display: inline-block; }
+.brand img { height: auto; width: 330px; max-width: 78vw; }
+.header-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 6px;
+}
+.tagline {
+  margin: 0; font-family: var(--jua); font-size: 1.15rem; line-height: 1.6; color: #26302d;
+}
+.nav { gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.nav a {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 999px; border: 1.5px solid #e3e8e6; background: #fff;
+  color: #26302d; font-weight: 500; font-size: 14px;
+}
+.nav a svg { width: 17px; height: 17px; }
+.nav a[aria-current="page"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); }
+
+main { padding-top: 8px; }
+
+/* 검색·탭·지역 칩: 앱 입력칸처럼 옅은 회색 둥근 칸 */
+.search { background: var(--field); border: 0; border-radius: 999px; }
+.search input { background: transparent; border: 0; }
+.tabs { border-bottom: 0; gap: 6px; margin: 12px 0 8px; }
+.tabs button {
+  flex: 1; border: 1.5px solid #e3e8e6; border-radius: 999px; padding: 7px 0; background: #fff; font-weight: 600;
+}
+.tabs button[aria-selected="true"] {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); box-shadow: none;
+}
+.chip { background: var(--field); border-color: transparent; }
+.chip[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* '팝업 카페 N곳' + 지도로 보기 (스크롤해도 위에 붙어 있다) */
+.listbar {
+  position: sticky; top: 0; z-index: 15; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 0; margin: 6px 0 4px; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(6px);
+}
+.result-line { margin: 0; font-size: 1.45rem; font-weight: 500; color: #26302d; }
+.result-line b { color: #1b8a3a; font-weight: 800; }
+.result-line small { margin-left: 8px; font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+.mapbtn {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  padding: 9px 16px; border-radius: 12px; background: #14b8a6; color: #fff; font-weight: 800; font-size: 15px;
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.35);
+}
+.mapbtn svg { width: 18px; height: 18px; }
+
+/* 카드: 포스터 꽉 채움 + 민트 테두리 + 아래 그라데이션 위 흰 글씨 */
+.grid { gap: 14px 12px; }
+.card {
+  position: relative; display: block; aspect-ratio: 3 / 4.1; border-radius: 16px; overflow: hidden;
+  border: 2px solid var(--mint-line); background: var(--accent-soft);
+  box-shadow: 0 2px 10px rgba(46, 156, 130, 0.12);
+}
+.card > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 0.25s; }
+.card:hover > img { transform: scale(1.03); }
+.card .area {
+  position: absolute; left: 8px; top: 8px; z-index: 2; padding: 2px 9px; border-radius: 999px; border: 1.5px solid;
+  color: #fff; font-size: 12px; font-weight: 700; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.card .dday {
+  position: absolute; right: 8px; top: 8px; z-index: 2; padding: 2px 9px; border-radius: 999px; background: #fff;
+  color: var(--accent-deep); font-size: 12px; font-weight: 800; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+.card-over {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 46px 12px 12px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.55) 45%, rgba(0, 0, 0, 0.78) 100%);
+  color: #fff;
+}
+.card-over .card-work {
+  font-family: var(--jua); font-weight: 400; font-size: 1.15rem; line-height: 1.3; color: #fff;
+  -webkit-line-clamp: 1; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.card-over .card-name {
+  display: flex; align-items: center; gap: 4px; margin-top: 3px; color: #fff; font-size: 13px; font-weight: 600;
+}
+.card-over .card-name svg { width: 15px; height: 15px; flex: none; }
+.card-over .card-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-over .card-period { margin-top: 2px; color: #fff; font-size: 14px; font-weight: 800; }
+
+/* 오른쪽 아래 코랄색 + (앱의 등록 버튼) */
+.fab {
+  position: fixed; right: 18px; bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 30;
+  width: 56px; height: 56px; border-radius: 50%; background: var(--coral); display: grid; place-items: center;
+  box-shadow: 0 6px 16px rgba(255, 107, 107, 0.45);
+}
+.fab svg { width: 28px; height: 28px; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; fill: none; }
+
+/* 상세·이번 주 제목도 앱 글꼴 */
+.detail h1, .page-title, .week-head h1, .empty h2 { font-family: var(--jua); font-weight: 400; }
+
+@media (max-width: 640px) {
+  .header { padding-top: 14px; }
+  .brand img { width: 240px; }
+  .tagline { font-size: 1.02rem; }
+  .header-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .nav { justify-content: flex-end; }
+  .result-line { font-size: 1.3rem; }
+  .card-over .card-work { font-size: 1.02rem; }
+}

@@ -22,8 +22,7 @@ export default async function Home() {
 
   return (
     <>
-      <h1 className="page-title">애니 팝업·콜라보 카페 찾기</h1>
-      <p className="page-sub">작품이나 동네로 찾고, 가기 전에 기간·특전·위치를 확인하세요.</p>
+      <h1 className="sr-only">애니 팝업·콜라보 카페 찾기</h1>
       {items.length > 0 ? (
         <PopupBrowser items={items} today={today} />
       ) : (

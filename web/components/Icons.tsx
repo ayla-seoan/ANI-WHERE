@@ -43,3 +43,22 @@ export const AddIcon = (p: P) => (
     <path d="M12 5v14M5 12h14" />
   </svg>
 );
+export const StoreIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="M4 9l1.5-4h13L20 9" />
+    <path d="M4 9h16v1.5a2.5 2.5 0 01-5 0 2.5 2.5 0 01-5 0 2.5 2.5 0 01-5 0z" />
+    <path d="M5 13v7h14v-7" />
+  </svg>
+);
+export const MapOutlineIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" />
+    <path d="M9 4v14M15 6v14" />
+  </svg>
+);
+export const ChatIcon = (p: P) => (
+  <svg {...base} {...p}>
+    <path d="M4 5h12v9H8l-4 3V5z" />
+    <path d="M16 9h4v9l-3-2h-7v-2" />
+  </svg>
+);
