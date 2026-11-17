@@ -41,6 +41,12 @@ def grade(case: dict, query, hits) -> tuple[bool, str]:
             return False, f"다른 지역 섞임: {r.get('address')}"
         if case.get("window") and not (query.window and ask._overlaps(r, query.window)):
             return False, "날짜 조건 안 맞음"
+        if case.get("ongoing") and not ask._ongoing(r, TODAY):
+            return False, f"진행 중이 아닌 팝업 섞임: {r.get('work')}"
+        if case.get("upcoming") and not (ask.mycal._day(r.get("start_date")) and ask.mycal._day(r.get("start_date")) > TODAY):
+            return False, f"이미 시작한 팝업 섞임: {r.get('work')}"
+    if case.get("intent") and query.intent != case["intent"]:
+        return False, f"질문 종류를 {query.intent or '검색'}(으)로 읽음 (기대: {case['intent']})"
     return True, f"{len(hits)}건 모두 조건 일치"
 
 
@@ -54,7 +60,7 @@ def main() -> None:
     lines = ["| # | 질문 | 읽은 조건 | 결과 | 판정 |", "| --- | --- | --- | --- | --- |"]
     ok = 0
     for i, case in enumerate(cases, 1):
-        query, hits = ask.retrieve(case["q"], rows, TODAY)
+        query, hits = ask.find(case["q"], rows, TODAY, case.get("ctx"))
         good, why = grade(case, query, hits)
         ok += good
         lines.append(f"| {i} | {case['q']} | {query.describe()} | {why} | {'O' if good else 'X'} |")

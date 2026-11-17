@@ -1587,7 +1587,6 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
             st.rerun()
         _view_switch(wide)
         st.button("", icon=":material/calendar_month:", key="m_cal_btn", on_click=_gnb_go, args=("cal",))
-        st.button("", icon=":material/bookmarks:", key="m_box_btn", on_click=_gnb_go, args=("box",))
 
 
 def _view_switch(wide: bool) -> None:
@@ -2504,7 +2503,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .st-key-gnb_right .st-key-login_btn button p { font-size: 1rem !important; }
 .gnb-tag { color: #6B7672; font-size: .82rem; margin: -2px 0 6px; font-family: "Jua", sans-serif; }
 /* 예전 '지도로 보기 / 리스트로 보기' 버튼은 위 탭이 대신한다. 모바일용 캘린더 아이콘도 PC 에서는 숨김 */
-.st-key-m_cal_btn, .st-key-m_box_btn { display: none !important; }
+.st-key-m_cal_btn { display: none !important; }
 .st-key-map_icon { display: none !important; }
 .ntf-item { padding: 8px 2px; border-bottom: 1px solid #EEF1F0; font-size: .88rem; line-height: 1.5; }
 .ntf-item b { color: #2E9C82; }
@@ -2682,7 +2681,6 @@ def _gnb(current: dict | None) -> None:
             st.button("지도로 보기", key=f"gnbtab_{'on_' if on_map else ''}map", on_click=_gnb_go, args=("map",))
             st.button("리스트로 보기", key=f"gnbtab_{'on_' if on_list else ''}list", on_click=_gnb_go, args=("list",))
             st.button("내 캘린더", key=f"gnbtab_{'on_' if on_cal else ''}cal", on_click=_gnb_go, args=("cal",))
-            st.button("보관함", key=f"gnbtab_{'on_' if on_box else ''}box", on_click=_gnb_go, args=("box",))
         with st.container(horizontal=True, key="gnb_right"):
             # 검색 아이콘: 누르면 아래 검색 필터 줄(검색·작품·캐릭터·진행여부·날짜)을 펼치고 접는다.
             # 걸어 둔 조건이 있으면 아이콘 옆에 그 수. 모바일에서는 필터 시트를 연다
@@ -2785,7 +2783,7 @@ def _notice_history(days_back: int = 30) -> list[tuple[date, str, str, dict]]:
 
 
 def render_my_calendar_view() -> None:
-    st.markdown(CAL_CSS + MYCAL_CSS, unsafe_allow_html=True)
+    st.markdown(CAL_CSS + MYCAL_CSS + BOX_CSS, unsafe_allow_html=True)
     # 모바일은 메뉴바 탭이 없어서 리스트·지도로 돌아가는 아이콘을 둔다
     with st.container(horizontal=True, horizontal_alignment="right", key="mycal_mnav"):
         st.button("", icon=":material/format_list_bulleted:", key="mycal_to_list", on_click=_gnb_go, args=("list",))
@@ -2796,28 +2794,38 @@ def render_my_calendar_view() -> None:
     with left, st.container(key="mycal_box"):
         render_calendar()
     with right, st.container(key="ntf_box"):
-        st.markdown('<div class="mc-title">알림 받은 내역</div>'
-                    '<div class="mc-sub">북마크한 팝업의 오픈 · 종료 3일 전부터 당일까지 알림 (최근 30일)</div>',
-                    unsafe_allow_html=True)
-        hist = _notice_history()
-        if not hist:
-            st.markdown('<div class="ntf-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
-                        '여기에 쌓여요.</div>', unsafe_allow_html=True)
-        last_day = None
-        for n, (day, kind, label, r) in enumerate(hist[:40]):
-            if day != last_day:
-                st.markdown(f'<div class="nh-day">{"오늘" if day == TODAY else f"{day.month}월 {day.day}일"}</div>',
-                            unsafe_allow_html=True)
-                last_day = day
-            eid = str(r.get("entry_id"))
-            with st.container(key=f"nh_{n}_{eid}"):
-                st.markdown(
-                    f'<div class="nh-item"><img src="{escape(_poster_url(r.get("images")))}" alt="">'
-                    f'<div><span class="nh-tag{" end" if kind == "end" else ""}">{escape(label)}</span>'
-                    f'<div class="nh-name">{escape(str(r.get("work") or ""))}</div>'
-                    f'<div class="nh-cafe">{escape(str(r.get("cafe_name") or ""))}</div></div></div>',
-                    unsafe_allow_html=True)
-                st.button(f"{r.get('work')} 상세", key=f"nh_btn_{n}_{eid}", on_click=_gnb_open, args=(eid,))
+        tab = st.session_state.get("box_tab", "ntf")
+        with st.container(horizontal=True, key="box_tabs"):
+            for t, label in (("ntf", "알림"), ("fav", "찜"), ("visited", "다녀온"), ("recent", "최근 본")):
+                st.button(label, key=f"boxtab_{'on_' if tab == t else ''}{t}", on_click=_box_tab, args=(t,))
+        if tab == "ntf":
+            _render_notice_history()
+        else:
+            render_box_view(tab)
+
+
+def _render_notice_history() -> None:
+    st.markdown('<div class="mc-sub">북마크한 팝업의 오픈 · 종료 3일 전부터 당일까지 알림 (최근 30일)</div>',
+                unsafe_allow_html=True)
+    hist = _notice_history()
+    if not hist:
+        st.markdown('<div class="ntf-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
+                    '여기에 쌓여요.</div>', unsafe_allow_html=True)
+    last_day = None
+    for n, (day, kind, label, r) in enumerate(hist[:40]):
+        if day != last_day:
+            st.markdown(f'<div class="nh-day">{"오늘" if day == TODAY else f"{day.month}월 {day.day}일"}</div>',
+                        unsafe_allow_html=True)
+            last_day = day
+        eid = str(r.get("entry_id"))
+        with st.container(key=f"nh_{n}_{eid}"):
+            st.markdown(
+                f'<div class="nh-item"><img src="{escape(_poster_url(r.get("images")))}" alt="">'
+                f'<div><span class="nh-tag{" end" if kind == "end" else ""}">{escape(label)}</span>'
+                f'<div class="nh-name">{escape(str(r.get("work") or ""))}</div>'
+                f'<div class="nh-cafe">{escape(str(r.get("cafe_name") or ""))}</div></div></div>',
+                unsafe_allow_html=True)
+            st.button(f"{r.get('work')} 상세", key=f"nh_btn_{n}_{eid}", on_click=_gnb_open, args=(eid,))
 
 
 # ------------------------------------------------------------ '보관함' 탭: 찜 · 다녀온(내가 쓴 다녀온 후기) · 최근 본
@@ -2888,26 +2896,13 @@ def _box_empty(title: str, hint: str, icon: str) -> None:
 
 
 def _box_grid(items: list[tuple[dict, str]], key: str) -> None:
-    """카드 목록: PC 는 2칸, 모바일은 1칸 (Streamlit 칸은 좁은 화면에서 저절로 쌓인다)."""
-    for i in range(0, len(items), 2):
-        cols = st.columns(2, gap="medium")
-        for col, (r, review_html) in zip(cols, items[i:i + 2]):
-            with col:
-                _box_card(r, key, review_html)
+    """카드 목록 (캘린더 옆 칸이라 한 줄에 한 장)."""
+    for r, review_html in items:
+        _box_card(r, key, review_html)
 
 
-def render_box_view() -> None:
-    st.markdown(BOX_CSS, unsafe_allow_html=True)
-    with st.container(horizontal=True, horizontal_alignment="right", key="box_mnav"):
-        st.button("", icon=":material/format_list_bulleted:", key="box_to_list", on_click=_gnb_go, args=("list",))
-        st.button("", icon=":material/map:", key="box_to_map", on_click=_gnb_go, args=("map",))
-    st.markdown("<style>@media (min-width: 641px) { .st-key-box_mnav { display: none !important; } }</style>",
-                unsafe_allow_html=True)
-    st.markdown('<div class="bx-title">보관함</div>', unsafe_allow_html=True)
-    tab = st.session_state.get("box_tab", "fav")
-    with st.container(horizontal=True, key="box_tabs"):
-        for t, label in (("fav", "찜"), ("visited", "다녀온"), ("recent", "최근 본")):
-            st.button(label, key=f"boxtab_{'on_' if tab == t else ''}{t}", on_click=_box_tab, args=(t,))
+def render_box_view(tab: str) -> None:
+    """내 캘린더 오른쪽 칸의 찜 · 다녀온 · 최근 본."""
     latest = {str(r.get("entry_id")): r for r in mycal.latest_rows(store.all_rows())}
 
     if tab == "fav":
@@ -3011,9 +3006,6 @@ def page_map() -> None:
         _remember_recent(str(current["entry_id"]))
     if st.session_state.get("cal_view") and not current:
         render_my_calendar_view()
-        return
-    if st.session_state.get("box_view") and not current:
-        render_box_view()
         return
 
     df = cafe.rows_to_frame(rows)
@@ -4611,25 +4603,82 @@ def _ask_panel_send(question: str) -> None:
     if errors:
         chat.append({"role": "bot", "text": errors[0], "ids": [], "badge": ""})
     else:
-        res = ask.answer(q, stats.popups(store.all_rows()), TODAY)
+        res = ask.answer(q, stats.popups(store.all_rows()), TODAY, ctx=_ask_ctx())
         if not res.hits:
-            text = ("조건에 맞는 팝업을 찾지 못했어요. 작품 이름을 줄이거나(예: 주술회전) 날짜·지역 조건을 하나 빼 보세요. "
-                    "없는 팝업이면 오른쪽 아래 + 로 직접 등록할 수 있어요.")
+            # 규칙(의도)이 준 안내가 있으면 그대로 (위치 모름·사용법 등), 없으면 기본 안내
+            text = res.text or ("조건에 맞는 팝업을 찾지 못했어요. 작품 이름을 줄이거나(예: 주술회전) 날짜·지역 조건을 하나 빼 보세요. "
+                                "없는 팝업이면 오른쪽 아래 + 로 직접 등록할 수 있어요.")
             chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체"})
         else:
-            used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:3]]
+            limit = 5 if res.query.intent else 3
+            used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:limit]]
             rows = {str(h.row.get("entry_id")): h.row for h in res.hits}
-            chat.append({"role": "bot", "text": res.text, "badge": res.badge,
-                         "ids": [_ask_card(i, rows[i]) for i in used[:3] if i in rows]})
+            cards = [_ask_card(i, rows[i], res.distances.get(i)) for i in used[:limit] if i in rows]
+            chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards,
+                         "head": res.summary or _ASK_HEADS.get(res.query.intent, "")})
+            _ask_log(q)
     del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
 
 
-def _ask_card(cafe_id: str, r: dict) -> dict:
+_ASK_HEADS = {"near": "내 위치에서 가까운 순", "recommend": "추천 (별점 → 리뷰 많은 순)", "ending": "곧 끝나는 순",
+              "upcoming": "곧 열리는 순", "popular": "북마크 많은 순", "reviewed": "후기 많은 순"}
+_ASK_LOG = Path(__file__).resolve().parent / "logs" / "ask_questions.jsonl"
+ASK_DEFAULT_CHIPS = ["내 주변 가까운 팝업", "팝업 추천해줘", "지금 진행 중인 서울 팝업", "곧 끝나는 팝업", "이번 주말 성수 팝업"]
+
+
+def _ask_ctx() -> dict:
+    """물어보기 규칙에 넘길 값: 내 위치, 팝업별 (평균 별점, 다녀온 후기 수), 팝업별 북마크 수."""
+    agg: dict[str, list[int]] = {}
+    for r in reviews.current_rows():
+        if r.get("kind") == review.RATED_KIND and not r.get("parent_id"):
+            try:
+                n = int(r.get("rating"))
+            except (TypeError, ValueError):
+                continue
+            if 1 <= n <= 5:
+                agg.setdefault(str(r.get("cafe_id")), []).append(n)
+    ratings = {k: (sum(v) / len(v), len(v)) for k, v in agg.items()}
+    return {"loc": _my_loc(), "ratings": ratings, "favs": favorite.counts(favs.current_rows())}
+
+
+def _ask_log(question: str) -> None:
+    """답을 찾은 질문만 남긴다 (개인정보는 가려서). '많이 물어본 질문' 칩에 쓴다."""
+    try:
+        _ASK_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with _ASK_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"at": datetime.now().isoformat(timespec="seconds"),
+                                "q": guard.mask(" ".join(question.split()))[:60]}, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _ask_chips() -> list[str]:
+    """사용자들이 가장 많이 물어본 질문 최대 5개. 기록이 모자라면 기본 질문으로 채운다."""
+    counts: dict[str, int] = {}
+    try:
+        for line in _ASK_LOG.read_text(encoding="utf-8").splitlines()[-2000:]:
+            q = json.loads(line).get("q", "").strip()
+            if 2 <= len(q) <= 30:
+                counts[q] = counts.get(q, 0) + 1
+    except (OSError, ValueError):
+        pass
+    top = [q for q, n in sorted(counts.items(), key=lambda kv: -kv[1]) if n >= 2][:5]
+    for d in ASK_DEFAULT_CHIPS:
+        if len(top) >= 5:
+            break
+        if d not in top:
+            top.append(d)
+    return top[:5]
+
+
+def _ask_card(cafe_id: str, r: dict, km: float | None = None) -> dict:
     """대화창 카드 한 장에 필요한 값."""
     def md(v) -> str:
         d = mycal._day(v)
         return f"{d.month}.{d.day}" if d else ""
     dates = f"{md(r.get('start_date'))} ~ {md(r.get('end_date'))}".strip(" ~")
+    if km is not None:
+        dates = (f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km") + " · " + dates
     return {"id": str(cafe_id), "work": str(r.get("work") or ""), "cafe": str(r.get("cafe_name") or ""),
             "address": str(r.get("address") or ""), "dates": dates, "poster": _poster_url(r.get("images"))}
 
@@ -4656,7 +4705,9 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
             # 대화창에서는 'AI 산출 / 규칙 기반 대체' 배지를 보이지 않는다 (사용자 요청 11/18). /ask 화면에는 남아 있다
             # 찾은 팝업이 있으면 요약 문장(회색 상자)은 아래 버튼과 겹쳐서 숨기고 'N곳' 만 (사용자 요청 11/18)
             if m.get("ids"):
-                st.markdown(f'<div class="apn-who">ANI:WHERE · 찾은 팝업 {len(m["ids"])}곳</div>', unsafe_allow_html=True)
+                head = f' · {escape(m["head"])}' if m.get("head") else ""
+                st.markdown(f'<div class="apn-who">ANI:WHERE · 찾은 팝업 {len(m["ids"])}곳{head}</div>',
+                            unsafe_allow_html=True)
             else:
                 st.markdown(f'<div class="apn-who">ANI:WHERE</div><div class="apn-bot">{escape(m["text"])}</div>',
                             unsafe_allow_html=True)
@@ -4681,7 +4732,7 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                     else:
                         st.button(f"{card['work']} 상세 보기", key=key, on_click=_ask_panel_open, args=(cid,))
     with st.container(horizontal=True, key=f"{prefix}_chips"):
-        for i, chip in enumerate(ASK_PANEL_CHIPS):
+        for i, chip in enumerate(_ask_chips()):
             st.button(chip, key=f"{prefix}_chip_{i}", on_click=_ask_panel_send, args=(chip,))
     with st.container(key=f"{prefix}_form"):
         with st.form(prefix, border=False, clear_on_submit=False):

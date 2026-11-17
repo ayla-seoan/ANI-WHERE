@@ -22,3 +22,14 @@
 {"q": "고죠 사토루 굿즈", "work": "주술회전"}
 {"q": "판교 팝업", "place": "판교"}
 {"q": "원피스 지난 팝업도 보여줘", "work": "원피스"}
+{"q": "팝업 추천해줘", "intent": "recommend", "ongoing": true}
+{"q": "서울 팝업 추천", "intent": "recommend", "place": "서울", "ongoing": true}
+{"q": "내 위치에서 가장 가까운 팝업 알려줘", "intent": "near", "ongoing": true, "ctx": {"loc": {"lat": 37.5563, "lng": 126.922}}}
+{"q": "가까운 팝업", "intent": "near", "empty": true}
+{"q": "지역별로 팝업 알려줘", "intent": "by_region", "ongoing": true}
+{"q": "현재 진행하는 부산 팝업 알려줘", "place": "부산", "ongoing": true}
+{"q": "곧 끝나는 팝업", "intent": "ending", "ongoing": true}
+{"q": "아직 예정중인 홍대 팝업", "intent": "upcoming", "place": "홍대", "upcoming": true}
+{"q": "12월 5일에 부산에서 열리는 팝업", "place": "부산", "window": true}
+{"q": "11.30에 서울 팝업 있어?", "place": "서울", "window": true}
+{"q": "안녕", "intent": "help", "empty": true}
