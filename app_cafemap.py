@@ -4237,7 +4237,27 @@ ASK_PANEL_CSS = """
 .apn-badge { display: inline-block; margin-top: 6px; padding: 1px 8px; border-radius: 999px; font-size: .7rem;
   font-weight: 700; border: 1px solid #9EDDCC; color: #2E9C82; background: #fff; }
 .apn-badge.fb { border-color: #C9D1CE; color: #6B7672; }
-[class*="st-key-apn_hit_"] button, [class*="st-key-apd_hit_"] button { justify-content: flex-start; text-align: left; font-size: .8rem;
+/* 찾은 팝업 카드: 왼쪽 포스터 · 오른쪽 작품(민트) · 매장(굵게) · 주소(회색) · 기간(민트 굵게) */
+[class*="st-key-apn_card_"], [class*="st-key-apd_card_"] { position: relative; gap: 0 !important; margin: 6px 0; }
+.apc { display: flex; gap: 12px; align-items: stretch; background: #E9F7F2; border-radius: 16px; padding: 10px;
+  transition: background .12s; }
+[class*="st-key-apn_card_"]:hover .apc, [class*="st-key-apd_card_"]:hover .apc { background: #DCF2EA; }
+.apc img { width: 78px; height: 106px; flex: 0 0 78px; object-fit: cover; border-radius: 8px; background: #fff; }
+.apc-txt { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.apc-work { font-family: "Jua", sans-serif; font-size: 1.2rem; line-height: 1.25; color: #2E9C82;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apc-cafe { font-weight: 800; font-size: .95rem; color: #26302D; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apc-addr { color: #7A8582; font-size: .82rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden; }
+.apc-date { color: #2E9C82; font-weight: 800; font-size: .9rem; margin-top: 2px; }
+/* 카드 전체를 덮는 투명 버튼 (글자는 화면 읽기용으로만 남는다) */
+[class*="st-key-apn_hit_"], [class*="st-key-apd_hit_"] { position: absolute !important; inset: 0; z-index: 2;
+  width: 100% !important; height: 100% !important; }
+[class*="st-key-apn_hit_"] > div, [class*="st-key-apd_hit_"] > div, [class*="st-key-apn_hit_"] .stButton,
+[class*="st-key-apd_hit_"] .stButton { width: 100% !important; height: 100% !important; }
+[class*="st-key-apn_hit_"] button, [class*="st-key-apd_hit_"] button { width: 100% !important; height: 100% !important;
+  opacity: 0 !important; cursor: pointer; }
+.st-key-apn_unused_hit button { justify-content: flex-start; text-align: left; font-size: .8rem;
   min-height: 0; padding: 4px 10px; border-radius: 10px; }
 .st-key-apn_chips, .st-key-apd_chips { padding-top: 10px; border-top: 1px solid #EEF1F0; gap: 6px !important; flex-wrap: wrap; }
 .st-key-apn_chips button, .st-key-apd_chips button { border-radius: 999px !important; font-size: .78rem; min-height: 0; padding: 4px 12px; }
@@ -4268,10 +4288,20 @@ def _ask_panel_send(question: str) -> None:
             chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체"})
         else:
             used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:3]]
-            names = {str(h.row.get("entry_id")): f'{h.row.get("work")} · {h.row.get("cafe_name")}' for h in res.hits}
+            rows = {str(h.row.get("entry_id")): h.row for h in res.hits}
             chat.append({"role": "bot", "text": res.text, "badge": res.badge,
-                         "ids": [(i, names.get(i, i)) for i in used[:3]]})
+                         "ids": [_ask_card(i, rows[i]) for i in used[:3] if i in rows]})
     del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
+
+
+def _ask_card(cafe_id: str, r: dict) -> dict:
+    """대화창 카드 한 장에 필요한 값."""
+    def md(v) -> str:
+        d = mycal._day(v)
+        return f"{d.month}.{d.day}" if d else ""
+    dates = f"{md(r.get('start_date'))} ~ {md(r.get('end_date'))}".strip(" ~")
+    return {"id": str(cafe_id), "work": str(r.get("work") or ""), "cafe": str(r.get("cafe_name") or ""),
+            "address": str(r.get("address") or ""), "dates": dates, "poster": _poster_url(r.get("images"))}
 
 
 def _ask_panel_submit(prefix: str = "apn") -> None:
@@ -4300,16 +4330,26 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
             else:
                 st.markdown(f'<div class="apn-who">ANI:WHERE</div><div class="apn-bot">{escape(m["text"])}</div>',
                             unsafe_allow_html=True)
-            for cid, label in m.get("ids", []):
-                key = f"{prefix}_hit_{n}_{cid}"
-                if in_dialog:
-                    # 팝업 안에서는 상세로 옮기려면 팝업을 닫고 앱 전체를 다시 그려야 한다
-                    if st.button(label, key=key, icon=":material/location_on:", width="stretch"):
-                        _ask_panel_open(cid)
-                        st.rerun()
-                else:
-                    st.button(label, key=key, icon=":material/location_on:", width="stretch",
-                              on_click=_ask_panel_open, args=(cid,))
+            for card in m.get("ids", []):
+                if not isinstance(card, dict):          # 예전 모양 (id, 이름) 기록
+                    card = {"id": card[0], "work": card[1], "cafe": "", "address": "", "dates": "",
+                            "poster": images.DEFAULT_POSTER_URL}
+                cid = card["id"]
+                with st.container(key=f"{prefix}_card_{n}_{cid}"):
+                    st.markdown(
+                        f'<div class="apc"><img src="{escape(card["poster"])}" alt="">'
+                        f'<div class="apc-txt"><div class="apc-work">{escape(card["work"])}</div>'
+                        f'<div class="apc-cafe">{escape(card["cafe"])}</div>'
+                        f'<div class="apc-addr">{escape(card["address"])}</div>'
+                        f'<div class="apc-date">{escape(card["dates"])}</div></div></div>', unsafe_allow_html=True)
+                    key = f"{prefix}_hit_{n}_{cid}"
+                    if in_dialog:
+                        # 팝업 안에서는 상세로 옮기려면 팝업을 닫고 앱 전체를 다시 그려야 한다
+                        if st.button(f"{card['work']} 상세 보기", key=key):
+                            _ask_panel_open(cid)
+                            st.rerun()
+                    else:
+                        st.button(f"{card['work']} 상세 보기", key=key, on_click=_ask_panel_open, args=(cid,))
     with st.container(horizontal=True, key=f"{prefix}_chips"):
         for i, chip in enumerate(ASK_PANEL_CHIPS):
             st.button(chip, key=f"{prefix}_chip_{i}", on_click=_ask_panel_send, args=(chip,))
