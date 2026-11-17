@@ -759,36 +759,48 @@ def _detail_info_html(current: dict) -> str:
     src_foot = f'<div class="dintro-foot">{src_btn}</div>' if src_btn else ""
     intro_html = (f'<div class="dsec"><div class="dsec-title">팝업 소개</div>'
                   f'<div class="dintro">{_intro_body(intro)}{src_foot}</div></div>' if intro else "")
-    return (f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
-            + _blog_html(current))
+    return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def _blog_posts(entry_id: str, work: str, cafe_name: str, start_date: str) -> tuple[list, str]:
     """팝업별 네이버 블로그 후기 (하루 동안 기억 → 같은 팝업은 하루 한 번만 검색)."""
-    posts, err = blog.search({"work": work, "cafe_name": cafe_name, "start_date": start_date})
-    return [p.__dict__ for p in posts], err
+    posts, err = blog.search({"work": work, "cafe_name": cafe_name, "start_date": start_date}, limit=15)
+    return [{**p.__dict__, "thumb": th} for p, th in blog.with_thumbs(posts)], err
 
 
-def _blog_html(current: dict) -> str:
-    """상세 '블로그 후기' 칸 (네이버 블로그 검색 결과: 제목·요약·블로거·날짜·원문 링크). 키가 없거나 0건이면 칸을 만들지 않는다."""
+def _blog_list(current: dict) -> list[dict]:
     if not blog.enabled():
-        return ""
+        return []
     try:
         posts, _ = _blog_posts(str(current.get("entry_id")), str(current.get("work") or ""),
                                str(current.get("cafe_name") or ""), str(current.get("start_date") or "")[:10])
     except Exception:
-        return ""
+        return []
+    return posts
+
+
+def _bcard(p: dict) -> str:
+    day = f'{p["day"]:%Y. %m. %d}' if p.get("day") else ""
+    pic = (f'<img class="bcard-img" src="{escape(p["thumb"])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
+           if p.get("thumb") else "")
+    return (f'<a class="bcard" href="{escape(p["link"])}" target="_blank" rel="noopener"><div class="bcard-txt">'
+            f'<div class="bcard-t">{escape(p["title"])}</div><div class="bcard-d">{escape(p["desc"])}</div>'
+            f'<div class="bcard-m"><span>{escape(p["blogger"] or "블로그")}</span><span>{day}</span></div></div>{pic}</a>')
+
+
+def _render_blog_tab(current: dict, posts: list[dict]) -> None:
+    """'블로그 후기' 탭: 안내 한 줄 + 카드 (제목 · 요약 2줄 · 블로거 · 날짜, 오른쪽 대표 사진). 누르면 원문 새 탭."""
+    st.markdown(f'<div class="blog-note">{_mi("check_circle")} 네이버 블로그 검색 결과예요. '
+                '부정확한 결과가 포함될 수 있으니 참고로만 봐 주세요.</div>', unsafe_allow_html=True)
+    if not blog.enabled():
+        st.markdown('<div class="blog-empty">블로그 후기는 네이버 검색을 연결한 뒤에 보여요.</div>', unsafe_allow_html=True)
+        return
     if not posts:
-        return ""
-    cards = "".join(
-        f'<a class="dblog" href="{escape(p["link"])}" target="_blank" rel="noopener">'
-        f'<div class="dblog-t">{escape(p["title"])}</div><div class="dblog-d">{escape(p["desc"])}</div>'
-        f'<div class="dblog-m">{_mi("person")}{escape(p["blogger"] or "블로그")}'
-        + (f' · {p["day"]:%Y.%m.%d}' if p.get("day") else "") + '</div></a>'
-        for p in posts)
-    return (f'<div class="dsec"><div class="dsec-title">블로그 후기 <span class="dsec-src">네이버 블로그 검색 결과</span></div>'
-            f'{cards}</div>')
+        st.markdown('<div class="blog-empty">아직 이 팝업의 블로그 후기를 찾지 못했어요.</div>', unsafe_allow_html=True)
+        return
+    # <a> 로 시작하면 마크다운이 첫 카드를 문단으로 쪼개서, 바깥을 <div> 로 감싼다
+    st.markdown('<div class="bcards">' + "".join(_bcard(p) for p in posts) + '</div>', unsafe_allow_html=True)
 
 
 def render_detail(current: dict) -> None:
@@ -862,7 +874,16 @@ def render_detail_tabs(current: dict) -> None:
     tab_review, tab_edit = st.tabs([f":material/chat_bubble: 리뷰 {n}", ":material/edit: 수정하기"], key=f"detail_tabs_{entry_id}",
                                    on_change="rerun")
     with tab_review:
-        render_reviews(entry_id)
+        posts = _blog_list(current)
+        sub = st.session_state.get(f"rvsub_{entry_id}", "review")
+        with st.container(horizontal=True, key="rv_subtabs"):
+            for k, label in (("review", f"리뷰 후기 ({n})"), ("blog", f"블로그 후기 ({len(posts)})")):
+                st.button(label, key=f"rvsub_{'on_' if sub == k else ''}{k}_{entry_id}",
+                          on_click=lambda k=k: st.session_state.update({f"rvsub_{entry_id}": k}))
+        if sub == "blog":
+            _render_blog_tab(current, posts)
+        else:
+            render_reviews(entry_id)
     with tab_edit:
         render_edit(current)
 
@@ -2314,6 +2335,29 @@ iframe[src*="kakao_map"] {{
             -webkit-box-orient:vertical; overflow:hidden; }}
 .dblog-m {{ color:#9AA5A1; font-size:.76rem; margin-top:4px; display:flex; align-items:center; gap:3px; }}
 .dsec-src {{ font-size:.72rem; font-weight:600; color:#9AA5A1; margin-left:6px; }}
+/* 리뷰 탭 안 '리뷰 후기 / 블로그 후기' (11/18 요청) */
+.st-key-rv_subtabs {{ gap:0 !important; margin:2px 0 12px; border-bottom:1.5px solid #E3E8E6; }}
+.st-key-rv_subtabs > div {{ flex:1 1 0 !important; }}
+.st-key-rv_subtabs button {{ width:100% !important; background:#F6F8F7 !important; border:0 !important; border-radius:0 !important;
+  box-shadow:none !important; padding:12px 0 10px !important; border-bottom:3px solid transparent !important; margin-bottom:-1.5px; }}
+.st-key-rv_subtabs button p {{ font-size:1rem !important; font-weight:700 !important; color:#9AA5A1 !important; }}
+.st-key-rv_subtabs [class*="st-key-rvsub_on_"] button {{ background:#fff !important; border-bottom-color:#26302D !important; }}
+.st-key-rv_subtabs [class*="st-key-rvsub_on_"] button p {{ color:#26302D !important; font-weight:800 !important; }}
+.blog-note {{ border:1.5px solid #E3E8E6; border-radius:12px; padding:11px 14px; text-align:center; font-size:.88rem;
+  color:#3A4542; background:#fff; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px; }}
+.blog-note .mi {{ color:{MINT_DEEP}; }}
+.blog-empty {{ color:#8A9592; font-size:.88rem; text-align:center; padding:28px 0; }}
+.bcard {{ display:flex; gap:16px; align-items:stretch; border:1.5px solid #E3E8E6; border-radius:14px; padding:16px 18px;
+  background:#fff; margin-bottom:10px; text-decoration:none !important; color:#26302D !important;
+  transition:border-color .15s, box-shadow .15s; }}
+.bcard:hover {{ border-color:{MINT}; box-shadow:0 4px 14px rgba(20,184,166,.12); }}
+.bcard-txt {{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:6px; }}
+.bcard-t {{ font-weight:800; font-size:1.02rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.bcard-d {{ color:#5F6B67; font-size:.84rem; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2;
+  -webkit-box-orient:vertical; overflow:hidden; }}
+.bcard-m {{ margin-top:auto; display:flex; justify-content:space-between; color:#8A9592; font-size:.76rem; }}
+.bcard-img {{ width:96px; height:96px; flex:0 0 96px; object-fit:cover; border-radius:10px; background:#F4F6F5; }}
+@media (max-width: 640px) {{ .bcard-img {{ width:72px; height:72px; flex-basis:72px; }} .bcard {{ padding:12px; gap:10px; }} }}
 .dlink-warn {{ display:inline-flex; align-items:center; gap:2px; font-size:.75rem; font-weight:800; color:#C2560C;
   background:#fff; border:1px solid #F5C9A6; border-radius:999px; padding:1px 8px; margin-left:6px; vertical-align:2px; }}
 .dlink-warn .mi {{ font-size:.9rem; }}

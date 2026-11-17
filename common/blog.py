@@ -100,3 +100,27 @@ def search(row: dict, limit: int = 5) -> tuple[list[Post], str]:
         posts.append(Post(title=title[:80], link=link, desc=desc[:120], blogger=_clean(it.get("bloggername"))[:30], day=day))
     posts.sort(key=lambda p: p.day or date.min, reverse=True)
     return posts[:limit], ""
+
+
+_OG = re.compile(r"""<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']""", re.I)
+
+
+def thumbnail(link: str) -> str:
+    """블로그 글의 대표 사진(og:image) 주소. 못 찾으면 ''. 네이버 블로그는 모바일 주소가 가볍다."""
+    url = link.replace("://blog.naver.com/", "://m.blog.naver.com/")
+    try:
+        res = requests.get(url, timeout=3, headers={"User-Agent": "Mozilla/5.0 (compatible; ANI-WHERE)"})
+        m = _OG.search(res.text[:200_000])
+    except requests.RequestException:
+        return ""
+    img = html.unescape(m.group(1)) if m else ""
+    return img if img.startswith("https://") and '"' not in img and "'" not in img else ""
+
+
+def with_thumbs(posts: list[Post]) -> list[tuple[Post, str]]:
+    """글마다 대표 사진을 함께 (동시에 최대 5개씩 가져온다)."""
+    from concurrent.futures import ThreadPoolExecutor
+    if not posts:
+        return []
+    with ThreadPoolExecutor(max_workers=min(5, len(posts))) as ex:
+        return list(zip(posts, ex.map(lambda p: thumbnail(p.link), posts)))
