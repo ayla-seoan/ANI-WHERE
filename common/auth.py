@@ -48,7 +48,9 @@ PROVIDERS = {
         "profile": "https://kapi.kakao.com/v2/user/me",
         "id_env": "KAKAO_LOGIN_CLIENT_ID",          # 카카오 REST API 키
         "secret_env": "KAKAO_LOGIN_CLIENT_SECRET",  # 보안 > Client Secret (켰을 때만)
-        "scope": "profile_nickname",
+        # scope 를 콕 집어 요청하지 않는다: 카카오 앱에 '닉네임' 동의항목이 켜져 있지 않으면 로그인 뒤
+        # "서비스 관리자에게 문의하세요(KOE205)" 로 막힌다. 비워 두면 켜 둔 동의항목만 묻고, 닉네임은 가입 화면에서 정한다
+        "scope": "",
     },
     "naver": {
         "label": "네이버",
