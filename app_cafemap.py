@@ -28,7 +28,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
-from common import (ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
+from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
                     kakao_postcode, mycal, notice, notion_sync, review, share, stats)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
 from common.schema import CafeEntry
@@ -55,11 +55,12 @@ GLOBAL_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+@import url('https://cdn.jsdelivr.net/gh/moonspam/NanumSquareRound@1.0/nanumsquareround.min.css');
 /* @import 는 맨 앞에 와야 해서(앞에 다른 규칙이 있으면 폰트가 무시된다) 변수는 그 뒤에 둔다 */
 /* 포인트 컬러 변수 (map-template.html 과 같은 값). 지도·등록하기 버튼 등이 쓴다 */
 :root {{ --accent: #14b8a6; --accent-soft: #e6fbf7; --accent-deep: #0d9488; }}
 html, body, [class*="st-"], .stMarkdown, button, input, textarea {{
-  font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }}
+  font-family: "NanumSquareRound", "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }}
 /* 위의 글꼴 지정이 아이콘 글꼴까지 덮지 않게 (안 그러면 '_arrow_right' 같은 이름 글자가 보인다) */
 [data-testid="stIconMaterial"], .material-symbols-rounded {{
   font-family: "Material Symbols Rounded" !important; }}
@@ -293,7 +294,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   border-radius: 14px !important; }}
 /* 머리글 */
 .brand-tag {{ margin-top: .4rem; margin-bottom: 1rem; font-family: "Jua", sans-serif; font-size: 1.25rem; color: #26302D; }}   /* 아래 한 칸 띄움 */
-.brand-tag span {{ font-family: "Pretendard", sans-serif; font-size: .78rem; font-weight: 700;
+.brand-tag span {{ font-family: "NanumSquareRound", "Pretendard", sans-serif; font-size: .78rem; font-weight: 700;
   letter-spacing: .14em; color: {MINT}; }}
 /* 누르면 메인으로 가는 로고: 버튼이지만 바탕·테두리 없이 */
 .st-key-home_brand button {{ background: none !important; border: 0 !important;
@@ -323,6 +324,10 @@ store = Storage(worksheet="cafes")
 reviews = Storage(worksheet="reviews", headers=review.HEADERS)
 favs = Storage(worksheet="favorites", headers=favorite.HEADERS)
 members = Storage(worksheet="members", headers=auth.HEADERS)
+del_requests = Storage(worksheet="del_requests", headers=admin.REQ_HEADERS)      # 일반 회원의 삭제 요청
+alert_rules = Storage(worksheet="alert_rules", headers=admin.RULE_HEADERS)       # 자동 알림 규칙 (관리자가 고침)
+notices_store = Storage(worksheet="notices", headers=admin.NOTICE_HEADERS)       # 회원에게 가는 알림·공지
+visits = Storage(worksheet="visits", headers=admin.VISIT_HEADERS)                # 회원이 접속한 날
 # 실행 번호: 찜 정보를 한 번 그릴 때 한 번만 읽고, 다음 실행에서는 새로 읽게 한다
 st.session_state["_run"] = st.session_state.get("_run", 0) + 1
 
@@ -354,7 +359,24 @@ def _heart(cafe_id: str, where: str, label_count: bool = False) -> None:
               on_click=_toggle_fav, args=(str(cafe_id), me, not on))
 
 
+def _need_login(msg: str) -> None:
+    """로그인이 필요한 일을 손님이 눌렀을 때: 다음 그리기에서 로그인 화면으로 옮긴다 (콜백 안에서는 페이지를 못 옮긴다)."""
+    st.session_state["_need_login"] = msg
+
+
+def _login_gate(msg: str, key: str) -> bool:
+    """손님이면 안내 + '로그인하기' 버튼을 그리고 True. 회원이면 False (그대로 진행)."""
+    if _member():
+        return False
+    st.markdown(f'<div class="ntf-empty" style="padding:10px 2px">{escape(msg)}</div>', unsafe_allow_html=True)
+    st.button("로그인하고 계속하기", icon=":material/login:", key=key, on_click=_need_login, args=(msg,))
+    return True
+
+
 def _toggle_fav(cafe_id: str, me: str, on: bool) -> None:
+    if not _member():                       # 북마크는 회원만 (11/18 요청) → 로그인 화면으로
+        _need_login("북마크는 로그인하면 쓸 수 있어요.")
+        return
     try:
         favorite.toggle(favs, cafe_id, me, on)
     except StorageWriteError:      # 콜백 안의 오류는 페이지의 try 로 잡히지 않아서 여기서 따로 받는다
@@ -492,6 +514,12 @@ def _member() -> dict | None:
         st.session_state["member_key"] = key
     row = auth.find(members, key) if key else None
     st.session_state["_member_cache"] = (run, row)
+    if row and st.session_state.get("_visit_logged") != (key, TODAY.isoformat()):
+        st.session_state["_visit_logged"] = (key, TODAY.isoformat())
+        try:
+            admin.log_visit(visits, str(key), TODAY)      # 일별 접속 회원 수 (관리자 '이용 지표')
+        except Exception:                                   # 기록이 실패해도 화면은 그대로
+            pass
     return row
 
 
@@ -532,7 +560,7 @@ _TOAST_JS = """
         transition: opacity .18s ease, transform .18s ease; pointer-events: none; }
       .ani-toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
       .ani-toast .ic { font-family: "Material Symbols Rounded"; font-size: 1.4rem; line-height: 1; color: #14b8a6; }
-      .ani-toast .tx { font-family: "Pretendard", sans-serif; font-weight: 700; font-size: .95rem; color: #1F2A27;
+      .ani-toast .tx { font-family: "NanumSquareRound", "Pretendard", sans-serif; font-weight: 700; font-size: .95rem; color: #1F2A27;
         word-break: keep-all; line-height: 1.4; }`;
     document.head.appendChild(css);
   }
@@ -728,6 +756,8 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
 
     입력이 끝나면 칸을 비워야 해서, 저장할 때마다 키 번호(n)를 올려 새 입력칸을 그린다.
     """
+    if _login_gate("리뷰는 로그인하면 쓸 수 있어요.", f"lg_rv_{cafe_id}_{parent_id}"):
+        return
     slot = f"rv_{cafe_id}_{parent_id or 'top'}"
     n = st.session_state.get(f"{slot}_n", 0)
     kind = ""
@@ -811,6 +841,27 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
 KIND_COLORS = {"다녀온 후기": "green", "기대평": "blue", "기타": "gray"}
 
 
+@st.dialog("삭제 요청")
+def delete_request_dialog(target_type: str, target_id: str, title: str) -> None:
+    """일반 회원이 게시글 삭제를 요청한다. 관리자가 '관리자 > 삭제 요청'에서 승인/거부하고 결과는 알림으로 간다."""
+    st.markdown(f"**{escape(admin.TARGET_LABEL.get(target_type, '게시글'))}** · {escape(title[:60])}")
+    reason = st.text_area("삭제를 요청하는 이유", key=f"dr_reason_{target_id}", max_chars=admin.MAX_REASON,
+                          placeholder="예: 잘못된 정보예요 / 광고·도배 글이에요 / 이미 끝난 행사예요")
+    if st.button("요청 보내기", type="primary", width="stretch", key=f"dr_send_{target_id}"):
+        me = _member()
+        errors = admin.validate_reason(reason)
+        if not me:
+            errors = ["로그인한 회원만 삭제를 요청할 수 있어요."]
+        elif admin.pending_for(del_requests.current_rows(), target_id, str(me["entry_id"])):
+            errors = ["이 글에 보낸 요청이 아직 처리 중이에요."]
+        if errors:
+            st.warning(errors[0], icon=":material/error:")
+            return
+        admin.request_delete(del_requests, target_type, target_id, title, reason, str(me["entry_id"]), _me())
+        st.session_state["flash"] = ("삭제 요청을 보냈어요. 처리 결과는 알림으로 알려 드려요.", ":material/check_circle:")
+        st.rerun()
+
+
 @st.dialog("리뷰 삭제")
 def confirm_review_delete(entry_id: str, replies: int) -> None:
     st.write("이 글을 삭제할까요? 삭제하면 다시 볼 수 없어요."
@@ -821,11 +872,11 @@ def confirm_review_delete(entry_id: str, replies: int) -> None:
     if c2.button("삭제", type="primary", width="stretch", key=f"rv_del_ok_{entry_id}"):
         # 버튼이 보였더라도 지우는 순간 한 번 더 확인한다 (내 닉네임과 같은 글만)
         row = next((r for r in reviews.current_rows() if str(r["entry_id"]) == entry_id), None)
-        if row and review.can_delete(row, _me()):
+        if row and _is_admin():
             reviews.soft_delete(entry_id)       # 저장소는 지우지 않고 '삭제됨' 행을 쌓는다
             st.session_state["flash"] = "삭제했습니다."
         else:
-            st.session_state["flash"] = "내가 쓴 글만 삭제할 수 있어요."
+            st.session_state["flash"] = "게시글 삭제는 관리자만 할 수 있어요."
         st.rerun()
 
 
@@ -840,16 +891,21 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     if int(r.get("revision") or 1) > 1:
         when += " :gray[(수정됨)]"
     # 내가 쓴 글(접속 IP 로 정해진 닉네임이 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
-    mine = review.can_delete(r, _me())
-    if mine:
+    mine = bool(_member()) and review.can_delete(r, _me())
+    is_admin = _is_admin()
+    member = bool(_member())
+    if mine or is_admin or member:
+        # 수정은 쓴 사람(회원)만, 삭제는 관리자만 (11/18 권한)
         t, b = st.columns([6, 1], vertical_alignment="center")
         t.markdown(head + when)
         with b.popover("⋯", key=f"rv_more_{eid}", type="tertiary"):
-            if st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
+            if mine and st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
                 st.session_state["rv_editing"] = eid
                 st.rerun()
-            if st.button("삭제", key=f"rv_del_{eid}", width="stretch"):
+            if is_admin and st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch"):
                 confirm_review_delete(eid, replies)
+            if member and not is_admin and st.button("삭제 요청", key=f"rv_req_{eid}", width="stretch"):
+                delete_request_dialog("review", eid, str(r.get("body") or r.get("kind") or "리뷰")[:40])
     else:
         st.markdown(head + when)
     # 다녀온 후기 별점: 머리 줄 다음 줄에, 내용보다 위에 크게
@@ -1049,7 +1105,7 @@ def confirm_delete(entry_id: str) -> None:
         if st.button("취소", width="stretch", key=f"delete_cancel_{entry_id}"):
             st.rerun()
     with c2:
-        if st.button("삭제", type="primary", width="stretch", key=f"delete_ok_{entry_id}"):
+        if st.button("삭제", type="primary", width="stretch", key=f"delete_ok_{entry_id}") and _is_admin():
             store.soft_delete(entry_id, extra={"source": "지도에서 내림", "editor": _me()})
             st.session_state["selected"] = None
             st.session_state["flash"] = "지도에서 내렸습니다. 이력은 남아 있습니다."
@@ -1212,6 +1268,8 @@ def _keep_notion(note: str, current: dict) -> str:
 
 def render_edit(current: dict) -> None:
     entry_id = str(current["entry_id"])
+    if _login_gate("팝업 정보 수정은 로그인하면 할 수 있어요.", f"lg_ed_{entry_id}"):
+        return
     st.caption("누구나 수정할 수 있습니다. 기존 기록은 남기고 새 줄로 쌓여서 언제든 되돌릴 수 있습니다.")
 
     # revision 을 키에 넣어야 되돌리기 후 입력칸이 새 값으로 다시 채워진다
@@ -1258,8 +1316,10 @@ def render_edit(current: dict) -> None:
     with st.container(horizontal=True, key=f"edit_btns_{k}"):
         submitted = st.button("수정 저장", type="primary", width="stretch", key=f"save_{k}",
                               disabled=bad or bool(img_errors) or bad_links)
-        if st.button("지도에서 내리기", width="stretch", key=f"delete_{k}"):
+        if _is_admin() and st.button("지도에서 내리기 (관리자)", width="stretch", key=f"delete_{k}"):
             confirm_delete(entry_id)
+        if not _is_admin() and st.button("삭제 요청", width="stretch", key=f"dreq_{k}"):
+            delete_request_dialog("cafe", entry_id, f'{current.get("work") or ""} · {current.get("cafe_name") or ""}')
 
     if submitted:
         entry = CafeEntry(
@@ -1585,6 +1645,8 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
             st.session_state["m_filters"] = not m_open
             st.rerun()
         _view_switch(wide)
+        if _member():
+            st.button("", icon=":material/calendar_month:", key="m_cal_btn", on_click=_gnb_go, args=("cal",))
 
 
 def _view_switch(wide: bool) -> None:
@@ -2453,7 +2515,31 @@ GNB_CSS = """
 /* 로고: 메뉴바 안에서는 작게 */
 .st-key-gnb .st-key-home_brand button { width: 190px !important; height: 58px !important; }
 /* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
-.st-key-gnb { position: relative; }
+.st-key-gnb { position: relative; background: #E9F7F2; border-radius: 0 0 28px 28px;
+  padding: 10px 28px !important; margin: 0 -28px; box-sizing: content-box; }
+/* 메뉴바가 있는 화면은 페이지 위 여백을 없애 메뉴바를 화면 맨 위에 붙인다 */
+.stMainBlockContainer { padding-top: 0 !important; }
+/* 오른쪽 아이콘: 둥근 굵은 선 그림(검색·종) + 둥근 글꼴 '로그인' (11/18 사용자 요청) */
+.st-key-gnb_right [class*="st-key-gnb_search_"] button span[data-testid="stIconMaterial"],
+.st-key-gnb_right [data-testid="stPopover"] button span[data-testid="stIconMaterial"] { display: none !important; }
+html body .st-key-gnb_right [class*="st-key-gnb_search_"] button,
+html body .st-key-gnb_right [data-testid="stPopover"] button { background-color: transparent !important; background-repeat: no-repeat !important; background-size: 27px 27px !important;
+  min-width: 42px; min-height: 42px; }
+html body .st-key-gnb_right .st-key-gnb_search_off button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.3' stroke-linecap='round'><circle cx='10.5' cy='10.5' r='6.6'/><path d='M15.6 15.6L20 20'/></svg>") !important; background-position: center !important; }
+html body .st-key-gnb_right .st-key-gnb_search_on button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.3' stroke-linecap='round'><path d='M6.5 6.5l11 11M17.5 6.5l-11 11'/></svg>") !important; background-position: center !important; }
+html body .st-key-gnb_right [data-testid="stPopover"] button { position: relative; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6.3 16.4V11.2a5.7 5.7 0 0 1 11.4 0v5.2'/><path d='M4.6 16.6c0 .3.3.5.6.5h13.6c.3 0 .6-.2.6-.5'/><path d='M10.2 19.6a1.9 1.9 0 0 0 3.6 0'/></svg>") !important; background-position: center !important;
+  padding: 0 !important; width: 42px !important; }
+.st-key-gnb_right [data-testid="stPopover"] button p { margin-left: -6px !important; font-size: .85rem !important; }
+.st-key-gnb_right [class*="st-key-gnb_search_"] button p, .st-key-gnb_right [data-testid="stPopover"] button p {
+  font-family: "NanumSquareRound", "Jua", sans-serif !important; color: #2E9C82 !important; font-weight: 800 !important; }
+.st-key-gnb_right .st-key-admin_btn button { background: #fff !important; border: 1.5px solid #9EDDCC !important;
+  border-radius: 999px !important; padding: 2px 12px !important; min-height: 0 !important; }
+.st-key-gnb_right .st-key-admin_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 800 !important;
+  color: #2E9C82 !important; font-size: .88rem !important; }
+.st-key-gnb_right .st-key-admin_btn button span { color: #2E9C82 !important; font-size: 1.1rem !important; }
+.st-key-gnb_right .st-key-login_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 700 !important;
+  color: #4B5260 !important; font-size: 1.02rem !important; letter-spacing: -.01em; }
+.st-key-gnb_tabs button p { font-family: "NanumSquareRound", sans-serif !important; }
 /* 메뉴바 묶음 안의 보이지 않는 칸(스타일·높이 0 iframe·위치 받기)이 간격만 차지하지 않게 */
 .st-key-topbar { gap: 0 !important; }
 .st-key-topbar > [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] style:only-child),
@@ -2474,21 +2560,68 @@ GNB_CSS = """
 .st-key-gnb_right [class*="st-key-gnb_search_"] button { background: transparent !important; border: 0 !important;
   box-shadow: none !important; }
 .st-key-gnb_right [class*="st-key-gnb_search_"] button span[data-testid="stIconMaterial"] { font-size: 1.6rem !important; }
-.st-key-gnb_search_on button { background: #E6F6F0 !important; border-radius: 999px !important; }
+.st-key-gnb_search_on button { border-radius: 999px !important; }
 .st-key-gnb_right [data-testid="stPopover"] button, .st-key-gnb_right .st-key-login_btn button {
   background: transparent !important; border: 0 !important; box-shadow: none !important; }
 .st-key-gnb_right [data-testid="stPopover"] button span[data-testid="stIconMaterial"] { font-size: 1.6rem !important; }
 .st-key-gnb_right [data-testid="stPopover"] button svg { display: none; }       /* 펼침 화살표 숨김 */
 .st-key-gnb_right .st-key-login_btn button p { font-size: 1rem !important; }
 .gnb-tag { color: #6B7672; font-size: .82rem; margin: -2px 0 6px; font-family: "Jua", sans-serif; }
-/* 예전 '지도로 보기 / 리스트로 보기' 버튼은 위 탭이 대신한다 */
+/* 예전 '지도로 보기 / 리스트로 보기' 버튼은 위 탭이 대신한다. 모바일용 캘린더 아이콘도 PC 에서는 숨김 */
+.st-key-m_cal_btn { display: none !important; }
 .st-key-map_icon { display: none !important; }
-.ntf-item { padding: 8px 2px; border-bottom: 1px solid #EEF1F0; font-size: .88rem; line-height: 1.5; }
+.ntf-item { padding: 8px 10px 8px 22px; border-radius: 10px; font-size: .88rem; line-height: 1.5; position: relative;
+  background: #F1FAF7; }
+.ntf-item::before { content: ""; position: absolute; left: 9px; top: 15px; width: 7px; height: 7px; border-radius: 50%;
+  background: #FF6B6B; }
 .ntf-item b { color: #2E9C82; }
+.ntf-item.read { background: transparent; color: #8A9592; }
+.ntf-item.read::before { background: transparent; }
+.ntf-item.read b { color: #8A9592; }
+.ntf-item .ntf-st { float: right; font-size: .72rem; font-weight: 700; color: #FF6B6B; }
+.ntf-item.read .ntf-st { color: #A9B3B0; }
+.ntf-why { display: flex; align-items: center; gap: 3px; font-size: .74rem; color: #8A9592; margin-top: 2px; line-height: 1.35; }
+.ntf-why .material-symbols-rounded, .ntf-why span { font-size: .82rem; }
+[class*="st-key-ntfc_"] { position: relative; margin-bottom: 4px; }
+[class*="st-key-ntfb_"] { position: absolute !important; inset: 0; z-index: 2; width: 100% !important; height: 100% !important; }
+[class*="st-key-ntfb_"] > div, [class*="st-key-ntfb_"] .stButton { width: 100% !important; height: 100% !important; }
+[class*="st-key-ntfb_"] button { width: 100% !important; height: 100% !important; opacity: 0 !important; cursor: pointer; }
+[class*="st-key-ntfc_"]:hover .ntf-item { outline: 1.5px solid var(--accent); }
+.ntf-item.plain { margin-bottom: 4px; cursor: default; }
 .ntf-empty { color: #8A9592; font-size: .88rem; padding: 6px 2px; }
 .st-key-gnb_loc_box { height: 0 !important; overflow: hidden !important; margin: 0 !important; }
 @media (max-width: 640px) {
-  /* 모바일: 첫 줄 = 로고 + (검색·알림·로그인), 둘째 줄 = 가운데 탭 */
+  /* 모바일: 메뉴바의 글자 탭은 숨기고, 필터 아이콘 옆 '보기 전환 아이콘'(지도 ↔ 리스트)으로 — 위에 늘 붙어 있다 (11/18 요청) */
+  .st-key-gnb > *:has(.st-key-gnb_tabs), html body .st-key-gnb .st-key-gnb_tabs { display: none !important; }
+  html body .st-key-view_tools .st-key-map_icon { display: block !important; width: auto !important; min-height: 0 !important; }
+  html body .st-key-view_tools .st-key-map_icon .stButton { width: auto !important; }
+  html body .st-key-view_tools .st-key-map_icon button { height: 32px !important; min-width: 32px; width: auto !important;
+    padding: 0 9px !important; border: 1.5px solid var(--accent) !important; border-radius: 10px !important;
+    background: #fff !important; box-shadow: none; }
+  html body .st-key-view_tools .st-key-map_icon button p { display: none !important; }
+  /* 세 아이콘(지도/리스트 · 캘린더 · 필터) 같은 크기 40×34, 같은 간격, 필터는 맨 오른쪽 */
+  html body .st-key-view_tools { gap: 8px !important; }
+  html body .st-key-view_tools > * { margin: 0 !important; }
+  html body .st-key-view_tools .st-key-map_icon button, html body .st-key-view_tools .st-key-m_cal_btn button,
+  html body .st-key-view_tools .st-key-m_filter_btn button { width: 40px !important; min-width: 40px !important;
+    height: 34px !important; padding: 0 !important; justify-content: center !important; }
+  html body .st-key-view_tools .st-key-map_icon .stButton, html body .st-key-view_tools .st-key-map_icon,
+  html body .st-key-view_tools .st-key-m_cal_btn, html body .st-key-view_tools .st-key-m_filter_btn {
+    width: 40px !important; min-width: 40px !important; flex: 0 0 40px !important; }
+  html body .st-key-view_tools > .st-key-map_icon, html body .st-key-view_tools > *:has(.st-key-map_icon) { order: 1; }
+  html body .st-key-view_tools > .st-key-m_cal_btn, html body .st-key-view_tools > *:has(.st-key-m_cal_btn) { order: 2; }
+  html body .st-key-view_tools > .st-key-m_filter_btn, html body .st-key-view_tools > *:has(.st-key-m_filter_btn) { order: 3; }
+  html body .st-key-view_tools .st-key-m_box_btn { display: block !important; width: auto !important; }
+  html body .st-key-view_tools .st-key-m_box_btn button { height: 32px !important; min-width: 32px; padding: 0 9px !important;
+    border: 1.5px solid var(--accent) !important; border-radius: 10px !important; background: #fff !important; min-height: 0 !important; }
+  html body .st-key-view_tools .st-key-m_box_btn button span { color: var(--accent-deep) !important; font-size: 1.2rem !important; margin: 0 !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn { display: block !important; width: auto !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn button { height: 32px !important; min-width: 32px; padding: 0 9px !important;
+    border: 1.5px solid var(--accent) !important; border-radius: 10px !important; background: #fff !important; min-height: 0 !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn button span { color: var(--accent-deep) !important; font-size: 1.2rem !important; margin: 0 !important; }
+  html body .st-key-view_tools .st-key-map_icon button span { color: var(--accent-deep) !important; font-size: 1.2rem !important;
+    margin: 0 !important; }
+  /* 모바일: 첫 줄 = 로고 + (검색·알림·로그인) */
   .st-key-gnb { flex-wrap: wrap !important; flex-direction: row !important; row-gap: 2px !important; }
   .st-key-gnb .st-key-home_brand { flex: 0 0 auto !important; width: auto !important; }
   .st-key-gnb .st-key-home_brand button { width: 140px !important; height: 44px !important; }
@@ -2525,7 +2658,11 @@ def _gnb_go(view: str) -> None:
     if view == "ask":
         st.session_state["_gnb_ask"] = True
         return
-    st.session_state["list_only"] = view == "list"
+    st.session_state["_gnb_to_map"] = True
+    st.session_state["cal_view"] = view == "cal"
+    st.session_state["box_view"] = view == "box"
+    if view not in ("cal", "box"):
+        st.session_state["list_only"] = view == "list"
     st.session_state["selected"] = None
     st.session_state["scroll_top"] = True
 
@@ -2566,11 +2703,52 @@ def _my_loc() -> dict | None:
     return None
 
 
+def _rules() -> dict[str, dict]:
+    """자동 알림 규칙의 지금 값 (한 번 실행에 한 번 읽음). 표가 아직 없으면(007 전) 기본값."""
+    run = st.session_state.get("_run", 0)
+    cached = st.session_state.get("_rules_cache")
+    if cached and cached[0] == run:
+        return cached[1]
+    try:
+        rows = alert_rules.all_rows()
+    except Exception:
+        rows = []
+    val = admin.rule_settings(rows)
+    st.session_state["_rules_cache"] = (run, val)
+    return val
+
+
+def _why_html(key: str) -> str:
+    return f'<div class="ntf-why">{_mi("info")} {escape(admin.why(key, _rules()))}</div>'
+
+
+def _inbox(member_key: str) -> list[dict]:
+    """관리자가 보낸 알림 중 켜진 규칙 것만 (공지는 정한 기간·개수만큼)."""
+    rules = _rules()
+    rows = admin.notices_for(notices_store.current_rows(), member_key, days=60)
+    out, n_notice = [], 0
+    for r in rows:
+        key = admin.KIND_RULE.get(str(r.get("kind")), "notice")
+        if not rules[key]["enabled"]:
+            continue
+        if key == "notice":
+            d = admin._day(r.get("updated_at"))
+            if d and (TODAY - d).days > rules["notice"]["days"]:
+                continue
+            n_notice += 1
+            if n_notice > rules["notice"]["max_items"]:
+                continue
+        out.append(r)
+    return out
+
+
 def _notices() -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
     """알림 두 묶음 (글자 HTML, cafe_id).
     1) 북마크한 팝업: 오픈 D-3 ~ 당일, 그리고 3일 안에 끝나는 것
     2) 내 위치 기반 추천: 지금 열려 있는 팝업 중 가까운 3곳 (북마크한 곳은 빼고)"""
     _, mine, _ = _fav_state()
+    rules = _rules()
+    od, ed = rules["open"]["days"], rules["end"]["days"]
     rows = [r for r in mycal.latest_rows(store.all_rows()) if r.get("status") != "deleted"]
     marks: list[tuple[str, str]] = []
     for r in rows:
@@ -2579,15 +2757,15 @@ def _notices() -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
             continue
         s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
         name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
-        if s and 0 <= (s - TODAY).days <= 3:
+        if rules["open"]["enabled"] and s and 0 <= (s - TODAY).days <= od:
             d = (s - TODAY).days
-            marks.append((f"<b>{'오늘 오픈' if d == 0 else f'오픈 D-{d}'}</b> · {name}", eid))
-        elif e and s and s <= TODAY and 0 <= (e - TODAY).days <= 3:
+            marks.append((f"<b>{'오늘 오픈' if d == 0 else f'오픈 D-{d}'}</b> · {name}" + _why_html("open"), eid))
+        elif rules["end"]["enabled"] and e and s and s <= TODAY and 0 <= (e - TODAY).days <= ed:
             d = (e - TODAY).days
-            marks.append((f"<b>{'오늘 종료' if d == 0 else f'종료 D-{d}'}</b> · {name}", eid))
+            marks.append((f"<b>{'오늘 종료' if d == 0 else f'종료 D-{d}'}</b> · {name}" + _why_html("end"), eid))
     marks.sort(key=lambda t: t[0])
     near: list[tuple[str, str]] = []
-    loc = _my_loc()
+    loc = _my_loc() if rules["near"]["enabled"] else None
     if loc:
         me = (float(loc["lat"]), float(loc["lng"]))
         cand = []
@@ -2600,11 +2778,13 @@ def _notices() -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
             if str(r.get("entry_id")) in mine or not (s and e and s <= TODAY <= e):
                 continue
             cand.append((my_place._km(me, pt), r))
-        for km, r in sorted(cand, key=lambda t: t[0])[:3]:
+        for km, r in sorted(cand, key=lambda t: t[0])[:rules["near"]["max_items"]]:
             name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
             dist = f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km"
-            near.append((f"<b>내 주변 {dist}</b> · {name}", str(r.get("entry_id"))))
-    return marks[:8], near
+            near.append((f"<b>내 주변 {dist}</b> · {name}" + _why_html("near"), str(r.get("entry_id"))))
+    opens = [m for m in marks if "오픈" in m[0].split("</b>")[0]][:rules["open"]["max_items"]]
+    ends = [m for m in marks if "종료" in m[0].split("</b>")[0]][:rules["end"]["max_items"]]
+    return sorted(opens + ends, key=lambda t: t[0]), near
 
 
 def _gnb_open(cafe_id: str) -> None:
@@ -2612,11 +2792,59 @@ def _gnb_open(cafe_id: str) -> None:
     st.session_state["scroll_top"] = True
 
 
-def _gnb(current: dict | None) -> None:
-    """상단 메뉴바: [로고] … [지도로 보기 · 리스트로 보기] (가운데) … [검색] [알림] [로그인]
-    물어보기는 리스트 옆 대화창으로 (탭에서는 뺐다)."""
+NTF_COOKIE = "aw_ntf_read"
+
+
+def _ntf_id(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
+
+
+def _ntf_read() -> set[str]:
+    """읽은 알림 번호들 (브라우저 쿠키에 남겨 다시 열어도 읽음으로 보인다)."""
+    if "_ntf_read" not in st.session_state:
+        raw = str(st.context.cookies.get(NTF_COOKIE) or "")
+        st.session_state["_ntf_read"] = {x for x in raw.split(".") if len(x) == 8}
+    return st.session_state["_ntf_read"]
+
+
+def _ntf_mark(ids: list[str]) -> None:
+    _ntf_read().update(ids)
+    st.session_state["_ntf_cookie"] = True
+
+
+def _ntf_click(nid: str, cafe_id: str | None) -> None:
+    """알림 칸을 누름 → 읽음 처리, 팝업이면 그 팝업 상세로 (다른 화면이면 메인으로 옮겨서)."""
+    _ntf_mark([nid])
+    if cafe_id:
+        st.session_state.update(cal_view=False, box_view=False, _gnb_to_map=True)
+        _gnb_open(cafe_id)
+
+
+def _ntf_cell(nid: str, html: str, cafe_id: str | None) -> None:
+    read = nid in _ntf_read()
+    item = (f'<div class="ntf-item{" read" if read else ""}"><span class="ntf-st">{"읽음" if read else "새 알림"}</span>'
+            f'{html}</div>')
+    if not cafe_id:          # 삭제 요청 승인/거부·공지처럼 갈 팝업이 없는 알림은 글만 (누를 수 없음, '모두 읽음'으로 읽음 처리)
+        st.markdown(item.replace('class="ntf-item', 'class="ntf-item plain'), unsafe_allow_html=True)
+        return
+    with st.container(key=f"ntfc_{nid}"):
+        st.markdown(item, unsafe_allow_html=True)
+        st.button("열기", key=f"ntfb_{nid}", on_click=_ntf_click, args=(nid, cafe_id))
+
+
+def _gnb(current: dict | None, on_map: bool = True) -> None:
+    if st.session_state.get("_cookie_pending"):     # 방금 로그인했으면 쿠키를 심는다 (메인으로 옮긴 뒤에도)
+        _set_cookie(st.session_state.pop("_cookie_pending"), auth.SESSION_DAYS)
+    msg = st.session_state.pop("_need_login", None)
+    if msg:                                  # 손님이 북마크·리뷰·수정을 누름 → 로그인 화면으로
+        st.session_state["flash"] = (msg, ":material/login:")
+        go("login")
+    # 상단 메뉴바: [로고] … [지도로 보기 · 리스트로 보기] (가운데) … [검색] [알림] [로그인]
+    # 물어보기는 리스트 옆 대화창으로 (탭에서는 뺐다).
     if st.session_state.pop("_gnb_ask", False):
         go("ask")
+    if st.session_state.pop("_gnb_to_map", False) and not on_map:
+        go("map")                            # 다른 화면에서 지도·리스트·내 캘린더 탭을 누름 (메인이면 표시만 지운다)
     st.markdown(GNB_CSS, unsafe_allow_html=True)
     wide = bool(st.session_state.get("list_only"))
     with st.container(horizontal=True, key="gnb"):
@@ -2627,11 +2855,26 @@ def _gnb(current: dict | None) -> None:
         if st.button("ANI:WHERE", key="home_brand", type="tertiary"):
             st.session_state["selected"] = None
             st.session_state["scroll_top"] = True
+            if not on_map:                     # 로그인·내 계정·등록하기 등에서 로고 → 리스트 보기 (11/18)
+                st.session_state.update(list_only=True, cal_view=False, box_view=False)
+                go("map")
             st.rerun()
         with st.container(horizontal=True, key="gnb_tabs"):
-            on_map, on_list = (not wide and not current), (wide and not current)
-            st.button("지도로 보기", key=f"gnbtab_{'on_' if on_map else ''}map", on_click=_gnb_go, args=("map",))
+            cal = bool(st.session_state.get("cal_view"))
+            box = bool(st.session_state.get("box_view"))
+            if not on_map:
+                current = {"_": "다른 화면"}       # 탭 밑줄을 모두 끈다
+            tab_map = not wide and not current and not cal and not box      # (on_map 과 이름을 나눔 — 겹쳐서 +·물어보기 버튼이 사라졌다)
+            on_list = wide and not current and not cal and not box
+            on_cal = cal and not current
+            on_box = box and not current
+            st.button("지도로 보기", key=f"gnbtab_{'on_' if tab_map else ''}map", on_click=_gnb_go, args=("map",))
             st.button("리스트로 보기", key=f"gnbtab_{'on_' if on_list else ''}list", on_click=_gnb_go, args=("list",))
+            if _member():                       # 내 캘린더(알림·찜·다녀온)는 로그인한 사람만
+                st.button("내 캘린더", key=f"gnbtab_{'on_' if on_cal else ''}cal", on_click=_gnb_go, args=("cal",))
+        if not _member():   # 알림은 로그인한 사람만: 손님이면 알림 칸(과 그것을 감싼 칸)을 숨긴다
+            st.markdown("<style>.st-key-bell_guest, .st-key-gnb_right > *:has(.st-key-bell_guest) "
+                        "{ display: none !important; }</style>", unsafe_allow_html=True)
         with st.container(horizontal=True, key="gnb_right"):
             # 검색 아이콘: 누르면 아래 검색 필터 줄(검색·작품·캐릭터·진행여부·날짜)을 펼치고 접는다.
             # 걸어 둔 조건이 있으면 아이콘 옆에 그 수. 모바일에서는 필터 시트를 연다
@@ -2639,42 +2882,349 @@ def _gnb(current: dict | None) -> None:
             opened = bool(st.session_state.get("pc_filters"))
             st.button(str(n_on) if n_on and not opened else "", icon=":material/close:" if opened else ":material/search:",
                       key=f"gnb_search_{'on' if opened else 'off'}", on_click=_toggle_search)
-            marks, near = _notices()
-            with st.popover(str(len(marks) + len(near)) if (marks or near) else "", icon=":material/notifications:"):
+            marks, near = _notices() if _member() else ([], [])
+            inbox = _inbox(str(_member()["entry_id"])) if _member() else []
+            # 알림마다 번호 (같은 날 같은 글이면 같은 번호 → 읽음 유지). 종 아이콘에는 숫자 대신 안 읽은 게 있을 때만 빨간 점
+            items_inbox = [(_ntf_id("i" + str(r.get("row_id"))), f'<b>{escape(str(r.get("title") or ""))}</b><br>'
+                            f'{escape(str(r.get("body") or ""))}' + _why_html(admin.KIND_RULE.get(str(r.get("kind")), "notice")),
+                            None) for r in inbox[:10]]
+            items_marks = [(_ntf_id(f"m{TODAY}{eid}{text}"), text, eid) for text, eid in marks]
+            items_near = [(_ntf_id(f"n{TODAY}{eid}"), text, eid) for text, eid in near]
+            all_items = items_inbox + items_marks + items_near
+            unread = [nid for nid, _, _ in all_items if nid not in _ntf_read()]
+            if st.session_state.pop("_ntf_cookie", False):
+                js = (f"window.parent.document.cookie = {json.dumps(NTF_COOKIE + '=' + '.'.join(sorted(_ntf_read())[-200:]))}"
+                      " + '; path=/; max-age=5184000; SameSite=Lax';")
+                components.html(f"<script>{js}</script>", height=0)
+            if unread:
+                st.markdown('<style>html body .st-key-gnb_right [data-testid="stPopover"] button::after { content: ""; '
+                            'position: absolute; top: 7px; right: 7px; width: 9px; height: 9px; border-radius: 999px; '
+                            'background: #FF6B6B; }</style>', unsafe_allow_html=True)
+            with (st.popover("", icon=":material/notifications:") if _member() else st.container(key="bell_guest")):
+                if unread:
+                    st.button("모두 읽음", icon=":material/done_all:", key="ntf_all_read", type="tertiary",
+                              on_click=_ntf_mark, args=(unread,))
+                if items_inbox:
+                    st.markdown("**받은 알림**")
+                    for nid, html, cid in items_inbox:
+                        _ntf_cell(nid, html, cid)
                 st.markdown("**북마크한 팝업**")
                 if not marks:
                     st.markdown('<div class="ntf-empty">오픈 3일 전부터 당일까지, 그리고 끝나기 3일 전부터 알려 드려요. '
                                 '팝업을 북마크해 보세요.</div>', unsafe_allow_html=True)
-                for n, (text, eid) in enumerate(marks):
-                    st.markdown(f'<div class="ntf-item">{text}</div>', unsafe_allow_html=True)
-                    st.button("보기", key=f"ntf_m{n}_{eid}", type="tertiary", on_click=_gnb_open, args=(eid,))
+                for nid, html, cid in items_marks:
+                    _ntf_cell(nid, html, cid)
                 st.markdown("**내 주변 추천**")
                 if not _my_loc():
                     st.markdown('<div class="ntf-empty">위치를 허용하면 지금 열려 있는 가까운 팝업을 추천해 드려요. '
                                 '브라우저 주소창의 위치 권한을 허용해 주세요.</div>', unsafe_allow_html=True)
                 elif not near:
                     st.markdown('<div class="ntf-empty">지금 주변에 열려 있는 팝업이 없어요.</div>', unsafe_allow_html=True)
-                for n, (text, eid) in enumerate(near):
-                    st.markdown(f'<div class="ntf-item">{text}</div>', unsafe_allow_html=True)
-                    st.button("보기", key=f"ntf_n{n}_{eid}", type="tertiary", on_click=_gnb_open, args=(eid,))
+                for nid, html, cid in items_near:
+                    _ntf_cell(nid, html, cid)
+            if _is_admin() and st.button("관리자", icon=":material/admin_panel_settings:", key="admin_btn"):
+                go("data")
             who = _member()
             if st.button(who["nickname"] if who else "로그인", key="login_btn"):
                 go("login")
     with st.container(key="gnb_loc_box"):
         my_place.my_location(key="gnb_loc")
-    if current:
-        if st.button("리스트로 돌아가기", icon=":material/arrow_back:", key="back_to_list", type="primary"):
-            st.session_state["selected"] = None
-            st.session_state["scroll_top"] = True
-            st.rerun()
+    # 상세에서 돌아가기는 위 '리스트로 보기 / 지도로 보기' 탭이나 로고로 (별도 '리스트로 돌아가기' 버튼은 뺐다, 11/18 요청)
     # 모바일: 등록 + 위에 물어보기 플로팅 버튼 → 팝업 대화창 (PC 는 리스트 옆 대화창이 있어 숨긴다)
+    if not on_map:
+        return
     st.markdown(ASK_FAB_CSS, unsafe_allow_html=True)
     if st.button("", icon=":material/forum:", key="ask_fab"):
         ask_dialog()
     # 오른쪽 아래 코랄색 + (등록) — 화면에 떠 있다 (CSS .st-key-add_btn)
-    if not current and st.button("", icon=":material/add:", key="add_btn", type="primary"):
+    # 등록(+)은 로그인한 사람에게만 보인다 (11/18)
+    if not current and _member() and st.button("", icon=":material/add:", key="add_btn", type="primary"):
         st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
         go("add")
+
+
+# ------------------------------------------------------------ '내 캘린더' 탭: 캘린더 + 알림 받은 내역
+MYCAL_CSS = """
+<style>
+.mc-title { font-family: "Jua", sans-serif; font-size: 1.35rem; color: #26302D; margin: 4px 0 2px; }
+.mc-sub { color: #8A9592; font-size: .82rem; margin-bottom: 10px; }
+.st-key-mycal_box, .st-key-ntf_box, .st-key-keep_box { border: 1.5px solid #E3E8E6; border-radius: 16px; padding: 14px 16px !important;
+  background: #fff; }
+.nh-day { color: #8A9592; font-size: .78rem; font-weight: 700; margin: 14px 0 6px; }
+.nh-item { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; background: #F4F8F6;
+  line-height: 1.45; word-break: keep-all; }
+.nh-item > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.nh-item .nh-tag { align-self: flex-start; }
+.nh-name { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* 알림 받은 내역 = 데일리 팝업 노트 모양: 둥근 포스터 · 작은 태그 · 굵은 이름 한 줄, 점선으로 잇기 */
+.st-key-ntf_box { padding: 12px 12px !important; }
+.st-key-ntf_box .mc-title { font-family: inherit; text-align: center; color: #6B7672; font-size: .78rem; font-weight: 700; margin: 0 0 2px; }
+.st-key-ntf_box .mc-sub { text-align: center; font-size: .7rem; line-height: 1.4; margin-bottom: 6px; }
+.st-key-ntf_box .nh-day { font-size: .7rem; margin: 12px 0 6px; }
+.st-key-ntf_box .nh-item { background: transparent; padding: 0 0 12px; gap: 10px; border-radius: 0; position: relative; }
+.st-key-ntf_box [class*="st-key-nh_"]:not(:last-child) .nh-item::before { content: ""; position: absolute; left: 17px;
+  top: 38px; bottom: 2px; border-left: 1.5px dashed #C9D1CE; }
+.st-key-ntf_box .nh-item img { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; border: 1px solid #E4E8E6; }
+.st-key-ntf_box .nh-item > div { gap: 3px; }
+.st-key-ntf_box .nh-tag { font-size: .62rem; padding: 0 .4rem; border-radius: 5px; line-height: 1.5; margin: 0; }
+.st-key-ntf_box .nh-name { font-size: .8rem; line-height: 1.25; display: block; white-space: nowrap; -webkit-line-clamp: unset; }
+.st-key-ntf_box .nh-cafe { font-size: .7rem; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-key-ntf_box .nh-item.msg { background: #F4F8F6; border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
+.st-key-ntf_box .nh-item.msg .nh-cafe { white-space: normal; }
+.st-key-ntf_box [class*="st-key-nh_"] { margin-bottom: 0; }
+.st-key-ntf_box [class*="st-key-nh_"]:hover .nh-name { color: var(--accent-deep); }
+.st-key-mycal_box .st-key-cal_nav { flex-wrap: nowrap; gap: 0 !important; margin-bottom: 4px; }
+.st-key-mycal_box .st-key-cal_nav > * { flex-shrink: 0; }
+.st-key-mycal_box .st-key-cal_nav > *:first-child { flex-shrink: 1; min-width: 0; }
+.st-key-mycal_box .cal-label { font-size: .72rem; padding: .12rem .45rem; margin-right: 5px; }
+.st-key-mycal_box .st-key-cal_prev button, .st-key-mycal_box .st-key-cal_next button { width: 28px; }
+.st-key-mycal_box .st-key-cal_now button { height: 34px; padding: 0 .6rem !important; margin-left: 4px; }
+.st-key-mycal_box .st-key-cal_now button p { font-size: .82rem !important; }
+.st-key-mycal_box .cal-nick { margin: 0 0 10px; }
+.st-key-mycal_box .cal-month { font-size: 1.2rem; }
+/* 찜·다녀온·최근 본: 조금 작게 */
+.st-key-keep_box .bxc { gap: 10px; padding: 8px; border-radius: 14px; }
+.st-key-keep_box .bxc img.pst { width: 60px; height: 80px; flex-basis: 60px; border-radius: 8px; }
+.st-key-keep_box .bxc .t { gap: 3px; justify-content: center; }
+.st-key-keep_box .bxc .w { font-size: 1rem; }
+.st-key-keep_box .bxc .c { font-size: .84rem; }
+.st-key-keep_box .bxc .d { font-size: .78rem; }
+.st-key-keep_box .bx-tip { padding: 9px 12px; font-size: .84rem; }
+.nh-item img { width: 44px; height: 58px; object-fit: cover; border-radius: 8px; flex: 0 0 44px; }
+.nh-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800;
+  background: #E6F6F0; color: #2E9C82; margin-bottom: 2px; }
+.nh-tag.end { background: #FFECEC; color: #E05555; }
+.nh-name { font-weight: 800; font-size: .92rem; color: #26302D; }
+.nh-cafe { color: #6B7672; font-size: .8rem; }
+.nh-why { color: #9AA5A1; font-size: .72rem; line-height: 1.35; white-space: normal; }
+.nh-why::before { content: "왜? "; color: #2E9C82; font-weight: 800; }
+.nh-item.msg .nh-why::before { content: ""; }
+[class*="st-key-nh_"] { position: relative; margin-bottom: 6px; }
+[class*="st-key-nh_btn_"] { position: absolute !important; inset: 0; z-index: 2; width: 100% !important; height: 100% !important; }
+[class*="st-key-nh_btn_"] > div, [class*="st-key-nh_btn_"] .stButton { width: 100% !important; height: 100% !important; }
+[class*="st-key-nh_btn_"] button { width: 100% !important; height: 100% !important; opacity: 0 !important; }
+@media (max-width: 640px) {
+  html body .st-key-view_tools .st-key-m_cal_btn { display: block !important; width: auto !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn button { height: 32px !important; min-width: 32px; padding: 0 9px !important;
+    border: 1.5px solid var(--accent) !important; border-radius: 10px !important; background: #fff !important; min-height: 0 !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn button span { color: var(--accent-deep) !important; font-size: 1.2rem !important; }
+  .st-key-mycal_mnav button { border: 1.5px solid var(--accent) !important; border-radius: 10px !important; }
+}
+</style>
+"""
+
+
+def _notice_history(days_back: int = 30) -> list[tuple[date, str, str, dict]]:
+    """알림 받은 내역: 북마크한 팝업마다 '오픈 D-3 ~ 당일', '종료 D-3 ~ 당일' 알림이 생긴 날을 거꾸로 계산한다.
+    (저장하지 않아도 북마크·기간만으로 같은 내역이 다시 나온다) → (알림 날, 종류, 글자, 행)"""
+    _, mine, _ = _fav_state()
+    rules = _rules()
+    out: list[tuple[date, str, str, dict]] = []
+    for r in mycal.latest_rows(store.all_rows()):
+        if str(r.get("entry_id")) not in mine:
+            continue
+        s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+        for kind, base in (("open", s_), ("end", e_)):
+            if not base or not rules[kind]["enabled"]:
+                continue
+            for d in range(rules[kind]["days"], -1, -1):
+                day = base - timedelta(days=d)
+                if day > TODAY or (TODAY - day).days > days_back:
+                    continue
+                if kind == "end" and s_ and day < s_:
+                    continue
+                label = ("오늘 오픈" if d == 0 else f"오픈 D-{d}") if kind == "open" else ("오늘 종료" if d == 0 else f"종료 D-{d}")
+                out.append((day, kind, label, r))
+    out.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return out
+
+
+def render_my_calendar_view() -> None:
+    st.markdown(CAL_CSS + MYCAL_CSS + BOX_CSS, unsafe_allow_html=True)
+    # 모바일은 메뉴바 탭이 없어서 리스트·지도로 돌아가는 아이콘을 둔다
+    with st.container(horizontal=True, horizontal_alignment="right", key="mycal_mnav"):
+        st.button("", icon=":material/format_list_bulleted:", key="mycal_to_list", on_click=_gnb_go, args=("list",))
+        st.button("", icon=":material/map:", key="mycal_to_map", on_click=_gnb_go, args=("map",))
+    st.markdown("<style>@media (min-width: 641px) { .st-key-mycal_mnav { display: none !important; } }</style>",
+                unsafe_allow_html=True)
+    # 순서 (11/18 요청): 왼쪽 = 내 캘린더(가장 넓게) · 가운데 = 찜·다녀온·최근 본(조금 작게) · 오른쪽 = 알림 받은 내역
+    # 캘린더는 지도 보기 오른쪽 캘린더와 같은 크기, 알림은 데일리 팝업 노트와 같은 폭·모양
+    left, mid, right = st.columns([1.55, 3.0, 0.9], gap="medium")
+    with right, st.container(key="ntf_box"):
+        st.markdown('<div class="mc-title">알림 받은 내역</div>', unsafe_allow_html=True)
+        _render_notice_history()
+    with left, st.container(key="mycal_box"):
+        render_calendar()
+    with mid, st.container(key="keep_box"):
+        tab = st.session_state.get("box_tab", "fav")
+        if tab not in ("fav", "visited", "recent"):
+            tab = "fav"
+        with st.container(horizontal=True, key="box_tabs"):
+            for t, label in (("fav", "찜"), ("visited", "다녀온"), ("recent", "최근 본")):
+                st.button(label, key=f"boxtab_{'on_' if tab == t else ''}{t}", on_click=_box_tab, args=(t,))
+        render_box_view(tab)
+
+
+def _render_notice_history() -> None:
+    me = _member()
+    rules = _rules()
+    inbox = _inbox(str(me["entry_id"])) if me else []
+    for r in inbox[:20]:                    # 공지 · 삭제 요청 처리 결과 (관리자가 보냄)
+        tag = "end" if r.get("kind") == "삭제 거부" else ""
+        why = admin.why(admin.KIND_RULE.get(str(r.get("kind")), "notice"), rules)
+        st.markdown(f'<div class="nh-item msg" style="display:block"><span class="nh-tag {tag}">{escape(str(r.get("kind") or "알림"))}</span>'
+                    f'<div class="nh-name">{escape(str(r.get("title") or ""))}</div>'
+                    f'<div class="nh-cafe">{escape(str(r.get("body") or ""))}</div>'
+                    f'<div class="nh-why">왜 왔나요? {escape(why)}</div>'
+                    f'<div class="nh-cafe">{escape(_when(str(r.get("updated_at", ""))))}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="mc-sub">북마크한 팝업의 오픈 {rules["open"]["days"]}일 전 · 종료 {rules["end"]["days"]}일 전부터 '
+                '당일까지 알림 (최근 30일)</div>', unsafe_allow_html=True)
+    hist = _notice_history()
+    if not hist:
+        st.markdown('<div class="ntf-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
+                    '여기에 쌓여요.</div>', unsafe_allow_html=True)
+    last_day = None
+    for n, (day, kind, label, r) in enumerate(hist[:40]):
+        if day != last_day:
+            st.markdown(f'<div class="nh-day">{"오늘" if day == TODAY else f"{day.month}월 {day.day}일"}</div>',
+                        unsafe_allow_html=True)
+            last_day = day
+        eid = str(r.get("entry_id"))
+        with st.container(key=f"nh_{n}_{eid}"):
+            st.markdown(
+                f'<div class="nh-item"><img src="{escape(_poster_url(r.get("images")))}" alt="">'
+                f'<div><span class="nh-tag{" end" if kind == "end" else ""}">{escape(label)}</span>'
+                f'<div class="nh-name">{escape(str(r.get("work") or ""))}</div>'
+                f'<div class="nh-cafe">{escape(str(r.get("cafe_name") or ""))}</div>'
+                f'<div class="nh-why">{escape(admin.why(kind, rules))}</div></div></div>',
+                unsafe_allow_html=True)
+            st.button(f"{r.get('work')} 상세", key=f"nh_btn_{n}_{eid}", on_click=_gnb_open, args=(eid,))
+
+
+# ------------------------------------------------------------ '보관함' 탭: 찜 · 다녀온(내가 쓴 다녀온 후기) · 최근 본
+BOX_CSS = """
+<style>
+.bx-title { font-family: "Jua", sans-serif; font-size: 1.7rem; color: #26302D; margin: 6px 0 4px; }
+.st-key-box_tabs { gap: 0 !important; border-bottom: 1.5px solid #E3E8E6; margin-bottom: 14px; }
+.st-key-box_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  padding: 8px 16px 9px !important; border-bottom: 3px solid transparent !important; margin-bottom: -1.5px; }
+.st-key-box_tabs button p { font-size: 1.1rem !important; font-weight: 700 !important; color: #9AA5A1 !important; }
+.st-key-box_tabs [class*="st-key-boxtab_on_"] button { border-bottom-color: #26302D !important; }
+.st-key-box_tabs [class*="st-key-boxtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
+.bx-tip { display: flex; align-items: center; gap: 8px; background: #F4F8F6; border-radius: 14px; padding: 12px 16px;
+  color: #4B5260; font-size: .9rem; margin-bottom: 14px; }
+.bx-empty { text-align: center; padding: 56px 12px 40px; }
+.bx-empty .ic { font-family: "Material Symbols Rounded"; font-size: 4.2rem; color: #C9D6D2; line-height: 1; }
+.bx-empty h4 { margin: 14px 0 4px; }
+.bx-empty p { color: #8A9592; font-size: .92rem; margin: 0; }
+[class*="st-key-bx_"] { position: relative; }
+.bxc { display: flex; gap: 12px; background: #fff; border: 1.5px solid #E3E8E6; border-radius: 16px; padding: 10px; }
+.bxc img.pst { width: 82px; height: 110px; object-fit: cover; border-radius: 10px; flex: 0 0 82px; }
+.bxc .t { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bxc .w { font-family: "Jua", sans-serif; font-size: 1.15rem; color: #2E9C82; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bxc .c { font-weight: 800; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bxc .d { color: #2E9C82; font-weight: 800; font-size: .85rem; }
+.bxc .st { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800; background: #E6F6F0;
+  color: #2E9C82; width: fit-content; }
+.bxc .st.end { background: #EEF1F0; color: #8A9592; }
+.bxr { margin-top: 8px; background: #F4F8F6; border-radius: 12px; padding: 10px 12px; font-size: .88rem; line-height: 1.55; }
+.bxr .stars { color: #F5A623; letter-spacing: 1px; font-size: .95rem; }
+.bxr .when { color: #9AA5A1; font-size: .75rem; margin-left: 6px; }
+.bxr .imgs { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.bxr .imgs img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
+[class*="st-key-bxbtn_"] { position: absolute !important; inset: 0; z-index: 2; width: 100% !important; height: 100% !important; }
+[class*="st-key-bxbtn_"] > div, [class*="st-key-bxbtn_"] .stButton { width: 100% !important; height: 100% !important; }
+[class*="st-key-bxbtn_"] button { width: 100% !important; height: 100% !important; opacity: 0 !important; }
+</style>
+"""
+
+
+def _remember_recent(cafe_id: str) -> None:
+    """최근 본 팝업 (이 브라우저 세션 안에서, 최신 20개)."""
+    rec = [x for x in st.session_state.get("recent_seen", []) if x != cafe_id]
+    st.session_state["recent_seen"] = ([cafe_id] + rec)[:20]
+
+
+def _box_tab(t: str) -> None:
+    st.session_state["box_tab"] = t
+
+
+def _box_card(r: dict, key: str, review_html: str = "") -> None:
+    eid = str(r.get("entry_id"))
+    s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+    md = lambda d: f"{d.month}.{d.day}" if d else ""          # noqa: E731
+    state = ("종료" if e_ and e_ < TODAY else "예정" if s_ and s_ > TODAY else "진행 중") if s_ else ""
+    with st.container(key=f"bx_{key}_{eid}"):
+        st.markdown(
+            f'<div class="bxc"><img class="pst" src="{escape(_poster_url(r.get("images")))}" alt="">'
+            f'<div class="t"><span class="st{" end" if state == "종료" else ""}">{state}</span>'
+            f'<div class="w">{escape(str(r.get("work") or ""))}</div><div class="c">{escape(str(r.get("cafe_name") or ""))}</div>'
+            f'<div class="d">{md(s_)} ~ {md(e_)}</div></div></div>{review_html}', unsafe_allow_html=True)
+        st.button(f"{r.get('work')} 상세", key=f"bxbtn_{key}_{eid}", on_click=_gnb_open, args=(eid,))
+
+
+def _box_empty(title: str, hint: str, icon: str) -> None:
+    st.markdown(f'<div class="bx-empty"><div class="ic">{icon}</div><h4>{title}</h4><p>{hint}</p></div>',
+                unsafe_allow_html=True)
+
+
+def _box_grid(items: list[tuple[dict, str]], key: str) -> None:
+    """카드 목록 (캘린더 옆 칸이라 한 줄에 한 장)."""
+    for r, review_html in items:
+        _box_card(r, key, review_html)
+
+
+def render_box_view(tab: str) -> None:
+    """내 캘린더 오른쪽 칸의 찜 · 다녀온 · 최근 본."""
+    latest = {str(r.get("entry_id")): r for r in mycal.latest_rows(store.all_rows())}
+
+    if tab == "fav":
+        st.markdown(f'<div class="bx-tip">{_mi("notifications")} 찜한 팝업은 오픈·종료 3일 전부터 알림으로 알려 드려요.</div>',
+                    unsafe_allow_html=True)
+        _, mine, _ = _fav_state()
+        rows = sorted((latest[i] for i in mine if i in latest),
+                      key=lambda r: (str(r.get("end_date") or "") < TODAY.isoformat(), str(r.get("start_date") or "")))
+        if not rows:
+            _box_empty("아직 찜한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.", "bookmark_add")
+            return
+        _box_grid([(r, "") for r in rows], "fav")
+
+    elif tab == "visited":
+        st.markdown(f'<div class="bx-tip">{_mi("rate_review")} \'다녀온 후기\'를 쓴 팝업이 여기에 모여요. 쓴 후기도 함께 보여요.</div>',
+                    unsafe_allow_html=True)
+        me = _me()
+        mine_reviews = [r for r in reviews.current_rows()
+                        if r.get("kind") == review.RATED_KIND and not r.get("parent_id") and review.can_delete(r, me)]
+        by_cafe: dict[str, list[dict]] = {}
+        for rv in sorted(mine_reviews, key=lambda x: str(x.get("updated_at", "")), reverse=True):
+            by_cafe.setdefault(str(rv.get("cafe_id")), []).append(rv)
+        items = []
+        for cid, rvs in by_cafe.items():
+            if cid not in latest:
+                continue
+            html_parts = []
+            for rv in rvs:
+                pics = images.paths(rv.get("images"))        # 리뷰 화면과 같은 방법으로 사진 경로를 고른다
+                imgs = "".join(f'<img src="{escape(images.url(x))}" alt="">' for x in pics[:4])
+                html_parts.append(
+                    f'<div class="bxr"><span class="stars">{review.stars(rv.get("rating"))}</span>'
+                    f'<span class="when">{escape(_when(str(rv.get("updated_at", ""))))}</span>'
+                    f'<div>{escape(str(rv.get("body") or ""))}</div>'
+                    f'{f"<div class=imgs>{imgs}</div>" if imgs else ""}</div>')
+            items.append((latest[cid], "".join(html_parts)))
+        if not items:
+            _box_empty("다녀온 팝업이 없어요", "팝업 상세의 리뷰 탭에서 '다녀온 후기'를 쓰면 여기에 기록돼요.", "where_to_vote")
+            return
+        _box_grid(items, "visited")
+
+    else:
+        ids = [i for i in st.session_state.get("recent_seen", []) if i in latest]
+        st.markdown(f'<div class="bx-tip">{_mi("history")} 이 브라우저에서 최근에 연 팝업 상세예요 (최대 20개).</div>',
+                    unsafe_allow_html=True)
+        if not ids:
+            _box_empty("최근 본 팝업이 없어요", "리스트나 지도에서 팝업을 눌러 상세를 열면 여기에 남아요.", "history")
+            return
+        _box_grid([(latest[i], "") for i in ids], "recent")
 
 
 def page_map() -> None:
@@ -2725,6 +3275,14 @@ def page_map() -> None:
         msg, icon = flash if isinstance(flash, tuple) else (flash, ":material/check_circle:")
         _toast(msg, icon)
 
+    if current:
+        _remember_recent(str(current["entry_id"]))
+    if st.session_state.get("cal_view") and not _member():
+        st.session_state["cal_view"] = False
+    if st.session_state.get("cal_view") and not current:
+        render_my_calendar_view()
+        return
+
     df = cafe.rows_to_frame(rows)
 
     if df.empty:
@@ -2763,7 +3321,7 @@ def page_map() -> None:
     # PC: 검색 필터 줄은 메뉴바의 검색 아이콘을 눌렀을 때만 보인다 (접어도 걸어 둔 조건은 그대로 걸린다)
     if not ss.get("pc_filters"):
         st.markdown("<style>@media (min-width: 641px) { .st-key-filters { display: none !important; } }"
-                    " :root { --apn-top: 120px; }</style>", unsafe_allow_html=True)
+                    " :root { --apn-top: 96px; }</style>", unsafe_allow_html=True)
     with top:
         fbox = st.container(key="filters")      # 모바일 전용 칸(찜·지역)도 아래에서 이 묶음에 넣는다
     if ss.pop("_focus_search", False):
@@ -2922,8 +3480,8 @@ def page_map() -> None:
             render_daily(df)
         with col_map:
             draw_map()
-        with col_cal, st.container(key="map_cal"):
-            render_calendar(compact=True)
+        with col_cal, st.container(key="ask_panel"):     # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
+            render_ask_panel()
 
     # 지도에서 고른 게 이번 실행에서 바뀌었으면 왼쪽 패널·강조를 다시 그린다
     if st.session_state.get("selected") != selected:
@@ -3640,6 +4198,9 @@ def _stepper_html(step: int) -> str:
 
 
 def page_add() -> None:
+    if not _member():               # 팝업 등록은 로그인한 사람만 (주소로 바로 들어와도 로그인 화면으로)
+        st.session_state["flash"] = ("팝업 등록은 로그인하면 할 수 있어요.", ":material/login:")
+        go("login")
     w = _wiz()
     step = w["step"]
     title, icon = STEPS[step]
@@ -3651,9 +4212,7 @@ def page_add() -> None:
     _clear_buttons()    # 입력칸 오른쪽 × 로 한 번에 지우기
     # 메인과 같은 상단(제목·문구)이 스크롤해도 떠 있고, 문구 줄 오른쪽에 홈으로
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True, logo=ADD_LOGO):   # 등록 화면은 등록 화면 전용 로고로 고정
-            st.session_state.pop("wiz", None)
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바 ('홈으로 돌아가기' 는 뺐다 — 로고·탭으로 돌아간다)
 
     back, head, _ = st.columns([1.2, 6, 1.2], vertical_alignment="center")
     with back:
@@ -3940,13 +4499,15 @@ def page_login() -> None:
     st.markdown(GLOBAL_CSS + AUTH_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
     if st.session_state.get("_cookie_pending"):          # 방금 로그인했으면 쿠키를 심는다
         _set_cookie(st.session_state.pop("_cookie_pending"), auth.SESSION_DAYS)
     flash = st.session_state.pop("flash", None)
     if flash:
-        _toast(*flash) if isinstance(flash, tuple) else _toast(flash)
+        if isinstance(flash, tuple):
+            _toast(*flash)
+        else:
+            _toast(flash)
     with st.container(key="auth_wrap"):         # 로그인·회원가입은 화면 가운데 좁은 칸에
         _login_body()
 
@@ -4022,7 +4583,7 @@ def _password_login_form() -> None:
         return
     ss.pop("_pw_fails", None)
     _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
-    st.rerun()
+    go("map")                                # 로그인하면 메인으로 (11/18)
 
 
 def _password_signup_form() -> None:
@@ -4033,7 +4594,8 @@ def _password_signup_form() -> None:
         pw = st.text_input("비밀번호 (필수)", type="password", max_chars=auth.PW_MAX,
                            placeholder="영문+숫자 8자 이상", autocomplete="new-password")
         pw2 = st.text_input("비밀번호 확인 (필수)", type="password", max_chars=auth.PW_MAX, autocomplete="new-password")
-        nick = st.text_input("닉네임 (필수)", max_chars=auth.MAX_NICK, placeholder="리뷰에 보일 이름 2~16자")
+        nick = st.text_input("닉네임 (필수)", max_chars=auth.MAX_NICK,
+                             placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
         agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 아이디 · 닉네임 · 암호화한 비밀번호")
         st.caption("이메일·전화번호를 받지 않아서 비밀번호를 잊으면 찾을 수 없어요. 꼭 기억해 두세요.")
         done = st.form_submit_button("가입하기", type="primary", icon=":material/person_add:", width="stretch")
@@ -4043,13 +4605,15 @@ def _password_signup_form() -> None:
         st.warning("동의해야 가입할 수 있어요.", icon=":material/error:")
         return
     try:
+        if not " ".join(str(nick or "").split()):      # 닉네임을 비워 두면 '꾸밈말 + 캐릭터' 로 자동 (11/18)
+            nick = review.auto_nickname(str(lid).strip().lower())
         row = auth.register_password(members, lid, pw, pw2, nick)
     except auth.AuthError as e:
         st.warning(str(e), icon=":material/error:")
         return
     moved = _move_guest_favs(row)
     _login_done(row, "가입했어요!" + (f" 북마크 {moved}개도 옮겼어요." if moved else ""))
-    st.rerun()
+    go("map")
 
 
 def _move_guest_favs(row: dict) -> int:
@@ -4128,8 +4692,7 @@ def page_auth() -> None:
     st.markdown(GLOBAL_CSS + AUTH_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
     with st.container(key="auth_wrap"):
         _auth_body()
 
@@ -4153,7 +4716,7 @@ def _auth_body() -> None:
         row = auth.find(members, ident.member_key)
         if row:
             _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
-            go("login")
+            go("map")
             return
         st.session_state["_pending_ident"] = ident
     ident = st.session_state.get("_pending_ident")
@@ -4166,7 +4729,7 @@ def _auth_body() -> None:
                 '앱에서 쓸 닉네임만 정하면 가입이 끝나요.</div>', unsafe_allow_html=True)
     with st.form("signup", border=False):
         nick = st.text_input("닉네임", value=ident.nickname, max_chars=auth.MAX_NICK,
-                             placeholder="리뷰에 보일 이름 (2~16자)")
+                             placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
         agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 닉네임 · 로그인 수단 · 해시한 계정 번호")
         done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")
     if done:
@@ -4174,6 +4737,8 @@ def _auth_body() -> None:
             st.warning("동의해야 가입할 수 있어요.", icon=":material/error:")
             return
         try:
+            if not " ".join(str(nick or "").split()):
+                nick = review.auto_nickname(ident.member_key)
             row = auth.signup(members, ident, nick)
         except auth.AuthError as e:
             st.warning(str(e), icon=":material/error:")
@@ -4185,35 +4750,528 @@ def _auth_body() -> None:
             favorite.toggle(favs, cid, f"m:{row['entry_id']}", True)
         st.session_state.pop("_pending_ident", None)
         _login_done(row, "가입했어요!" + (f" 북마크 {len(moved)}개도 옮겼어요." if moved else ""))
-        go("login")
+        go("map")
 
 
 # ------------------------------------------------------------ 2차: 데이터 보기 (/data)
-DATA_TABLES = {"cafes": "팝업", "reviews": "리뷰", "favorites": "북마크", "members": "회원"}
-DATA_HIDE = {"members": [], "favorites": ["user"], "reviews": [], "cafes": []}
+DATA_TABLES = {"cafes": "팝업", "reviews": "리뷰", "favorites": "북마크", "members": "회원",
+               "del_requests": "삭제 요청", "notices": "알림", "visits": "접속"}
+DATA_HIDE = {"members": [], "favorites": ["user"], "reviews": [], "cafes": [], "del_requests": [], "notices": [],
+             "visits": []}
+
+
+DEFAULT_ADMIN = "f37119a9dd2d4c0b"        # 관리자 회원 번호 (공개돼도 되는 값: 로그인해야 그 회원이 된다)
 
 
 def _is_admin() -> bool:
-    """관리자: ADMIN_MEMBER_KEYS(쉼표로 구분한 회원 번호)에 든 회원, 또는 내 컴퓨터에서 직접 연 경우."""
+    """관리자: ADMIN_MEMBER_KEYS(쉼표로 구분한 회원 번호)에 든 회원만. 비워 두면 기본 관리자 한 명 (11/18 지정).
+    나머지 가입자는 모두 일반 회원이다."""
     row = _member()
-    keys = {k.strip() for k in os.getenv("ADMIN_MEMBER_KEYS", "").split(",") if k.strip()}
-    if row and str(row["entry_id"]) in keys:
-        return True
-    return st.context.ip_address in (None, "127.0.0.1", "::1")     # 로컬 실행(개발자 본인)
+    keys = {k.strip() for k in (os.getenv("ADMIN_MEMBER_KEYS") or DEFAULT_ADMIN).split(",") if k.strip()}
+    return bool(row) and str(row["entry_id"]) in keys
+
+
+# ------------------------------------------------------------ 관리자 대시보드 (/data)
+ADMIN_CSS = """
+<style>
+.adm-eyebrow { font-size: .72rem; letter-spacing: .14em; color: #8A9592; font-weight: 700; margin-top: 6px; }
+.adm-title { font-family: "Jua", sans-serif; font-size: 2rem; color: #26302D; line-height: 1.15; margin: 2px 0 2px; }
+.adm-sub { color: #6B7672; font-size: .88rem; margin-bottom: 12px; }
+/* 큰 보기 탭 */
+.st-key-adm_tabs { gap: 0 !important; border-bottom: 2px solid #DDE5E2; margin: 6px 0 14px; flex-wrap: wrap; }
+.st-key-adm_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  padding: 10px 18px 9px !important; border-bottom: 3px solid transparent !important; margin-bottom: -2px; }
+.st-key-adm_tabs button p { font-size: 1rem !important; font-weight: 700 !important; color: #8A9592 !important; }
+.st-key-adm_tabs [class*="st-key-admtab_on_"] button { border-bottom-color: #14B8A6 !important; }
+.st-key-adm_tabs [class*="st-key-admtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
+/* 숫자 카드 */
+.adm-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.adm-kpi { background: #fff; border: 1px solid #DDE5E2; border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.adm-kpi b { font-size: 1.6rem; font-weight: 800; color: #26302D; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.adm-kpi span { font-size: .78rem; color: #6B7672; }
+.adm-kpi b small { font-size: .95rem; font-weight: 700; color: #6B7672; margin-left: 3px; }
+.adm-kpi em { font-style: normal; font-size: .72rem; color: #9AA5A1; }
+.adm-kpi.alert b { color: #E05555; }
+.st-key-adm_kpis { gap: 10px !important; flex-wrap: wrap; margin-bottom: 14px; }
+.st-key-adm_kpis > * { flex: 1 1 150px !important; min-width: 0; }
+[class*="st-key-admk_"] { position: relative; }
+[class*="st-key-admk_"] .adm-kpi { cursor: pointer; transition: border-color .15s; }
+[class*="st-key-admk_"]:hover .adm-kpi { border-color: #14B8A6; }
+[class*="st-key-admk_on_"] .adm-kpi { border: 2px solid #14B8A6; background: #F1FAF7; }
+[class*="st-key-admkb_"], [class*="st-key-admlb_"] { position: absolute !important; inset: 0; z-index: 2; width: 100% !important; height: 100% !important; }
+[class*="st-key-admkb_"] > div, [class*="st-key-admkb_"] .stButton, [class*="st-key-admlb_"] > div, [class*="st-key-admlb_"] .stButton {
+  width: 100% !important; height: 100% !important; }
+[class*="st-key-admkb_"] button, [class*="st-key-admlb_"] button { width: 100% !important; height: 100% !important; opacity: 0 !important; cursor: pointer; }
+[class*="st-key-admli_"] { position: relative; }
+[class*="st-key-admli_"]:hover .adm-card { border-color: #14B8A6; }
+a.adm-link, a.adm-link:visited { text-decoration: none !important; color: inherit !important; }
+a.adm-card.adm-link { cursor: pointer; }
+a.adm-card.adm-pcard { display: flex !important; gap: 14px !important; align-items: center; }
+a.adm-card.adm-pcard img { width: 44px; height: 60px; object-fit: cover; border-radius: 6px; flex: 0 0 44px; background: #F4F6F5;
+  margin-right: 2px; }
+.adm-pcard > div { min-width: 0; display: grid; gap: 1px; }
+a.adm-card.adm-link:hover { border-color: #14B8A6; }
+.gt-lab a.adm-link:hover b { color: #14B8A6; text-decoration: underline; }
+.adm-card .adm-go { float: right; color: #9AA5A1; font-size: .74rem; }
+@media (max-width: 900px) { .adm-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 칸반 */
+.adm-col { background: #F6F9F8; border: 1px solid #DDE5E2; border-radius: 12px; padding: 10px; min-height: 120px; }
+.adm-colhead { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: .95rem;
+  padding: 2px 4px 8px; border-bottom: 3px solid var(--c); margin-bottom: 8px; color: #26302D; }
+.adm-colhead small { font-size: .8rem; color: #6B7672; font-weight: 700; }
+.adm-card { background: #fff; border: 1px solid #E3E8E6; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; display: grid; gap: 1px; }
+.adm-card b { font-size: .86rem; color: #26302D; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-card span { font-size: .76rem; color: #6B7672; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-card em { font-style: normal; font-size: .74rem; color: #2E9C82; font-weight: 700; }
+.adm-empty { color: #9AA5A1; font-size: .82rem; padding: 10px 4px; }
+/* 패널 · 요청 줄 */
+.adm-panel-h { font-weight: 800; font-size: 1rem; color: #26302D; margin: 4px 0 6px; }
+.adm-req { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 10px; border: 1px solid #DDE5E2; border-radius: 12px;
+  padding: 10px 12px; background: #fff; margin-bottom: 4px; }
+.adm-req .rail { border-radius: 2px; background: var(--st); }
+.adm-req .t { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .9rem; font-weight: 700; }
+.adm-req .d { font-size: .8rem; color: #6B7672; margin-top: 2px; }
+.adm-pill { display: inline-block; font-size: .7rem; font-weight: 800; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--st); color: var(--st); }
+.adm-info { background: #F4F8F6; border-radius: 12px; padding: 12px 14px; font-size: .86rem; line-height: 1.7; color: #3A4542; }
+.adm-info b { color: #2E9C82; }
+/* 주 단위 간트 */
+.gt { border: 1px solid #DDE5E2; border-radius: 12px; background: #fff; padding: 10px 12px; margin: 4px 0 14px; }
+.gt-row { display: grid; grid-template-columns: minmax(120px, 230px) minmax(0, 1fr); gap: 10px; align-items: center; min-height: 26px; }
+.gt-row + .gt-row { border-top: 1px dashed #EEF1F0; }
+.gt-lab { font-size: .8rem; color: #26302D; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gt-lab b { font-weight: 800; }
+.gt-lab span { color: #8A9592; }
+.gt-track { position: relative; height: 26px; }
+.gt-wk { position: absolute; top: 0; bottom: 0; background: #E6F6F0; }
+.gt-today { position: absolute; top: 0; bottom: 0; width: 2px; background: #FF6B6B; }
+.gt-bar { position: absolute; top: 6px; height: 14px; border-radius: 4px; background: var(--c); }
+.gt-head .gt-track { height: 20px; }
+.gt-tick { position: absolute; top: 0; font-size: .72rem; color: #6B7672; font-weight: 700; transform: translateX(-50%); white-space: nowrap; }
+.gt-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: #EEF1F0; }
+.gt-bar.cl { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.gt-bar.cr { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.gt-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .76rem; color: #6B7672; margin: 6px 0 0; }
+.gt-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.adm-metric-h { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0 2px; }
+.adm-metric-h b { font-weight: 800; font-size: 1rem; color: #26302D; }
+.adm-metric-h span { font-size: .86rem; color: #6B7672; }
+.adm-metric-h span strong { font-size: 1.1rem; color: #26302D; }
+</style>
+"""
+ADMIN_TABS = [("board", "팝업 현황"), ("usage", "이용 지표"), ("requests", "삭제 요청"), ("notices", "알림 관리"),
+              ("members", "회원 정보"), ("raw", "원본 데이터")]
+ST_COLOR = {"pending": "#D9821B", "approved": "#23866A", "rejected": "#C8352A"}
+ST_LABEL = {"pending": "대기", "approved": "승인", "rejected": "거부"}
+
+
+def _adm_tab(t: str) -> None:
+    st.session_state["adm_tab"] = t
+
+
+def _adm_week(delta: int) -> None:
+    st.session_state["adm_week"] = st.session_state.get("adm_week", 0) + delta
+
+
+def _adm_pick_week(key: str) -> None:
+    picked = st.session_state.get(key)
+    if isinstance(picked, date):
+        st.session_state["adm_week"] = (admin.week_of(picked)[0] - admin.week_of(TODAY)[0]).days // 7
+
+
+def _week_nav(key: str) -> date:
+    """‹ [달력] › : 달력에서 아무 날이나 고르면 그 날이 든 주(월~일)를 본다."""
+    off = st.session_state.get("adm_week", 0)
+    mon, sun = admin.week_of(TODAY + timedelta(weeks=off))
+    pick = f"admwk_pick_{key}"
+    st.session_state[pick] = mon                     # 화살표로 옮겼을 때 달력도 같이
+    with st.container(horizontal=True, vertical_alignment="center", key=f"admwk_{key}"):
+        st.button("", icon=":material/chevron_left:", key=f"admwk_prev_{key}", type="tertiary", on_click=_adm_week, args=(-1,))
+        st.date_input("주 고르기", key=pick, format="YYYY.MM.DD", label_visibility="collapsed", width=150,
+                      on_change=_adm_pick_week, args=(pick,))
+        st.button("", icon=":material/chevron_right:", key=f"admwk_next_{key}", type="tertiary", on_click=_adm_week, args=(1,))
+        st.markdown(f"**{mon.month}/{mon.day}(월) ~ {sun.month}/{sun.day}(일)**" + (" · 이번 주" if off == 0 else ""))
+        if off:
+            st.button("이번 주", key=f"admwk_now_{key}", on_click=lambda: st.session_state.update(adm_week=0))
+    return mon
+
+
+def _adm_href(r: dict) -> str:
+    """팝업 이름 링크 → 메인의 그 팝업 상세 (공유 링크와 같은 ?cafe=<번호>)."""
+    return f"./?cafe={quote(str(r.get('entry_id') or ''))}"
+
+
+GANTT_COLOR = {"예정": "#3672BD", "진행": "#14B8A6", "종료": "#A9B3B0"}
+
+
+def _admin_gantt(mon: date) -> None:
+    """고른 주(월~일) 하루 단위 팝업 일정. 주 밖으로 이어지면 막대 끝을 ‹ › 로, 오늘 칸은 연한 민트."""
+    start, end = mon, mon + timedelta(days=6)
+    span = (end - start).days + 1
+    rows = admin.gantt_rows(store.all_rows(), start, end, limit=80)
+
+    def pct(d: date) -> float:
+        return max(0.0, min(100.0, (d - start).days / span * 100))
+
+    wk = (f'<div class="gt-wk" style="left:{pct(TODAY):.2f}%;width:{100 / span:.2f}%"></div>'
+          if start <= TODAY <= end else "")
+    grid = "".join(f'<div class="gt-grid" style="left:{pct(start + timedelta(days=i)):.2f}%"></div>' for i in range(1, span))
+    wd = "월화수목금토일"
+    ticks = "".join(f'<div class="gt-tick" style="left:{(i + .5) / span * 100:.2f}%">'
+                    f'{(start + timedelta(days=i)).month}/{(start + timedelta(days=i)).day}({wd[i]})</div>'
+                    for i in range(span))
+    today = ""
+    html = [f'<div class="gt"><div class="gt-row gt-head"><div class="gt-lab"><b>팝업 {len(rows)}곳</b></div>'
+            f'<div class="gt-track">{ticks}</div></div>']
+    for r in rows:
+        s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+        kind = "예정" if s > TODAY else ("종료" if e < TODAY else "진행")
+        left, right = pct(max(s, start)), pct(min(e, end) + timedelta(days=1))
+        html.append(
+            f'<div class="gt-row"><div class="gt-lab"><a class="adm-link" href="{_adm_href(r)}" target="_self">'
+            f'<b>{escape(str(r.get("work") or ""))}</b></a> '
+            f'<span>{escape(str(r.get("cafe_name") or ""))} · {s.month}/{s.day}~{e.month}/{e.day}</span></div>'
+            f'<div class="gt-track">{wk}{grid}<div class="gt-bar{" cl" if s < start else ""}{" cr" if e > end else ""}" '
+            f'style="--c:{GANTT_COLOR[kind]};left:{left:.2f}%;width:{max(right - left, 0.8):.2f}%"></div></div></div>')
+    if not rows:
+        html.append('<div class="adm-empty">이 기간에 걸친 팝업이 없어요.</div>')
+    html.append('<div class="gt-legend">' + "".join(f'<span><i style="background:{c}"></i>{k}</span>'
+                                                     for k, c in GANTT_COLOR.items())
+                + '<span><i style="background:#E6F6F0"></i>오늘</span><span>막대가 칸 끝에 붙어 있으면 이 주 앞뒤로 이어져요</span></div></div>')
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+
+def _admin_board() -> None:
+    mon = _week_nav("board")
+    st.markdown('<div class="adm-panel-h">이 주 일정 (간트 차트 · 하루 단위)</div>', unsafe_allow_html=True)
+    _admin_gantt(mon)
+    st.markdown('<div class="adm-panel-h">고른 주 현황</div>', unsafe_allow_html=True)
+    board = admin.popup_board(store.all_rows(), mon)
+    colors = {"새로 생성": "#14B8A6", "예정": "#3672BD", "진행": "#23866A", "종료": "#8A9592"}
+    cols = st.columns(4, gap="small")
+    for col, (name, rows) in zip(cols, board.items()):
+        with col:
+            cards = "".join(
+                f'<a class="adm-card adm-link adm-pcard" href="{_adm_href(r)}" target="_self">'
+                f'<img src="{escape(_poster_url(r.get("images")))}" alt="" loading="lazy"><div>'
+                f'<b>{escape(str(r.get("work") or ""))}</b>'
+                f'<span>{escape(str(r.get("cafe_name") or ""))}</span>'
+                f'<em>{escape(str(r.get("start_date") or "")[5:])} ~ {escape(str(r.get("end_date") or "")[5:])}</em></div></a>'
+                for r in rows[:40]) or '<div class="adm-empty">없어요</div>'
+            st.markdown(f'<div class="adm-col" style="--c:{colors[name]}"><div class="adm-colhead">{name}'
+                        f'<small>{len(rows)}곳</small></div>{cards}</div>', unsafe_allow_html=True)
+    st.caption("새로 생성 = 그 주에 처음 등록 · 예정 = 그 주가 끝난 뒤 4주 안에 시작 · 진행 = 그 주에 열려 있고 다음 주에도 이어짐 · 종료 = 그 주에 끝남")
+
+
+def _admin_usage() -> None:
+    mon = _week_nav("usage")
+    ev = admin.member_events(members.all_rows())
+    charts = [
+        ("신규 이용자 수", admin.daily_events(ev, "가입", mon), MINT, "명"),
+        ("일별 접속 회원", admin.daily_active(visits.all_rows(), mon).rename(columns={"접속 회원": "명"}), "#3672BD", "명 (연인원)"),
+        ("탈퇴한 회원 수", admin.daily_events(ev, "탈퇴", mon), "#C8352A", "명"),
+    ]
+    for title, df, color, unit in charts:
+        total = int(df["명"].sum())
+        st.markdown(f'<div class="adm-metric-h"><b>{title}</b><span>이 주 합계 <strong>{total}</strong>{unit}</span></div>',
+                    unsafe_allow_html=True)
+        st.bar_chart(df, x="날", y="명", color=color, sort=False, height=200, x_label="", y_label="")
+    st.caption("신규 = 그날 가입한 회원 · 접속 회원 = 그날 로그인한 상태로 한 번 이상 들어온 회원 (같은 날 여러 번 와도 1명, "
+               "손님은 세지 않아요) · 탈퇴 = 그날 탈퇴한 회원. 날짜는 한국 시간.")
+
+
+def _admin_decide(req: dict, approve: bool) -> None:
+    reason = st.session_state.get(f"adm_rj_{req['entry_id']}", "")
+    if not approve and len(" ".join(reason.split())) < 2:
+        st.session_state["flash"] = ("거부 사유를 적어 주세요.", ":material/error:")
+        return
+    if approve:                             # 승인 → 게시글 삭제 (지우지 않고 '삭제됨' 행)
+        target = reviews if req.get("target_type") == "review" else store
+        extra = {} if req.get("target_type") == "review" else {"source": "삭제 요청 승인", "editor": _me()}
+        try:
+            target.soft_delete(str(req.get("target_id")), extra=extra or None)
+        except Exception:                   # 이미 지워진 글이어도 요청 처리는 끝낸다
+            pass
+    admin.decide(del_requests, notices_store, req, approve, reason,
+                 notify=_rules()["del_ok" if approve else "del_no"]["enabled"])
+    st.session_state["flash"] = (("승인했어요. 게시글을 삭제하고 요청자에게 알렸어요." if approve
+                                  else "거부했어요. 요청자에게 사유를 알렸어요."), ":material/check_circle:")
+
+
+def _admin_requests() -> None:
+    rows = sorted(del_requests.current_rows(), key=lambda r: str(r.get("updated_at", "")), reverse=True)
+    pending = [r for r in rows if r.get("decision") == "pending"]
+    done = [r for r in rows if r.get("decision") != "pending"]
+    st.markdown(f'<div class="adm-panel-h">처리 대기 {len(pending)}건</div>', unsafe_allow_html=True)
+    if not pending:
+        st.markdown('<div class="adm-empty">처리할 삭제 요청이 없어요.</div>', unsafe_allow_html=True)
+    for r in pending:
+        eid = str(r["entry_id"])
+        st.markdown(
+            f'<div class="adm-req" style="--st:{ST_COLOR["pending"]}"><div class="rail"></div><div>'
+            f'<div class="t"><span class="adm-pill">대기</span>{escape(admin.TARGET_LABEL.get(r.get("target_type"), "글"))} · '
+            f'{escape(str(r.get("target_title") or ""))}</div>'
+            f'<div class="d">요청 {escape(str(r.get("requester_nick") or ""))} · {escape(_when(str(r.get("updated_at", ""))))}</div>'
+            f'<div class="d">사유: {escape(str(r.get("reason") or ""))}</div></div></div>', unsafe_allow_html=True)
+        c1, c2, c3 = st.columns([1, 3, 1], vertical_alignment="bottom")
+        c1.button("승인 (삭제)", key=f"adm_ok_{eid}", type="primary", width="stretch", on_click=_admin_decide, args=(r, True))
+        c2.text_input("거부 사유", key=f"adm_rj_{eid}", placeholder="거부할 때 요청자에게 보낼 사유", label_visibility="collapsed",
+                      max_chars=admin.MAX_REASON)
+        c3.button("거부", key=f"adm_no_{eid}", width="stretch", on_click=_admin_decide, args=(r, False))
+    with st.expander(f"처리한 요청 {len(done)}건"):
+        for r in done[:50]:
+            d = r.get("decision")
+            st.markdown(
+                f'<div class="adm-req" style="--st:{ST_COLOR.get(d, "#8A9592")}"><div class="rail"></div><div>'
+                f'<div class="t"><span class="adm-pill">{ST_LABEL.get(d, d)}</span>'
+                f'{escape(str(r.get("target_title") or ""))}</div>'
+                f'<div class="d">요청 {escape(str(r.get("requester_nick") or ""))} · 사유 {escape(str(r.get("reason") or ""))}</div>'
+                + (f'<div class="d">거부 사유: {escape(str(r.get("admin_reason") or ""))}</div>' if d == "rejected" else "")
+                + '</div></div>', unsafe_allow_html=True)
+
+
+def _admin_notice_save(entry_id: str | None) -> None:
+    k = entry_id or "new"
+    title = " ".join(str(st.session_state.get(f"adm_nt_t_{k}", "")).split())
+    body = str(st.session_state.get(f"adm_nt_b_{k}", "")).strip()
+    if len(title) < 2 or not body:
+        st.session_state["flash"] = ("제목(2자 이상)과 내용을 적어 주세요.", ":material/error:")
+        return
+    if guard.scan(f"{title} {body}"):
+        st.session_state["flash"] = ("알림에 전화번호·이메일 같은 개인정보는 넣을 수 없어요.", ":material/error:")
+        return
+    admin.send(notices_store, "all", "공지", title, body, entry_id=entry_id)
+    st.session_state.pop("adm_nt_edit", None)
+    for key in (f"adm_nt_t_{k}", f"adm_nt_b_{k}"):      # 저장했으면 입력칸을 비운다
+        st.session_state.pop(key, None)
+    st.session_state["flash"] = ("알림을 저장했어요. 모든 회원의 알림에 보여요.", ":material/check_circle:")
+
+
+def _admin_notice_delete(row: dict) -> None:
+    notices_store.soft_delete(str(row["entry_id"]))
+    st.session_state["flash"] = ("알림을 삭제했어요.", ":material/check_circle:")
+
+
+def _admin_rule_save(key: str, enabled: bool) -> None:
+    d = admin.RULES[key]
+    days = st.session_state.get(f"adm_rule_days_{key}") if d["days"] is not None else None
+    mx = st.session_state.get(f"adm_rule_max_{key}") if d["max_items"] is not None else None
+    try:
+        admin.save_rule(alert_rules, key, enabled, days, mx)
+    except Exception:
+        st.session_state["flash"] = ("저장하지 못했어요. Supabase 에 007_alert_rules.sql 을 먼저 돌려 주세요.", ":material/error:")
+        return
+    st.session_state.pop("_rules_cache", None)
+    st.session_state["flash"] = (f"'{d['name']}' 규칙을 {'저장했어요' if enabled else '껐어요'}.", ":material/check_circle:")
+
+
+def _admin_rule_editor(rules: dict[str, dict]) -> None:
+    """규칙 하나를 골라 며칠 전부터 · 최대 몇 개 · 켜기/끄기(삭제). 기록은 지우지 않고 쌓인다."""
+    keys = list(admin.RULES)
+    with st.container(border=True):
+        k = st.selectbox("고칠 규칙", keys, format_func=lambda x: f'{admin.RULES[x]["name"]} '
+                         f'({"켜짐" if rules[x]["enabled"] else "꺼짐"})', key="adm_rule_pick")
+        d, cur = admin.RULES[k], rules[k]
+        c1, c2 = st.columns(2)
+        if d["days"] is not None:
+            c1.number_input("며칠 전부터 (공지는 며칠 동안)", min_value=0, max_value=30, value=int(cur["days"]), step=1,
+                            key=f"adm_rule_days_{k}")
+        else:
+            c1.markdown('<div class="adm-empty">이 규칙은 일수가 없어요.</div>', unsafe_allow_html=True)
+        if d["max_items"] is not None:
+            c2.number_input("최대 노출 개수", min_value=1, max_value=30, value=int(cur["max_items"]), step=1,
+                            key=f"adm_rule_max_{k}")
+        else:
+            c2.markdown('<div class="adm-empty">처리할 때마다 1건씩 가요.</div>', unsafe_allow_html=True)
+        b1, b2, _ = st.columns([1, 1, 2])
+        b1.button("저장" if cur["enabled"] else "저장하고 다시 켜기", type="primary", width="stretch",
+                  key=f"adm_rule_save_{k}", on_click=_admin_rule_save, args=(k, True))
+        if cur["enabled"]:
+            b2.button("이 알림 끄기 (삭제)", width="stretch", key=f"adm_rule_off_{k}", on_click=_admin_rule_save, args=(k, False))
+        st.caption("끈 규칙은 회원에게 더 이상 나가지 않아요. 기록은 남아서 언제든 다시 켤 수 있어요. 주간 브리핑 메일은 Apps Script 에서 고쳐요.")
+
+
+def _admin_notices() -> None:
+    st.markdown('<div class="adm-panel-h">자동으로 나가는 알림</div>', unsafe_allow_html=True)
+    rules = _rules()
+    st.dataframe(admin.rules_table(rules), hide_index=True, width="stretch")
+    _admin_rule_editor(rules)
+    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+    rows = sorted([r for r in notices_store.current_rows() if r.get("target") == "all"],
+                  key=lambda r: str(r.get("updated_at", "")), reverse=True)
+    left, right = st.columns([1.4, 1], gap="medium")
+    with right:
+        editing = st.session_state.get("adm_nt_edit")
+        cur = next((r for r in rows if str(r["entry_id"]) == editing), None) if editing else None
+        k = str(cur["entry_id"]) if cur else "new"
+        st.markdown(f'<div class="adm-panel-h">{"알림 수정" if cur else "새 알림 추가"}</div>', unsafe_allow_html=True)
+        st.text_input("제목", key=f"adm_nt_t_{k}", value=str(cur.get("title", "")) if cur else "", max_chars=60)
+        st.text_area("내용", key=f"adm_nt_b_{k}", value=str(cur.get("body", "")) if cur else "", max_chars=500, height=120)
+        c1, c2 = st.columns(2)
+        c1.button("저장", key=f"adm_nt_save_{k}", type="primary", width="stretch", on_click=_admin_notice_save,
+                  args=(str(cur["entry_id"]) if cur else None,))
+        if cur:
+            c2.button("취소", key="adm_nt_cancel", width="stretch", on_click=lambda: st.session_state.pop("adm_nt_edit", None))
+        st.caption("저장하면 모든 회원의 종 알림과 '내 캘린더 > 알림 받은 내역'에 보여요.")
+    with left:
+        st.markdown(f'<div class="adm-panel-h">공지 알림 {len(rows)}개</div>', unsafe_allow_html=True)
+        if not rows:
+            st.markdown('<div class="adm-empty">아직 보낸 공지 알림이 없어요. 오른쪽에서 추가해 보세요.</div>', unsafe_allow_html=True)
+        for r in rows:
+            eid = str(r["entry_id"])
+            st.markdown(
+                f'<div class="adm-req" style="--st:#14B8A6"><div class="rail"></div><div>'
+                f'<div class="t">{escape(str(r.get("title") or ""))}</div>'
+                f'<div class="d">{escape(str(r.get("body") or ""))}</div>'
+                f'<div class="d">{escape(_when(str(r.get("updated_at", ""))))} · 수정 {int(r.get("revision") or 1) - 1}회</div>'
+                '</div></div>', unsafe_allow_html=True)
+            c1, c2, _ = st.columns([1, 1, 3])
+            c1.button("수정", key=f"adm_nt_ed_{eid}", width="stretch",
+                      on_click=lambda e=eid: st.session_state.update(adm_nt_edit=e))
+            c2.button("삭제", key=f"adm_nt_del_{eid}", width="stretch", on_click=_admin_notice_delete, args=(r,))
+
+
+def _admin_members() -> None:
+    st.markdown(
+        '<div class="adm-info"><b>수집하는 정보</b> — 닉네임 · 로그인 수단(카카오/네이버/아이디) · 회원 번호(계정 고유 번호를 '
+        '알아볼 수 없게 바꾼 값) · 약관 동의 시각 · 아이디 가입이면 아이디와 <b>암호화한</b> 비밀번호 · 접속한 날(일별 접속 수)<br>'
+        '<b>수집하지 않는 정보</b> — 이메일 · 전화번호 · 실명 · 생일 · 카카오/네이버 고유 번호 원래 값</div>',
+        unsafe_allow_html=True)
+    rows = members.all_rows()
+    latest = mycal.latest_rows(rows)
+    first = {}
+    for r in rows:
+        if int(r.get("revision") or 0) == 1:
+            d = admin._day(r.get("updated_at"))          # 한국 시간 기준 가입일
+            first[str(r["entry_id"])] = d.isoformat() if d else ""
+    last = admin.last_visit(visits.all_rows())
+    keys = {k.strip() for k in (os.getenv("ADMIN_MEMBER_KEYS") or DEFAULT_ADMIN).split(",") if k.strip()}
+    table = pd.DataFrame([{
+        "회원 번호": str(r["entry_id"]), "닉네임": r.get("nickname") or "(탈퇴)",
+        "로그인 수단": auth.PROVIDER_LABEL.get(str(r.get("provider")), "-"),
+        "가입일": first.get(str(r["entry_id"]), ""), "약관 동의": str(r.get("agreed_at") or "")[:16].replace("T", " "),
+        "최근 접속": last.get(str(r["entry_id"]), "-"),
+        "상태": "탈퇴" if r.get("status") == "deleted" else "활동",
+        "권한": "관리자" if str(r["entry_id"]) in keys else "일반 회원",
+    } for r in latest])
+    st.markdown(f'<div class="adm-panel-h" style="margin-top:12px">회원 {len(table)}명</div>', unsafe_allow_html=True)
+    if table.empty:
+        st.markdown('<div class="adm-empty">아직 가입한 회원이 없어요.</div>', unsafe_allow_html=True)
+    else:
+        st.dataframe(table.sort_values("가입일", ascending=False), hide_index=True, width="stretch")
+
+
+ADM_KPIS = [("new", "이번 주 새로 등록", "곳"), ("live", "진행 중", "곳"), ("soon", "예정", "곳"),
+            ("members", "회원 (활동)", "명"), ("requests", "삭제 요청 대기", "건")]
+
+
+def _adm_kpi_pick(k: str) -> None:
+    if k in ("members", "requests"):           # 회원 · 삭제 요청은 그 탭으로
+        st.session_state.update(adm_tab=k, adm_kpi=None)
+        return
+    st.session_state["adm_kpi"] = None if st.session_state.get("adm_kpi") == k else k
+
+
+def _adm_open_popup(cafe_id: str) -> None:
+    """관리자 목록에서 팝업을 누름 → 메인(리스트 보기)으로 가서 그 팝업 상세."""
+    st.session_state.update(list_only=True, cal_view=False, box_view=False, _gnb_to_map=True)
+    _gnb_open(cafe_id)
+
+
+def _admin_kpis(pop_rows: list[dict], pend: int, n_members: int) -> None:
+    mon, _ = admin.week_of(TODAY)
+    live, soon = [], []
+    for r in pop_rows:
+        if r.get("status") == "deleted":
+            continue
+        s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+        if s_ and e_ and s_ <= TODAY <= e_:
+            live.append(r)
+        elif s_ and s_ > TODAY:
+            soon.append(r)
+    lists = {"new": [r for r in admin.popup_board(store.all_rows(), mon)["새로 생성"] if r.get("status") != "deleted"],
+             "live": sorted(live, key=lambda r: str(r.get("end_date") or "")),
+             "soon": sorted(soon, key=lambda r: str(r.get("start_date") or ""))}
+    nums = {"new": len(lists["new"]), "live": len(live), "soon": len(soon), "members": n_members, "requests": pend}
+    picked = st.session_state.get("adm_kpi")
+    with st.container(horizontal=True, key="adm_kpis"):
+        for k, label, unit in ADM_KPIS:
+            alert = " alert" if k == "requests" and pend else ""
+            with st.container(key=f"admk_{'on_' if picked == k else ''}{k}"):
+                st.markdown(f'<div class="adm-kpi{alert}"><span>{label}</span><b>{nums[k]}<small>{unit}</small></b></div>',
+                            unsafe_allow_html=True)
+                st.button("보기", key=f"admkb_{k}", on_click=_adm_kpi_pick, args=(k,))
+    if picked not in lists:
+        return
+    rows = lists[picked]
+    label = dict((k, l) for k, l, _ in ADM_KPIS)[picked]
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.markdown(f'<div class="adm-panel-h">{label} {len(rows)}곳 · 누르면 상세로 이동</div>', unsafe_allow_html=True)
+        st.button("닫기", icon=":material/close:", key="adm_kpi_close", type="tertiary",
+                  on_click=lambda: st.session_state.update(adm_kpi=None))
+    if not rows:
+        st.markdown('<div class="adm-empty">해당하는 팝업이 없어요.</div>', unsafe_allow_html=True)
+        return
+    with st.container(height=min(420, 64 * len(rows) + 20), border=False):
+        cols = st.columns(3, gap="small")
+        for n, r in enumerate(rows):
+            eid = str(r.get("entry_id"))
+            with cols[n % 3], st.container(key=f"admli_{picked}_{eid}"):
+                st.markdown(f'<div class="adm-card"><b>{escape(str(r.get("work") or ""))}</b>'
+                            f'<span>{escape(str(r.get("cafe_name") or ""))}</span>'
+                            f'<em>{escape(str(r.get("start_date") or "")[5:])} ~ {escape(str(r.get("end_date") or "")[5:])}'
+                            f'<span class="adm-go">상세 ›</span></em></div>', unsafe_allow_html=True)
+                st.button("열기", key=f"admlb_{picked}_{eid}", on_click=_adm_open_popup, args=(eid,))
 
 
 def page_data() -> None:
-    """저장소에 실제로 쌓인 기록을 본다 (append-only 라서 수정·삭제도 행으로 보인다). 관리자만."""
-    st.markdown(GLOBAL_CSS + STATS_CSS, unsafe_allow_html=True)
+    """관리자 대시보드. 관리자(지정한 회원 번호)만."""
+    st.markdown(GLOBAL_CSS + STATS_CSS + ADMIN_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
+    flash = st.session_state.pop("flash", None)
+    if flash:
+        if isinstance(flash, tuple):
+            _toast(*flash)
+        else:
+            _toast(flash)
     if not _is_admin():
         st.markdown('<div class="stats-title">관리자 전용</div><div class="stats-sub">이 화면은 관리자만 볼 수 있어요. '
                     '관리자 계정으로 로그인해 주세요.</div>', unsafe_allow_html=True)
         st.page_link(PAGES["login"], label="로그인하기", icon=":material/login:")
         return
+    rows = stats.popups(store.all_rows())
+    status = stats.status_counts(rows, TODAY)
+    mon, sun = admin.week_of(TODAY)
+    new_week = len(admin.popup_board(store.all_rows(), mon)["새로 생성"])
+    pend = sum(1 for r in del_requests.current_rows() if r.get("decision") == "pending")
+    n_members = sum(1 for r in members.current_rows())
+    st.markdown(f'<div class="adm-eyebrow">ANI:WHERE ADMIN · {TODAY:%Y.%m.%d}</div>'
+                '<div class="adm-title">관리자 대시보드</div>'
+                f'<div class="adm-sub">저장소: {escape(store.mode)} · 모든 기록은 지우지 않고 쌓여요 (append-only)</div>'
+                , unsafe_allow_html=True)
+    _admin_kpis(rows, pend, n_members)
+    tab = st.session_state.get("adm_tab", "board")
+    with st.container(horizontal=True, key="adm_tabs"):
+        for t, label in ADMIN_TABS:
+            lab = f"{label} {pend}" if t == "requests" and pend else label
+            st.button(lab, key=f"admtab_{'on_' if tab == t else ''}{t}", on_click=_adm_tab, args=(t,))
+    if tab == "board":
+        _admin_board()
+    elif tab == "usage":
+        _admin_usage()
+    elif tab == "requests":
+        _admin_requests()
+    elif tab == "notices":
+        _admin_notices()
+    elif tab == "members":
+        _admin_members()
+    else:
+        _admin_raw()
+
+
+def _admin_raw() -> None:
+    """원본 데이터: 저장소에 실제로 쌓인 기록 (append-only 라서 수정·삭제도 행으로 보인다)."""
     where = {"local": "내 컴퓨터의 data/*.json 파일", "sheets": "Google Sheets",
              "supabase": "Supabase 클라우드 (PostgreSQL)"}.get(store.mode, store.mode)
     st.markdown(f'<div class="stats-title">데이터 보기</div><div class="stats-sub">지금 저장소: <b>{where}</b> '
@@ -4223,7 +5281,8 @@ def page_data() -> None:
                    icon=":material/cloud_off:")
     if store.mode == "local":
         st.caption("Supabase 로 옮기면 같은 표가 Supabase 대시보드 → Table Editor 에도 보여요 (db.md 6절).")
-    stores = {"cafes": store, "reviews": reviews, "favorites": favs, "members": members}
+    stores = {"cafes": store, "reviews": reviews, "favorites": favs, "members": members,
+              "del_requests": del_requests, "notices": notices_store, "visits": visits}
     cols = st.columns(len(stores))
     for col, (name, s_) in zip(cols, stores.items()):
         col.metric(f"{DATA_TABLES[name]} ({name})", f"{len(s_.all_rows())}행",
@@ -4250,11 +5309,11 @@ def page_data() -> None:
 ASK_PANEL_CSS = """
 <style>
 [data-testid="stColumn"]:has(> div > .st-key-ask_panel), [data-testid="stColumn"]:has(.st-key-ask_panel) {
-  position: sticky !important; top: var(--apn-top, 214px); align-self: flex-start !important; z-index: 5; }
+  position: sticky !important; top: var(--apn-top, 172px); align-self: flex-start !important; z-index: 5; }
 /* 위 고정줄(메뉴·검색 필터) 아래에 붙고, 대화창 전체가 화면 안에 들어오게:
    대화창 = 세로 flex, 높이는 (화면 - 위 고정줄 - 여백)까지. 대화 기록만 남는 공간을 쓰고 넘치면 그 안에서 스크롤 */
 .st-key-ask_panel { display: flex !important; flex-direction: column !important;
-  max-height: calc(100vh - var(--apn-top, 214px) - 16px); }
+  max-height: calc(100vh - var(--apn-top, 172px) - 16px); }
 .st-key-ask_panel > * { flex: 0 0 auto; }
 .st-key-ask_panel > *:has(.st-key-apn_log), .st-key-ask_panel > .st-key-apn_log {
   flex: 1 1 auto !important; min-height: 0 !important; display: flex; flex-direction: column; }
@@ -4320,25 +5379,82 @@ def _ask_panel_send(question: str) -> None:
     if errors:
         chat.append({"role": "bot", "text": errors[0], "ids": [], "badge": ""})
     else:
-        res = ask.answer(q, stats.popups(store.all_rows()), TODAY)
+        res = ask.answer(q, stats.popups(store.all_rows()), TODAY, ctx=_ask_ctx())
         if not res.hits:
-            text = ("조건에 맞는 팝업을 찾지 못했어요. 작품 이름을 줄이거나(예: 주술회전) 날짜·지역 조건을 하나 빼 보세요. "
-                    "없는 팝업이면 오른쪽 아래 + 로 직접 등록할 수 있어요.")
+            # 규칙(의도)이 준 안내가 있으면 그대로 (위치 모름·사용법 등), 없으면 기본 안내
+            text = res.text or ("조건에 맞는 팝업을 찾지 못했어요. 작품 이름을 줄이거나(예: 주술회전) 날짜·지역 조건을 하나 빼 보세요. "
+                                "없는 팝업이면 오른쪽 아래 + 로 직접 등록할 수 있어요.")
             chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체"})
         else:
-            used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:3]]
+            limit = 5 if res.query.intent else 3
+            used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:limit]]
             rows = {str(h.row.get("entry_id")): h.row for h in res.hits}
-            chat.append({"role": "bot", "text": res.text, "badge": res.badge,
-                         "ids": [_ask_card(i, rows[i]) for i in used[:3] if i in rows]})
+            cards = [_ask_card(i, rows[i], res.distances.get(i)) for i in used[:limit] if i in rows]
+            chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards,
+                         "head": res.summary or _ASK_HEADS.get(res.query.intent, "")})
+            _ask_log(q)
     del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
 
 
-def _ask_card(cafe_id: str, r: dict) -> dict:
+_ASK_HEADS = {"near": "내 위치에서 가까운 순", "recommend": "추천 (별점 → 리뷰 많은 순)", "ending": "곧 끝나는 순",
+              "upcoming": "곧 열리는 순", "popular": "북마크 많은 순", "reviewed": "후기 많은 순"}
+_ASK_LOG = Path(__file__).resolve().parent / "logs" / "ask_questions.jsonl"
+ASK_DEFAULT_CHIPS = ["내 주변 가까운 팝업", "팝업 추천해줘", "지금 진행 중인 서울 팝업", "곧 끝나는 팝업", "이번 주말 성수 팝업"]
+
+
+def _ask_ctx() -> dict:
+    """물어보기 규칙에 넘길 값: 내 위치, 팝업별 (평균 별점, 다녀온 후기 수), 팝업별 북마크 수."""
+    agg: dict[str, list[int]] = {}
+    for r in reviews.current_rows():
+        if r.get("kind") == review.RATED_KIND and not r.get("parent_id"):
+            try:
+                n = int(r.get("rating"))
+            except (TypeError, ValueError):
+                continue
+            if 1 <= n <= 5:
+                agg.setdefault(str(r.get("cafe_id")), []).append(n)
+    ratings = {k: (sum(v) / len(v), len(v)) for k, v in agg.items()}
+    return {"loc": _my_loc(), "ratings": ratings, "favs": favorite.counts(favs.current_rows())}
+
+
+def _ask_log(question: str) -> None:
+    """답을 찾은 질문만 남긴다 (개인정보는 가려서). '많이 물어본 질문' 칩에 쓴다."""
+    try:
+        _ASK_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with _ASK_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"at": datetime.now().isoformat(timespec="seconds"),
+                                "q": guard.mask(" ".join(question.split()))[:60]}, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _ask_chips() -> list[str]:
+    """사용자들이 가장 많이 물어본 질문 최대 5개. 기록이 모자라면 기본 질문으로 채운다."""
+    counts: dict[str, int] = {}
+    try:
+        for line in _ASK_LOG.read_text(encoding="utf-8").splitlines()[-2000:]:
+            q = json.loads(line).get("q", "").strip()
+            if 2 <= len(q) <= 30:
+                counts[q] = counts.get(q, 0) + 1
+    except (OSError, ValueError):
+        pass
+    top = [q for q, n in sorted(counts.items(), key=lambda kv: -kv[1]) if n >= 2][:5]
+    for d in ASK_DEFAULT_CHIPS:
+        if len(top) >= 5:
+            break
+        if d not in top:
+            top.append(d)
+    return top[:5]
+
+
+def _ask_card(cafe_id: str, r: dict, km: float | None = None) -> dict:
     """대화창 카드 한 장에 필요한 값."""
     def md(v) -> str:
         d = mycal._day(v)
         return f"{d.month}.{d.day}" if d else ""
     dates = f"{md(r.get('start_date'))} ~ {md(r.get('end_date'))}".strip(" ~")
+    if km is not None:
+        dates = (f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km") + " · " + dates
     return {"id": str(cafe_id), "work": str(r.get("work") or ""), "cafe": str(r.get("cafe_name") or ""),
             "address": str(r.get("address") or ""), "dates": dates, "poster": _poster_url(r.get("images"))}
 
@@ -4365,7 +5481,9 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
             # 대화창에서는 'AI 산출 / 규칙 기반 대체' 배지를 보이지 않는다 (사용자 요청 11/18). /ask 화면에는 남아 있다
             # 찾은 팝업이 있으면 요약 문장(회색 상자)은 아래 버튼과 겹쳐서 숨기고 'N곳' 만 (사용자 요청 11/18)
             if m.get("ids"):
-                st.markdown(f'<div class="apn-who">ANI:WHERE · 찾은 팝업 {len(m["ids"])}곳</div>', unsafe_allow_html=True)
+                head = f' · {escape(m["head"])}' if m.get("head") else ""
+                st.markdown(f'<div class="apn-who">ANI:WHERE · 찾은 팝업 {len(m["ids"])}곳{head}</div>',
+                            unsafe_allow_html=True)
             else:
                 st.markdown(f'<div class="apn-who">ANI:WHERE</div><div class="apn-bot">{escape(m["text"])}</div>',
                             unsafe_allow_html=True)
@@ -4390,7 +5508,7 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                     else:
                         st.button(f"{card['work']} 상세 보기", key=key, on_click=_ask_panel_open, args=(cid,))
     with st.container(horizontal=True, key=f"{prefix}_chips"):
-        for i, chip in enumerate(ASK_PANEL_CHIPS):
+        for i, chip in enumerate(_ask_chips()):
             st.button(chip, key=f"{prefix}_chip_{i}", on_click=_ask_panel_send, args=(chip,))
     with st.container(key=f"{prefix}_form"):
         with st.form(prefix, border=False, clear_on_submit=False):
@@ -4403,8 +5521,7 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
 def render_ask_panel() -> None:
     """PC 리스트 옆 대화창 (모바일에서는 숨기고 플로팅 버튼 → 팝업으로)."""
     st.markdown(ASK_PANEL_CSS, unsafe_allow_html=True)
-    st.markdown('<div class="apn-head"><span class="apn-title">ANI:WHERE에게 물어보기</span>'
-                '<span class="apn-sub">질문 → 팝업 데이터 검색</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="apn-head"><span class="apn-title">ANI:WHERE에게 물어보기</span></div>', unsafe_allow_html=True)
     _ask_chat_body("apn", 430)
 
 
@@ -4412,7 +5529,6 @@ def render_ask_panel() -> None:
 def ask_dialog() -> None:
     """모바일: 오른쪽 아래 물어보기 플로팅 버튼을 누르면 뜨는 팝업."""
     st.markdown(ASK_PANEL_CSS, unsafe_allow_html=True)
-    st.markdown('<div class="apn-sub" style="margin:-6px 0 4px">질문 → 팝업 데이터 검색</div>', unsafe_allow_html=True)
     _ask_chat_body("apd", 360, in_dialog=True)
 
 
@@ -4447,8 +5563,7 @@ def page_ask() -> None:
     st.markdown(GLOBAL_CSS + ASK_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
     st.markdown('<div class="ask-q">팝업에게 물어보기</div><div class="ask-sub">앱에 모인 팝업 정보 안에서만 찾아 답해요. '
                 '작품·지역·날짜를 함께 적으면 더 정확해요.</div>', unsafe_allow_html=True)
     with st.container(horizontal=True):
@@ -4510,8 +5625,7 @@ def page_stats() -> None:
     st.markdown(GLOBAL_CSS + STATS_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
     all_rows = store.all_rows()
     rows = stats.popups(all_rows)
     st.markdown('<div class="stats-title">ANI:WHERE 지표</div>'

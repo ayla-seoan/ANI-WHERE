@@ -35,6 +35,7 @@ class Query:
     window_label: str = ""
     include_ended: bool = False
     words: list[str] = field(default_factory=list)
+    intent: str = ""
 
     def describe(self) -> str:
         parts = []
@@ -67,6 +68,8 @@ class Answer:
     dropped_ids: list[str] = field(default_factory=list)   # AI 가 지어낸 근거 id (지워짐)
     confidence: str = "high"
     error: str | None = None
+    distances: dict = field(default_factory=dict)    # near 의도: cafe_id → km
+    summary: str = ""                                 # by_region 의도: '서울 41곳 · 부산 7곳 …'
 
 
 # ------------------------------------------------------------- 입력 검사
@@ -91,8 +94,8 @@ def _norm(s: str) -> str:
 
 def _window(q: str, today: date) -> tuple[tuple[date, date] | None, str]:
     wd = today.weekday()
-    if "오늘" in q or "지금" in q:
-        return (today, today), "오늘"
+    if "오늘" in q or "지금" in q or "현재" in q or re.search(r"진행\s*중|진행하는|하고\s*있는|열려\s*있는", q):
+        return (today, today), "오늘(진행 중)"
     if "내일" in q:
         d = today + timedelta(days=1)
         return (d, d), "내일"
@@ -108,6 +111,15 @@ def _window(q: str, today: date) -> tuple[tuple[date, date] | None, str]:
     if "이번 달" in q or "이번달" in q:
         nxt = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
         return (today, nxt - timedelta(days=1)), "이번 달"
+    d = re.search(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일", q) or re.search(r"(?<![\d.])(\d{1,2})\s*[/.]\s*(\d{1,2})(?![\d.])", q)
+    if d and 1 <= int(d.group(1)) <= 12 and 1 <= int(d.group(2)) <= 31:
+        mon, day = int(d.group(1)), int(d.group(2))
+        year = today.year if mon >= today.month - 6 else today.year + 1
+        try:
+            one = date(year, mon, day)
+            return (one, one), f"{mon}월 {day}일"
+        except ValueError:
+            pass
     m = re.search(r"(\d{1,2})\s*월", q)
     if m and 1 <= int(m.group(1)) <= 12:
         mon = int(m.group(1))
@@ -158,7 +170,7 @@ def parse(question: str, rows: list[dict], today: date) -> Query:
     words = []
     for w in re.findall(r"[가-힣A-Za-z0-9]{2,}", q):
         base = _PARTICLE.sub("", w)          # '주에' → '주', '성수에서' → '성수'
-        if len(base) < 2 or w in _STOP or base in _STOP or _DATE_WORD.fullmatch(w):
+        if len(base) < 2 or w in _STOP or base in _STOP or _DATE_WORD.fullmatch(w) or _DATE_WORD.fullmatch(base):
             continue
         if any(k and (k in _norm(w) or _norm(base) in k) for k in known):
             continue
@@ -172,7 +184,7 @@ _STOP = {"팝업", "카페", "콜라보", "있어", "있나요", "있니", "어�
          "다음주", "이번달", "지난", "끝난", "종료", "추천", "추천해줘", "가볼", "만한", "곳", "있는", "열리는",
          # 서술어: 조건이 아니라 말투라서 검색어로 쓰지 않는다 (eval v1 에서 '오늘 열려 있는 팝업' 0건으로 틀림)
          "열려", "열린", "열려있는", "시작", "시작하는", "시작해", "끝나는", "진행", "진행중", "진행중인", "중인",
-         "보여줘", "보여", "보여줘요", "알려줄래", "나와", "나오는", "갈만한", "가고", "싶어"}
+         "보여줘", "보여", "보여줘요", "알려줄래", "나와", "나오는", "갈만한", "가고", "싶어", "아직", "열리는", "여는", "있을까"}
 _PARTICLE = re.compile(r"(?:에서|에는|에|의|은|는|이|가|을|를|도|로|으로)$")
 _DATE_WORD = re.compile(r"\d{1,2}월|\d{1,2}일|주말에?|이번주에?|이번달에?|다음주에?")
 
@@ -268,8 +280,13 @@ def _rule_answer(query: Query, hits: list[Hit], today: date) -> AskAnswer:
                      confidence="high")
 
 
-def answer(question: str, rows: list[dict], today: date, version: str | None = None) -> Answer:
+def answer(question: str, rows: list[dict], today: date, version: str | None = None,
+           ctx: dict | None = None) -> Answer:
+    """ctx: {'loc': {'lat','lng'} | None, 'ratings': {cafe_id: (평균, 개수)}, 'favs': {cafe_id: 북마크 수}}"""
     question = guard.mask(question.strip())[:MAX_QUESTION]
+    special = intent_answer(question, rows, today, ctx or {})
+    if special is not None:
+        return special
     query, hits = retrieve(question, rows, today)
     if not hits:
         return Answer(text="", hits=[], used_ids=[], source="rule", badge="규칙 기반 대체", query=query,
@@ -287,3 +304,170 @@ def answer(question: str, rows: list[dict], today: date, version: str | None = N
     return Answer(text=guard.mask(data.answer), hits=hits, used_ids=used,
                   source=res.source if res.ok else "fallback", badge=res.badge if res.ok else "규칙 기반 대체",
                   query=query, dropped_ids=dropped, confidence=data.confidence, error=res.error)
+
+
+# ================================================================== 자주 묻는 질문 규칙 (의도)
+# 검색어 해석(retrieve)보다 먼저 본다. 모두 규칙이라 AI 없이도 늘 같은 답을 낸다.
+# 지역·작품·날짜 조건은 parse() 로 같이 읽어서 거른다 (예: '부산 팝업 추천', '주말에 가까운 팝업').
+INTENTS = [
+    ("help", re.compile(r"^(안녕|하이|hi|hello|도움|도와|사용법|뭐\s*할\s*수|뭘\s*물어|어떻게\s*써)", re.I)),
+    ("near", re.compile(r"가까운|근처|주변|내\s*위치|여기서|가까이")),
+    ("by_region", re.compile(r"지역\s*별|지역마다|동네\s*별|어느\s*지역|지역\s*순")),
+    ("recommend", re.compile(r"추천|어디\s*갈까|갈\s*만한|가볼\s*만한|볼\s*만한|베스트|좋은\s*팝업", re.I)),
+    ("ending", re.compile(r"곧\s*끝|마감|끝나기\s*전|종료\s*임박|얼마\s*안\s*남|막바지|끝나는")),
+    ("upcoming", re.compile(r"오픈\s*예정|곧\s*(열|시작|오픈)|새로\s*(열|생|오픈)|신규|예정\s*(된|중|인)|예정이|다가오는|"
+                            r"오픈하는|시작하는|아직\s*(안\s*(열|시작)|시작\s*전|오픈\s*전|예정)|시작\s*전|오픈\s*전")),
+    ("popular", re.compile(r"인기|북마크\s*많|핫한|사람\s*많|유명한")),
+    ("reviewed", re.compile(r"리뷰\s*많|후기\s*많|후기\s*좋|별점\s*(높|좋)|평점")),
+]
+
+
+def detect_intent(question: str) -> str | None:
+    q = question.strip()
+    for name, pat in INTENTS:
+        if pat.search(q):
+            return name
+    return None
+
+
+def _km(a: tuple[float, float], b: tuple[float, float]) -> float:
+    from math import asin, cos, radians, sin, sqrt
+    lat1, lng1, lat2, lng2 = map(radians, (*a, *b))
+    h = sin((lat2 - lat1) / 2) ** 2 + cos(lat1) * cos(lat2) * sin((lng2 - lng1) / 2) ** 2
+    return 6371 * 2 * asin(sqrt(h))
+
+
+def _ongoing(r: dict, today: date) -> bool:
+    s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+    return bool(s and e and s <= today <= e)
+
+
+def _filtered(query: Query, rows: list[dict], today: date, ongoing_only: bool = True) -> list[dict]:
+    """질문 속 작품·지역·날짜 조건 + (기본) 진행 중만."""
+    out = []
+    for r in rows:
+        if ongoing_only and not query.window and not _ongoing(r, today):
+            continue
+        if query.window and not _overlaps(r, query.window):
+            continue
+        work = _norm(r.get("work"))
+        if query.works and not (work and any(_norm(w) in work or work in _norm(w) for w in query.works)):
+            continue
+        if query.places and not any(_place_match(p, r) for p in query.places):
+            continue
+        out.append(r)
+    return out
+
+
+def _done(query: Query, rows: list[dict], text: str, intent: str, limit: int = 5) -> "Answer":
+    hits = [Hit(r, 0.0, [intent]) for r in rows[:limit]]
+    query.intent = intent
+    return Answer(text=text, hits=hits, used_ids=[str(h.row.get("entry_id")) for h in hits], source="rule",
+                  badge="규칙 기반 대체", query=query, confidence="high" if hits else "low")
+
+
+def intent_answer(question: str, rows: list[dict], today: date, ctx: dict) -> "Answer | None":
+    intent = detect_intent(question)
+    if intent is None:
+        return None
+    query = parse(question, rows, today)
+    cond = query.describe()
+    cond_txt = "" if cond.startswith("조건 없음") else f"{cond} 조건으로 "
+    ratings: dict = ctx.get("ratings") or {}
+    favs: dict = ctx.get("favs") or {}
+
+    def eid(r: dict) -> str:
+        return str(r.get("entry_id"))
+
+    def rating(r: dict) -> tuple[float, int]:
+        return ratings.get(eid(r), (0.0, 0))
+
+    if intent == "help":
+        return _done(query, [], "작품·지역·날짜로 물어보세요. 예: '내 주변 가까운 팝업', '팝업 추천해줘', '지금 진행 중인 부산 팝업', "
+                                "'곧 끝나는 팝업', '이번 주말 성수 팝업'.", intent)
+
+    if intent == "near":
+        if query.places:
+            # '홍대 근처 팝업' 처럼 지역을 말했으면 '그 지역 주변' 이라는 뜻 → 내 위치가 아니라 지역 검색으로
+            return None
+        loc = ctx.get("loc")
+        if not (isinstance(loc, dict) and "lat" in loc):
+            return _done(query, [], "내 위치를 아직 몰라요. 브라우저 주소창의 위치 권한을 허용하거나 지도 보기를 한 번 열어 주세요. "
+                                    "'홍대 팝업'처럼 동네 이름으로 물어봐도 돼요.", intent)
+        me = (float(loc["lat"]), float(loc["lng"]))
+        cand = []
+        for r in _filtered(query, rows, today):
+            try:
+                cand.append((_km(me, (float(r.get("lat")), float(r.get("lng")))), r))
+            except (TypeError, ValueError):
+                continue
+        cand.sort(key=lambda t: t[0])
+        if not cand:
+            return _done(query, [], f"{cond_txt}지금 열려 있는 팝업 중 위치를 아는 곳이 없어요.", intent)
+        res = _done(query, [r for _, r in cand], f"{cond_txt}내 위치에서 가까운 진행 중 팝업이에요.", intent)
+        res.distances = {eid(r): km for km, r in cand[:5]}
+        return res
+
+    if intent == "by_region":
+        groups: dict[str, list[dict]] = {}
+        for r in _filtered(query, rows, today):
+            g = geo.city_name(str(r.get("address") or "")) or "지역 미상"
+            groups.setdefault(g, []).append(r)
+        if not groups:
+            return _done(query, [], "지금 진행 중인 팝업이 없어요.", intent)
+        order = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+        summary = " · ".join(f"{g} {len(v)}곳" for g, v in order)
+        reps = [sorted(v, key=lambda r: (-rating(r)[0], -favs.get(eid(r), 0)))[0] for _, v in order]
+        res = _done(query, reps, f"지역별 진행 중 팝업: {summary}", intent, limit=8)
+        res.summary = summary
+        return res
+
+    if intent == "recommend":
+        live = _filtered(query, rows, today)
+        if not live:
+            return _done(query, [], f"{cond_txt}지금 진행 중인 팝업이 없어요. 조건을 하나 빼 보세요.", intent)
+        # 별점 높은 순 → 리뷰 많은 순 → 북마크 많은 순 → 곧 끝나는 순 (진행 중만)
+        live.sort(key=lambda r: (-rating(r)[0], -rating(r)[1], -favs.get(eid(r), 0), str(r.get("end_date") or "")))
+        rated = any(rating(r)[1] for r in live)
+        why = "별점 높은 순 → 리뷰 많은 순" if rated else "아직 별점이 없어 북마크 많은 순"
+        return _done(query, live, f"{cond_txt}지금 갈 수 있는 팝업을 {why}으로 골랐어요.", intent)
+
+    if intent == "ending":
+        live = [r for r in _filtered(query, rows, today)
+                if mycal._day(r.get("end_date")) and (mycal._day(r.get("end_date")) - today).days <= 7]
+        live.sort(key=lambda r: str(r.get("end_date") or ""))
+        if not live:
+            return _done(query, [], f"{cond_txt}7일 안에 끝나는 팝업이 없어요.", intent)
+        return _done(query, live, f"{cond_txt}7일 안에 끝나는 팝업이에요 (끝나는 날이 가까운 순).", intent)
+
+    if intent == "upcoming":
+        soon = [r for r in rows if mycal._day(r.get("start_date")) and mycal._day(r.get("start_date")) > today]
+        q2 = Query(works=query.works, characters=query.characters, places=query.places)
+        soon = _filtered(q2, soon, today, ongoing_only=False)
+        soon.sort(key=lambda r: str(r.get("start_date") or ""))
+        if not soon:
+            return _done(query, [], f"{cond_txt}오픈 예정인 팝업이 없어요.", intent)
+        return _done(query, soon, f"{cond_txt}곧 열리는 팝업이에요 (시작일이 가까운 순).", intent)
+
+    if intent == "popular":
+        live = _filtered(query, rows, today)
+        live.sort(key=lambda r: (-favs.get(eid(r), 0), -rating(r)[1]))
+        if not live:
+            return _done(query, [], f"{cond_txt}지금 진행 중인 팝업이 없어요.", intent)
+        return _done(query, live, f"{cond_txt}북마크가 많은 진행 중 팝업이에요.", intent)
+
+    if intent == "reviewed":
+        live = [r for r in _filtered(query, rows, today) if rating(r)[1]]
+        live.sort(key=lambda r: (-rating(r)[1], -rating(r)[0]))
+        if not live:
+            return _done(query, [], f"{cond_txt}아직 다녀온 후기가 달린 진행 중 팝업이 없어요.", intent)
+        return _done(query, live, f"{cond_txt}다녀온 후기가 많은 진행 중 팝업이에요.", intent)
+    return None
+
+
+def find(question: str, rows: list[dict], today: date, ctx: dict | None = None) -> tuple[Query, list[Hit]]:
+    """AI 없이 찾기만: 자주 묻는 질문 규칙(의도) → 없으면 검색어 해석. 평가(scripts/eval_ask.py)가 쓴다."""
+    special = intent_answer(guard.mask(question.strip())[:MAX_QUESTION], rows, today, ctx or {})
+    if special is not None:
+        return special.query, special.hits
+    return retrieve(question, rows, today)
