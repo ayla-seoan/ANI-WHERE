@@ -17,6 +17,8 @@
 """
 from __future__ import annotations
 
+from . import nickrule
+
 import re
 
 import base64
@@ -240,7 +242,23 @@ def validate_nick(nick: str) -> list[str]:
         errors.append("닉네임에 # 은 쓸 수 없어요 (뒤에 자동으로 붙어요).")
     if scan(n):
         errors.append("닉네임에 전화번호·이메일 같은 개인정보는 넣을 수 없어요.")
+    bad = nickrule.problem(n)
+    if bad == "사칭":
+        errors.append("관리자·운영자로 오해할 수 있는 닉네임은 쓸 수 없어요.")
+    elif bad:
+        errors.append("욕설이나 음란한 말이 든 닉네임은 쓸 수 없어요. 다른 닉네임을 골라 주세요.")
     return errors
+
+
+def nick_taken(store, nickname: str, except_key: str | None = None) -> bool:
+    """다른 회원이 이미 쓰는 닉네임인가 (띄어쓰기·대소문자 차이는 같은 것으로 본다). 탈퇴한 회원은 빼고."""
+    return any(nickrule.same(r.get("nickname"), nickname) and str(r.get("entry_id")) != str(except_key or "")
+               for r in store.current_rows())
+
+
+def _check_unique(store, nickname: str, except_key: str | None = None) -> None:
+    if nick_taken(store, nickname, except_key):
+        raise AuthError("이미 다른 회원이 쓰고 있는 닉네임이에요. 다른 닉네임을 골라 주세요.")
 
 
 def find(store, key: str) -> dict | None:
@@ -253,6 +271,7 @@ def signup(store, ident: Identity, nickname: str) -> dict:
     errors = validate_nick(nickname)
     if errors:
         raise AuthError(errors[0])
+    _check_unique(store, nickname, ident.member_key)
     return store.append({"provider": ident.provider, "nickname": " ".join(nickname.split()),
                          "agreed_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "avatar": clean_avatar(ident.avatar)},
                         entry_id=ident.member_key)
@@ -262,6 +281,7 @@ def rename(store, row: dict, nickname: str) -> dict:
     errors = validate_nick(nickname)
     if errors:
         raise AuthError(errors[0])
+    _check_unique(store, nickname, str(row["entry_id"]))
     return store.append({"provider": row.get("provider", ""), "nickname": " ".join(nickname.split()),
                          "agreed_at": row.get("agreed_at", ""), "avatar": clean_avatar(row.get("avatar"))},
                         entry_id=str(row["entry_id"]))
@@ -354,7 +374,7 @@ def _cred_load() -> dict:
 
 def _cred_save(data: dict) -> None:
     _CRED_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _CRED_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    _CRED_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def login_exists(login_id: str) -> bool:
@@ -371,6 +391,7 @@ def register_password(store, login_id: str, pw: str, pw2: str, nickname: str) ->
         raise AuthError(errors[0])
     lid = login_id.strip().lower()
     key = member_key("local", lid)
+    _check_unique(store, nickname, key)          # 비밀번호를 만들기 전에 막는다 (닉네임 때문에 반쯤 가입되는 일 없게)
     if _supabase():
         if not _rpc("register_login", p_login_id=lid, p_password=pw, p_member_key=key):
             raise AuthError("이미 있는 아이디예요. 다른 아이디를 골라 주세요.")
@@ -430,3 +451,58 @@ def drop_password(login_id: str, pw: str) -> None:
     data = _cred_load()
     data.pop(lid, None)
     _cred_save(data)
+
+
+# ================================================================== 탈퇴 회원 개인정보 파기 (11/18)
+WITHDRAWN = "탈퇴한 회원"
+
+
+def purge_withdrawn(member_key_: str) -> bool:
+    """탈퇴 직후 지난 기록까지 지운다 (개인정보 보호법 '파기').
+    저장소는 append-only 지만 법적 파기는 예외로 예전 행을 고친다: 닉네임·사진 빈 값, 리뷰 작성자 '탈퇴한 회원',
+    접속 기록·받은 알림·아이디/비밀번호 해시 삭제. supabase 는 DB 함수(009), local(개발용)은 파일을 직접 고친다."""
+    if _supabase():
+        try:
+            return bool(_rpc("purge_withdrawn", p_member_key=member_key_))
+        except AuthError:
+            return False
+    import json as _json
+    from . import storage as _storage
+    base = _storage.LOCAL_DIR
+    tag = f"#m{member_key_[:4]}"
+
+    def rewrite(name: str, fn) -> None:
+        path = base / f"{name}.json"
+        if not path.exists():
+            return
+        rows = _json.loads(path.read_text(encoding="utf-8") or "[]")
+        path.write_text(_json.dumps(fn(rows), ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def members(rows):
+        for r in rows:
+            if str(r.get("entry_id")) == member_key_:
+                r["nickname"], r["avatar"] = "", ""
+        return rows
+
+    def reviews(rows):
+        for r in rows:
+            if str(r.get("nickname") or "").endswith(tag):
+                r["nickname"] = WITHDRAWN + tag
+        return rows
+
+    def requests_(rows):
+        for r in rows:
+            if str(r.get("requester")) == member_key_:
+                r["requester_nick"] = ""
+        return rows
+
+    rewrite("members", members)
+    rewrite("reviews", reviews)
+    rewrite("del_requests", requests_)
+    rewrite("visits", lambda rows: [r for r in rows if str(r.get("member")) != member_key_])
+    rewrite("notices", lambda rows: [r for r in rows if str(r.get("target")) != member_key_])
+    data = _cred_load()
+    for lid in [k for k, v in data.items() if v.get("member_key") == member_key_]:
+        data.pop(lid, None)
+    _cred_save(data)
+    return True

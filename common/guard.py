@@ -119,7 +119,7 @@ def validate_cafe(entry, today: date | None = None, existing: list | None = None
     if entry.end_date < today:
         v.fail(f"이미 끝난 일정입니다 (종료 {entry.end_date}).")
     # 팝업은 한두 달 가는 경우가 많다. 석 달을 넘으면 날짜를 잘못 읽었을 가능성이 크다
-    if (entry.end_date - entry.start_date).days > 90:
+    if (entry.end_date - entry.start_date).days > 90 and entry.end_date.isoformat() != "2099-12-31":   # 상시(dates.ALWAYS_END)는 제외
         v.warnings.append("기간이 90일을 넘습니다. 날짜를 잘못 읽었을 수 있습니다.")
 
     blob = " ".join([entry.cafe_name, entry.work, *entry.characters,

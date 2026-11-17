@@ -47,6 +47,7 @@ def app_url(data_dir) -> str:
         # 빈 값으로 넣어 두면 load_dotenv() 가 .env 값으로 덮어쓰지 않는다
         "OPENAI_API_KEY": "", "NOTION_TOKEN": "",
         "PYTHONIOENCODING": "utf-8",
+        "ANIWHERE_LINKCHECK": "0",      # 참고 웹사이트 확인(외부 요청)은 테스트에서 끈다
     })
     log = open(data_dir.parent / "streamlit.log", "w", encoding="utf-8")
     proc = subprocess.Popen(
