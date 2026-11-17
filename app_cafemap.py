@@ -55,11 +55,12 @@ GLOBAL_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+@import url('https://cdn.jsdelivr.net/gh/moonspam/NanumSquareRound@1.0/nanumsquareround.min.css');
 /* @import 는 맨 앞에 와야 해서(앞에 다른 규칙이 있으면 폰트가 무시된다) 변수는 그 뒤에 둔다 */
 /* 포인트 컬러 변수 (map-template.html 과 같은 값). 지도·등록하기 버튼 등이 쓴다 */
 :root {{ --accent: #14b8a6; --accent-soft: #e6fbf7; --accent-deep: #0d9488; }}
 html, body, [class*="st-"], .stMarkdown, button, input, textarea {{
-  font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }}
+  font-family: "NanumSquareRound", "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }}
 /* 위의 글꼴 지정이 아이콘 글꼴까지 덮지 않게 (안 그러면 '_arrow_right' 같은 이름 글자가 보인다) */
 [data-testid="stIconMaterial"], .material-symbols-rounded {{
   font-family: "Material Symbols Rounded" !important; }}
@@ -293,7 +294,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   border-radius: 14px !important; }}
 /* 머리글 */
 .brand-tag {{ margin-top: .4rem; margin-bottom: 1rem; font-family: "Jua", sans-serif; font-size: 1.25rem; color: #26302D; }}   /* 아래 한 칸 띄움 */
-.brand-tag span {{ font-family: "Pretendard", sans-serif; font-size: .78rem; font-weight: 700;
+.brand-tag span {{ font-family: "NanumSquareRound", "Pretendard", sans-serif; font-size: .78rem; font-weight: 700;
   letter-spacing: .14em; color: {MINT}; }}
 /* 누르면 메인으로 가는 로고: 버튼이지만 바탕·테두리 없이 */
 .st-key-home_brand button {{ background: none !important; border: 0 !important;
@@ -532,7 +533,7 @@ _TOAST_JS = """
         transition: opacity .18s ease, transform .18s ease; pointer-events: none; }
       .ani-toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
       .ani-toast .ic { font-family: "Material Symbols Rounded"; font-size: 1.4rem; line-height: 1; color: #14b8a6; }
-      .ani-toast .tx { font-family: "Pretendard", sans-serif; font-weight: 700; font-size: .95rem; color: #1F2A27;
+      .ani-toast .tx { font-family: "NanumSquareRound", "Pretendard", sans-serif; font-weight: 700; font-size: .95rem; color: #1F2A27;
         word-break: keep-all; line-height: 1.4; }`;
     document.head.appendChild(css);
   }
@@ -2453,7 +2454,24 @@ GNB_CSS = """
 /* 로고: 메뉴바 안에서는 작게 */
 .st-key-gnb .st-key-home_brand button { width: 190px !important; height: 58px !important; }
 /* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
-.st-key-gnb { position: relative; }
+.st-key-gnb { position: relative; background: #E9F7F2; border-radius: 0 0 28px 28px;
+  padding: 48px 28px 8px !important; margin: -40px -28px 0; box-sizing: content-box; }  /* 위 여백까지 덮어 화면 맨 위에 붙인다 */
+/* 오른쪽 아이콘: 둥근 굵은 선 그림(검색·종) + 둥근 글꼴 '로그인' (11/18 사용자 요청) */
+.st-key-gnb_right [class*="st-key-gnb_search_"] button span[data-testid="stIconMaterial"],
+.st-key-gnb_right [data-testid="stPopover"] button span[data-testid="stIconMaterial"] { display: none !important; }
+html body .st-key-gnb_right [class*="st-key-gnb_search_"] button,
+html body .st-key-gnb_right [data-testid="stPopover"] button { background-color: transparent !important; background-repeat: no-repeat !important; background-size: 27px 27px !important;
+  min-width: 42px; min-height: 42px; }
+html body .st-key-gnb_right .st-key-gnb_search_off button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.3' stroke-linecap='round'><circle cx='10.5' cy='10.5' r='6.6'/><path d='M15.6 15.6L20 20'/></svg>") !important; background-position: center !important; }
+html body .st-key-gnb_right .st-key-gnb_search_on button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.3' stroke-linecap='round'><path d='M6.5 6.5l11 11M17.5 6.5l-11 11'/></svg>") !important; background-position: center !important; }
+html body .st-key-gnb_right [data-testid="stPopover"] button { position: relative; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6.3 16.4V11.2a5.7 5.7 0 0 1 11.4 0v5.2'/><path d='M4.6 16.6c0 .3.3.5.6.5h13.6c.3 0 .6-.2.6-.5'/><path d='M10.2 19.6a1.9 1.9 0 0 0 3.6 0'/></svg>") !important; background-position: center !important;
+  padding: 0 !important; width: 42px !important; }
+.st-key-gnb_right [data-testid="stPopover"] button p { margin-left: -6px !important; font-size: .85rem !important; }
+.st-key-gnb_right [class*="st-key-gnb_search_"] button p, .st-key-gnb_right [data-testid="stPopover"] button p {
+  font-family: "NanumSquareRound", "Jua", sans-serif !important; color: #2E9C82 !important; font-weight: 800 !important; }
+.st-key-gnb_right .st-key-login_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 700 !important;
+  color: #4B5260 !important; font-size: 1.02rem !important; letter-spacing: -.01em; }
+.st-key-gnb_tabs button p { font-family: "NanumSquareRound", sans-serif !important; }
 /* 메뉴바 묶음 안의 보이지 않는 칸(스타일·높이 0 iframe·위치 받기)이 간격만 차지하지 않게 */
 .st-key-topbar { gap: 0 !important; }
 .st-key-topbar > [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] style:only-child),
@@ -2462,7 +2480,7 @@ GNB_CSS = """
 .st-key-gnb_loc_box { display: none !important; }
 /* 탭은 메뉴바 정가운데 (로고·오른쪽 아이콘 폭과 상관없이) */
 .st-key-gnb_tabs { gap: 0 !important; width: auto !important; flex: 0 0 auto; position: absolute !important;
-  left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
+  left: 50%; top: calc(50% + 20px); transform: translate(-50%, -50%); z-index: 2; }  /* 위 덮개 여백(48-8)/2 만큼 내려 줄 맞춤 */
 .st-key-gnb_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important;
   box-shadow: none !important; padding: 10px 16px 9px !important; border-bottom: 3px solid transparent !important; }
 .st-key-gnb_tabs button p { font-size: 1.05rem !important; font-weight: 600 !important; color: #8A9592 !important; }
@@ -2474,7 +2492,7 @@ GNB_CSS = """
 .st-key-gnb_right [class*="st-key-gnb_search_"] button { background: transparent !important; border: 0 !important;
   box-shadow: none !important; }
 .st-key-gnb_right [class*="st-key-gnb_search_"] button span[data-testid="stIconMaterial"] { font-size: 1.6rem !important; }
-.st-key-gnb_search_on button { background: #E6F6F0 !important; border-radius: 999px !important; }
+.st-key-gnb_search_on button { border-radius: 999px !important; }
 .st-key-gnb_right [data-testid="stPopover"] button, .st-key-gnb_right .st-key-login_btn button {
   background: transparent !important; border: 0 !important; box-shadow: none !important; }
 .st-key-gnb_right [data-testid="stPopover"] button span[data-testid="stIconMaterial"] { font-size: 1.6rem !important; }
@@ -2640,7 +2658,13 @@ def _gnb(current: dict | None) -> None:
             st.button(str(n_on) if n_on and not opened else "", icon=":material/close:" if opened else ":material/search:",
                       key=f"gnb_search_{'on' if opened else 'off'}", on_click=_toggle_search)
             marks, near = _notices()
-            with st.popover(str(len(marks) + len(near)) if (marks or near) else "", icon=":material/notifications:"):
+            n_ntf = len(marks) + len(near)
+            if n_ntf:
+                st.markdown(f'<style>html body .st-key-gnb_right [data-testid="stPopover"] button::after {{ content: "{n_ntf}"; '
+                            'position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; '
+                            'background: #FF6B6B; color: #fff; font: 800 10px/16px "NanumSquareRound", sans-serif; text-align: center; }}'
+                            '</style>', unsafe_allow_html=True)
+            with st.popover("", icon=":material/notifications:"):
                 st.markdown("**북마크한 팝업**")
                 if not marks:
                     st.markdown('<div class="ntf-empty">오픈 3일 전부터 당일까지, 그리고 끝나기 3일 전부터 알려 드려요. '
