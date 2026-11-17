@@ -35,7 +35,7 @@ def sign_up(page: Page, url: str) -> None:
     f.get_by_label("아이디 (필수)").fill("qa_" + uuid.uuid4().hex[:8])
     f.get_by_label("비밀번호 (필수)").fill("qatest1234")
     f.get_by_label("비밀번호 확인 (필수)").fill("qatest1234")
-    f.get_by_label("닉네임 (필수)").fill("테스트봇")
+    f.get_by_label("닉네임 (필수)").fill("테스트봇" + uuid.uuid4().hex[:4])   # 닉네임 중복 가입 금지 (11/18)
     f.locator('[data-testid="stCheckbox"] label').first.click()
     f.get_by_role("button", name="가입하기").click()
     # 가입하면 메인으로 가고, 메뉴바의 '로그인' 자리에 닉네임이 보인다

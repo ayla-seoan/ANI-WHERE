@@ -4718,7 +4718,7 @@ def _my_account(row: dict) -> None:
                 f'<b>{escape(_nick_only(auth.display_name(row)))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
                 f'가입 {escape(str(row.get("agreed_at", ""))[:10])}<br>회원 번호 <code>{escape(str(row["entry_id"]))}</code>'
                 f'{" · 관리자" if _is_admin() else ""}</span></div>', unsafe_allow_html=True)
-    with st.expander("프로필 사진 바꾸기", icon=":material/account_circle:"):
+    with st.expander("프로필 사진 바꾸기"):
         st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
         n = st.session_state.get("_av_n", 0)
         up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n}")
@@ -4748,7 +4748,7 @@ def _my_account(row: dict) -> None:
                 st.warning(str(e), icon=":material/error:")
     local = row.get("provider") == "local"
     if local:
-        with st.expander("비밀번호 바꾸기", icon=":material/key:"):
+        with st.expander("비밀번호 바꾸기"):
             with st.form("pw_change", border=False):
                 lid = st.text_input("아이디", max_chars=20)
                 old = st.text_input("지금 비밀번호", type="password")
@@ -5443,12 +5443,18 @@ ASK_PANEL_CSS = """
   padding: 0 !important; gap: 0 !important; overflow: hidden; box-shadow: 0 4px 18px rgba(38,48,45,.06); }
 .st-key-ask_panel > div { padding-left: 14px; padding-right: 14px; }
 .apn-head { display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  padding: 14px 0 12px; border-bottom: 1px solid #EEF1F0; }
+  padding: 14px 0 6px; }
 .apn-title { font-family: "Jua", sans-serif; font-size: 1.25rem; color: #26302D; }
 .apn-sub { color: #9AA5A1; font-size: .78rem; white-space: nowrap; }
 .apn-who { color: #6B7672; font-size: .78rem; margin: 10px 0 4px; }
-.apn-bot { background: #F4F7F6; border: 1px solid #E6ECEA; border-radius: 12px; padding: 10px 12px;
-  color: #26302D; font-size: .9rem; line-height: 1.6; word-break: keep-all; }
+.apn-row { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 4px; }
+.apn-ava { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 50%; border: 1.5px solid #CDEDE3; background: #EAF8F3; }
+.apn-col { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.apn-name { color: #6B7672; font-size: .74rem; font-weight: 700; }
+.apn-bot { background: #EEF1F0; border: 0; border-radius: 4px 18px 18px 18px; padding: 10px 14px;
+  color: #26302D; font-size: .9rem; line-height: 1.6; word-break: keep-all; align-self: flex-start; }
+/* 찾은 팝업 카드는 말풍선과 같은 줄에서 시작 (캐릭터 폭만큼 들여쓰기) */
+[class*="st-key-apn_card_"], [class*="st-key-apd_card_"] { margin-left: 46px !important; }
 .apn-me { display: flex; justify-content: flex-end; margin: 10px 0 2px; }
 .apn-me span { background: var(--accent, #56C2A7); color: #fff; border-radius: 12px 12px 2px 12px; padding: 8px 12px;
   font-size: .9rem; max-width: 85%; word-break: keep-all; }
@@ -5589,11 +5595,20 @@ def _ask_panel_open(cafe_id: str) -> None:
     st.session_state["scroll_top"] = True
 
 
+ASK_AVATAR = "app/static/ask_avatar.png"      # 로고의 토끼를 동그랗게 자른 그림
+
+
+def _ask_bot(html: str) -> str:
+    """ANI:WHERE 말풍선: 왼쪽에 동그란 로고 캐릭터, 오른쪽에 둥근 회색 말풍선 (11/18 요청)."""
+    return (f'<div class="apn-row"><img class="apn-ava" src="{ASK_AVATAR}" alt="ANI:WHERE">'
+            f'<div class="apn-col"><div class="apn-name">ANI:WHERE</div><div class="apn-bot">{html}</div></div></div>')
+
+
 def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> None:
     """대화 기록 · 예시 칩 · 입력칸. PC 옆 대화창(apn)과 모바일 팝업(apd)이 같은 기록(ask_chat)을 쓴다."""
     with st.container(height=log_height, border=False, key=f"{prefix}_log"):
-        st.markdown('<div class="apn-who">ANI:WHERE</div><div class="apn-bot">안녕하세요. 지금 등록된 팝업에서 찾아 드릴게요. '
-                    '<b>작품 · 지역 · 날짜</b>로 물어보면 더 정확해요.</div>', unsafe_allow_html=True)
+        st.markdown(_ask_bot('안녕하세요. 지금 등록된 팝업에서 찾아 드릴게요. <b>작품 · 지역 · 날짜</b>로 물어보면 더 정확해요.'),
+                    unsafe_allow_html=True)
         for n, m in enumerate(st.session_state.get("ask_chat", [])):
             if m["role"] == "me":
                 st.markdown(f'<div class="apn-me"><span>{escape(m["text"])}</span></div>', unsafe_allow_html=True)
@@ -5602,11 +5617,9 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
             # 찾은 팝업이 있으면 요약 문장(회색 상자)은 아래 버튼과 겹쳐서 숨기고 'N곳' 만 (사용자 요청 11/18)
             if m.get("ids"):
                 head = f' · {escape(m["head"])}' if m.get("head") else ""
-                st.markdown(f'<div class="apn-who">ANI:WHERE · 찾은 팝업 {len(m["ids"])}곳{head}</div>',
-                            unsafe_allow_html=True)
+                st.markdown(_ask_bot(f'찾은 팝업 <b>{len(m["ids"])}곳</b>{head}'), unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="apn-who">ANI:WHERE</div><div class="apn-bot">{escape(m["text"])}</div>',
-                            unsafe_allow_html=True)
+                st.markdown(_ask_bot(escape(m["text"])), unsafe_allow_html=True)
             for card in m.get("ids", []):
                 if not isinstance(card, dict):          # 예전 모양 (id, 이름) 기록
                     card = {"id": card[0], "work": card[1], "cafe": "", "address": "", "dates": "",
