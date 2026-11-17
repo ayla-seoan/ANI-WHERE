@@ -4212,8 +4212,15 @@ ASK_PANEL_CSS = """
 <style>
 [data-testid="stColumn"]:has(> div > .st-key-ask_panel), [data-testid="stColumn"]:has(.st-key-ask_panel) {
   position: sticky !important; top: var(--apn-top, 214px); align-self: flex-start !important; z-index: 5; }
-/* 위 고정줄(메뉴·검색 필터) 아래에 붙고, 대화 영역은 화면 높이에 맞춘다 */
-.st-key-apn_log { height: max(200px, calc(100vh - var(--apn-top, 214px) - 250px)) !important; }
+/* 위 고정줄(메뉴·검색 필터) 아래에 붙고, 대화창 전체가 화면 안에 들어오게:
+   대화창 = 세로 flex, 높이는 (화면 - 위 고정줄 - 여백)까지. 대화 기록만 남는 공간을 쓰고 넘치면 그 안에서 스크롤 */
+.st-key-ask_panel { display: flex !important; flex-direction: column !important;
+  max-height: calc(100vh - var(--apn-top, 214px) - 16px); }
+.st-key-ask_panel > * { flex: 0 0 auto; }
+.st-key-ask_panel > *:has(.st-key-apn_log), .st-key-ask_panel > .st-key-apn_log {
+  flex: 1 1 auto !important; min-height: 0 !important; display: flex; flex-direction: column; }
+.st-key-apn_log { flex: 1 1 auto !important; height: auto !important; max-height: none !important;
+  min-height: 90px !important; overflow-y: auto !important; }
 .st-key-ask_panel { border: 1.5px solid #E3E8E6; border-radius: 16px; background: #fff;
   padding: 0 !important; gap: 0 !important; overflow: hidden; box-shadow: 0 4px 18px rgba(38,48,45,.06); }
 .st-key-ask_panel > div { padding-left: 14px; padding-right: 14px; }
@@ -4287,8 +4294,12 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                 st.markdown(f'<div class="apn-me"><span>{escape(m["text"])}</span></div>', unsafe_allow_html=True)
                 continue
             # 대화창에서는 'AI 산출 / 규칙 기반 대체' 배지를 보이지 않는다 (사용자 요청 11/18). /ask 화면에는 남아 있다
-            st.markdown(f'<div class="apn-who">ANI:WHERE</div><div class="apn-bot">{escape(m["text"])}</div>',
-                        unsafe_allow_html=True)
+            # 찾은 팝업이 있으면 요약 문장(회색 상자)은 아래 버튼과 겹쳐서 숨기고 'N곳' 만 (사용자 요청 11/18)
+            if m.get("ids"):
+                st.markdown(f'<div class="apn-who">ANI:WHERE · 찾은 팝업 {len(m["ids"])}곳</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="apn-who">ANI:WHERE</div><div class="apn-bot">{escape(m["text"])}</div>',
+                            unsafe_allow_html=True)
             for cid, label in m.get("ids", []):
                 key = f"{prefix}_hit_{n}_{cid}"
                 if in_dialog:
