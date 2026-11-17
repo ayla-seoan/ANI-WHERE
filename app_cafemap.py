@@ -529,6 +529,44 @@ def _fav_user() -> str:
     return f"m:{row['entry_id']}" if row else favorite.user_key(st.context.ip_address)
 
 
+# 프로필 사진이 없을 때 보여 줄 기본 그림 (민트 동그라미 + 사람 모양). 파일 없이 화면에서만 쓴다
+DEFAULT_AVATAR = ("data:image/svg+xml;utf8," + quote(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#DDF3EC"/>'
+    '<circle cx="32" cy="25" r="11" fill="#7CCFB8"/><path d="M12 54c3-11 11-16 20-16s17 5 20 16" fill="#7CCFB8"/></svg>'))
+
+
+def _avatar_url(value) -> str:
+    """members.avatar → 화면 주소. 비었거나 'none' 이면 기본 그림."""
+    v = auth.clean_avatar(value)
+    if not v or v == "none":
+        return DEFAULT_AVATAR
+    if v.startswith("https://"):
+        return v
+    found = images.paths(v)
+    return images.url(found[0]) if found else DEFAULT_AVATAR
+
+
+def _avatar_img(value, size: int = 28, cls: str = "av") -> str:
+    return (f'<img class="{cls}" src="{escape(_avatar_url(value))}" alt="" width="{size}" height="{size}" '
+            f'referrerpolicy="no-referrer" onerror="this.src=\'{DEFAULT_AVATAR}\'">')
+
+
+def _avatar_by_tag() -> dict[str, str]:
+    """리뷰 닉네임 끝 '#m네 글자' → 그 회원의 프로필 사진 값 (한 번 실행에 한 번 읽음)."""
+    run = st.session_state.get("_run", 0)
+    cached = st.session_state.get("_avatar_cache")
+    if cached and cached[0] == run:
+        return cached[1]
+    out = {f'm{str(r["entry_id"])[:4]}': str(r.get("avatar") or "") for r in members.current_rows()}
+    st.session_state["_avatar_cache"] = (run, out)
+    return out
+
+
+def _nick_only(name) -> str:
+    """'닉네임#m1a2b' → '닉네임'. 끝의 꼬리표는 저장(내 글 확인)에만 쓰고 화면에는 안 보인다 (11/18 요청)."""
+    return str(name or "").rsplit("#", 1)[0].strip() or "익명"
+
+
 def _me() -> str:
     """지금 접속한 사람의 이름. 회원이면 '닉네임#회원번호4자', 손님이면 IP 기반 자동 닉네임.
     리뷰 작성자·수정 이력에 남고, 끝의 #네 글자로 '내 글' 을 알아본다."""
@@ -763,7 +801,9 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
     kind = ""
     nick = _me()
     # 닉네임 → 종류 → 내용 순으로 한 줄씩, 같은 왼쪽 선에 맞춰 둔다
-    st.caption(f":material/person: **{nick}**", help="접속한 IP 에 따라 자동으로 정해지는 닉네임입니다")
+    me_row = _member() or {}
+    st.markdown(f'<div class="rv-me">{_avatar_img(me_row.get("avatar"), 28, "rv-av")}<b>{escape(_nick_only(nick))}</b></div>',
+                unsafe_allow_html=True)
     rating = None
     if not parent_id:
         kind = st.pills("종류", review.KINDS, default=review.KINDS[0], key=f"{slot}_kind_{n}",
@@ -881,7 +921,8 @@ def confirm_review_delete(entry_id: str, replies: int) -> None:
 
 
 def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
-    head = f"**{_plain(r.get('nickname') or '익명')}**"
+    tag = str(r.get("nickname") or "").rsplit("#", 1)[-1] if "#" in str(r.get("nickname") or "") else ""
+    head = _avatar_img(_avatar_by_tag().get(tag, ""), 26, "rv-av") + f" **{_plain(_nick_only(r.get('nickname')))}**"
     if r.get("kind"):
         head = f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] " + head
     if reply:
@@ -897,7 +938,7 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     if mine or is_admin or member:
         # 수정은 쓴 사람(회원)만, 삭제는 관리자만 (11/18 권한)
         t, b = st.columns([6, 1], vertical_alignment="center")
-        t.markdown(head + when)
+        t.markdown(head + when, unsafe_allow_html=True)
         with b.popover("⋯", key=f"rv_more_{eid}", type="tertiary"):
             if mine and st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
                 st.session_state["rv_editing"] = eid
@@ -907,7 +948,7 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
             if member and not is_admin and st.button("삭제 요청", key=f"rv_req_{eid}", width="stretch"):
                 delete_request_dialog("review", eid, str(r.get("body") or r.get("kind") or "리뷰")[:40])
     else:
-        st.markdown(head + when)
+        st.markdown(head + when, unsafe_allow_html=True)
     # 다녀온 후기 별점: 머리 줄 다음 줄에, 내용보다 위에 크게
     rated = review.stars(r.get("rating")) if r.get("kind") == review.RATED_KIND else ""
     if rated and not (mine and st.session_state.get("rv_editing") == eid):
@@ -1469,7 +1510,7 @@ def _history_card_html(r: dict, older: dict | None, now: bool) -> str:
             f'<div class="hx-top"><b>{int(r["revision"])}번째</b><span class="hx-when">{when}</span>'
             + ('<span class="hx-now">지금</span>' if now else "")
             + f'<span class="hx-src">{_mi(icon)}{escape(label)}</span></div>'
-            f'<div class="hx-who">{_mi("person")}{escape(_editor(r))}</div>'
+            f'<div class="hx-who">{_mi("person")}{escape(_nick_only(_editor(r)))}</div>'
             f'{body}</div>')
 
 
@@ -1961,6 +2002,10 @@ iframe[src*="kakao_map"] {{
   justify-content: center; height: auto !important; }}
 /* 리뷰 카드의 별점 줄 (★ 채움은 노랑, ☆ 빈 칸은 연한 회색으로 보이게 글꼴 크게) */
 /* 반짝이는 효과: 별 위로 밝은 빛줄기가 지나가고(rvShine), 노란 빛이 은은하게 커졌다 작아진다(rvGlow) */
+.rv-av {{ width: 26px; height: 26px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 4px;
+  border: 1px solid #E3E8E6; background: #DDF3EC; }}
+.rv-me {{ display: flex; align-items: center; gap: 6px; font-size: .9rem; color: #26302D; margin-bottom: 4px; }}
+.rv-me .rv-av {{ width: 28px; height: 28px; margin: 0; }}
 .rv-stars {{ display: inline-block; font-size: 1.35rem; letter-spacing: 2px; line-height: 1; margin: 2px 0 12px;
   color: #14b8a6; background: linear-gradient(110deg, #14b8a6 35%, #9FF0E1 48%, #FFFFFF 50%, #9FF0E1 52%, #14b8a6 65%);
   background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
@@ -4442,7 +4487,7 @@ def render_calendar(compact: bool = False) -> None:
         st.button("›", key="cal_next", type="tertiary", on_click=_cal_shift, args=(1,))
         st.button("이번달", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None))
     # '내 캘린더' 줄 바로 아래: 내 닉네임(리뷰와 같은 IP 기반). 북마크도 이 사람 것만 보인다
-    st.markdown(f'<div class="cal-nick">{escape(_me())}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="cal-nick">{escape(_nick_only(_me()))}</div>', unsafe_allow_html=True)
     if not events:
         st.markdown('<div class="cal-empty">아직 북마크한 팝업이 없어요. 리스트에서 북마크하면 달력에 일정이 채워져요.</div>',
                     unsafe_allow_html=True)
@@ -4464,6 +4509,10 @@ AUTH_CSS = """
 .auth-note { color: #6B7672; font-size: .8rem; line-height: 1.6; max-width: 420px; }
 .auth-or { display: flex; align-items: center; gap: .6rem; max-width: 380px; color: #9AA5A1; font-size: .8rem;
   margin: 1rem 0 .3rem; }
+.me-av { margin-bottom: 8px; }
+.me-avimg { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #DDF3EC; background: #DDF3EC; }
+.auth-av { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: .86rem; color: #6B7672; }
+.auth-av img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 1px solid #E3E8E6; }
 .auth-or::before, .auth-or::after { content: ""; flex: 1; border-top: 1px solid #E3E8E6; }
 /* 로그인·회원가입: 가운데 좁은 칸 (PC 에서 왼쪽으로 쏠리지 않게) */
 .st-key-auth_wrap { width: 100%; max-width: 420px; margin-left: auto !important; margin-right: auto !important; }
@@ -4632,12 +4681,39 @@ def _logout() -> None:
     st.session_state.pop("_fav_cache", None)
 
 
+def _avatar_saved(msg: str) -> None:
+    st.session_state["_av_n"] = st.session_state.get("_av_n", 0) + 1      # 올리기 칸 비우기
+    st.session_state.pop("_member_cache", None)
+    st.session_state.pop("_avatar_cache", None)
+    st.session_state["flash"] = (msg, ":material/check_circle:")
+    st.rerun()
+
+
 def _my_account(row: dict) -> None:
     prov = auth.PROVIDER_LABEL.get(str(row.get("provider")), "")
     st.markdown(f'<div class="auth-title">내 계정</div><div class="auth-card">'
-                f'<b>{escape(auth.display_name(row))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
+                f'<div class="me-av">{_avatar_img(row.get("avatar"), 72, "me-avimg")}</div>'
+                f'<b>{escape(_nick_only(auth.display_name(row)))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
                 f'가입 {escape(str(row.get("agreed_at", ""))[:10])}<br>회원 번호 <code>{escape(str(row["entry_id"]))}</code>'
                 f'{" · 관리자" if _is_admin() else ""}</span></div>', unsafe_allow_html=True)
+    with st.expander("프로필 사진 바꾸기", icon=":material/account_circle:"):
+        st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
+        n = st.session_state.get("_av_n", 0)
+        up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n}")
+        c1, c2 = st.columns(2)
+        if c1.button("이 사진으로 저장", type="primary", width="stretch", disabled=up is None, key="av_save"):
+            data = up.getvalue()
+            if images.too_big(data, 5):
+                st.warning("5MB 이하 사진만 올릴 수 있어요.", icon=":material/error:")
+            else:
+                auth.set_avatar(members, row, images.save(up.name, data))
+                _avatar_saved("프로필 사진을 바꿨어요.")
+        if c2.button("기본 그림으로", width="stretch", key="av_default"):
+            auth.set_avatar(members, row, "none")
+            _avatar_saved("기본 그림으로 바꿨어요.")
+        if row.get("provider") in ("kakao", "naver"):
+            st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 처음 가입할 때(또는 사진이 없을 때 다시 로그인하면) '
+                       '자동으로 불러와요.')
     with st.form("rename", border=False):
         nick = st.text_input("닉네임 바꾸기", value=row.get("nickname", ""), max_chars=auth.MAX_NICK)
         if st.form_submit_button("저장", icon=":material/check:"):
@@ -4715,6 +4791,11 @@ def _auth_body() -> None:
             return
         row = auth.find(members, ident.member_key)
         if row:
+            if not str(row.get("avatar") or "") and ident.avatar:   # 사진을 정한 적 없으면 카카오·네이버 사진으로
+                try:
+                    row = auth.set_avatar(members, row, ident.avatar)
+                except Exception:
+                    pass
             _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
             go("map")
             return
@@ -4727,10 +4808,14 @@ def _auth_body() -> None:
     label = auth.PROVIDERS[ident.provider]["label"]
     st.markdown(f'<div class="auth-title">거의 다 됐어요</div><div class="auth-sub">{label} 계정으로 처음 오셨어요. '
                 '앱에서 쓸 닉네임만 정하면 가입이 끝나요.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="auth-av">{_avatar_img(ident.avatar, 48, "")}'
+                + (f"{label} 프로필 사진을 불러왔어요. 마이페이지에서 언제든 바꿀 수 있어요." if ident.avatar
+                   else "프로필 사진은 선택이에요. 마이페이지에서 언제든 올릴 수 있어요.") + '</div>', unsafe_allow_html=True)
     with st.form("signup", border=False):
         nick = st.text_input("닉네임", value=ident.nickname, max_chars=auth.MAX_NICK,
                              placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
-        agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 닉네임 · 로그인 수단 · 해시한 계정 번호")
+        agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 닉네임 · 로그인 수단 · 해시한 계정 번호 · "
+                            "프로필 사진 주소(선택)")
         done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")
     if done:
         if not agree:
@@ -5043,12 +5128,12 @@ def _admin_notice_save(entry_id: str | None) -> None:
     st.session_state.pop("adm_nt_edit", None)
     for key in (f"adm_nt_t_{k}", f"adm_nt_b_{k}"):      # 저장했으면 입력칸을 비운다
         st.session_state.pop(key, None)
-    st.session_state["flash"] = ("알림을 저장했어요. 모든 회원의 알림에 보여요.", ":material/check_circle:")
+    st.session_state["flash"] = ("공지를 저장했어요. 모든 회원의 알림에 보여요.", ":material/check_circle:")
 
 
 def _admin_notice_delete(row: dict) -> None:
     notices_store.soft_delete(str(row["entry_id"]))
-    st.session_state["flash"] = ("알림을 삭제했어요.", ":material/check_circle:")
+    st.session_state["flash"] = ("공지를 삭제했어요.", ":material/check_circle:")
 
 
 def _admin_rule_save(key: str, enabled: bool) -> None:
@@ -5067,6 +5152,17 @@ def _admin_rule_save(key: str, enabled: bool) -> None:
 def _admin_rule_editor(rules: dict[str, dict]) -> None:
     """규칙 하나를 골라 며칠 전부터 · 최대 몇 개 · 켜기/끄기(삭제). 기록은 지우지 않고 쌓인다."""
     keys = list(admin.RULES)
+    opened = bool(st.session_state.get("adm_rule_open"))
+    # 빨간 '수정하기' 버튼을 누르면 고칠 규칙 칸이 펼쳐지고, 한 번 더 누르면 접힌다 (11/18 요청)
+    st.markdown('<style>.st-key-adm_rule_toggle button { background: #E05555 !important; border-color: #E05555 !important; }'
+                '.st-key-adm_rule_toggle button:hover { background: #C8352A !important; border-color: #C8352A !important; }'
+                '.st-key-adm_rule_toggle button p, .st-key-adm_rule_toggle button span { color: #fff !important; }</style>',
+                unsafe_allow_html=True)
+    st.button("수정 닫기" if opened else "수정하기", icon=":material/expand_less:" if opened else ":material/edit:",
+              type="primary", key="adm_rule_toggle",
+              on_click=lambda: st.session_state.update(adm_rule_open=not st.session_state.get("adm_rule_open")))
+    if not opened:
+        return
     with st.container(border=True):
         k = st.selectbox("고칠 규칙", keys, format_func=lambda x: f'{admin.RULES[x]["name"]} '
                          f'({"켜짐" if rules[x]["enabled"] else "꺼짐"})', key="adm_rule_pick")
@@ -5103,7 +5199,7 @@ def _admin_notices() -> None:
         editing = st.session_state.get("adm_nt_edit")
         cur = next((r for r in rows if str(r["entry_id"]) == editing), None) if editing else None
         k = str(cur["entry_id"]) if cur else "new"
-        st.markdown(f'<div class="adm-panel-h">{"알림 수정" if cur else "새 알림 추가"}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="adm-panel-h">{"공지 수정" if cur else "새 공지 추가"}</div>', unsafe_allow_html=True)
         st.text_input("제목", key=f"adm_nt_t_{k}", value=str(cur.get("title", "")) if cur else "", max_chars=60)
         st.text_area("내용", key=f"adm_nt_b_{k}", value=str(cur.get("body", "")) if cur else "", max_chars=500, height=120)
         c1, c2 = st.columns(2)
@@ -5133,7 +5229,8 @@ def _admin_notices() -> None:
 def _admin_members() -> None:
     st.markdown(
         '<div class="adm-info"><b>수집하는 정보</b> — 닉네임 · 로그인 수단(카카오/네이버/아이디) · 회원 번호(계정 고유 번호를 '
-        '알아볼 수 없게 바꾼 값) · 약관 동의 시각 · 아이디 가입이면 아이디와 <b>암호화한</b> 비밀번호 · 접속한 날(일별 접속 수)<br>'
+        '알아볼 수 없게 바꾼 값) · 약관 동의 시각 · 프로필 사진(선택: 카카오·네이버 사진 주소 또는 직접 올린 사진) · '
+        '아이디 가입이면 아이디와 <b>암호화한</b> 비밀번호 · 접속한 날(일별 접속 수)<br>'
         '<b>수집하지 않는 정보</b> — 이메일 · 전화번호 · 실명 · 생일 · 카카오/네이버 고유 번호 원래 값</div>',
         unsafe_allow_html=True)
     rows = members.all_rows()

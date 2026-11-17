@@ -17,6 +17,8 @@
 """
 from __future__ import annotations
 
+import re
+
 import base64
 import hashlib
 import hmac
@@ -37,7 +39,8 @@ STATE_MAX_AGE = 600          # 동의 화면에서 10분 안에 돌아와야 한
 MAX_NICK = 16
 
 HEADERS = ["row_id", "entry_id", "revision", "status", "updated_at",
-           "provider", "nickname", "agreed_at"]
+           "provider", "nickname", "agreed_at", "avatar"]
+MAX_AVATAR = 500
 PROVIDER_LABEL = {"kakao": "카카오", "naver": "네이버", "local": "아이디"}
 
 PROVIDERS = {
@@ -73,6 +76,7 @@ class Identity:
     provider: str
     member_key: str          # 소금 친 해시. 저장소의 entry_id
     nickname: str            # 카카오·네이버가 준 별명 (가입 화면 기본값)
+    avatar: str = ""         # 카카오·네이버 프로필 사진 주소 (있으면 가입할 때 그대로 씀, 마이페이지에서 바꿀 수 있음)
 
 
 # ------------------------------------------------------------------ 설정
@@ -187,19 +191,42 @@ def exchange(code: str, state: str, timeout: float = 10.0) -> Identity:
 
     if provider == "kakao":
         uid = str(prof.get("id") or "")
-        nick = ((prof.get("kakao_account") or {}).get("profile") or {}).get("nickname") \
-            or (prof.get("properties") or {}).get("nickname") or ""
+        kp = (prof.get("kakao_account") or {}).get("profile") or {}
+        nick = kp.get("nickname") or (prof.get("properties") or {}).get("nickname") or ""
+        pic = "" if kp.get("is_default_image") else (kp.get("profile_image_url") or kp.get("thumbnail_image_url")
+                                                      or (prof.get("properties") or {}).get("profile_image") or "")
     else:
         res = prof.get("response") or {}
         uid, nick = str(res.get("id") or ""), res.get("nickname") or ""
+        pic = res.get("profile_image") or ""
     if not uid:
         raise AuthError(f'{p["label"]} 계정 정보를 받지 못했어요. 동의 화면에서 필수 항목을 확인해 주세요.')
-    return Identity(provider=provider, member_key=member_key(provider, uid), nickname=clean_nick(nick))
+    return Identity(provider=provider, member_key=member_key(provider, uid), nickname=clean_nick(nick),
+                    avatar=clean_avatar(pic))
 
 
 # ------------------------------------------------------------------ 회원 기록
 def clean_nick(nick: str) -> str:
     return mask(" ".join(str(nick or "").split()))[:MAX_NICK]
+
+
+_AVATAR_URL = re.compile(r"https://[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%-]+")
+_AVATAR_FILE = re.compile(r"[0-9a-f]{12}\.(png|jpg|jpeg|webp|gif)")
+
+
+def clean_avatar(value) -> str:
+    """프로필 사진 값: https 주소(카카오·네이버) · static/uploads 파일 이름 · 'none'(기본 그림을 고름) · ''(아직 안 정함).
+    그 밖의 값은 버린다 (화면 HTML 에 들어가므로 따옴표·공백 같은 글자를 막는다)."""
+    v = str(value or "").strip()
+    if v == "none":
+        return v
+    if v.startswith("http://"):
+        v = "https://" + v[len("http://"):]
+    if len(v) <= MAX_AVATAR and _AVATAR_URL.fullmatch(v):
+        return v
+    if _AVATAR_FILE.fullmatch(v):
+        return v
+    return ""
 
 
 def validate_nick(nick: str) -> list[str]:
@@ -227,7 +254,8 @@ def signup(store, ident: Identity, nickname: str) -> dict:
     if errors:
         raise AuthError(errors[0])
     return store.append({"provider": ident.provider, "nickname": " ".join(nickname.split()),
-                         "agreed_at": time.strftime("%Y-%m-%dT%H:%M:%S")}, entry_id=ident.member_key)
+                         "agreed_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "avatar": clean_avatar(ident.avatar)},
+                        entry_id=ident.member_key)
 
 
 def rename(store, row: dict, nickname: str) -> dict:
@@ -235,12 +263,20 @@ def rename(store, row: dict, nickname: str) -> dict:
     if errors:
         raise AuthError(errors[0])
     return store.append({"provider": row.get("provider", ""), "nickname": " ".join(nickname.split()),
-                         "agreed_at": row.get("agreed_at", "")}, entry_id=str(row["entry_id"]))
+                         "agreed_at": row.get("agreed_at", ""), "avatar": clean_avatar(row.get("avatar"))},
+                        entry_id=str(row["entry_id"]))
+
+
+def set_avatar(store, row: dict, avatar: str) -> dict:
+    """프로필 사진만 바꾼다 ('none' = 기본 그림). 닉네임·동의 시각은 그대로 잇는다."""
+    return store.append({"provider": row.get("provider", ""), "nickname": row.get("nickname", ""),
+                         "agreed_at": row.get("agreed_at", ""), "avatar": clean_avatar(avatar)},
+                        entry_id=str(row["entry_id"]))
 
 
 def withdraw(store, row: dict) -> dict:
     """탈퇴: 지우지 않고 'deleted' 행을 쌓는다. 닉네임은 남기지 않는다."""
-    return store.append({"provider": row.get("provider", ""), "nickname": "", "agreed_at": ""},
+    return store.append({"provider": row.get("provider", ""), "nickname": "", "agreed_at": "", "avatar": ""},
                         entry_id=str(row["entry_id"]), status="deleted")
 
 
