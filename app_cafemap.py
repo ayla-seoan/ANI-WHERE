@@ -339,6 +339,7 @@ favs = Storage(worksheet="favorites", headers=favorite.HEADERS)
 members = Storage(worksheet="members", headers=auth.HEADERS)
 del_requests = Storage(worksheet="del_requests", headers=admin.REQ_HEADERS)      # 일반 회원의 삭제 요청
 alert_rules = Storage(worksheet="alert_rules", headers=admin.RULE_HEADERS)       # 자동 알림 규칙 (관리자가 고침)
+api_usage = Storage(worksheet="api_usage", headers=blog.USAGE_HEADERS)            # 블로그 검색 호출 수 (한 달 한도)
 notices_store = Storage(worksheet="notices", headers=admin.NOTICE_HEADERS)       # 회원에게 가는 알림·공지
 visits = Storage(worksheet="visits", headers=admin.VISIT_HEADERS)                # 회원이 접속한 날
 # 실행 번호: 찜 정보를 한 번 그릴 때 한 번만 읽고, 다음 실행에서는 새로 읽게 한다
@@ -763,9 +764,10 @@ def _detail_info_html(current: dict) -> str:
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def _blog_posts(entry_id: str, work: str, cafe_name: str, start_date: str) -> tuple[list, str]:
+def _blog_posts(entry_id: str, work: str, cafe_name: str, start_date: str, address: str = "") -> tuple[list, str]:
     """팝업별 네이버 블로그 후기 (하루 동안 기억 → 같은 팝업은 하루 한 번만 검색)."""
-    posts, err = blog.search({"work": work, "cafe_name": cafe_name, "start_date": start_date}, limit=15)
+    posts, err = blog.search({"work": work, "cafe_name": cafe_name, "start_date": start_date, "address": address}, limit=15,
+                             usage=api_usage)        # 한 달 30,000번이 넘으면 부르지 않음
     return [{**p.__dict__, "thumb": th} for p, th in blog.with_thumbs(posts)], err
 
 
@@ -774,7 +776,8 @@ def _blog_list(current: dict) -> list[dict]:
         return []
     try:
         posts, _ = _blog_posts(str(current.get("entry_id")), str(current.get("work") or ""),
-                               str(current.get("cafe_name") or ""), str(current.get("start_date") or "")[:10])
+                               str(current.get("cafe_name") or ""), str(current.get("start_date") or "")[:10],
+                               str(current.get("address") or ""))
     except Exception:
         return []
     return posts
@@ -876,14 +879,19 @@ def render_detail_tabs(current: dict) -> None:
     with tab_review:
         posts = _blog_list(current)
         sub = st.session_state.get(f"rvsub_{entry_id}", "review")
-        with st.container(horizontal=True, key="rv_subtabs"):
-            for k, label in (("review", f"리뷰 후기 ({n})"), ("blog", f"블로그 후기 ({len(posts)})")):
-                st.button(label, key=f"rvsub_{'on_' if sub == k else ''}{k}_{entry_id}",
-                          on_click=lambda k=k: st.session_state.update({f"rvsub_{entry_id}": k}))
-        if sub == "blog":
-            _render_blog_tab(current, posts)
-        else:
-            render_reviews(entry_id)
+
+        def subtabs() -> bool:
+            # 리뷰 쓰기 칸 아래에 '리뷰 후기 / 블로그 후기' (11/18 요청)
+            with st.container(horizontal=True, key="rv_subtabs"):
+                for k, label in (("review", f"리뷰 후기 ({n})"), ("blog", f"블로그 후기 ({len(posts)})")):
+                    st.button(label, key=f"rvsub_{'on_' if sub == k else ''}{k}_{entry_id}",
+                              on_click=lambda k=k: st.session_state.update({f"rvsub_{entry_id}": k}))
+            if sub == "blog":
+                _render_blog_tab(current, posts)
+                return False
+            return True
+
+        render_reviews(entry_id, after_write=subtabs)
     with tab_edit:
         render_edit(current)
 
@@ -1212,11 +1220,14 @@ def _avg_rating_html(avg: float, n: int) -> str:
             f'<span class="rv-avg-cnt">다녀온 후기 {n}개 평균</span></div>')
 
 
-def render_reviews(cafe_id: str) -> None:
+def render_reviews(cafe_id: str, after_write=None) -> None:
+    """after_write: 리뷰 쓰기 칸 바로 아래에 그릴 것 ('리뷰 후기 / 블로그 후기' 탭). False 를 돌려주면 리뷰 목록은 그리지 않는다."""
     _review_lightbox()      # 리뷰 사진을 누르면 확대 보기 팝업
     # 맨 위 리뷰 쓰기: 닉네임·종류·별점·입력칸·리뷰 등록 버튼을 처음부터 펼쳐 둔다. 그 아래에 리뷰를 보여 준다
     with st.container(border=True, key=f"rvbox_{cafe_id}"):
         _write_box(cafe_id)
+    if after_write is not None and after_write() is False:
+        return
 
     threads = review.threads(reviews.current_rows(), cafe_id)
     if not threads:
@@ -2336,16 +2347,16 @@ iframe[src*="kakao_map"] {{
 .dblog-m {{ color:#9AA5A1; font-size:.76rem; margin-top:4px; display:flex; align-items:center; gap:3px; }}
 .dsec-src {{ font-size:.72rem; font-weight:600; color:#9AA5A1; margin-left:6px; }}
 /* 리뷰 탭 안 '리뷰 후기 / 블로그 후기' (11/18 요청) */
-.st-key-rv_subtabs {{ gap:0 !important; margin:2px 0 12px; border-bottom:1.5px solid #E3E8E6; }}
+.st-key-rv_subtabs {{ gap:0 !important; margin:14px 0 12px; border-bottom:1.5px solid #E3E8E6; }}
 .st-key-rv_subtabs > div {{ flex:1 1 0 !important; }}
 .st-key-rv_subtabs button {{ width:100% !important; background:#F6F8F7 !important; border:0 !important; border-radius:0 !important;
   box-shadow:none !important; padding:12px 0 10px !important; border-bottom:3px solid transparent !important; margin-bottom:-1.5px; }}
 .st-key-rv_subtabs button p {{ font-size:1rem !important; font-weight:700 !important; color:#9AA5A1 !important; }}
 .st-key-rv_subtabs [class*="st-key-rvsub_on_"] button {{ background:#fff !important; border-bottom-color:#26302D !important; }}
 .st-key-rv_subtabs [class*="st-key-rvsub_on_"] button p {{ color:#26302D !important; font-weight:800 !important; }}
-.blog-note {{ border:1.5px solid #E3E8E6; border-radius:12px; padding:11px 14px; text-align:center; font-size:.88rem;
-  color:#3A4542; background:#fff; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px; }}
-.blog-note .mi {{ color:{MINT_DEEP}; }}
+.blog-note {{ border:0; border-radius:12px; padding:11px 14px; text-align:center; font-size:.88rem; font-weight:600;
+  color:#fff; background:{MINT}; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px; }}
+.blog-note .mi {{ color:#fff; }}
 .blog-empty {{ color:#8A9592; font-size:.88rem; text-align:center; padding:28px 0; }}
 .bcard {{ display:flex; gap:16px; align-items:stretch; border:1.5px solid #E3E8E6; border-radius:14px; padding:16px 18px;
   background:#fff; margin-bottom:10px; text-decoration:none !important; color:#26302D !important;

@@ -153,7 +153,7 @@ Supabase popups_current ──▶ Next.js 공개 웹 (ISR 10분) · MCP 서버 �
 | Automatically expose new tables | **끔** (Supabase 권장) | 권한을 `004_grants.sql` 로 필요한 만큼만 직접 준다 |
 | Enable automatic RLS | **켬** | 마이그레이션에서도 켜지만, 새 표를 만들 때 잊어도 RLS 가 걸리게 한 겹 더 |
 
-SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009` 순서로 돌린다. (005 = 아이디·비밀번호 가입, `docs/login.md` · 006·007 = 관리자 표, 10절)
+SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009 → 010` 순서로 돌린다. (005 = 아이디·비밀번호 가입, `docs/login.md` · 006·007 = 관리자 표, 10절)
 
 ## 10. 관리자 표 (006, 11/18)
 
@@ -191,3 +191,11 @@ SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 �
 - 탈퇴하지 않은 회원은 `purge_withdrawn` 으로 지울 수 없다 (마지막 기록이 탈퇴인지 먼저 본다).
 - pg_cron 을 켤 수 없으면 SQL Editor 에서 `select public.purge_expired();` 를 직접 돌린다.
 - 로컬(개발) 모드는 `auth.purge_withdrawn` 이 `data/*.json` 을 같은 규칙으로 고친다.
+
+## 13. 외부 API 호출 수 (010, 11/18)
+
+`api_usage` 표 — 블로그 검색(NAVER API HUB)을 **한 달 30,000번**까지만 부르려고 센다 (`common/blog.py`).
+
+- 한 줄 = 25번 호출 묶음 (`api='blog'`, `month='2026-11'`, `calls=25`). 이번 달 합계 = `calls` 의 합 + 아직 안 적은 수.
+- 합계가 30,000 이상이면 부르지 않는다. 표를 못 읽으면(010 전·연결 실패) 안전하게 부르지 않는다.
+- append-only (anon 은 SELECT·INSERT 만).
