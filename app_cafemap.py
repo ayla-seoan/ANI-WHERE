@@ -3762,9 +3762,10 @@ def _login_body() -> None:
     for prov in ("kakao", "naver"):
         label = auth.PROVIDERS[prov]["label"]
         if auth.enabled(prov):
-            # target="_top": 배포 사이트(Streamlit Cloud)는 앱을 iframe 안에 띄운다. 카카오·네이버 로그인 화면은
-            # iframe 안에서 열리기를 거부하므로("연결을 거부했습니다") 창 전체를 옮긴다
-            st.markdown(f'<a class="auth-btn {prov}" href="{escape(auth.authorize_url(prov))}" target="_top">'
+            # 새 탭으로 연다: 배포 사이트(Streamlit Cloud)는 앱을 iframe 안에 띄우는데, 카카오·네이버 로그인 화면은
+            # iframe 안에서 열리기를 거부하고("연결을 거부했습니다"), 그 iframe 은 바깥 창 이동(_top)도 막는다
+            # (sandbox 에 allow-top-navigation 없음, allow-popups 는 있음). 로그인이 끝나면 새 탭에서 로그인된 상태가 된다
+            st.markdown(f'<a class="auth-btn {prov}" href="{escape(auth.authorize_url(prov))}" target="_blank" rel="noopener">'
                         f'{label}로 {verb}</a>', unsafe_allow_html=True)
         else:
             st.markdown(f'<span class="auth-btn off">{label} {verb} 준비 중</span>', unsafe_allow_html=True)
