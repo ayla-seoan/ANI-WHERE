@@ -2454,6 +2454,12 @@ GNB_CSS = """
 .st-key-gnb .st-key-home_brand button { width: 190px !important; height: 58px !important; }
 /* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
 .st-key-gnb { position: relative; }
+/* 메뉴바 묶음 안의 보이지 않는 칸(스타일·높이 0 iframe·위치 받기)이 간격만 차지하지 않게 */
+.st-key-topbar { gap: 0 !important; }
+.st-key-topbar > [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] style:only-child),
+.st-key-topbar [data-testid="stElementContainer"]:has(iframe[height="0"]) { display: none !important; }
+.st-key-topbar .st-key-filters { margin-top: 10px; }
+.st-key-gnb_loc_box { display: none !important; }
 /* 탭은 메뉴바 정가운데 (로고·오른쪽 아이콘 폭과 상관없이) */
 .st-key-gnb_tabs { gap: 0 !important; width: auto !important; flex: 0 0 auto; position: absolute !important;
   left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
@@ -2465,6 +2471,10 @@ GNB_CSS = """
 .st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
 /* 오른쪽 끝: 검색 · 알림 · 로그인 */
 .st-key-gnb_right { margin-left: auto; width: auto !important; flex: 0 0 auto; gap: 2px !important; align-items: center; }
+.st-key-gnb_right [class*="st-key-gnb_search_"] button { background: transparent !important; border: 0 !important;
+  box-shadow: none !important; }
+.st-key-gnb_right [class*="st-key-gnb_search_"] button span[data-testid="stIconMaterial"] { font-size: 1.6rem !important; }
+.st-key-gnb_search_on button { background: #E6F6F0 !important; border-radius: 999px !important; }
 .st-key-gnb_right [data-testid="stPopover"] button, .st-key-gnb_right .st-key-login_btn button {
   background: transparent !important; border: 0 !important; box-shadow: none !important; }
 .st-key-gnb_right [data-testid="stPopover"] button span[data-testid="stIconMaterial"] { font-size: 1.6rem !important; }
@@ -2518,6 +2528,26 @@ def _gnb_go(view: str) -> None:
     st.session_state["list_only"] = view == "list"
     st.session_state["selected"] = None
     st.session_state["scroll_top"] = True
+
+
+def _active_filters() -> int:
+    """지금 걸려 있는 검색 조건 수 (검색어·작품·진행여부·날짜·캐릭터·지역·북마크)."""
+    ss = st.session_state
+    return sum([
+        bool(str(ss.get("f_query") or "").strip()), ss.get("f_work", "전체") != "전체",
+        ss.get("f_span", "진행중 + 예정") != "진행중 + 예정",
+        bool(ss.get(f"f_date_{ss.get('date_ver', 0)}")),
+        any(ss.get(k) for k in list(ss) if str(k).startswith("filter_chars_")),
+        bool(ss.get("regions")), bool(ss.get("fav_only")),
+    ])
+
+
+def _toggle_search() -> None:
+    ss = st.session_state
+    ss["pc_filters"] = not ss.get("pc_filters", False)
+    ss["m_filters"] = ss["pc_filters"]          # 모바일은 같은 버튼으로 필터 시트
+    if ss["pc_filters"]:
+        ss["_focus_search"] = True
 
 
 def _gnb_search() -> None:
@@ -2603,10 +2633,12 @@ def _gnb(current: dict | None) -> None:
             st.button("지도로 보기", key=f"gnbtab_{'on_' if on_map else ''}map", on_click=_gnb_go, args=("map",))
             st.button("리스트로 보기", key=f"gnbtab_{'on_' if on_list else ''}list", on_click=_gnb_go, args=("list",))
         with st.container(horizontal=True, key="gnb_right"):
-            with st.popover("", icon=":material/search:"):
-                st.text_input("검색", key="gnb_q", placeholder="작품·카페명·캐릭터·주소", on_change=_gnb_search,
-                              label_visibility="collapsed")
-                st.caption("엔터를 누르면 리스트에서 바로 찾아 줘요.")
+            # 검색 아이콘: 누르면 아래 검색 필터 줄(검색·작품·캐릭터·진행여부·날짜)을 펼치고 접는다.
+            # 걸어 둔 조건이 있으면 아이콘 옆에 그 수. 모바일에서는 필터 시트를 연다
+            n_on = _active_filters()
+            opened = bool(st.session_state.get("pc_filters"))
+            st.button(str(n_on) if n_on and not opened else "", icon=":material/close:" if opened else ":material/search:",
+                      key=f"gnb_search_{'on' if opened else 'off'}", on_click=_toggle_search)
             marks, near = _notices()
             with st.popover(str(len(marks) + len(near)) if (marks or near) else "", icon=":material/notifications:"):
                 st.markdown("**북마크한 팝업**")
@@ -2728,8 +2760,15 @@ def page_map() -> None:
         unsafe_allow_html=True,
     )
 
+    # PC: 검색 필터 줄은 메뉴바의 검색 아이콘을 눌렀을 때만 보인다 (접어도 걸어 둔 조건은 그대로 걸린다)
+    if not ss.get("pc_filters"):
+        st.markdown("<style>@media (min-width: 641px) { .st-key-filters { display: none !important; } }"
+                    " :root { --apn-top: 120px; }</style>", unsafe_allow_html=True)
     with top:
         fbox = st.container(key="filters")      # 모바일 전용 칸(찜·지역)도 아래에서 이 묶음에 넣는다
+    if ss.pop("_focus_search", False):
+        components.html("<script>setTimeout(()=>{const i=window.parent.document.querySelector('.st-key-f_query input');"
+                        "if(i){i.focus();}},350);</script>", height=0)
     with fbox, st.container(key="m_sheet_head"):
         # 모바일 필터 시트 머리: '필터' 제목과 닫기(×). PC 에서는 숨긴다
         st.markdown('<div class="sheet-title">필터</div>', unsafe_allow_html=True)
