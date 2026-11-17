@@ -551,20 +551,41 @@ def _avatar_img(value, size: int = 28, cls: str = "av") -> str:
             f'referrerpolicy="no-referrer" onerror="this.src=\'{DEFAULT_AVATAR}\'">')
 
 
-def _avatar_by_tag() -> dict[str, str]:
-    """리뷰 닉네임 끝 '#m네 글자' → 그 회원의 프로필 사진 값 (한 번 실행에 한 번 읽음)."""
+def _member_by_tag() -> dict[str, dict]:
+    """글에 남은 이름 끝 '#m네 글자' → 그 회원의 지금 기록 (한 번 실행에 한 번 읽음).
+    리뷰·수정 이력에 쓸 때의 닉네임이 아니라 회원이 지금 정해 둔 닉네임·사진을 보여 주려고 쓴다."""
     run = st.session_state.get("_run", 0)
     cached = st.session_state.get("_avatar_cache")
     if cached and cached[0] == run:
         return cached[1]
-    out = {f'm{str(r["entry_id"])[:4]}': str(r.get("avatar") or "") for r in members.current_rows()}
+    out = {f'm{str(r["entry_id"])[:4]}': r for r in members.current_rows()}
     st.session_state["_avatar_cache"] = (run, out)
     return out
 
 
+def _author(name) -> tuple[str, str]:
+    """저장된 이름('닉네임#m1a2b') → (화면에 보일 닉네임, 프로필 사진 값).
+    회원이면 지금 닉네임(바꿨으면 바뀐 이름), 탈퇴했거나 예전 손님 글이면 저장된 이름에서 꼬리표만 뺀 것."""
+    text = str(name or "")
+    tag = text.rsplit("#", 1)[-1] if "#" in text else ""
+    row = _member_by_tag().get(tag) if tag.startswith("m") else None
+    if row and str(row.get("nickname") or "").strip():
+        return str(row["nickname"]).strip(), str(row.get("avatar") or "")
+    return (text.rsplit("#", 1)[0].strip() or "익명"), ""
+
+
 def _nick_only(name) -> str:
-    """'닉네임#m1a2b' → '닉네임'. 끝의 꼬리표는 저장(내 글 확인)에만 쓰고 화면에는 안 보인다 (11/18 요청)."""
-    return str(name or "").rsplit("#", 1)[0].strip() or "익명"
+    """'닉네임#m1a2b' → 화면에 보일 닉네임 (꼬리표는 저장·내 글 확인에만 쓴다, 11/18 요청)."""
+    return _author(name)[0]
+
+
+def _auto_nick(seed: str) -> str:
+    """닉네임을 비워 두면 '꾸밈말 + 캐릭터' 로 짓되, 이미 있는 닉네임·쓸 수 없는 말이면 다른 조합으로."""
+    for i in range(30):
+        cand = review.auto_nickname(f"{seed}{i or ''}")
+        if not auth.validate_nick(cand) and not auth.nick_taken(members, cand):
+            return cand
+    return review.auto_nickname(f"{seed}{time.time()}")
 
 
 def _me() -> str:
@@ -921,8 +942,8 @@ def confirm_review_delete(entry_id: str, replies: int) -> None:
 
 
 def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
-    tag = str(r.get("nickname") or "").rsplit("#", 1)[-1] if "#" in str(r.get("nickname") or "") else ""
-    head = _avatar_img(_avatar_by_tag().get(tag, ""), 26, "rv-av") + f" **{_plain(_nick_only(r.get('nickname')))}**"
+    who, pic = _author(r.get("nickname"))
+    head = _avatar_img(pic, 26, "rv-av") + f" **{_plain(who)}**"
     if r.get("kind"):
         head = f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] " + head
     if reply:
@@ -4645,6 +4666,7 @@ def _password_signup_form() -> None:
         pw2 = st.text_input("비밀번호 확인 (필수)", type="password", max_chars=auth.PW_MAX, autocomplete="new-password")
         nick = st.text_input("닉네임 (필수)", max_chars=auth.MAX_NICK,
                              placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
+        st.caption("다른 회원과 같은 닉네임, 욕설·음란한 말, 관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
         agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 아이디 · 닉네임 · 암호화한 비밀번호")
         st.caption("이메일·전화번호를 받지 않아서 비밀번호를 잊으면 찾을 수 없어요. 꼭 기억해 두세요.")
         done = st.form_submit_button("가입하기", type="primary", icon=":material/person_add:", width="stretch")
@@ -4655,7 +4677,7 @@ def _password_signup_form() -> None:
         return
     try:
         if not " ".join(str(nick or "").split()):      # 닉네임을 비워 두면 '꾸밈말 + 캐릭터' 로 자동 (11/18)
-            nick = review.auto_nickname(str(lid).strip().lower())
+            nick = _auto_nick(str(lid).strip().lower())
         row = auth.register_password(members, lid, pw, pw2, nick)
     except auth.AuthError as e:
         st.warning(str(e), icon=":material/error:")
@@ -4814,6 +4836,7 @@ def _auth_body() -> None:
     with st.form("signup", border=False):
         nick = st.text_input("닉네임", value=ident.nickname, max_chars=auth.MAX_NICK,
                              placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
+        st.caption("다른 회원과 같은 닉네임, 욕설·음란한 말, 관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
         agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 닉네임 · 로그인 수단 · 해시한 계정 번호 · "
                             "프로필 사진 주소(선택)")
         done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")
@@ -4823,7 +4846,7 @@ def _auth_body() -> None:
             return
         try:
             if not " ".join(str(nick or "").split()):
-                nick = review.auto_nickname(ident.member_key)
+                nick = _auto_nick(ident.member_key)
             row = auth.signup(members, ident, nick)
         except auth.AuthError as e:
             st.warning(str(e), icon=":material/error:")

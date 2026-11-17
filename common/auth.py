@@ -17,6 +17,8 @@
 """
 from __future__ import annotations
 
+from . import nickrule
+
 import re
 
 import base64
@@ -240,7 +242,23 @@ def validate_nick(nick: str) -> list[str]:
         errors.append("닉네임에 # 은 쓸 수 없어요 (뒤에 자동으로 붙어요).")
     if scan(n):
         errors.append("닉네임에 전화번호·이메일 같은 개인정보는 넣을 수 없어요.")
+    bad = nickrule.problem(n)
+    if bad == "사칭":
+        errors.append("관리자·운영자로 오해할 수 있는 닉네임은 쓸 수 없어요.")
+    elif bad:
+        errors.append("욕설이나 음란한 말이 든 닉네임은 쓸 수 없어요. 다른 닉네임을 골라 주세요.")
     return errors
+
+
+def nick_taken(store, nickname: str, except_key: str | None = None) -> bool:
+    """다른 회원이 이미 쓰는 닉네임인가 (띄어쓰기·대소문자 차이는 같은 것으로 본다). 탈퇴한 회원은 빼고."""
+    return any(nickrule.same(r.get("nickname"), nickname) and str(r.get("entry_id")) != str(except_key or "")
+               for r in store.current_rows())
+
+
+def _check_unique(store, nickname: str, except_key: str | None = None) -> None:
+    if nick_taken(store, nickname, except_key):
+        raise AuthError("이미 다른 회원이 쓰고 있는 닉네임이에요. 다른 닉네임을 골라 주세요.")
 
 
 def find(store, key: str) -> dict | None:
@@ -253,6 +271,7 @@ def signup(store, ident: Identity, nickname: str) -> dict:
     errors = validate_nick(nickname)
     if errors:
         raise AuthError(errors[0])
+    _check_unique(store, nickname, ident.member_key)
     return store.append({"provider": ident.provider, "nickname": " ".join(nickname.split()),
                          "agreed_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "avatar": clean_avatar(ident.avatar)},
                         entry_id=ident.member_key)
@@ -262,6 +281,7 @@ def rename(store, row: dict, nickname: str) -> dict:
     errors = validate_nick(nickname)
     if errors:
         raise AuthError(errors[0])
+    _check_unique(store, nickname, str(row["entry_id"]))
     return store.append({"provider": row.get("provider", ""), "nickname": " ".join(nickname.split()),
                          "agreed_at": row.get("agreed_at", ""), "avatar": clean_avatar(row.get("avatar"))},
                         entry_id=str(row["entry_id"]))
@@ -371,6 +391,7 @@ def register_password(store, login_id: str, pw: str, pw2: str, nickname: str) ->
         raise AuthError(errors[0])
     lid = login_id.strip().lower()
     key = member_key("local", lid)
+    _check_unique(store, nickname, key)          # 비밀번호를 만들기 전에 막는다 (닉네임 때문에 반쯤 가입되는 일 없게)
     if _supabase():
         if not _rpc("register_login", p_login_id=lid, p_password=pw, p_member_key=key):
             raise AuthError("이미 있는 아이디예요. 다른 아이디를 골라 주세요.")
