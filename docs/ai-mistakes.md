@@ -43,3 +43,4 @@ AI 추출 결과가 아니라, 화면을 고치던 코딩 도우미가 잘못 �
 | 11/17 | 프롬프트 기록 문서 초안 (Claude Code 작성) | prompts/README.md 에 'v1 이 작품명에 꾸밈말을 붙였다' 등 실제로 확인하지 않은 실패 사례를 적음 | diff 만 보고 이유를 사실처럼 지어냄 | 확인된 사실만 남기고 실제 사례는 TODO 로 표시. 문서도 AI 산출물이라 사람이 근거를 확인해야 함 |
 | 11/17 | 커밋 전 검사 (Claude Code 작성 훅 + 1차 guard 규칙) | data/cafes.json 커밋이 "주민등록번호" 로 막힘 | 트윗·기사 주소 속 긴 번호(2115404786770334141)가 주민번호 정규식에 걸림 — 앞뒤 숫자 경계가 없었음 | 정규식에 (?<!d)…(?!d) 경계 추가, 훅은 URL 을 빼고 검사. 앱 리뷰 검사도 같이 나아짐 |
 | 11/18 | 카카오·네이버 로그인 버튼 (Claude Code 작성) | 배포 사이트에서 "kauth.kakao.com에서 연결을 거부했습니다" | Streamlit Cloud 는 앱을 iframe 안에 띄우는데 링크가 target="_self" 라 로그인 화면을 iframe 안에서 열려 함 (카카오·네이버는 iframe 금지). 로컬엔 iframe 이 없어 시험에서 못 잡음 | target="_top" 으로 창 전체 이동. 배포 주소에서도 한 번 눌러 보는 확인을 추가 |
+| 11/18 | 위 수정(target="_top") | 배포 사이트에서 버튼을 눌러도 아무 일도 안 일어남 | Streamlit Cloud iframe 의 sandbox 에 allow-top-navigation 이 없어 바깥 창 이동이 막힘 (allow-popups 는 있음). 고치기 전 sandbox 속성을 확인하지 않고 추측으로 고침 | target="_blank" 로 새 탭에서 로그인. 배포 주소의 iframe sandbox 를 먼저 확인 |
