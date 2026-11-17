@@ -153,4 +153,4 @@ Supabase popups_current ──▶ Next.js 공개 웹 (ISR 10분) · MCP 서버 �
 | Automatically expose new tables | **끔** (Supabase 권장) | 권한을 `004_grants.sql` 로 필요한 만큼만 직접 준다 |
 | Enable automatic RLS | **켬** | 마이그레이션에서도 켜지만, 새 표를 만들 때 잊어도 RLS 가 걸리게 한 겹 더 |
 
-SQL Editor 에서 `001 → 002 → 003 → 004` 순서로 돌린다.
+SQL Editor 에서 `001 → 002 → 003 → 004 → 005` 순서로 돌린다. (005 = 아이디·비밀번호 가입, `docs/login.md`)

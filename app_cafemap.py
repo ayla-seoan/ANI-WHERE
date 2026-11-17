@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from urllib.parse import quote
 from datetime import date, datetime, timedelta
 from html import escape
@@ -3686,6 +3687,9 @@ AUTH_CSS = """
 .auth-btn.naver { background: #03C75A; color: #fff !important; }
 .auth-btn.off { background: #EEF1F0; color: #9AA5A1 !important; pointer-events: none; }
 .auth-note { color: #6B7672; font-size: .8rem; line-height: 1.6; max-width: 420px; }
+.auth-or { display: flex; align-items: center; gap: .6rem; max-width: 380px; color: #9AA5A1; font-size: .8rem;
+  margin: 1rem 0 .3rem; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; border-top: 1px solid #E3E8E6; }
 .auth-card { border: 1.5px solid #9EDDCC; border-radius: 14px; padding: 1rem 1.1rem; max-width: 460px; background: #fff; }
 </style>
 """
@@ -3727,15 +3731,19 @@ def page_login() -> None:
                                 label_visibility="collapsed", key="auth_mode") or "로그인"
     if mode == "로그인":
         st.markdown('<div class="auth-title">다시 오셨네요</div>'
-                    '<div class="auth-sub">가입할 때 쓴 계정으로 로그인해요. 처음이면 같은 버튼으로 바로 가입돼요.</div>',
+                    '<div class="auth-sub">아이디로 가입했다면 아래에, 카카오·네이버로 가입했다면 그 버튼으로 로그인해요.</div>',
                     unsafe_allow_html=True)
+        _password_login_form()
+        st.markdown('<div class="auth-or">또는 간편 로그인</div>', unsafe_allow_html=True)
         verb = "로그인"
     else:
         st.markdown('<div class="auth-title">3초 만에 회원가입</div>'
-                    '<div class="auth-sub">비밀번호를 만들 필요 없이 카카오·네이버 계정으로 가입해요.<br>'
-                    '① 계정 고르기 → ② 카카오·네이버에서 <b>닉네임 제공</b>에 동의 → ③ 앱에서 쓸 닉네임 정하기<br>'
+                    '<div class="auth-sub"><b>아이디·비밀번호·닉네임</b>만 있으면 가입돼요. 이메일·전화번호는 받지 않아요.<br>'
+                    '카카오·네이버 계정이 있으면 아래 간편 가입으로 비밀번호 없이도 가입할 수 있어요.<br>'
                     '가입하면 북마크·리뷰가 <b>어느 기기에서나</b> 내 것으로 남고, 손님일 때 해 둔 북마크도 옮겨 와요.</div>',
                     unsafe_allow_html=True)
+        _password_signup_form()
+        st.markdown('<div class="auth-or">또는 간편 가입</div>', unsafe_allow_html=True)
         verb = "가입하기"
     for prov in ("kakao", "naver"):
         label = auth.PROVIDERS[prov]["label"]
@@ -3753,6 +3761,73 @@ def page_login() -> None:
                    "버튼이 켜져요 (docs/login.md).")
 
 
+def _password_login_form() -> None:
+    """아이디·비밀번호 로그인. 5번 틀리면 5분 동안 잠근다 (무작위 대입 늦추기)."""
+    ss = st.session_state
+    locked = ss.get("_pw_lock_until", 0) - time.time()
+    with st.form("pw_login", border=False, width=380):
+        lid = st.text_input("아이디", max_chars=20, autocomplete="username")
+        pw = st.text_input("비밀번호", type="password", max_chars=auth.PW_MAX, autocomplete="current-password")
+        go_in = st.form_submit_button("로그인", type="primary", icon=":material/login:", width="stretch")
+    if not go_in:
+        return
+    if locked > 0:
+        st.warning(f"비밀번호를 여러 번 틀려서 잠시 막았어요. {int(locked // 60) + 1}분 뒤 다시 시도해 주세요.",
+                   icon=":material/lock_clock:")
+        return
+    try:
+        key = auth.check_password(lid, pw)
+    except auth.AuthError as e:
+        st.warning(str(e), icon=":material/error:")
+        return
+    row = auth.find(members, key) if key else None
+    if not row:
+        ss["_pw_fails"] = ss.get("_pw_fails", 0) + 1
+        if ss["_pw_fails"] >= auth.MAX_FAILS:
+            ss["_pw_lock_until"], ss["_pw_fails"] = time.time() + auth.LOCK_SECONDS, 0
+        st.warning("아이디나 비밀번호가 맞지 않아요.", icon=":material/error:")   # 어느 쪽이 틀렸는지는 알려 주지 않는다
+        return
+    ss.pop("_pw_fails", None)
+    _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
+    st.rerun()
+
+
+def _password_signup_form() -> None:
+    """일반 회원가입: 필수 정보(아이디·비밀번호·닉네임·동의)만 받는다."""
+    with st.form("pw_signup", border=False, width=380):
+        lid = st.text_input("아이디 (필수)", max_chars=20, placeholder="영어 소문자·숫자·_ 4~20자",
+                            autocomplete="username")
+        pw = st.text_input("비밀번호 (필수)", type="password", max_chars=auth.PW_MAX,
+                           placeholder="영문+숫자 8자 이상", autocomplete="new-password")
+        pw2 = st.text_input("비밀번호 확인 (필수)", type="password", max_chars=auth.PW_MAX, autocomplete="new-password")
+        nick = st.text_input("닉네임 (필수)", max_chars=auth.MAX_NICK, placeholder="리뷰에 보일 이름 2~16자")
+        agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 아이디 · 닉네임 · 암호화한 비밀번호")
+        st.caption("이메일·전화번호를 받지 않아서 비밀번호를 잊으면 찾을 수 없어요. 꼭 기억해 두세요.")
+        done = st.form_submit_button("가입하기", type="primary", icon=":material/person_add:", width="stretch")
+    if not done:
+        return
+    if not agree:
+        st.warning("동의해야 가입할 수 있어요.", icon=":material/error:")
+        return
+    try:
+        row = auth.register_password(members, lid, pw, pw2, nick)
+    except auth.AuthError as e:
+        st.warning(str(e), icon=":material/error:")
+        return
+    moved = _move_guest_favs(row)
+    _login_done(row, "가입했어요!" + (f" 북마크 {moved}개도 옮겼어요." if moved else ""))
+    st.rerun()
+
+
+def _move_guest_favs(row: dict) -> int:
+    """손님일 때 해 둔 북마크를 회원 계정으로 옮긴다 (지우지 않고 회원 쪽에 새로 쌓음)."""
+    guest = favorite.user_key(st.context.ip_address)
+    moved = sorted(favorite.mine(favs.current_rows(), guest))
+    for cid in moved:
+        favorite.toggle(favs, cid, f"m:{row['entry_id']}", True)
+    return len(moved)
+
+
 def _logout() -> None:
     _set_cookie("", 0)
     st.session_state.update({"member_key": "", "_logged_out": True})
@@ -3761,7 +3836,7 @@ def _logout() -> None:
 
 
 def _my_account(row: dict) -> None:
-    prov = auth.PROVIDERS.get(str(row.get("provider")), {}).get("label", "")
+    prov = auth.PROVIDER_LABEL.get(str(row.get("provider")), "")
     st.markdown(f'<div class="auth-title">내 계정</div><div class="auth-card">'
                 f'<b>{escape(auth.display_name(row))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
                 f'가입 {escape(str(row.get("agreed_at", ""))[:10])}<br>회원 번호 <code>{escape(str(row["entry_id"]))}</code>'
@@ -3776,6 +3851,21 @@ def _my_account(row: dict) -> None:
                 st.rerun()
             except auth.AuthError as e:
                 st.warning(str(e), icon=":material/error:")
+    local = row.get("provider") == "local"
+    if local:
+        with st.expander("비밀번호 바꾸기", icon=":material/key:"):
+            with st.form("pw_change", border=False):
+                lid = st.text_input("아이디", max_chars=20)
+                old = st.text_input("지금 비밀번호", type="password")
+                new = st.text_input("새 비밀번호", type="password", placeholder="영문+숫자 8자 이상")
+                new2 = st.text_input("새 비밀번호 확인", type="password")
+                if st.form_submit_button("바꾸기", icon=":material/check:"):
+                    try:
+                        auth.change_password(lid, old, new, new2)
+                        st.session_state["flash"] = ("비밀번호를 바꿨어요.", ":material/check_circle:")
+                        st.rerun()
+                    except auth.AuthError as e:
+                        st.warning(str(e), icon=":material/error:")
     c1, c2 = st.columns(2)
     if c1.button("로그아웃", icon=":material/logout:", width="stretch"):
         _logout()
@@ -3783,7 +3873,17 @@ def _my_account(row: dict) -> None:
         st.rerun()
     with c2.popover("탈퇴하기", icon=":material/person_remove:", width="stretch"):
         st.write("닉네임을 지우고 로그인 연결을 끊어요. 이미 쓴 리뷰는 남지만 더 이상 고칠 수 없어요.")
+        if local:
+            st.caption("아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.")
+            w_id = st.text_input("아이디", key="w_id")
+            w_pw = st.text_input("비밀번호", type="password", key="w_pw")
         if st.button("탈퇴할게요", type="primary"):
+            if local:
+                try:
+                    auth.drop_password(w_id, w_pw)
+                except auth.AuthError as e:
+                    st.warning(str(e), icon=":material/error:")
+                    st.stop()
             auth.withdraw(members, row)
             _logout()
             st.session_state["flash"] = ("탈퇴했어요. 그동안 고마웠어요.", ":material/check_circle:")
