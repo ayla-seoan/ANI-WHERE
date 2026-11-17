@@ -5067,6 +5067,17 @@ def _admin_rule_save(key: str, enabled: bool) -> None:
 def _admin_rule_editor(rules: dict[str, dict]) -> None:
     """규칙 하나를 골라 며칠 전부터 · 최대 몇 개 · 켜기/끄기(삭제). 기록은 지우지 않고 쌓인다."""
     keys = list(admin.RULES)
+    opened = bool(st.session_state.get("adm_rule_open"))
+    # 빨간 '수정하기' 버튼을 누르면 고칠 규칙 칸이 펼쳐지고, 한 번 더 누르면 접힌다 (11/18 요청)
+    st.markdown('<style>.st-key-adm_rule_toggle button { background: #E05555 !important; border-color: #E05555 !important; }'
+                '.st-key-adm_rule_toggle button:hover { background: #C8352A !important; border-color: #C8352A !important; }'
+                '.st-key-adm_rule_toggle button p, .st-key-adm_rule_toggle button span { color: #fff !important; }</style>',
+                unsafe_allow_html=True)
+    st.button("수정 닫기" if opened else "수정하기", icon=":material/expand_less:" if opened else ":material/edit:",
+              type="primary", key="adm_rule_toggle",
+              on_click=lambda: st.session_state.update(adm_rule_open=not st.session_state.get("adm_rule_open")))
+    if not opened:
+        return
     with st.container(border=True):
         k = st.selectbox("고칠 규칙", keys, format_func=lambda x: f'{admin.RULES[x]["name"]} '
                          f'({"켜짐" if rules[x]["enabled"] else "꺼짐"})', key="adm_rule_pick")
