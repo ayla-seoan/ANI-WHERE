@@ -181,3 +181,40 @@ export function hostOf(url: string): string {
     return url;
   }
 }
+
+// ---- 앱(Streamlit)과 같은 카드 표기 ----
+
+/** 카드용 짧은 기간 '11/21-12/20' (앱 카드와 같은 모양). 연도가 다르면 '26/12/20' 처럼 앞에 붙인다 */
+export function cardPeriod(p: Pick<Popup, "start" | "end">, today: string): string {
+  const f = (ymd: string) => {
+    if (!ymd) return "";
+    const [y, m, d] = ymd.split("-").map(Number);
+    return String(y) === today.slice(0, 4) ? `${m}/${d}` : `${String(y).slice(2)}/${m}/${d}`;
+  };
+  if (!p.start && !p.end) return "기간 미정";
+  return `${f(p.start)}-${f(p.end)}`;
+}
+
+/** 지역 배지 색 — 앱(app_cafemap.py CITY_COLORS)과 같은 색 */
+const CITY_COLORS: Record<string, string> = {
+  서울: "#56C2A7", 부산: "#3B82C4", 인천: "#8B6CD1", 대구: "#E0884A", 대전: "#D9A400", 광주: "#4CA36A",
+  울산: "#2BA3B5", 제주: "#F2789B", 세종: "#7F8C3A", 수원: "#E06C6C", 고양: "#5A7BD8", 성남: "#B0639E",
+};
+const MORE_COLORS = ["#6C9A8B", "#C77D4E", "#7A6FB3", "#4F95A8", "#B5654A", "#5E8F4A", "#A0628B", "#8A7D3E"];
+
+export function regionColor(region: string): string {
+  if (!region || region === "기타") return "#9AA5A1";
+  if (CITY_COLORS[region]) return CITY_COLORS[region];
+  let sum = 0;
+  for (const ch of region) sum += ch.codePointAt(0) ?? 0;
+  return MORE_COLORS[sum % MORE_COLORS.length];
+}
+
+/** 카드 오른쪽 위 배지 글자 — 앱처럼 'D-3' / '진행 중' / '오늘 종료' */
+export function cardBadge(p: Pick<Popup, "start" | "end">, today: string): string {
+  const s = statusOf(p, today);
+  if (s === "undated") return "기간 미정";
+  if (s === "ended") return "종료";
+  if (s === "upcoming") return `D-${daysBetween(today, p.start)}`;
+  return daysBetween(today, p.end) === 0 ? "오늘 종료" : "진행 중";
+}

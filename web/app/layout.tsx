@@ -32,13 +32,23 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const data = await getPopupData();
   return (
     <html lang="ko">
+      <head>
+        {/* 앱과 같은 제목 글꼴 (Jua) */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet" />
+      </head>
       <body>
         <header className="header">
-          <div className="container header-inner">
+          <div className="container">
             <Link href="/" className="brand" aria-label="ANI:WHERE 처음으로">
-              <img src="/logo.png" alt="ANI:WHERE" width={120} height={34} />
+              <img src="/logo_mint.png" alt="ANI:WHERE — ANIME POP-UP · CAFE · GOODS" width={330} height={100} />
             </Link>
-            <Nav />
+            <div className="header-row">
+              <p className="tagline">함께 만드는 애니 팝업 지도!! 찾고, 공유하고, 함께 기록해요!</p>
+              <Nav />
+            </div>
           </div>
         </header>
         <main className="container">{children}</main>
@@ -57,6 +67,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             </p>
           </div>
         </footer>
+        {/* 앱처럼 오른쪽 아래 코랄색 + : 새 팝업 등록은 편집용 앱에서 */}
+        <a className="fab" href={`${APP_URL}/add`} target="_blank" rel="noopener noreferrer" aria-label="새 팝업 등록 (앱에서 열기)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        </a>
         <InstallHint />
         <SWRegister />
       </body>

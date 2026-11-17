@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { statusOf } from "@/lib/popup";
+import { APP_URL, statusOf } from "@/lib/popup";
 import PopupCard, { type CardData } from "./PopupCard";
 import EmptyState from "./EmptyState";
-import { SearchIcon } from "./Icons";
+import { MapOutlineIcon, SearchIcon } from "./Icons";
 
 export type BrowserItem = CardData & { text: string };
 
@@ -143,9 +143,20 @@ export default function PopupBrowser({ items, today }: { items: BrowserItem[]; t
 
       {shown.length > 0 ? (
         <>
-          <p className="result-line" aria-live="polite">
-            {tabLabel} {shown.length}곳{filtered ? " 찾음" : ""}
-          </p>
+          {/* 앱 리스트 위 줄처럼: '팝업 카페 N곳' + 오른쪽 '지도로 보기' (지도는 앱에서) */}
+          <div className="listbar">
+            <p className="result-line" aria-live="polite">
+              팝업 카페 <b>{shown.length}</b>곳
+              <small>
+                {tabLabel}
+                {filtered ? " · 찾음" : ""}
+              </small>
+            </p>
+            <a className="mapbtn" href={APP_URL} target="_blank" rel="noopener noreferrer">
+              <MapOutlineIcon />
+              지도로 보기
+            </a>
+          </div>
           <div className="grid">
             {shown.map((p, i) => (
               <PopupCard key={p.id} p={p} today={today} eager={i < 4} />
