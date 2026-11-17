@@ -2455,7 +2455,9 @@ GNB_CSS = """
 .st-key-gnb .st-key-home_brand button { width: 190px !important; height: 58px !important; }
 /* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
 .st-key-gnb { position: relative; background: #E9F7F2; border-radius: 0 0 28px 28px;
-  padding: 48px 28px 8px !important; margin: -40px -28px 0; box-sizing: content-box; }  /* 위 여백까지 덮어 화면 맨 위에 붙인다 */
+  padding: 10px 28px !important; margin: 0 -28px; box-sizing: content-box; }
+/* 메뉴바가 있는 화면은 페이지 위 여백을 없애 메뉴바를 화면 맨 위에 붙인다 */
+.stMainBlockContainer { padding-top: 0 !important; }
 /* 오른쪽 아이콘: 둥근 굵은 선 그림(검색·종) + 둥근 글꼴 '로그인' (11/18 사용자 요청) */
 .st-key-gnb_right [class*="st-key-gnb_search_"] button span[data-testid="stIconMaterial"],
 .st-key-gnb_right [data-testid="stPopover"] button span[data-testid="stIconMaterial"] { display: none !important; }
@@ -2480,7 +2482,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .st-key-gnb_loc_box { display: none !important; }
 /* 탭은 메뉴바 정가운데 (로고·오른쪽 아이콘 폭과 상관없이) */
 .st-key-gnb_tabs { gap: 0 !important; width: auto !important; flex: 0 0 auto; position: absolute !important;
-  left: 50%; top: calc(50% + 20px); transform: translate(-50%, -50%); z-index: 2; }  /* 위 덮개 여백(48-8)/2 만큼 내려 줄 맞춤 */
+  left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
 .st-key-gnb_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important;
   box-shadow: none !important; padding: 10px 16px 9px !important; border-bottom: 3px solid transparent !important; }
 .st-key-gnb_tabs button p { font-size: 1.05rem !important; font-weight: 600 !important; color: #8A9592 !important; }
@@ -2506,7 +2508,17 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .ntf-empty { color: #8A9592; font-size: .88rem; padding: 6px 2px; }
 .st-key-gnb_loc_box { height: 0 !important; overflow: hidden !important; margin: 0 !important; }
 @media (max-width: 640px) {
-  /* 모바일: 첫 줄 = 로고 + (검색·알림·로그인), 둘째 줄 = 가운데 탭 */
+  /* 모바일: 메뉴바의 글자 탭은 숨기고, 필터 아이콘 옆 '보기 전환 아이콘'(지도 ↔ 리스트)으로 — 위에 늘 붙어 있다 (11/18 요청) */
+  .st-key-gnb > *:has(.st-key-gnb_tabs), html body .st-key-gnb .st-key-gnb_tabs { display: none !important; }
+  html body .st-key-view_tools .st-key-map_icon { display: block !important; width: auto !important; min-height: 0 !important; }
+  html body .st-key-view_tools .st-key-map_icon .stButton { width: auto !important; }
+  html body .st-key-view_tools .st-key-map_icon button { height: 32px !important; min-width: 32px; width: auto !important;
+    padding: 0 9px !important; border: 1.5px solid var(--accent) !important; border-radius: 10px !important;
+    background: #fff !important; box-shadow: none; }
+  html body .st-key-view_tools .st-key-map_icon button p { display: none !important; }
+  html body .st-key-view_tools .st-key-map_icon button span { color: var(--accent-deep) !important; font-size: 1.2rem !important;
+    margin: 0 !important; }
+  /* 모바일: 첫 줄 = 로고 + (검색·알림·로그인) */
   .st-key-gnb { flex-wrap: wrap !important; flex-direction: row !important; row-gap: 2px !important; }
   .st-key-gnb .st-key-home_brand { flex: 0 0 auto !important; width: auto !important; }
   .st-key-gnb .st-key-home_brand button { width: 140px !important; height: 44px !important; }
@@ -2783,7 +2795,7 @@ def page_map() -> None:
     # PC: 검색 필터 줄은 메뉴바의 검색 아이콘을 눌렀을 때만 보인다 (접어도 걸어 둔 조건은 그대로 걸린다)
     if not ss.get("pc_filters"):
         st.markdown("<style>@media (min-width: 641px) { .st-key-filters { display: none !important; } }"
-                    " :root { --apn-top: 120px; }</style>", unsafe_allow_html=True)
+                    " :root { --apn-top: 96px; }</style>", unsafe_allow_html=True)
     with top:
         fbox = st.container(key="filters")      # 모바일 전용 칸(찜·지역)도 아래에서 이 묶음에 넣는다
     if ss.pop("_focus_search", False):
@@ -4270,11 +4282,11 @@ def page_data() -> None:
 ASK_PANEL_CSS = """
 <style>
 [data-testid="stColumn"]:has(> div > .st-key-ask_panel), [data-testid="stColumn"]:has(.st-key-ask_panel) {
-  position: sticky !important; top: var(--apn-top, 214px); align-self: flex-start !important; z-index: 5; }
+  position: sticky !important; top: var(--apn-top, 172px); align-self: flex-start !important; z-index: 5; }
 /* 위 고정줄(메뉴·검색 필터) 아래에 붙고, 대화창 전체가 화면 안에 들어오게:
    대화창 = 세로 flex, 높이는 (화면 - 위 고정줄 - 여백)까지. 대화 기록만 남는 공간을 쓰고 넘치면 그 안에서 스크롤 */
 .st-key-ask_panel { display: flex !important; flex-direction: column !important;
-  max-height: calc(100vh - var(--apn-top, 214px) - 16px); }
+  max-height: calc(100vh - var(--apn-top, 172px) - 16px); }
 .st-key-ask_panel > * { flex: 0 0 auto; }
 .st-key-ask_panel > *:has(.st-key-apn_log), .st-key-ask_panel > .st-key-apn_log {
   flex: 1 1 auto !important; min-height: 0 !important; display: flex; flex-direction: column; }
