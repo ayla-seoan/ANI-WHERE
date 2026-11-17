@@ -1933,9 +1933,12 @@ LIST_CSS = f"""
 [class*="st-key-card_w_"]:hover .pcard .chip.tag {{ background:{MINT}; border-color:{MINT}; color:#fff; }}
 [class*="st-key-card_w_"]:hover .pcard .chips.short {{ display:none; }}
 [class*="st-key-card_w_"]:hover .pcard .more {{ display:block; margin-top:8px; }}
-[class*="st-key-card_w_"]:hover .pcard .t {{ white-space:normal; }}
-.pcard .more .m {{ font-size:13.5px; line-height:1.5; margin:0 0 8px; }}
-.pcard .more .m b {{ display:block; color:#9fe3d1; font-size:12.5px; margin-bottom:2px; }}
+[class*="st-key-card_w_"]:hover .pcard .t {{ white-space:normal; font-size:15px; }}
+[class*="st-key-card_w_"]:hover .pcard .s {{ font-size:12px; }}
+[class*="st-key-card_w_"]:hover .pcard .d {{ font-size:12px; }}
+.pcard .more .m {{ font-size:11.5px; line-height:1.45; margin:0 0 6px; }}   /* 커서를 올리면 나오는 정보: 작게 (11/18) */
+.pcard .more .m b {{ display:block; color:#9fe3d1; font-size:10.5px; margin-bottom:1px; }}
+.pcard .more .chip {{ font-size:10.5px; padding:2px 8px; }}
 .pcard .more ul {{ margin:0; padding-left:1.1em; }}
 .pcard .more .chips {{ height:auto; flex-wrap:wrap; overflow:visible; }}
 /* 상단 묶음(제목·등록하기·검색 필터): 스크롤해도 늘 위에 붙어 있다 */
@@ -3396,7 +3399,11 @@ def _render_near_picks() -> None:
     """알림 받은 내역 아래 '내 주변 추천' 최대 3곳 (11/18 요청).
     대상: 지금 진행 중이거나 3일 안에 여는 팝업 중 내 위치에서 NEAR_KM 안 (북마크한 곳은 위 알림에 있으니 뺌).
     순서: 별점 높은 순 → 다녀온 후기 많은 순 → 가까운 순."""
-    st.markdown('<div class="nh-day">내 주변 추천</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nh-day">내 주변 추천 <span class="nh-help" tabindex="0">?<span class="nh-tip">'
+                f'내 위치에서 {NEAR_KM}km 안에 있는 팝업 중 <b>지금 진행 중</b>이거나 <b>3일 안에 여는</b> 곳을 골라요.<br>'
+                '순서: 별점 높은 순 → 다녀온 후기 많은 순 → 가까운 순, 최대 3곳.<br>'
+                '이미 북마크한 팝업은 위 알림에 있어서 빼요. 위치를 허용해야 보여요.</span></span></div>',
+                unsafe_allow_html=True)
     loc = _my_loc()
     if not loc:
         st.markdown('<div class="ntf-empty">위치를 허용하면 내 주변에서 별점 좋은 팝업을 추천해 드려요. '
@@ -3459,6 +3466,15 @@ BOX_CSS = """
 [class*="st-key-bx_"]:hover .bxc { background: #F1FAF7; border-color: var(--accent); box-shadow: 0 4px 14px rgba(20,184,166,.14); }
 /* 다녀온 후기 상자가 칸 아래 테두리에 겹치지 않게 아래 여백 (11/18) */
 .st-key-keep_box, .st-key-ntf_box { padding-bottom: 22px !important; }
+/* '내 주변 추천' 옆 회색 ? : 커서를 올리면 추천 기준 안내 */
+.nh-help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px;
+  border-radius: 50%; background: #E3E8E6; color: #6B7672; font-size: .66rem; font-weight: 900; cursor: help; margin-left: 4px;
+  vertical-align: 1px; }
+.nh-tip { display: none; position: absolute; top: calc(100% + 6px); right: -8px; z-index: 60; width: 230px; background: #26302D;
+  color: #fff; font-size: .74rem; font-weight: 500; line-height: 1.55; padding: 9px 11px; border-radius: 10px; text-align: left;
+  box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+.nh-tip b { color: #7BE3CF; }
+.nh-help:hover .nh-tip, .nh-help:focus .nh-tip { display: block; }
 .st-key-ntf_box [class*="ntfc_"], .st-key-ntf_box .ntf-item.plain { margin-bottom: 8px; }
 .st-key-keep_box [data-testid="stMarkdownContainer"]:has(.bxr) { margin-bottom: 4px !important; }
 .bxc { display: flex; gap: 12px; background: #fff; border: 1.5px solid #E3E8E6; border-radius: 16px; padding: 10px; }
@@ -3815,8 +3831,11 @@ def page_map() -> None:
             col_day, col_map, col_cal = st.columns([0.9, 3.4, 1.55], gap="medium")
         with col_day, st.container(key="map_daily"):
             render_daily(df)
-        with col_map:
+        with col_map, st.container(key="map_frame"):
             draw_map()
+        # PC 지도: 화면 높이에 맞춰 늘린다 (메뉴바·여백만 빼고, 페이지 스크롤이 생기지 않을 만큼, 11/18 요청)
+        st.markdown("<style>@media (min-width: 641px) { .st-key-map_frame iframe { height: calc(100vh - 140px) !important;"
+                    " min-height: 520px; } }</style>", unsafe_allow_html=True)
         with col_cal, st.container(key="ask_panel"):     # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
             render_ask_panel()
 
