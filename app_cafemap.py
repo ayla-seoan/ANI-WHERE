@@ -2666,7 +2666,12 @@ def page_map() -> None:
 
     # '리스트 전체보기' 를 누르면 지도 없이 리스트만 크게 본다. '지도보기' 를 누르면 다시 반반으로
     if wide:
-        render_list(view, wide=True)
+        # 리스트 전체보기: 왼쪽 목록 + 오른쪽 '팝업에게 물어보기' 대화창 (PC). 모바일은 대화창을 숨기고 위 '물어보기' 버튼으로
+        lst, chat = st.columns([3.3, 1.35], gap="medium")
+        with lst:
+            render_list(view, wide=True)
+        with chat, st.container(key="ask_panel"):
+            render_ask_panel()
         return
 
     def draw_map() -> None:
@@ -4028,6 +4033,101 @@ def page_data() -> None:
         df = df.sort_values("updated_at", ascending=False)
     st.caption(f"{len(df)}행 · 최근 쓴 순서")
     st.dataframe(df, hide_index=True, width="stretch", height=520)
+
+
+# ------------------------------------------------------------ 리스트 옆 '팝업에게 물어보기' 대화창
+ASK_PANEL_CSS = """
+<style>
+.st-key-ask_panel { position: sticky; top: 96px; border: 1.5px solid #E3E8E6; border-radius: 16px; background: #fff;
+  padding: 0 !important; gap: 0 !important; overflow: hidden; box-shadow: 0 4px 18px rgba(38,48,45,.06); }
+.st-key-ask_panel > div { padding-left: 14px; padding-right: 14px; }
+.apn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding: 14px 0 12px; border-bottom: 1px solid #EEF1F0; }
+.apn-title { font-family: "Jua", sans-serif; font-size: 1.25rem; color: #26302D; }
+.apn-sub { color: #9AA5A1; font-size: .78rem; white-space: nowrap; }
+.apn-who { color: #6B7672; font-size: .78rem; margin: 10px 0 4px; }
+.apn-bot { background: #F4F7F6; border: 1px solid #E6ECEA; border-radius: 12px; padding: 10px 12px;
+  color: #26302D; font-size: .9rem; line-height: 1.6; word-break: keep-all; }
+.apn-me { display: flex; justify-content: flex-end; margin: 10px 0 2px; }
+.apn-me span { background: var(--accent, #56C2A7); color: #fff; border-radius: 12px 12px 2px 12px; padding: 8px 12px;
+  font-size: .9rem; max-width: 85%; word-break: keep-all; }
+.apn-badge { display: inline-block; margin-top: 6px; padding: 1px 8px; border-radius: 999px; font-size: .7rem;
+  font-weight: 700; border: 1px solid #9EDDCC; color: #2E9C82; background: #fff; }
+.apn-badge.fb { border-color: #C9D1CE; color: #6B7672; }
+.st-key-ask_panel [class*="st-key-apn_hit_"] button { justify-content: flex-start; text-align: left; font-size: .8rem;
+  min-height: 0; padding: 4px 10px; border-radius: 10px; }
+.st-key-apn_chips { padding-top: 10px; border-top: 1px solid #EEF1F0; gap: 6px !important; flex-wrap: wrap; }
+.st-key-apn_chips button { border-radius: 999px !important; font-size: .78rem; min-height: 0; padding: 4px 12px; }
+.st-key-apn_form [data-testid="stForm"] { padding: 10px 0 14px; }
+.st-key-apn_form [data-testid="stFormSubmitButton"] button { background: #E0895A !important; border-color: #E0895A !important;
+  color: #fff !important; font-weight: 800; }
+@media (max-width: 640px) { .st-key-ask_panel { display: none !important; } }
+</style>
+"""
+ASK_PANEL_CHIPS = ["이번 주말 성수", "주술회전 어디서 해?", "부산 팝업", "오늘 열린 팝업", "12월 시작", "다음 주 서울 팝업"]
+
+
+def _ask_panel_send(question: str) -> None:
+    """질문을 대화 기록에 쌓고 답을 만든다 (버튼·입력 모두 여기로)."""
+    q = (question or "").strip()
+    if not q:
+        return
+    chat = st.session_state.setdefault("ask_chat", [])
+    chat.append({"role": "me", "text": q[:ask.MAX_QUESTION]})
+    errors = [e for e in ask.validate(q) if "개인정보" not in e]
+    if errors:
+        chat.append({"role": "bot", "text": errors[0], "ids": [], "badge": ""})
+    else:
+        res = ask.answer(q, stats.popups(store.all_rows()), TODAY)
+        if not res.hits:
+            text = ("조건에 맞는 팝업을 찾지 못했어요. 작품 이름을 줄이거나(예: 주술회전) 날짜·지역 조건을 하나 빼 보세요. "
+                    "없는 팝업이면 오른쪽 아래 + 로 직접 등록할 수 있어요.")
+            chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체"})
+        else:
+            used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:3]]
+            names = {str(h.row.get("entry_id")): f'{h.row.get("work")} · {h.row.get("cafe_name")}' for h in res.hits}
+            chat.append({"role": "bot", "text": res.text, "badge": res.badge,
+                         "ids": [(i, names.get(i, i)) for i in used[:3]]})
+    del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
+
+
+def _ask_panel_submit() -> None:
+    _ask_panel_send(st.session_state.get("apn_q", ""))
+    st.session_state["apn_q"] = ""
+
+
+def _ask_panel_open(cafe_id: str) -> None:
+    st.session_state["selected"] = str(cafe_id)
+    st.session_state["scroll_top"] = True
+
+
+def render_ask_panel() -> None:
+    st.markdown(ASK_PANEL_CSS, unsafe_allow_html=True)
+    st.markdown('<div class="apn-head"><span class="apn-title">팝업에게 물어보기</span>'
+                '<span class="apn-sub">질문 → 팝업 데이터 검색</span></div>', unsafe_allow_html=True)
+    with st.container(height=430, border=False, key="apn_log"):
+        st.markdown('<div class="apn-who">ANI:WHERE</div><div class="apn-bot">안녕하세요. 지금 등록된 팝업에서 찾아 드릴게요. '
+                    '<b>작품 · 지역 · 날짜</b>로 물어보면 더 정확해요.</div>', unsafe_allow_html=True)
+        for n, m in enumerate(st.session_state.get("ask_chat", [])):
+            if m["role"] == "me":
+                st.markdown(f'<div class="apn-me"><span>{escape(m["text"])}</span></div>', unsafe_allow_html=True)
+                continue
+            badge = (f'<br><span class="apn-badge{"" if m.get("badge") == "AI 산출" else " fb"}">{escape(m["badge"])}</span>'
+                     if m.get("badge") else "")
+            st.markdown(f'<div class="apn-who">ANI:WHERE</div><div class="apn-bot">{escape(m["text"])}{badge}</div>',
+                        unsafe_allow_html=True)
+            for cid, label in m.get("ids", []):
+                st.button(label, key=f"apn_hit_{n}_{cid}", icon=":material/location_on:", width="stretch",
+                          on_click=_ask_panel_open, args=(cid,))
+    with st.container(horizontal=True, key="apn_chips"):
+        for i, chip in enumerate(ASK_PANEL_CHIPS):
+            st.button(chip, key=f"apn_chip_{i}", on_click=_ask_panel_send, args=(chip,))
+    with st.container(key="apn_form"):
+        with st.form("apn", border=False, clear_on_submit=False):
+            c1, c2 = st.columns([4, 1.4], vertical_alignment="bottom")
+            c1.text_input("질문", key="apn_q", max_chars=ask.MAX_QUESTION, label_visibility="collapsed",
+                          placeholder="예: 이번 주말 홍대 근처 팝업 있어?")
+            c2.form_submit_button("보내기", on_click=_ask_panel_submit, width="stretch")
 
 
 # ------------------------------------------------------------ 2차: 팝업 Q&A (/ask)
