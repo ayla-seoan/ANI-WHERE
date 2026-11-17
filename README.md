@@ -12,8 +12,90 @@
 
 ---
 
+## 0. 2차 프로젝트 (PO) 요약
+
+> **문제:** 팬이 "이번 주말 어디 갈까"를 정하려면 X·인스타·모음 사이트를 오가야 하고, 1차 데이터의 30%는 기간·위치·공식 공지 중 하나가 빠져 있었다.
+> **핵심 흐름:** 찾기(목록·지도·물어보기) → 판단(방문 전 정보) → 저장(북마크·내 캘린더).
+> 자세한 내용: [`PRD.md`](PRD.md) · 설계 [`db.md`](db.md) · 규칙 [`CLAUDE.md`](CLAUDE.md)
+
+### 지표 (전 → 후)
+
+| 지표 | 전 | 후 | 근거 |
+| --- | --- | --- | --- |
+| 방문 전 정보 완결률 (북극성) | 70.0% (10/30 이전 60건) | 85.4% (11/17, 123건) | `/stats`, [`docs/metrics-log.md`](docs/metrics-log.md) |
+| 물어보기 검색 정확도 (24문항) | 92% (v1 규칙) | 100% (평가 세트 기준, 새 질문 재검증 예정) | [`docs/ask-eval.md`](docs/ask-eval.md) |
+| 핵심 흐름 자동 테스트 | 없음 | 6/6 통과 | [`docs/qa-results.md`](docs/qa-results.md) |
+| 행사 조회 MCP 서버 확인 | 없음 | 9/9 | `tests/mcp/check_server.py` |
+| 사용자 과업 성공률 (선택) | — | 개인 프로젝트라 생략. 하게 되면 [`docs/user-test/plan.md`](docs/user-test/plan.md) | — |
+
+### 고른 메뉴
+
+| 메뉴 | 어디에 썼나 | 맡은 사람 |
+| --- | --- | --- |
+| 데이터 분석·차트 | `/stats` 지표 페이지 — 완결률 전후, 지역·작품·월·기간·별점 분포 (`common/stats.py`) | (이름) |
+| RAG 챗봇 | `/ask` 팝업에게 물어보기 — 규칙 기반 검색 + 후보만 근거로 답 (`common/ask.py`, `common/prompts/ask.v1.txt`) | (이름) |
+| Supabase DB | 카페·리뷰·북마크 표, append-only 와 '내 리뷰만 수정'을 RLS 로 강제, Notion → Supabase 이관 (`supabase/`, `db.md`) | (이름) |
+| MCP | Notion MCP 로 매일 수집(CMS) + **행사 조회 MCP 서버 직접 제작** (`mcp_server/`, `docs/mcp.md`) | (이름) |
+| Next.js + Vercel | 읽기 전용 공개 웹 — 목록·상세·이번 주 (`web/`) | (이름) |
+| PWA | 공개 웹을 폰에 설치, 오프라인 페이지 — 현장에 가는 서비스라서 (`web/`) | (이름) |
+| 서브에이전트·훅·스킬 | 커밋 전 검사 훅, 프롬프트 덮어쓰기 차단 훅, `/metrics-snapshot`·`/user-test-report` 스킬, `po-reviewer` 서브에이전트 (`.claude/`) | (이름) |
+| Playwright QA | 핵심 흐름 6개 자동 테스트 (`tests/e2e/`) | (이름) |
+| Apps Script | 월요일 주간 팝업 브리핑 메일 (`automation/`) | (이름) |
+
+### AI 사용 지도
+
+| 부분 | 만든 도구 | 쓴 프롬프트 · 스킬 | 사람이 결정한 것 |
+| --- | --- | --- | --- |
+| 팝업 수집 | Claude 예약 작업 + Notion MCP | `docs/notion-import.md` 수집 규칙 | 포함·제외 기준, 링크 우선순위, 소개 원칙 |
+| 공지 → 칸 채우기 | OpenAI API | `common/prompts/cafe.v2.txt` | 작품명·캐릭터 규칙, 원문에 없는 값 금지 |
+| 물어보기 답 | OpenAI API (+ 규칙 기반 대체) | `common/prompts/ask.v1.txt` | 후보만 근거, 없으면 없다고, 검색 기준 |
+| 지표·대시보드 | Claude Code | `/metrics-snapshot` 스킬 | 북극성 지표 정의, 비교 기준 시점 |
+| DB·RLS | Claude Code 서브에이전트 | — | 로그인 없이 IP 해시로 '내 글' 구분 (한계 인정) |
+| 테스트 | Claude Code 서브에이전트 (Playwright) | — | 어떤 흐름을 '핵심'으로 볼지 |
+| 공개 웹·PWA | Claude Code 서브에이전트 | — | 편집은 Streamlit, 웹은 읽기 전용 |
+| 리뷰 | `po-reviewer` 서브에이전트 | `.claude/agents/po-reviewer.md` | 최종 머지 여부 |
+| AI 실수 기록 | — | [`docs/ai-mistakes.md`](docs/ai-mistakes.md) | 무엇을 실수로 볼지, 고칠 방법 |
+
+### 운영 구성 — 두 서비스를 함께 운영
+
+| | Streamlit 앱 (`app_cafemap.py`) | 공개 웹 (`web/`, Next.js + PWA) |
+| --- | --- | --- |
+| 역할 | **참여**: 등록·수정·리뷰·북마크·로그인·물어보기·지표·관리자 | **찾기·판단**: 빠른 목록·상세·이번 주, 폰에 설치 |
+| 쓰기 | O (append-only) | X (읽기 전용) |
+| 배포 | Streamlit Community Cloud — https://ani-where.streamlit.app | Vercel (Root Directory = `web`) |
+| 로컬 | `streamlit run app_cafemap.py` → http://localhost:8501 | `cd web && npm run dev` → http://localhost:3000 |
+| 데이터 | 같은 저장소 (`STORAGE_MODE`: local / supabase) | Supabase `popups_current` 뷰, 없으면 GitHub 의 `data/cafes.json` |
+
+두 서비스는 같은 데이터를 본다. 공개 웹 상세의 '리뷰·수정은 앱에서' 링크가 Streamlit 앱 상세(`?cafe=<id>`)로 이어진다.
+
+### 2차에서 새로 생긴 것 실행해 보기
+
+```bash
+# 앱의 새 화면: 첫 화면 오른쪽 위 '물어보기', 지표는 주소 뒤에 /stats
+streamlit run app_cafemap.py          # http://localhost:8501/ask , http://localhost:8501/stats
+
+# 개발 도구 (테스트·MCP)
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+python scripts/qa_report.py           # 핵심 흐름 자동 테스트 (실제 data/ 는 건드리지 않음)
+python -X utf8 scripts/eval_ask.py    # 물어보기 검색 정확도
+python -X utf8 scripts/metrics_snapshot.py   # 지표 한 장 요약
+python -X utf8 tests/mcp/check_server.py     # MCP 서버 확인
+
+# 사람이 직접 커밋할 때도 커밋 전 검사 켜기 (한 번만)
+git config core.hooksPath .githooks
+
+# 공개 웹 (Next.js · PWA)
+cd web && npm install && npm run dev  # 자세한 배포는 web/README.md
+```
+
+Supabase 연결은 [`db.md`](db.md) 6·8절, 주간 브리핑 메일은 [`automation/README.md`](automation/README.md).
+
+---
+
 ## 목차
 
+0. [2차 프로젝트 (PO) 요약](#0-2차-프로젝트-po-요약)
 1. [내 컴퓨터에서 실행하기 (처음부터 따라 하기)](#1-내-컴퓨터에서-실행하기-처음부터-따라-하기)
 2. [화면 사용법](#2-화면-사용법)
 3. [키 설정하기 (선택)](#3-키-설정하기-선택)
@@ -157,8 +239,8 @@ pip install -r requirements.txt   # 패키지가 바뀌었을 수 있어 한 번
 
 ### Notion 트래커에서 팝업 가져오기
 
-- Notion DB 는 예약 작업 **'애니 팝업·콜라보 주간 수집'** 이 매주 월요일 오전 8:43 에 RE:CAL 등에서 행사를 모아 채웁니다 (행사 × 지점 = 1행).
-- 그 뒤 **매주 월요일 오전 10:00** GitHub Actions('Notion 주간 가져오기')가 Notion 을 직접 읽어 앱 데이터에 넣고 깃에 올립니다 → 배포 사이트가 자동으로 갱신됩니다. 저장소 Secret `NOTION_TOKEN` 이 필요합니다 (만드는 법은 아래 문서).
+- Notion DB 는 예약 작업 **'애니 팝업·콜라보 매일 수집'** 이 매일 오전 8:00 에 RE:CAL 등에서 행사를 모아 채웁니다 (행사 × 지점 = 1행).
+- 그 뒤 **매일 오전 8:40** GitHub Actions('Notion 매일 가져오기')가 Notion 을 직접 읽어 앱 데이터에 넣고 깃에 올립니다 → 배포 사이트가 자동으로 갱신됩니다. 저장소 Secret `NOTION_TOKEN` 이 필요합니다 (만드는 법은 아래 문서).
 - `.env` 에 `NOTION_TOKEN` 이 있으면 메인 화면을 열 때(최대 1시간에 한 번)도 Notion '🎀 애니 팝업·콜라보 트래커' DB 에서 **검수상태가 '검토 완료'** 인 새 행사를 가져옵니다.
 - 같은 작품·겹치는 기간·가까운 위치의 팝업이 이미 있으면 새로 만들지 않습니다. 포스터 이미지도 함께 내려받습니다.
 - Notion 의 **팝업소개** 는 상세 화면의 팝업 소개로, **소개출처** 는 소개 상자 오른쪽 아래 **출처 보기** 버튼으로 들어갑니다. 소개는 Notion 기준으로 맞추되(바뀌면 바꾸고 지우면 비움), 사람이 앱에서 쓴 소개는 덮어쓰지 않습니다. 전화번호·이메일이 든 줄은 빼고 저장합니다.
@@ -450,9 +532,9 @@ ANI-WHERE/
 ├── logs/runs.jsonl          AI 호출 기록 (자동 생성)
 ├── data/                    로컬 저장소 (cafes · reviews · favorites JSON)
 ├── docs/ai-mistakes.md      AI 실수와 수정 기록
-├── docs/notion-import.md    Notion 주간 수집 · 앱 가져오기 규칙
+├── docs/notion-import.md    Notion 매일 수집 · 앱 가져오기 규칙
 ├── scripts/notion_import.py Notion → data/cafes.json 가져오기 (--dry 로 결과만 보기)
-├── .github/workflows/notion-sync.yml  매주 월 10:00 KST 자동 가져오기 + 커밋
+├── .github/workflows/notion-sync.yml  매일 08:40 KST 자동 가져오기 + 커밋
 └── 프롬프트.md               화면을 다듬을 때 쓴 요청 프롬프트 모음
 ```
 

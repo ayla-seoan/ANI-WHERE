@@ -2,19 +2,19 @@
 
 ANI:WHERE 의 팝업 데이터는 두 단계로 들어옵니다.
 
-1. **주간 수집 (예약 작업)** — 매주 월요일 RE:CAL 등에서 행사를 모아 Notion **'🎀 애니 팝업·콜라보 트래커'** DB 에 쌓습니다.
+1. **매일 수집 (예약 작업)** — 매일 오전 8시 RE:CAL 등에서 행사를 모아 Notion **'🎀 애니 팝업·콜라보 트래커'** DB 에 쌓습니다.
 2. **앱 가져오기** — 앱이 그 Notion DB 를 읽어 지도(`data/cafes.json`)에 넣습니다. 코드는 `common/notion_sync.py`.
 
 이 문서는 두 단계의 규칙을 함께 적습니다. 1단계 규칙의 원본은 예약 작업의 지시문이고, 바뀌면 이 문서도 같이 고칩니다.
 
 ---
 
-## 1. 주간 수집 (예약 작업)
+## 1. 매일 수집 (예약 작업)
 
 | 항목 | 값 |
 | --- | --- |
-| 이름 | 애니 팝업·콜라보 주간 수집 |
-| 언제 | 매주 월요일 오전 8:43 (한국 시간) |
+| 이름 | 애니 팝업·콜라보 매일 수집 |
+| 언제 | 매일 오전 8:00 (한국 시간). 2026-11-17 에 주 1회(월 08:43) → 매일로 바꿈 |
 | 어디에 저장 | Notion DB '🎀 애니 팝업·콜라보 트래커' (data source `08b1da83-4ff5-4c5a-af4c-f6b3d682461b`) |
 | 관리 | claude.ai 예약 작업(Routine). 상태·다음 실행은 Claude Code 에서 확인 |
 
@@ -85,13 +85,13 @@ ANI:WHERE 의 팝업 데이터는 두 단계로 들어옵니다.
 
 ### 2-1. 언제
 
-- **매주 자동 (GitHub Actions)**: `.github/workflows/notion-sync.yml` 이 **매주 월요일 오전 10:00 (KST)** 에 돕니다.
-  주간 수집(08:43, 약 20분)이 끝난 뒤입니다.
+- **매일 자동 (GitHub Actions)**: `.github/workflows/notion-sync.yml` 이 **매일 오전 8:40 (KST)** 에 돕니다.
+  매일 수집(08:00, 약 20~30분)이 끝난 뒤입니다.
   1. Notion API 로 DB 전체를 읽고 (`scripts/notion_import.py`)
   2. 새 팝업 추가 · 빈 이미지 채움 · 팝업 소개 맞춤 · 기간 끝난 팝업 내림
   3. 바뀐 게 있으면 `data/cafes.json` 과 새 포스터(`static/uploads/`)를 커밋해 `main` 에 올립니다 → Streamlit Cloud 가 다시 배포
   - 필요한 저장소 Secret: `NOTION_TOKEN` (필수), `KAKAO_REST_API_KEY` (선택, 좌표 없는 곳 위치 찾기)
-  - 저장소 **Actions** 탭 → 'Notion 주간 가져오기' → **Run workflow** 로 아무 때나 바로 돌릴 수 있습니다. 실행 기록에 추가·건너뜀 개수가 남습니다.
+  - 저장소 **Actions** 탭 → 'Notion 매일 가져오기' → **Run workflow** 로 아무 때나 바로 돌릴 수 있습니다. 실행 기록에 추가·건너뜀 개수가 남습니다.
 - **앱을 열 때**: `.env` 에 `NOTION_TOKEN` 이 있으면 메인 화면을 열 때도 가져옵니다. 최대 1시간에 한 번(`data/notion_sync.json` 에 마지막 시각).
 - **손으로**: `python scripts/notion_import.py --dry` 로 결과만 본 뒤 `python scripts/notion_import.py` 로 넣습니다.
   키가 없으면 Notion 연결(Claude 의 Notion 도구)로 표를 읽어 같은 함수(`import_rows`, `sync_intros`)에 넣습니다.

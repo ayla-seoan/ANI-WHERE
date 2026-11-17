@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "aniwhere": {
+      "command": "python",
+      "args": ["-X", "utf8", "mcp_server/aniwhere_server.py"],
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    }
+  }
+}

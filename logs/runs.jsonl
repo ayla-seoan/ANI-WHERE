@@ -17,3 +17,7 @@
 {"run_id": "58162264", "at": "2026-10-28T07:20:44.794154+00:00", "prompt": "cafe", "version": "v2", "attempt": 2, "ok": false, "error": "RuntimeError: OPENAI_API_KEY 가 설정되지 않았습니다.", "elapsed_ms": 1500}
 {"run_id": "85852117", "at": "2026-10-28T07:22:14.222889+00:00", "prompt": "cafe", "version": "v2", "attempt": 2, "ok": false, "error": "RuntimeError: OPENAI_API_KEY 가 설정되지 않았습니다.", "elapsed_ms": 1500}
 {"run_id": "9e9001c0", "at": "2026-10-28T09:20:01.123992+00:00", "prompt": "cafe", "version": "v2", "attempt": 2, "ok": false, "error": "RuntimeError: OPENAI_API_KEY 가 설정되지 않았습니다.", "elapsed_ms": 1500}
+{"run_id": "da719840", "at": "2026-11-17T14:01:46.976342+00:00", "prompt": "ask", "version": "v1", "attempt": 2, "ok": false, "error": "RuntimeError: OPENAI_API_KEY 가 설정되지 않았습니다.", "elapsed_ms": 1500}
+{"run_id": "c3f0ae46", "at": "2026-11-17T14:05:53.382728+00:00", "prompt": "ask", "version": "v1", "attempt": 2, "ok": false, "error": "RuntimeError: OPENAI_API_KEY 가 설정되지 않았습니다.", "elapsed_ms": 1500}
+{"run_id": "b8160bfa", "at": "2026-11-17T14:06:18.406164+00:00", "prompt": "ask", "version": "v1", "attempt": 2, "ok": false, "error": "RuntimeError: OPENAI_API_KEY 가 설정되지 않았습니다.", "elapsed_ms": 1500}
+{"run_id": "56ca9445", "at": "2026-11-17T14:23:15.734011+00:00", "prompt": "ask", "version": "v1", "attempt": 2, "ok": false, "error": "RuntimeError: OPENAI_API_KEY 가 설정되지 않았습니다.", "elapsed_ms": 1500}

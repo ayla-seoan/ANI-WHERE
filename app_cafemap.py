@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from urllib.parse import quote
 from datetime import date, datetime, timedelta
@@ -26,11 +27,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
-from common import (ai, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
-                    kakao_postcode, mycal, notice, notion_sync, review, share)
+from common import (ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
+                    kakao_postcode, mycal, notice, notion_sync, review, share, stats)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
 from common.schema import CafeEntry
-from common.storage import Storage
+from common.storage import Storage, StorageWriteError
 
 load_dotenv()
 
@@ -320,6 +321,7 @@ st.set_page_config(page_title="ANI:WHERE", page_icon=":material/map:", layout="w
 store = Storage(worksheet="cafes")
 reviews = Storage(worksheet="reviews", headers=review.HEADERS)
 favs = Storage(worksheet="favorites", headers=favorite.HEADERS)
+members = Storage(worksheet="members", headers=auth.HEADERS)
 # 실행 번호: 찜 정보를 한 번 그릴 때 한 번만 읽고, 다음 실행에서는 새로 읽게 한다
 st.session_state["_run"] = st.session_state.get("_run", 0) + 1
 
@@ -330,7 +332,7 @@ def _fav_state() -> tuple[str, set[str], dict[str, int]]:
     cached = st.session_state.get("_fav_cache")
     if cached and cached[0] == run:
         return cached[1]
-    me = favorite.user_key(st.context.ip_address)
+    me = _fav_user()
     rows = favs.current_rows()
     state = (me, favorite.mine(rows, me), favorite.counts(rows))
     st.session_state["_fav_cache"] = (run, state)
@@ -352,7 +354,11 @@ def _heart(cafe_id: str, where: str, label_count: bool = False) -> None:
 
 
 def _toggle_fav(cafe_id: str, me: str, on: bool) -> None:
-    favorite.toggle(favs, cafe_id, me, on)
+    try:
+        favorite.toggle(favs, cafe_id, me, on)
+    except StorageWriteError:      # 콜백 안의 오류는 페이지의 try 로 잡히지 않아서 여기서 따로 받는다
+        st.session_state["flash"] = ("북마크를 저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.", ":material/error:")
+        return
     st.session_state.pop("_fav_cache", None)
     # 다시 그릴 때 화면 위에 토스트로 알린다 (page_map 의 flash)
     st.session_state["flash"] = (("북마크했어요. 내 캘린더에서 볼 수 있어요.", ":material/bookmark_added:") if on
@@ -469,9 +475,36 @@ def address_field(value: str, key: str, on_pick, placeholder: str = "") -> str:
 _WEEKDAYS = "월화수목금토일"
 
 
+def _member() -> dict | None:
+    """로그인한 회원의 최신 기록. 손님이면 None. 세션에 없으면 쿠키(aw_session)로 되살린다."""
+    run = st.session_state.get("_run", 0)
+    cached = st.session_state.get("_member_cache")
+    if cached and cached[0] == run:
+        return cached[1]
+    key = st.session_state.get("member_key")
+    if key is None and not st.session_state.get("_logged_out"):
+        try:
+            sess = auth.read_session(st.context.cookies.get(auth.COOKIE))
+        except auth.AuthError:            # AUTH_SECRET 이 없으면 로그인 기능 자체가 꺼진 상태
+            sess = None
+        key = sess["k"] if sess else ""
+        st.session_state["member_key"] = key
+    row = auth.find(members, key) if key else None
+    st.session_state["_member_cache"] = (run, row)
+    return row
+
+
+def _fav_user() -> str:
+    """북마크 주인: 회원이면 회원 번호, 손님이면 IP 해시."""
+    row = _member()
+    return f"m:{row['entry_id']}" if row else favorite.user_key(st.context.ip_address)
+
+
 def _me() -> str:
-    """지금 접속한 사람의 닉네임 (리뷰와 같은 IP 기반). 수정 이력에 누가 고쳤는지 남길 때 쓴다."""
-    return review.nickname_for(st.context.ip_address)
+    """지금 접속한 사람의 이름. 회원이면 '닉네임#회원번호4자', 손님이면 IP 기반 자동 닉네임.
+    리뷰 작성자·수정 이력에 남고, 끝의 #네 글자로 '내 글' 을 알아본다."""
+    row = _member()
+    return auth.display_name(row) if row else review.nickname_for(st.context.ip_address)
 
 
 def _toast(msg: str, icon: str = ":material/check_circle:") -> None:
@@ -697,7 +730,7 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
     slot = f"rv_{cafe_id}_{parent_id or 'top'}"
     n = st.session_state.get(f"{slot}_n", 0)
     kind = ""
-    nick = review.nickname_for(st.context.ip_address)
+    nick = _me()
     # 닉네임 → 종류 → 내용 순으로 한 줄씩, 같은 왼쪽 선에 맞춰 둔다
     st.caption(f":material/person: **{nick}**", help="접속한 IP 에 따라 자동으로 정해지는 닉네임입니다")
     rating = None
@@ -787,7 +820,7 @@ def confirm_review_delete(entry_id: str, replies: int) -> None:
     if c2.button("삭제", type="primary", width="stretch", key=f"rv_del_ok_{entry_id}"):
         # 버튼이 보였더라도 지우는 순간 한 번 더 확인한다 (내 닉네임과 같은 글만)
         row = next((r for r in reviews.current_rows() if str(r["entry_id"]) == entry_id), None)
-        if row and review.can_delete(row, review.nickname_for(st.context.ip_address)):
+        if row and review.can_delete(row, _me()):
             reviews.soft_delete(entry_id)       # 저장소는 지우지 않고 '삭제됨' 행을 쌓는다
             st.session_state["flash"] = "삭제했습니다."
         else:
@@ -806,7 +839,7 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     if int(r.get("revision") or 1) > 1:
         when += " :gray[(수정됨)]"
     # 내가 쓴 글(접속 IP 로 정해진 닉네임이 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
-    mine = review.can_delete(r, review.nickname_for(st.context.ip_address))
+    mine = review.can_delete(r, _me())
     if mine:
         t, b = st.columns([6, 1], vertical_alignment="center")
         t.markdown(head + when)
@@ -858,7 +891,7 @@ def _review_edit_box(r: dict) -> None:
         st.session_state.pop("rv_editing", None)
         st.rerun()
     if c2.button("저장", type="primary", width="stretch", key=f"rv_edit_ok_{eid}", disabled=bad):
-        nick = review.nickname_for(st.context.ip_address)
+        nick = _me()
         current = next((x for x in reviews.current_rows() if str(x["entry_id"]) == eid), None)
         # 저장하는 순간에도 내 글인지 한 번 더 확인한다
         if not current or not review.can_delete(current, nick):
@@ -2465,6 +2498,13 @@ def page_map() -> None:
             # 내 캘린더는 지도보기 오른쪽에 바로 보여서 따로 버튼을 두지 않는다
             with st.container(horizontal=True, horizontal_alignment="right", key="top_btns"):
                 # 글자 '+' 는 글꼴 때문에 동그라미 가운데에서 살짝 비껴 보여서, 가운데에 정확히 놓이는 아이콘을 쓴다
+                # 팝업 Q&A (2차: RAG). 등록 버튼 왼쪽의 말풍선 아이콘
+                if st.button("물어보기", icon=":material/forum:", key="ask_btn"):
+                    go("ask")
+                who = _member()
+                if st.button(who["nickname"] if who else "로그인",
+                             icon=":material/account_circle:" if who else ":material/login:", key="login_btn"):
+                    go("login")
                 if st.button("", icon=":material/add:", key="add_btn", type="primary"):
                     st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
                     go("add")
@@ -2560,8 +2600,9 @@ def page_map() -> None:
 
     view = df.copy()
     if query.strip():
-        q = query.strip()
-        hit = lambda col: view[col].astype(str).str.contains(q, case=False, regex=False)
+        # 띄어쓰기는 보지 않는다: 작품명이 목록 이름('짱구는 못말려')으로 바뀌어 '짱구는못말려' 로 찾으면 0곳이 나왔다
+        q = re.sub(r"\s+", "", query)
+        hit = lambda col: view[col].astype(str).str.replace(r"\s+", "", regex=True).str.contains(q, case=False, regex=False)
         view = view[hit("cafe_name") | hit("work") | hit("characters") | hit("address")]
     if pick_work != "전체":
         view = view[view["work"] == pick_work]
@@ -3634,10 +3675,428 @@ def render_calendar(compact: bool = False) -> None:
 
 
 
+# ------------------------------------------------------------ 2차: 간편 회원가입·로그인 (/login, /auth)
+AUTH_CSS = """
+<style>
+.auth-title { font-family: "Jua", sans-serif; font-size: 1.6rem; color: #26302D; margin: .4rem 0 .2rem; }
+.auth-sub { color: #6B7672; font-size: .9rem; margin-bottom: 1rem; line-height: 1.6; }
+.auth-btn { display: flex; align-items: center; justify-content: center; gap: .5rem; width: 100%; max-width: 380px;
+  height: 48px; border-radius: 12px; font-weight: 700; font-size: 1rem; text-decoration: none !important; margin: .5rem 0; }
+.auth-btn.kakao { background: #FEE500; color: rgba(0,0,0,.85) !important; }
+.auth-btn.naver { background: #03C75A; color: #fff !important; }
+.auth-btn.off { background: #EEF1F0; color: #9AA5A1 !important; pointer-events: none; }
+.auth-note { color: #6B7672; font-size: .8rem; line-height: 1.6; max-width: 420px; }
+.auth-card { border: 1.5px solid #9EDDCC; border-radius: 14px; padding: 1rem 1.1rem; max-width: 460px; background: #fff; }
+</style>
+"""
+
+
+def _set_cookie(value: str, days: int) -> None:
+    """로그인 쿠키를 브라우저에 심는다 (다음에 열어도 로그인 유지). 서버는 st.context.cookies 로 읽는다."""
+    secure = "; Secure" if auth.base_url().startswith("https") else ""
+    js = (f"window.parent.document.cookie = {json.dumps(auth.COOKIE + '=' + value)} + "
+          f"'; path=/; max-age={days * 86400}; SameSite=Lax{secure}';")
+    components.html(f"<script>{js}</script>", height=0)
+
+
+def _login_done(row: dict, msg: str) -> None:
+    st.session_state["member_key"] = str(row["entry_id"])
+    st.session_state.pop("_logged_out", None)
+    st.session_state.pop("_member_cache", None)
+    st.session_state.pop("_fav_cache", None)
+    st.session_state["_cookie_pending"] = auth.make_session(str(row["entry_id"]), str(row.get("provider", "")))
+    st.session_state["flash"] = (msg, ":material/waving_hand:")
+
+
+def page_login() -> None:
+    st.markdown(GLOBAL_CSS + AUTH_CSS, unsafe_allow_html=True)
+    _no_translate()
+    with st.container(key="topbar"):
+        if _brand(home=True, fixed=True):
+            go("map")
+    if st.session_state.get("_cookie_pending"):          # 방금 로그인했으면 쿠키를 심는다
+        _set_cookie(st.session_state.pop("_cookie_pending"), auth.SESSION_DAYS)
+    flash = st.session_state.pop("flash", None)
+    if flash:
+        _toast(*flash) if isinstance(flash, tuple) else _toast(flash)
+    row = _member()
+    if row:
+        _my_account(row)
+        return
+    mode = st.segmented_control("로그인 또는 회원가입", ["로그인", "회원가입"], default="로그인",
+                                label_visibility="collapsed", key="auth_mode") or "로그인"
+    if mode == "로그인":
+        st.markdown('<div class="auth-title">다시 오셨네요</div>'
+                    '<div class="auth-sub">가입할 때 쓴 계정으로 로그인해요. 처음이면 같은 버튼으로 바로 가입돼요.</div>',
+                    unsafe_allow_html=True)
+        verb = "로그인"
+    else:
+        st.markdown('<div class="auth-title">3초 만에 회원가입</div>'
+                    '<div class="auth-sub">비밀번호를 만들 필요 없이 카카오·네이버 계정으로 가입해요.<br>'
+                    '① 계정 고르기 → ② 카카오·네이버에서 <b>닉네임 제공</b>에 동의 → ③ 앱에서 쓸 닉네임 정하기<br>'
+                    '가입하면 북마크·리뷰가 <b>어느 기기에서나</b> 내 것으로 남고, 손님일 때 해 둔 북마크도 옮겨 와요.</div>',
+                    unsafe_allow_html=True)
+        verb = "가입하기"
+    for prov in ("kakao", "naver"):
+        label = auth.PROVIDERS[prov]["label"]
+        if auth.enabled(prov):
+            st.markdown(f'<a class="auth-btn {prov}" href="{escape(auth.authorize_url(prov))}" target="_self">'
+                        f'{label}로 {verb}</a>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<span class="auth-btn off">{label} {verb} 준비 중</span>', unsafe_allow_html=True)
+    st.markdown('<div class="auth-note">로그인하지 않아도 지금처럼 둘러보고 북마크할 수 있어요.</div>',
+                unsafe_allow_html=True)
+    st.markdown('<div class="auth-note">받는 정보: <b>별명(닉네임)</b>과 계정 고유 번호뿐이에요. 고유 번호는 알아볼 수 없게 '
+                '바꿔서(해시) 저장하고, 이메일·전화번호·실명은 받지도 저장하지도 않아요.</div>', unsafe_allow_html=True)
+    if not (auth.enabled("kakao") or auth.enabled("naver")):
+        st.caption("관리자 안내: .env 에 AUTH_SECRET · KAKAO_LOGIN_CLIENT_ID · NAVER_LOGIN_CLIENT_ID/SECRET 을 넣으면 "
+                   "버튼이 켜져요 (docs/login.md).")
+
+
+def _logout() -> None:
+    _set_cookie("", 0)
+    st.session_state.update({"member_key": "", "_logged_out": True})
+    st.session_state.pop("_member_cache", None)
+    st.session_state.pop("_fav_cache", None)
+
+
+def _my_account(row: dict) -> None:
+    prov = auth.PROVIDERS.get(str(row.get("provider")), {}).get("label", "")
+    st.markdown(f'<div class="auth-title">내 계정</div><div class="auth-card">'
+                f'<b>{escape(auth.display_name(row))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
+                f'가입 {escape(str(row.get("agreed_at", ""))[:10])}<br>회원 번호 <code>{escape(str(row["entry_id"]))}</code>'
+                f'{" · 관리자" if _is_admin() else ""}</span></div>', unsafe_allow_html=True)
+    with st.form("rename", border=False):
+        nick = st.text_input("닉네임 바꾸기", value=row.get("nickname", ""), max_chars=auth.MAX_NICK)
+        if st.form_submit_button("저장", icon=":material/check:"):
+            try:
+                auth.rename(members, row, nick)
+                st.session_state.pop("_member_cache", None)
+                st.session_state["flash"] = ("닉네임을 바꿨어요.", ":material/check_circle:")
+                st.rerun()
+            except auth.AuthError as e:
+                st.warning(str(e), icon=":material/error:")
+    c1, c2 = st.columns(2)
+    if c1.button("로그아웃", icon=":material/logout:", width="stretch"):
+        _logout()
+        st.session_state["flash"] = ("로그아웃했어요.", ":material/logout:")
+        st.rerun()
+    with c2.popover("탈퇴하기", icon=":material/person_remove:", width="stretch"):
+        st.write("닉네임을 지우고 로그인 연결을 끊어요. 이미 쓴 리뷰는 남지만 더 이상 고칠 수 없어요.")
+        if st.button("탈퇴할게요", type="primary"):
+            auth.withdraw(members, row)
+            _logout()
+            st.session_state["flash"] = ("탈퇴했어요. 그동안 고마웠어요.", ":material/check_circle:")
+            st.rerun()
+
+
+def page_auth() -> None:
+    """카카오·네이버가 돌려보내는 곳. 처음 온 사람은 여기서 간편 가입(닉네임·동의)을 한다."""
+    st.markdown(GLOBAL_CSS + AUTH_CSS, unsafe_allow_html=True)
+    _no_translate()
+    with st.container(key="topbar"):
+        if _brand(home=True, fixed=True):
+            go("map")
+    qp = st.query_params
+    if qp.get("error"):            # 동의 화면에서 '취소' — 중간 이탈
+        st.query_params.clear()
+        st.info("로그인을 취소했어요. 로그인하지 않아도 둘러보고 북마크할 수 있어요.", icon=":material/info:")
+        st.page_link(PAGES["map"], label="홈으로", icon=":material/home:")
+        return
+    if qp.get("code") and qp.get("state"):
+        code, state = qp["code"], qp["state"]
+        st.query_params.clear()        # code 는 한 번만 쓸 수 있다. 새로고침해도 다시 쓰지 않게 주소에서 지운다
+        try:
+            ident = auth.exchange(code, state)
+        except auth.AuthError as e:
+            st.warning(str(e), icon=":material/error:")
+            st.page_link(PAGES["login"], label="다시 로그인하기", icon=":material/login:")
+            return
+        row = auth.find(members, ident.member_key)
+        if row:
+            _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
+            go("login")
+            return
+        st.session_state["_pending_ident"] = ident
+    ident = st.session_state.get("_pending_ident")
+    if not ident:
+        st.info("로그인 화면에서 시작해 주세요.", icon=":material/info:")
+        st.page_link(PAGES["login"], label="로그인하기", icon=":material/login:")
+        return
+    label = auth.PROVIDERS[ident.provider]["label"]
+    st.markdown(f'<div class="auth-title">거의 다 됐어요</div><div class="auth-sub">{label} 계정으로 처음 오셨어요. '
+                '앱에서 쓸 닉네임만 정하면 가입이 끝나요.</div>', unsafe_allow_html=True)
+    with st.form("signup", border=False):
+        nick = st.text_input("닉네임", value=ident.nickname, max_chars=auth.MAX_NICK,
+                             placeholder="리뷰에 보일 이름 (2~16자)")
+        agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 닉네임 · 로그인 수단 · 해시한 계정 번호")
+        done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")
+    if done:
+        if not agree:
+            st.warning("동의해야 가입할 수 있어요.", icon=":material/error:")
+            return
+        try:
+            row = auth.signup(members, ident, nick)
+        except auth.AuthError as e:
+            st.warning(str(e), icon=":material/error:")
+            return
+        # 손님일 때 해 둔 북마크를 회원 계정으로 옮긴다 (지우지 않고 회원 쪽에 새로 쌓음)
+        guest = favorite.user_key(st.context.ip_address)
+        moved = sorted(favorite.mine(favs.current_rows(), guest))
+        for cid in moved:
+            favorite.toggle(favs, cid, f"m:{row['entry_id']}", True)
+        st.session_state.pop("_pending_ident", None)
+        _login_done(row, "가입했어요!" + (f" 북마크 {len(moved)}개도 옮겼어요." if moved else ""))
+        go("login")
+
+
+# ------------------------------------------------------------ 2차: 데이터 보기 (/data)
+DATA_TABLES = {"cafes": "팝업", "reviews": "리뷰", "favorites": "북마크", "members": "회원"}
+DATA_HIDE = {"members": [], "favorites": ["user"], "reviews": [], "cafes": []}
+
+
+def _is_admin() -> bool:
+    """관리자: ADMIN_MEMBER_KEYS(쉼표로 구분한 회원 번호)에 든 회원, 또는 내 컴퓨터에서 직접 연 경우."""
+    row = _member()
+    keys = {k.strip() for k in os.getenv("ADMIN_MEMBER_KEYS", "").split(",") if k.strip()}
+    if row and str(row["entry_id"]) in keys:
+        return True
+    return st.context.ip_address in (None, "127.0.0.1", "::1")     # 로컬 실행(개발자 본인)
+
+
+def page_data() -> None:
+    """저장소에 실제로 쌓인 기록을 본다 (append-only 라서 수정·삭제도 행으로 보인다). 관리자만."""
+    st.markdown(GLOBAL_CSS + STATS_CSS, unsafe_allow_html=True)
+    _no_translate()
+    with st.container(key="topbar"):
+        if _brand(home=True, fixed=True):
+            go("map")
+    if not _is_admin():
+        st.markdown('<div class="stats-title">관리자 전용</div><div class="stats-sub">이 화면은 관리자만 볼 수 있어요. '
+                    '관리자 계정으로 로그인해 주세요.</div>', unsafe_allow_html=True)
+        st.page_link(PAGES["login"], label="로그인하기", icon=":material/login:")
+        return
+    where = {"local": "내 컴퓨터의 data/*.json 파일", "sheets": "Google Sheets",
+             "supabase": "Supabase 클라우드 (PostgreSQL)"}.get(store.mode, store.mode)
+    st.markdown(f'<div class="stats-title">데이터 보기</div><div class="stats-sub">지금 저장소: <b>{where}</b> '
+                f'(STORAGE_MODE={escape(os.getenv("STORAGE_MODE", "local"))})</div>', unsafe_allow_html=True)
+    if getattr(store, "fallback_reason", ""):
+        st.warning(f"Supabase 에 연결하지 못해 로컬 파일을 보여 주고 있어요: {store.fallback_reason[:200]}",
+                   icon=":material/cloud_off:")
+    if store.mode == "local":
+        st.caption("Supabase 로 옮기면 같은 표가 Supabase 대시보드 → Table Editor 에도 보여요 (db.md 6절).")
+    stores = {"cafes": store, "reviews": reviews, "favorites": favs, "members": members}
+    cols = st.columns(len(stores))
+    for col, (name, s_) in zip(cols, stores.items()):
+        col.metric(f"{DATA_TABLES[name]} ({name})", f"{len(s_.all_rows())}행",
+                   f"지금 {len(s_.current_rows())}건", delta_color="off", border=True)
+    tab = st.segmented_control("표", list(DATA_TABLES), format_func=lambda n: DATA_TABLES[n], default="cafes",
+                               key="data_tab") or "cafes"
+    rows = stores[tab].all_rows()
+    if not rows:
+        st.info("아직 기록이 없어요.", icon=":material/info:")
+        return
+    df = pd.DataFrame(rows).drop(columns=DATA_HIDE[tab], errors="ignore")
+    q = st.text_input("찾기", placeholder="entry_id · 이름 · 작품 등", key="data_q")
+    if q.strip():
+        df = df[df.astype(str).apply(lambda r: r.str.contains(q.strip(), case=False, regex=False)).any(axis=1)]
+    if st.toggle("최신 기록만 (수정 이력 숨기기)", key="data_now") and "entry_id" in df:
+        df = df.sort_values("revision").groupby("entry_id", as_index=False).tail(1)
+    if "updated_at" in df:
+        df = df.sort_values("updated_at", ascending=False)
+    st.caption(f"{len(df)}행 · 최근 쓴 순서")
+    st.dataframe(df, hide_index=True, width="stretch", height=520)
+
+
+# ------------------------------------------------------------ 2차: 팝업 Q&A (/ask)
+ASK_CSS = """
+<style>
+.ask-q { font-family: "Jua", sans-serif; font-size: 1.5rem; color: #26302D; margin: .2rem 0 .1rem; }
+.ask-sub { color: #6B7672; font-size: .9rem; margin-bottom: .6rem; }
+.ask-badge { display: inline-block; padding: .1rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 700;
+  border: 1.5px solid var(--accent, #14b8a6); color: var(--accent-deep, #0f766e); background: #fff; margin-right: .3rem; }
+.ask-badge.fb { border-color: #9AA5A1; color: #4B5552; }
+.ask-answer { background: #F4F7F6; border-radius: 12px; padding: .9rem 1rem; line-height: 1.65; margin: .5rem 0; }
+.ask-cond { color: #6B7672; font-size: .8rem; }
+</style>
+"""
+ASK_EXAMPLES = ["이번 주말 성수에서 하는 팝업 있어?", "주술회전 팝업 어디서 해?", "부산 팝업 알려줘", "12월에 시작하는 팝업"]
+
+
+def _ask_pick(q: str) -> None:
+    st.session_state["ask_q"] = q
+
+
+def _ask_open(cafe_id: str) -> None:
+    # 콜백 안에서는 페이지를 옮기지 않고 표시만 해 둔다 (다음 그리기에서 page_ask 가 옮긴다)
+    st.session_state["selected"] = str(cafe_id)
+    st.session_state["_ask_go"] = True
+
+
+def page_ask() -> None:
+    if st.session_state.pop("_ask_go", False):
+        go("map")
+    st.markdown(GLOBAL_CSS + ASK_CSS, unsafe_allow_html=True)
+    _no_translate()
+    with st.container(key="topbar"):
+        if _brand(home=True, fixed=True):
+            go("map")
+    st.markdown('<div class="ask-q">팝업에게 물어보기</div><div class="ask-sub">앱에 모인 팝업 정보 안에서만 찾아 답해요. '
+                '작품·지역·날짜를 함께 적으면 더 정확해요.</div>', unsafe_allow_html=True)
+    with st.container(horizontal=True):
+        for i, ex in enumerate(ASK_EXAMPLES):
+            st.button(ex, key=f"ask_ex_{i}", on_click=_ask_pick, args=(ex,), type="tertiary")
+    with st.form("ask_form", border=False):
+        q = st.text_input("질문", key="ask_q", max_chars=ask.MAX_QUESTION, label_visibility="collapsed",
+                          placeholder="예: 이번 주말 홍대 근처 주술회전 팝업 있어?")
+        sent = st.form_submit_button("물어보기", icon=":material/send:", type="primary")
+    if not sent:
+        return
+    errors = ask.validate(q)
+    if any("개인정보" not in e for e in errors):
+        for e in errors:
+            st.warning(e, icon=":material/error:")
+        return
+    if errors:            # 개인정보는 가리고 계속 찾는다
+        st.info(errors[0], icon=":material/shield:")
+    with st.spinner("팝업을 찾는 중이에요..."):
+        rows = stats.popups(store.all_rows())
+        res = ask.answer(q, rows, TODAY)
+    st.markdown(f'<div class="ask-cond">질문에서 읽은 조건: {escape(res.query.describe())}</div>', unsafe_allow_html=True)
+    if not res.hits:
+        # 0건일 때 빈 화면 대신 다음 할 일을 안내한다
+        st.markdown('<div class="ask-answer">조건에 맞는 팝업을 찾지 못했어요.<br>'
+                    '· 작품 이름을 줄여서(예: <b>주술회전</b>) 다시 물어보거나<br>'
+                    '· 날짜·지역 조건을 하나 빼 보세요.<br>'
+                    '· 아직 등록되지 않은 팝업이라면 첫 화면 오른쪽 위 <b>+</b> 로 직접 등록할 수 있어요.</div>',
+                    unsafe_allow_html=True)
+        return
+    cls = "ask-badge" if res.source == "ai" else "ask-badge fb"
+    low = '<span class="ask-badge fb">딱 맞는 팝업은 없음</span>' if res.confidence == "low" else ""
+    st.markdown(f'<span class="{cls}">{res.badge}</span>{low}'
+                f'<div class="ask-answer">{escape(res.text)}</div>', unsafe_allow_html=True)
+    if res.dropped_ids:
+        st.caption(f"AI 가 후보에 없는 팝업 {len(res.dropped_ids)}건을 근거로 들어 지웠어요.")
+    st.markdown("**찾은 팝업** — 누르면 상세로 이동해요")
+    used = set(res.used_ids)
+    for h in sorted(res.hits, key=lambda h: str(h.row.get("entry_id")) not in used):
+        r = h.row
+        label = (f'{r.get("work")} · {r.get("cafe_name")}  |  {r.get("start_date")} ~ {r.get("end_date")}  |  '
+                 f'{geo.area_name(str(r.get("address") or "")) or "지역 미상"}')
+        st.button(label, key=f"ask_hit_{r.get('entry_id')}", icon=":material/location_on:",
+                  on_click=_ask_open, args=(r.get("entry_id"),), width="stretch",
+                  type="primary" if str(r.get("entry_id")) in used else "secondary")
+
+
+# ------------------------------------------------------------ 2차: PO 지표 (/stats)
+STATS_CSS = """
+<style>
+.stats-title { font-family: "Jua", sans-serif; font-size: 1.6rem; color: #26302D; margin: .2rem 0 .1rem; }
+.stats-sub { color: #6B7672; font-size: .9rem; margin-bottom: .8rem; }
+</style>
+"""
+STATS_BEFORE = "#B8C2BF"      # 개선 전: 회색 (덜 눈에 띄게)
+
+
+def page_stats() -> None:
+    st.markdown(GLOBAL_CSS + STATS_CSS, unsafe_allow_html=True)
+    _no_translate()
+    with st.container(key="topbar"):
+        if _brand(home=True, fixed=True):
+            go("map")
+    all_rows = store.all_rows()
+    rows = stats.popups(all_rows)
+    st.markdown('<div class="stats-title">ANI:WHERE 지표</div>'
+                f'<div class="stats-sub">팝업 {len(rows)}건 · 기준일 {TODAY:%Y-%m-%d} · '
+                '저장소가 append-only 라서 과거 시점의 상태를 그대로 다시 계산해요.</div>', unsafe_allow_html=True)
+    if not rows:
+        st.info("아직 팝업이 없어요. 첫 화면 오른쪽 위 + 로 팝업을 등록하면 지표가 채워져요.", icon=":material/info:")
+        return
+
+    now = stats.completeness(rows)
+    before = stats.completeness(stats.popups(all_rows, until=stats.NOTION_CUTOFF))
+    status = stats.status_counts(rows, TODAY)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("방문 전 정보 완결률", f"{now['complete']:.0f}%",
+              f"{now['complete'] - before['complete']:+.0f}%p (Notion 주간 수집 전 대비)" if before["n"] else None,
+              border=True)
+    c2.metric("지금 갈 수 있는 팝업", f"{status['진행 중']}곳", border=True)
+    c3.metric("7일 안에 시작", f"{stats.starting_within(rows, TODAY)}곳", border=True)
+    days = stats.durations(rows)
+    c4.metric("평균 진행 기간", f"{sum(days) / len(days):.0f}일" if days else "-", border=True)
+
+    st.markdown("#### 개선 전후: 방문 전 정보가 채워진 비율")
+    st.caption(f"이전 = {stats.NOTION_CUTOFF} 전까지 쌓인 기록 ({before['n']}건) · 지금 = 모든 기록 ({now['n']}건). "
+               "방문 전 정보 = 기간·주소·지도 좌표·참고 링크·포스터가 모두 있음. 회색 막대 = 이전, 민트 막대 = 지금")
+    ba = stats.before_after(all_rows)
+    if before["n"]:
+        wide = ba.pivot(index="항목", columns="시점", values="비율")[["이전", "지금"]].reset_index()
+        # 순서: 북극성 지표(방문 전 정보 모두)를 맨 위, 나머지는 원래 순서
+        wide["순서"] = wide["항목"].map({n: i for i, n in enumerate(dict.fromkeys(ba["항목"]))})
+        wide = wide.sort_values("순서").drop(columns="순서")
+        st.bar_chart(wide, x="항목", y=["이전", "지금"], color=[STATS_BEFORE, MINT], stack=False,
+                     horizontal=True, sort=False, height=420, y_label="채워진 비율(%)", x_label="")
+        with st.expander("표로 보기"):
+            st.dataframe(ba.pivot(index="항목", columns="시점", values="비율")[["이전", "지금"]],
+                         width="stretch")
+    else:
+        st.info("비교할 이전 기록이 없어요.", icon=":material/info:")
+
+    st.markdown("#### 팝업은 어디에, 무엇이 많이 열리나")
+    left, right = st.columns(2)
+    with left:
+        st.caption("지역별 팝업 수 (상위 10, 나머지는 '그 외')")
+        st.bar_chart(stats.by_city(rows), x="지역", y="팝업 수", horizontal=True, sort="-팝업 수",
+                     color=MINT, height=340, x_label="", y_label="")
+    with right:
+        st.caption("작품별 팝업 수 (상위 10)")
+        st.bar_chart(stats.by_work(rows), x="작품", y="팝업 수", horizontal=True, sort="-팝업 수",
+                     color=MINT, height=340, x_label="", y_label="")
+    left, right = st.columns(2)
+    with left:
+        st.caption("시작 월별 팝업 수")
+        st.bar_chart(stats.by_month(rows), x="월", y="팝업 수", color=MINT, height=260, x_label="", y_label="")
+    with right:
+        st.caption("진행 기간 분포")
+        st.bar_chart(stats.duration_buckets(days), x="기간", y="팝업 수", sort=False, color=MINT, height=260,
+                     x_label="", y_label="")
+
+    st.markdown("#### 참여")
+    review_rows = reviews.current_rows()
+    fav_rows = favs.current_rows()
+    eng = stats.engagement(fav_rows, review_rows)
+    cols = st.columns(len(eng))
+    for col, (k, v) in zip(cols, eng.items()):
+        col.metric(k, v, border=True)
+    left, right = st.columns(2)
+    with left:
+        st.caption("다녀온 후기 별점 분포")
+        st.bar_chart(stats.rating_dist(review_rows), x="별점", y="후기 수", sort=False, color=MINT, height=240,
+                     x_label="", y_label="")
+    with right:
+        st.caption("북마크가 많은 팝업")
+        top = stats.top_bookmarked(fav_rows, rows)
+        if top.empty:
+            st.info("아직 북마크가 없어요.", icon=":material/info:")
+        else:
+            st.dataframe(top, hide_index=True, width="stretch")
+
+
 # 지도와 등록은 주소가 다른 별개 페이지다 (/, /add). 메뉴는 숨기고 버튼으로만 오간다.
 PAGES = {
     "map": st.Page(page_map, title="ANI:WHERE", icon=":material/map:", url_path="map", default=True),
     "add": st.Page(page_add, title="팝업 카페 등록하기 · ANI:WHERE", icon=":material/add:", url_path="add"),
     "calendar": st.Page(page_calendar, title="내 캘린더 · ANI:WHERE", icon=":material/calendar_month:", url_path="calendar"),
+    "ask": st.Page(page_ask, title="팝업에게 물어보기 · ANI:WHERE", icon=":material/forum:", url_path="ask"),
+    "stats": st.Page(page_stats, title="지표 · ANI:WHERE", icon=":material/insights:", url_path="stats"),
+    "login": st.Page(page_login, title="로그인 · ANI:WHERE", icon=":material/login:", url_path="login"),
+    "auth": st.Page(page_auth, title="가입 · ANI:WHERE", icon=":material/person_add:", url_path="auth"),
+    "data": st.Page(page_data, title="데이터 보기 · ANI:WHERE", icon=":material/database:", url_path="data"),
 }
-st.navigation(list(PAGES.values()), position="hidden").run()
+try:
+    st.navigation(list(PAGES.values()), position="hidden").run()
+except StorageWriteError as exc:
+    # Supabase 가 쓰기를 거절함 (RLS: 남의 리뷰 수정·민감정보·동시 수정 충돌, 또는 연결 끊김). 화면이 멈추지 않게 안내만
+    st.error("저장하지 못했어요. 잠시 뒤 다시 시도해 주세요. 내가 쓴 글이 아니거나 개인정보가 들어 있으면 저장되지 않아요.",
+             icon=":material/error:")
+    st.caption(f"자세한 이유: {str(exc)[:200]}")

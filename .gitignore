@@ -8,3 +8,6 @@ __pycache__/
 
 # Notion 을 마지막으로 확인한 시각 (컴퓨터마다 따로)
 data/notion_sync.json
+
+# 회원 기록 (닉네임·해시) — 로컬 실행용. 배포에서는 Supabase members 표
+data/members.json

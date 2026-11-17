@@ -1,11 +1,11 @@
-# 매주 월요일 Notion 트래커 → 앱 데이터 가져오기
-# Notion 주간 수집(월 08:43 KST, 약 20분)이 끝난 뒤 10:00 KST 에 돌고, 바뀐 게 있으면 data/cafes.json · 포스터를 커밋한다.
+# 매일 아침 Notion 트래커 → 앱 데이터 가져오기
+# Notion 매일 수집(08:00 KST, 약 20~30분)이 끝난 뒤 08:40 KST 에 돌고, 바뀐 게 있으면 data/cafes.json · 포스터를 커밋한다.
 # 필요한 Secret: NOTION_TOKEN (필수), KAKAO_REST_API_KEY (선택 — Notion 에 좌표가 없는 곳의 위치 찾기)
-name: Notion 주간 가져오기
+name: Notion 매일 가져오기
 
 on:
   schedule:
-    - cron: "0 1 * * 1"        # 매주 월요일 01:00 UTC = 10:00 KST
+    - cron: "40 23 * * *"      # 매일 23:40 UTC = 다음 날 08:40 KST (GitHub 은 붐비면 몇 분 늦게 돌 수 있다)
   workflow_dispatch:            # Actions 탭에서 'Run workflow' 로 바로 돌릴 수 있다
 
 permissions:
@@ -34,7 +34,10 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
-          STORAGE_MODE: local
+          # Secret 에 SUPABASE_URL 이 있으면 Notion → Supabase 로 바로 넣고 data/cafes.json 은 거울로 남긴다 (db.md)
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          STORAGE_MODE: ${{ secrets.SUPABASE_URL != '' && 'supabase' || 'local' }}
         run: python scripts/notion_import.py
 
       - name: 바뀐 데이터 올리기
@@ -46,5 +49,5 @@ jobs:
           fi
           git config user.name "ani-where-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Notion 주간 가져오기 ($(TZ=Asia/Seoul date +%Y-%m-%d))"
+          git commit -m "Notion 매일 가져오기 ($(TZ=Asia/Seoul date +%Y-%m-%d))"
           git push

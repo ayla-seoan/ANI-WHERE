@@ -58,3 +58,14 @@ class CafeEntry(BaseModel):
 
 class CafeExtraction(BaseModel):
     entries: list[CafeEntry]
+
+
+# ---------------------------------------------------------------- 주제 3 (2차: 팝업 Q&A)
+class AskAnswer(BaseModel):
+    """팝업 데이터에서 찾아 준 답. 근거(used_ids)는 검색된 후보 안에서만 고른다."""
+
+    answer: str = Field(max_length=600, description="질문에 대한 답. 후보 팝업 정보에 있는 사실만, 3~5문장")
+    used_ids: list[str] = Field(default_factory=list, description="답에 쓴 팝업의 id. 후보 목록의 id 그대로")
+    confidence: Literal["high", "low"] = Field(
+        description="후보 중 질문 조건(작품·지역·날짜)에 딱 맞는 팝업이 없으면 low",
+    )

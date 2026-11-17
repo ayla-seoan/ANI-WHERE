@@ -1,0 +1,65 @@
+# 간편 회원가입·로그인 (카카오 · 네이버)
+
+## 무엇을 저장하나 — 그리고 어디에
+
+| 칸 | 내용 | 예 |
+| --- | --- | --- |
+| `entry_id` | **회원 번호** = 카카오·네이버 고유 번호를 소금 친 해시(앞 16자). 원래 번호는 저장하지 않음 | `3f9a1c…` |
+| `provider` | 로그인 수단 | `kakao` / `naver` |
+| `nickname` | 앱에서 쓰는 닉네임 (2~16자, 개인정보 패턴 차단) | `굿즈헌터` |
+| `agreed_at` | 약관 동의 시각 | `2026-11-25T10:02:11` |
+| `status` / `revision` | append-only: 닉네임 변경·탈퇴도 새 행 | `active` / `deleted` |
+
+**이메일·전화번호·실명·생일은 요청하지도 저장하지도 않는다.** 카카오 동의항목은 '닉네임' 하나, 네이버 제공 정보는 '별명' 하나만 켠다.
+
+- `STORAGE_MODE=supabase` → Supabase 클라우드(PostgreSQL)의 **`members` 표** (`supabase/migrations/003_members.sql`)
+- `STORAGE_MODE=local` → 내 컴퓨터의 `data/members.json` (깃에 올리지 않음, `.gitignore`)
+
+리뷰·수정 이력에는 `닉네임#m회원번호4자` 로 남는다 (예: `굿즈헌터#m3f9a`). 손님은 지금처럼 `IP 닉네임#네 글자`.
+로그인하면 북마크·리뷰가 회원 번호에 묶여 **어느 기기에서나** 내 것이 되고, 가입할 때 손님 북마크를 회원 쪽으로 옮긴다.
+
+## 관리자는 회원 정보를 어떻게 보나
+
+1. **Supabase 대시보드** (배포 후 권장): supabase.com → 프로젝트 → **Table Editor → `members`**. 필터·정렬·CSV 내보내기가 된다.
+   지금 상태만 보려면 SQL Editor 에서: `select distinct on (entry_id) * from members order by entry_id, revision desc;`
+2. **앱의 `/data` 화면** (관리자 전용): 팝업·리뷰·북마크·회원 표를 저장소 종류와 상관없이 같은 화면에서 본다. 찾기, '최신 기록만' 보기.
+   - 볼 수 있는 사람: `.env`(또는 Streamlit Secrets)의 `ADMIN_MEMBER_KEYS` 에 회원 번호가 든 사람, 그리고 내 컴퓨터에서 직접 연 경우(localhost).
+   - 내 회원 번호는 로그인 후 `/login` 의 '내 계정' 카드에 보인다 → 그 번호를 `ADMIN_MEMBER_KEYS` 에 넣고 앱을 다시 켠다.
+3. 탈퇴한 회원은 `status = deleted` 행으로 남고 닉네임은 비워진다 (기록을 지우지 않는 append-only).
+
+## 켜는 법 (키 발급)
+
+공통: `.env` 에 `APP_BASE_URL`(예: `http://localhost:8501`, 배포는 `https://ani-where.streamlit.app`)과 `AUTH_SECRET`(32자 이상 무작위)을 넣는다.
+Redirect URI 는 두 곳 모두 **`{APP_BASE_URL}/auth`** 로 등록한다.
+
+### 카카오
+1. https://developers.kakao.com → 내 애플리케이션 → 앱 추가
+2. 앱 키의 **REST API 키** → `KAKAO_LOGIN_CLIENT_ID`
+3. 카카오 로그인 → **활성화 ON**, Redirect URI 에 `http://localhost:8501/auth` 와 배포 주소 `/auth` 등록
+4. 동의항목 → **닉네임**만 '필수 동의' (이메일 등은 켜지 않음)
+5. (권장) 보안 → Client Secret 생성·활성화 → `KAKAO_LOGIN_CLIENT_SECRET`
+
+### 네이버
+1. https://developers.naver.com → Application → 애플리케이션 등록 → 사용 API **네이버 로그인**
+2. 제공 정보 선택: **별명**만
+3. 환경 추가 → PC 웹: 서비스 URL `http://localhost:8501`, Callback URL `http://localhost:8501/auth` (배포 주소도 추가)
+4. Client ID → `NAVER_LOGIN_CLIENT_ID`, Client Secret → `NAVER_LOGIN_CLIENT_SECRET`
+5. 개발 중 상태에서는 '멤버 관리'에 등록한 네이버 아이디만 로그인된다. 공개하려면 검수 요청.
+
+키가 없으면 로그인 화면 버튼이 '준비 중'으로 보이고, 앱은 손님 모드로 그대로 돈다.
+
+## 안전장치
+
+| 위험 | 막는 법 |
+| --- | --- |
+| 로그인 요청 위조(CSRF) | `state` 에 서명 + 10분 만료. 돌아올 때 서명을 다시 확인 (`auth.check_state`) |
+| `code` 재사용 | 돌아오자마자 주소창에서 `code` 를 지움 |
+| 쿠키 위조 | `aw_session` 쿠키에 HMAC 서명 + 30일 만료. 서명이 틀리면 손님으로 봄 |
+| 남의 계정으로 기록 잇기 | DB 정책: 같은 회원 번호의 다음 행은 처음 가입한 로그인 수단과 같아야 함 (003) |
+| 닉네임에 개인정보 | `guard.scan` + DB 제약 `has_sensitive` |
+| 동의 화면에서 취소(중간 이탈) | `/auth?error=…` → "취소했어요, 손님으로 계속 쓸 수 있어요" 안내 |
+
+## 한계
+
+- 쿠키는 브라우저 자바스크립트로 심는다 (Streamlit 이 서버에서 쿠키를 쓰는 기능이 없음). 그래서 HttpOnly 가 아니다 → 서명으로 위조는 막지만, 같은 브라우저의 악성 스크립트가 쿠키를 읽을 수는 있다.
+- Supabase anon 키로 쓰는 구조라, 키를 가진 서버(우리 앱) 밖에서 위조 요청을 막는 것은 RLS 정책 수준까지다 (`db.md` 7절).

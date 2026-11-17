@@ -1,0 +1,4 @@
+#!/bin/sh
+# 사람이 직접 커밋할 때도 Claude 훅과 같은 검사를 돌린다.
+# 켜기: git config core.hooksPath .githooks
+exec python .claude/hooks/precommit_guard.py --git

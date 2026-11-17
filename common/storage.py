@@ -1,4 +1,7 @@
-"""Google Sheets 를 저장소로 쓴다. 키가 없으면 로컬 JSON 으로 자동 전환.
+"""Google Sheets 또는 Supabase 를 저장소로 쓴다. 키가 없으면 로컬 JSON 으로 자동 전환.
+
+STORAGE_MODE = sheets | supabase | local. 설정이 틀리면 조용히 local 로 내려가고
+이유는 self.fallback_reason 에 남긴다. Supabase 는 SELECT·INSERT 만 쓴다 (db.md).
 
 로컬 전환이 있어야 심사자가 README 만 보고 바로 돌려볼 수 있다.
 모든 쓰기는 append 로만 하고, 수정·삭제도 새 행을 쌓는다.
@@ -8,13 +11,14 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-LOCAL_DIR = ROOT / "data"
+LOCAL_DIR = Path(os.getenv("ANIWHERE_DATA_DIR") or ROOT / "data")   # 테스트는 임시 복사본을 가리킨다
 
 HEADERS = [
     "row_id", "entry_id", "revision", "status", "updated_at",
@@ -27,6 +31,16 @@ HEADERS = [
     "intro_src",          # 팝업 소개를 옮겨 온 원문 주소 (Notion '소개출처'). 상세의 '출처 보기' 버튼
 ]
 
+# Supabase 표에서 숫자 칸. 나머지는 모두 text 로 주고받는다
+_SB_INT = {"revision"}
+_SB_FLOAT = {"lat", "lng"}        # 빈칸 <-> null
+_SB_PAGE = 1000                   # PostgREST 기본 최대 행 수
+_SB_CACHE_SEC = 3.0               # 한 번 화면을 그리는 동안 같은 표를 여러 번 읽지 않게
+
+
+class StorageWriteError(RuntimeError):
+    """Supabase 쓰기 실패. 로컬로 몰래 쓰지 않고 바로 알린다 (재배포 때 사라지는 곳에 쓰면 더 위험)."""
+
 
 class Storage:
     """append-only 저장소. sheets 모드와 local 모드가 같은 인터페이스를 쓴다."""
@@ -36,10 +50,19 @@ class Storage:
         self.headers = headers or HEADERS     # 리뷰처럼 칸이 다른 저장소는 따로 넘긴다
         self.mode = os.getenv("STORAGE_MODE", "local").lower()
         self._ws = None
+        self._sb: dict | None = None
+        self._sb_cache: tuple[float, list[dict]] | None = None
+        self.fallback_reason = ""
         if self.mode == "sheets":
             try:
                 self._ws = self._open_sheet()
             except Exception as exc:  # 자격증명 문제면 조용히 로컬로
+                self.mode = "local"
+                self.fallback_reason = str(exc)
+        elif self.mode == "supabase":
+            try:
+                self._sb = self._open_supabase()
+            except Exception as exc:  # URL·키가 없거나 표가 없으면 조용히 로컬로
                 self.mode = "local"
                 self.fallback_reason = str(exc)
 
@@ -71,6 +94,96 @@ class Storage:
             ws.update([head + missing], "A1")
         return ws
 
+    # ---------------------------------------------------------- supabase
+    def _open_supabase(self) -> dict:
+        """PostgREST 로 표를 한 번 읽어 보고 연결 정보를 돌려준다. requests 만 쓴다 (새 의존성 없음)."""
+        import requests
+
+        url = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
+        key = (os.getenv("SUPABASE_KEY") or "").strip()
+        if not url or not key:
+            raise RuntimeError("SUPABASE_URL 또는 SUPABASE_KEY 가 없습니다.")
+        conn = {
+            "endpoint": f"{url}/rest/v1/{self.worksheet}",
+            # 새 형식 키(sb_publishable_…)는 apikey 머리말에만, 옛 형식(anon JWT, eyJ…)은 Authorization 에도 넣는다
+            "headers": {"apikey": key, **({"Authorization": f"Bearer {key}"} if key.startswith("eyJ") else {})},
+        }
+        res = requests.get(conn["endpoint"], headers=conn["headers"],
+                           params={"select": "row_id", "limit": "1"}, timeout=10)
+        if res.status_code != 200:
+            raise RuntimeError(f"Supabase '{self.worksheet}' 표를 읽지 못했습니다 "
+                               f"({res.status_code}): {res.text[:200]}")
+        return conn
+
+    def _sb_read(self) -> list[dict]:
+        import requests
+
+        cached = self._sb_cache
+        if cached and time.monotonic() - cached[0] < _SB_CACHE_SEC:
+            return [dict(r) for r in cached[1]]
+        rows: list[dict] = []
+        offset = 0
+        while True:   # 1000 행씩 끊어 읽는다
+            res = requests.get(
+                self._sb["endpoint"], headers=self._sb["headers"], timeout=20,
+                params={"select": "*", "order": "updated_at.asc,revision.asc,row_id.asc",
+                        "limit": str(_SB_PAGE), "offset": str(offset)},
+            )
+            res.raise_for_status()
+            page = res.json()
+            rows.extend(self._from_db(r) for r in page)
+            if len(page) < _SB_PAGE:
+                break
+            offset += _SB_PAGE
+        self._sb_cache = (time.monotonic(), rows)
+        return [dict(r) for r in rows]
+
+    def _from_db(self, row: dict) -> dict:
+        """DB 한 행 -> 로컬 JSON 과 같은 모양 (revision 은 int, 빈 좌표는 '', 별점은 int 또는 '')."""
+        out: dict[str, Any] = {}
+        for h in self.headers:
+            v = row.get(h)
+            if h in _SB_INT:
+                out[h] = int(v or 0)
+            elif h in _SB_FLOAT:
+                out[h] = "" if v is None else v
+            elif h == "rating":
+                out[h] = int(v) if str(v or "").isdigit() else ""
+            else:
+                out[h] = "" if v is None else str(v)
+        return out
+
+    def _to_db(self, record: dict) -> dict:
+        """앱의 한 행 -> DB 에 넣을 모양. 표에 없는 칸은 버린다."""
+        out: dict[str, Any] = {}
+        for h in self.headers:
+            v = record.get(h, "")
+            if h in _SB_INT:
+                out[h] = int(v or 0)
+            elif h in _SB_FLOAT:
+                out[h] = None if v in ("", None) else float(v)
+            else:
+                out[h] = "" if v is None else str(v)
+        return out
+
+    def _sb_insert(self, records: list[dict]) -> None:
+        import requests
+
+        try:
+            res = requests.post(
+                self._sb["endpoint"], timeout=20,
+                headers={**self._sb["headers"], "Content-Type": "application/json",
+                         "Prefer": "return=minimal"},
+                data=json.dumps([self._to_db(r) for r in records], ensure_ascii=False).encode("utf-8"),
+            )
+        except requests.RequestException as exc:
+            raise StorageWriteError(f"Supabase 에 저장하지 못했습니다 (연결 실패): {exc}") from exc
+        finally:
+            self._sb_cache = None
+        if res.status_code not in (200, 201, 204):
+            # RLS(남의 리뷰 수정)·민감정보 검사·revision 충돌이 여기로 온다
+            raise StorageWriteError(f"Supabase 가 저장을 거부했습니다 ({res.status_code}): {res.text[:300]}")
+
     # ------------------------------------------------------------- local
     @property
     def _local_path(self) -> Path:
@@ -91,6 +204,8 @@ class Storage:
     def all_rows(self) -> list[dict]:
         if self.mode == "sheets" and self._ws is not None:
             return self._ws.get_all_records()
+        if self.mode == "supabase" and self._sb is not None:
+            return self._sb_read()
         return self._read_local()
 
     def current_rows(self) -> list[dict]:
@@ -128,6 +243,8 @@ class Storage:
 
         if self.mode == "sheets" and self._ws is not None:
             self._ws.append_row([str(record.get(h, "")) for h in self.headers])
+        elif self.mode == "supabase" and self._sb is not None:
+            self._sb_insert([record])      # 실패하면 StorageWriteError. 로컬로 대신 쓰지 않는다
         else:
             rows.append(record)
             self._write_local(rows)

@@ -1,4 +1,4 @@
-"""Notion 트래커 → 앱 데이터(data/cafes.json) 가져오기. 매주 GitHub Actions 가 돌린다 (.github/workflows/notion-sync.yml).
+"""Notion 트래커 → 앱 데이터 가져오기 (STORAGE_MODE=supabase 면 Supabase, 아니면 data/cafes.json). 매주 GitHub Actions 가 돌린다 (.github/workflows/notion-sync.yml).
 
     python scripts/notion_import.py          # 실제 data/ 에 넣는다
     python scripts/notion_import.py --dry    # 임시 복사본에만 넣어 결과만 본다 (이미지도 내려받지 않음)
@@ -8,6 +8,7 @@ NOTION_TOKEN(Notion 내부 통합 키)이 환경 변수나 .env 에 있어야 �
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -57,7 +58,15 @@ def main() -> int:
     for _, why in report["skipped"]:
         skipped[why] = skipped.get(why, 0) + 1
     print("건너뜀:", ", ".join(f"{k} {v}" for k, v in skipped.items()) or "-")
-    print(f"기록 {before} → {len(store.all_rows())}행" + (" (dry run, 실제 데이터는 그대로)" if dry else ""))
+    print(f"기록 {before} → {len(store.all_rows())}행 · 저장소 {store.mode}" + (" (dry run, 실제 데이터는 그대로)" if dry else ""))
+    if store.mode == "supabase" and not dry:
+        # Supabase 가 원본이 된 뒤에도 data/cafes.json 을 거울로 남긴다:
+        # 공개 웹의 키 없는 대체 경로, Apps Script 브리핑, 평가 스크립트가 GitHub 의 이 파일을 읽는다
+        mirror = ROOT / "data" / "cafes.json"
+        mirror.write_text(json.dumps(store.all_rows(), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        print(f"Supabase → {mirror.relative_to(ROOT)} 거울 저장")
+    elif getattr(store, "fallback_reason", ""):
+        print(f"주의: Supabase 대신 로컬에 저장했습니다 ({store.fallback_reason})")
     return 0
 
 
