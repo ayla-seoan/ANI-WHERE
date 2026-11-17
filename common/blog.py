@@ -208,3 +208,19 @@ def record(store) -> None:
     except Exception:
         with _lock:
             _pending += n                  # 못 적었으면 다음에 다시
+
+
+def total(row: dict, usage=None) -> int | None:
+    """이 팝업의 네이버 블로그 글 수 (검색 결과 총수). 못 세면 None. 한도 안에서만 부른다."""
+    if not enabled():
+        return None
+    if usage is not None:
+        if not allowed(usage):
+            return None
+        record(usage)
+    try:
+        res = requests.get(os.getenv("NAVER_BLOG_URL") or HUB_URL, headers=_headers(), timeout=TIMEOUT,
+                           params={"query": query_for(row), "display": 1, "format": "json"})
+        return int(res.json().get("total") or 0) if res.status_code == 200 else None
+    except (requests.RequestException, ValueError, TypeError):
+        return None

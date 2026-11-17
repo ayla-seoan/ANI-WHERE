@@ -410,6 +410,10 @@ def answer(question: str, rows: list[dict], today: date, version: str | None = N
 # 지역·작품·날짜 조건은 parse() 로 같이 읽어서 거른다 (예: '부산 팝업 추천', '주말에 가까운 팝업').
 INTENTS = [
     ("help", re.compile(r"^(안녕|하이|hi|hello|도움|도와|사용법|뭐\s*할\s*수|뭘\s*물어|어떻게\s*써)", re.I)),
+    # 순위 질문 (11/18): 블로그 후기 수 · 리뷰 수 · 별점 — 가장/제일 많은·적은·높은·낮은
+    ("blog_rank", re.compile(r"블로그.*(많|적|높|낮|순위|랭킹)|(많|적).*블로그")),
+    ("rating_rank", re.compile(r"(별점|평점)\s*(이|가)?\s*(가장|제일|젤|높|낮|좋|나쁜|순|랭킹)|(높|낮|좋|나쁜)\S*\s*(별점|평점)")),
+    ("review_rank", re.compile(r"(리뷰|후기|댓글)\s*(가|이)?\s*(가장|제일|젤)?\s*(많|적|없|순|랭킹)|(많|적)\S*\s*(리뷰|후기)")),
     ("near", re.compile(r"가까운|근처|주변|내\s*위치|여기서|가까이")),
     ("by_region", re.compile(r"지역\s*별|지역마다|동네\s*별|어느\s*지역|지역\s*순")),
     ("recommend", re.compile(r"추천|어디\s*갈까|갈\s*만한|가볼\s*만한|볼\s*만한|베스트|좋은\s*팝업", re.I)),
@@ -419,6 +423,27 @@ INTENTS = [
     ("popular", re.compile(r"인기|북마크\s*많|핫한|사람\s*많|유명한")),
     ("reviewed", re.compile(r"리뷰\s*많|후기\s*많|후기\s*좋|별점\s*(높|좋)|평점")),
 ]
+
+
+_KOR_NUM = {"한": 1, "하나": 1, "두": 2, "둘": 2, "세": 3, "셋": 3, "네": 4, "넷": 4, "다섯": 5, "여섯": 6, "일곱": 7,
+            "여덟": 8, "아홉": 9, "열": 10}
+RANK_MAX = 10
+
+
+def wanted_count(question: str, default: int = 5) -> int:
+    """'3개', '다섯 개', '5곳' → 몇 개 보여 줄지 (1~RANK_MAX)."""
+    m = re.search(r"(\d{1,2})\s*(개|곳|군데|위)", question)
+    if m:
+        return max(1, min(RANK_MAX, int(m.group(1))))
+    m = re.search(r"(하나|한|두|둘|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)\s*(개|곳|군데)", question)
+    if m:
+        return _KOR_NUM[m.group(1)]
+    return default
+
+
+def lowest_first(question: str) -> bool:
+    """'적은·낮은·나쁜·없는' 을 물었으면 작은 것부터."""
+    return bool(re.search(r"적|낮|나쁜|없는|최하|꼴찌", question))
 
 
 def detect_intent(question: str) -> str | None:
@@ -483,6 +508,9 @@ def intent_answer(question: str, rows: list[dict], today: date, ctx: dict) -> "A
 
     def rating(r: dict) -> tuple[float, int]:
         return ratings.get(eid(r), (0.0, 0))
+
+    if intent in ("blog_rank", "review_rank", "rating_rank"):
+        return _rank_answer(intent, question, query, rows, today, ctx, cond_txt)
 
     if intent == "help":
         return _done(query, [], "작품·지역·날짜로 물어보세요. 예: '내 주변 가까운 팝업', '팝업 추천해줘', '지금 진행 중인 부산 팝업', "
@@ -565,6 +593,47 @@ def intent_answer(question: str, rows: list[dict], today: date, ctx: dict) -> "A
             return _done(query, [], f"{cond_txt}아직 다녀온 후기가 달린 진행 중 팝업이 없어요.", intent)
         return _done(query, live, f"{cond_txt}다녀온 후기가 많은 진행 중 팝업이에요.", intent)
     return None
+
+
+def _rank_answer(intent: str, question: str, query: Query, rows: list[dict], today: date, ctx: dict,
+                 cond_txt: str) -> "Answer":
+    """순위 질문: 끝나지 않은 팝업(질문 속 작품·지역·날짜 조건 적용) 중 블로그 후기 수 / 리뷰 수 / 별점 순."""
+    n = wanted_count(question)
+    low = lowest_first(question)
+    pool = _filtered(query, rows, today, ongoing_only=False)
+    word = {"blog_rank": "블로그 후기", "review_rank": "리뷰", "rating_rank": "별점"}[intent]
+    if intent == "blog_rank":
+        counter = ctx.get("blog_totals")
+        totals = counter(pool) if callable(counter) else {}
+        if not totals:
+            return _done(query, [], "블로그 후기 수를 지금은 셀 수 없어요 (네이버 검색 연결이 꺼져 있거나 이번 달 검색 한도를 다 썼어요).",
+                         intent)
+        value = lambda r: totals.get(str(r.get("entry_id")))           # noqa: E731
+        pool = [r for r in pool if value(r) is not None]
+        unit = lambda v: f"블로그 글 {v:,}개"                            # noqa: E731
+    elif intent == "review_rank":
+        counts = ctx.get("review_counts") or {}
+        value = lambda r: counts.get(str(r.get("entry_id")), 0)         # noqa: E731
+        unit = lambda v: f"리뷰 {v}개"                                   # noqa: E731
+    else:
+        ratings = ctx.get("ratings") or {}
+        pool = [r for r in pool if ratings.get(str(r.get("entry_id")), (0, 0))[1]]
+        if not pool:
+            return _done(query, [], f"{cond_txt}아직 별점이 달린 팝업이 없어요. 다녀온 후기에 별점을 남기면 순위를 보여 드려요.", intent)
+        value = lambda r: ratings[str(r.get("entry_id"))][0]            # noqa: E731
+        unit = lambda v: f"별점 {v:.1f}"                                  # noqa: E731
+    if not pool:
+        return _done(query, [], f"{cond_txt}지금 볼 수 있는 팝업이 없어요.", intent)
+    if intent == "review_rank" and not low and not any(value(r) for r in pool):
+        return _done(query, [], f"{cond_txt}아직 리뷰가 달린 팝업이 없어요. 첫 리뷰를 남겨 보세요.", intent)
+    # 같은 값이면 곧 끝나는 순
+    pool.sort(key=lambda r: ((value(r) if low else -value(r)), str(r.get("end_date") or "")))
+    top = pool[:n]
+    head = f"{word} {'적은' if low and intent != 'rating_rank' else '낮은' if low else '많은' if intent != 'rating_rank' else '높은'} 순"
+    lines = " · ".join(f"{i + 1}. {r.get('work')} ({unit(value(r))})" for i, r in enumerate(top[:3]))
+    res = _done(query, top, f"{cond_txt}{head}으로 {len(top)}곳이에요. {lines}", intent, limit=n)
+    res.summary = head
+    return res
 
 
 def find(question: str, rows: list[dict], today: date, ctx: dict | None = None) -> tuple[Query, list[Hit]]:

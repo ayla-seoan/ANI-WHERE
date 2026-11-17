@@ -6022,7 +6022,7 @@ def _ask_panel_send(question: str) -> None:
             chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체",
                          "guide": res.query.intent == "unknown"})
         else:
-            limit = 5
+            limit = min(len(res.hits), ask.RANK_MAX) if res.query.intent in ("blog_rank", "review_rank", "rating_rank") else 5
             used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:limit]]
             rows = {str(h.row.get("entry_id")): h.row for h in res.hits}
             cards = [_ask_card(i, rows[i], res.distances.get(i)) for i in used[:limit] if i in rows]
@@ -6034,7 +6034,8 @@ def _ask_panel_send(question: str) -> None:
     del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
 
 
-_ASK_HEADS = {"near": "내 위치에서 가까운 순", "recommend": "추천 (별점 → 리뷰 많은 순)", "ending": "곧 끝나는 순",
+_ASK_HEADS = {"blog_rank": "블로그 후기 수 순", "review_rank": "리뷰 수 순", "rating_rank": "별점 순",
+              "near": "내 위치에서 가까운 순", "recommend": "추천 (별점 → 리뷰 많은 순)", "ending": "곧 끝나는 순",
               "upcoming": "곧 열리는 순", "popular": "북마크 많은 순", "reviewed": "후기 많은 순"}
 _ASK_LOG = Path(__file__).resolve().parent / "logs" / "ask_questions.jsonl"
 ASK_DEFAULT_CHIPS = ["내 주변 가까운 팝업", "팝업 추천해줘", "지금 진행 중인 서울 팝업", "곧 끝나는 팝업", "이번 주말 성수 팝업"]
@@ -6052,7 +6053,30 @@ def _ask_ctx() -> dict:
             if 1 <= n <= 5:
                 agg.setdefault(str(r.get("cafe_id")), []).append(n)
     ratings = {k: (sum(v) / len(v), len(v)) for k, v in agg.items()}
-    return {"loc": _my_loc(), "ratings": ratings, "favs": favorite.counts(favs.current_rows())}
+    return {"loc": _my_loc(), "ratings": ratings, "favs": favorite.counts(favs.current_rows()),
+            "review_counts": review.counts(reviews.current_rows()),      # 리뷰 많은·적은 순 (11/18)
+            "blog_totals": _blog_totals_for}                              # 블로그 후기 많은·적은 순 (부를 때만 셈)
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _blog_totals(keys: tuple) -> dict:
+    """팝업별 네이버 블로그 글 수 (하루 동안 기억). keys = ((entry_id, work, cafe_name, address), …). 한도 안에서만 부른다."""
+    from concurrent.futures import ThreadPoolExecutor
+    def one(k):
+        return k[0], blog.total({"work": k[1], "cafe_name": k[2], "address": k[3]}, usage=api_usage)
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        return {eid: n for eid, n in ex.map(one, keys) if n is not None}
+
+
+def _blog_totals_for(rows: list[dict]) -> dict:
+    if not blog.enabled():
+        return {}
+    keys = tuple(sorted((str(r.get("entry_id")), str(r.get("work") or ""), str(r.get("cafe_name") or ""),
+                         str(r.get("address") or "")) for r in rows))
+    try:
+        return _blog_totals(keys)
+    except Exception:
+        return {}
 
 
 def _ask_log(question: str) -> None:

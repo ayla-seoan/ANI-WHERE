@@ -38,3 +38,6 @@
 {"q": "다음 달 서울 팝업", "place": "서울", "window": true}
 {"q": "오늘 날씨 어때?", "empty": true}
 {"q": "점심 뭐 먹지", "empty": true}
+{"q": "리뷰 가장 적은 팝업 뭐야?", "intent": "review_rank"}
+{"q": "별점 가장 높은 팝업 3개 보여줘", "intent": "rating_rank", "empty": true}
+{"q": "블로그 리뷰 가장 많은 팝업 뭐야?", "intent": "blog_rank", "empty": true}
