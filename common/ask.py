@@ -70,6 +70,7 @@ class Answer:
     error: str | None = None
     distances: dict = field(default_factory=dict)    # near 의도: cafe_id → km
     summary: str = ""                                 # by_region 의도: '서울 41곳 · 부산 7곳 …'
+    total: int = 0                                    # 조건에 모두 맞는 팝업 수 (카드는 일부만 보여 줌)
 
 
 # ------------------------------------------------------------- 입력 검사
@@ -99,6 +100,15 @@ def _window(q: str, today: date) -> tuple[tuple[date, date] | None, str]:
     if "내일" in q:
         d = today + timedelta(days=1)
         return (d, d), "내일"
+    if "모레" in q:
+        d = today + timedelta(days=2)
+        return (d, d), "모레"
+    if re.search(r"다음\s*주\s*말", q):
+        sat = today + timedelta(days=(5 - wd) % 7 + 7) if wd <= 5 else today + timedelta(days=6)
+        return (sat, sat + timedelta(days=1)), "다음 주말"
+    if "크리스마스" in q:
+        y = today.year if (today.month, today.day) <= (12, 25) else today.year + 1
+        return (date(y, 12, 24), date(y, 12, 25)), "크리스마스"
     if "이번 주말" in q or "이번주말" in q or ("주말" in q and "다음" not in q):
         sat = today + timedelta(days=(5 - wd) % 7) if wd <= 5 else today
         sun = sat + timedelta(days=1) if sat.weekday() == 5 else sat
@@ -111,6 +121,12 @@ def _window(q: str, today: date) -> tuple[tuple[date, date] | None, str]:
     if "이번 달" in q or "이번달" in q:
         nxt = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
         return (today, nxt - timedelta(days=1)), "이번 달"
+    if re.search(r"다음\s*달", q):
+        start = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+        nxt = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return (start, nxt - timedelta(days=1)), "다음 달"
+    if "연말" in q:
+        return (max(today, date(today.year, 12, 1)), date(today.year, 12, 31)), "연말"
     d = re.search(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일", q) or re.search(r"(?<![\d.])(\d{1,2})\s*[/.]\s*(\d{1,2})(?![\d.])", q)
     if d and 1 <= int(d.group(1)) <= 12 and 1 <= int(d.group(2)) <= 31:
         mon, day = int(d.group(1)), int(d.group(2))
@@ -145,6 +161,12 @@ def parse(question: str, rows: list[dict], today: date) -> Query:
         else:
             # 작품명 전체, 또는 4글자 이상 앞부분('주술회전' ← '주술회전 0')이 질문에 있으면 작품으로 본다
             hit = nw in nq or (len(nw) >= 4 and nw[:4] in nq)
+            if not hit:
+                # 작품명의 첫 낱말만 말해도 ('산리오' ← '산리오 캐릭터즈', '원피스' ← '원피스 대해적시대') 3글자 이상이면 작품으로
+                first = re.split(r"[\s·:×x\-]+", w.strip())[0]
+                hit = len(_norm(first)) >= 3 and _norm(first) not in _STOP and _word_at_start(first, q)
+                if hit:
+                    w, nw = first, _norm(first)      # '원피스' 로 찾아서 '원피스 …' 작품을 모두 잡는다
         if hit and not any(_norm(x) in nw or nw in _norm(x) for x in query.works):
             query.works.append(w)
 
@@ -184,7 +206,9 @@ _STOP = {"팝업", "카페", "콜라보", "있어", "있나요", "있니", "어�
          "다음주", "이번달", "지난", "끝난", "종료", "추천", "추천해줘", "가볼", "만한", "곳", "있는", "열리는",
          # 서술어: 조건이 아니라 말투라서 검색어로 쓰지 않는다 (eval v1 에서 '오늘 열려 있는 팝업' 0건으로 틀림)
          "열려", "열린", "열려있는", "시작", "시작하는", "시작해", "끝나는", "진행", "진행중", "진행중인", "중인",
-         "보여줘", "보여", "보여줘요", "알려줄래", "나와", "나오는", "갈만한", "가고", "싶어", "아직", "열리는", "여는", "있을까"}
+         "보여줘", "보여", "보여줘요", "알려줄래", "나와", "나오는", "갈만한", "가고", "싶어", "아직", "열리는", "여는", "있을까",
+         "모레", "다음달", "연말", "크리스마스", "있어요", "있나", "있음", "하나요", "해요", "하니", "할까", "하는거",
+         "있는지", "궁금해", "궁금", "찾아줘", "찾아", "검색", "좀", "혹시", "정보", "언제까지", "언제부터", "몇", "개", "건"}
 _PARTICLE = re.compile(r"(?:에서|에는|에|의|은|는|이|가|을|를|도|로|으로)$")
 _DATE_WORD = re.compile(r"\d{1,2}월|\d{1,2}일|주말에?|이번주에?|이번달에?|다음주에?")
 
@@ -210,8 +234,14 @@ def _overlaps(row: dict, window: tuple[date, date]) -> bool:
     return bool(s and e and s <= window[1] and e >= window[0])
 
 
-def retrieve(question: str, rows: list[dict], today: date, k: int = TOP_K) -> tuple[Query, list[Hit]]:
+def retrieve(question: str, rows: list[dict], today: date, k: int | None = TOP_K) -> tuple[Query, list[Hit]]:
     query = parse(question, rows, today)
+    hits = search(query, rows, today)
+    return query, (hits[:k] if k else hits)
+
+
+def search(query: Query, rows: list[dict], today: date) -> list[Hit]:
+    """읽어 낸 조건(작품·캐릭터·장소·기간)에 **모두** 맞는 팝업. 점수 높은 순."""
     hits: list[Hit] = []
     for r in rows:
         end = mycal._day(r.get("end_date"))
@@ -228,10 +258,11 @@ def retrieve(question: str, rows: list[dict], today: date, k: int = TOP_K) -> tu
                 continue          # 작품을 콕 집어 물었으면 다른 작품은 뺀다
         chars = _norm(r.get("characters"))
         if query.characters:
-            if any(_norm(c) in chars or _norm(c) in _norm(r.get("intro")) for c in query.characters):
+            if any(_norm(c) in chars or _norm(c) in _norm(r.get("intro")) or _norm(c) in work
+                   for c in query.characters):
                 score += 4; why.append("캐릭터")
-            elif not query.works:
-                continue          # 캐릭터만 콕 집어 물었으면 그 캐릭터가 없는 팝업은 뺀다
+            else:
+                continue          # 캐릭터를 말했으면 그 캐릭터가 나오는 팝업만 (작품과 함께 말해도 둘 다 맞아야)
         if query.places:
             if any(_place_match(p, r) for p in query.places):
                 score += 3; why.append("지역")
@@ -254,7 +285,7 @@ def retrieve(question: str, rows: list[dict], today: date, k: int = TOP_K) -> tu
         live = 0.3 if s <= today <= (end or today) else 0.0
         hits.append(Hit(r, score + live, why))
     hits.sort(key=lambda h: (-h.score, str(h.row.get("start_date") or "")))
-    return query, hits[:k]
+    return hits
 
 
 # ------------------------------------------------------------- 답 만들기
@@ -280,6 +311,61 @@ def _rule_answer(query: Query, hits: list[Hit], today: date) -> AskAnswer:
                      confidence="high")
 
 
+GUIDE = ("말씀을 못 알아들었어요. 작품 이름 · 장소 · 날짜를 넣어서 물어봐 주세요.\n"
+         "예) '치이카와 이번 달 서울 팝업 있어?' · '이번 주말 홍대 팝업' · '12월 5일 부산에서 하는 팝업' · "
+         "'주술회전 팝업 언제까지야?' · '곧 끝나는 팝업'")
+
+
+def phrase(query: Query) -> str:
+    """조건을 말로: '이번 달 서울에서 하는 치이카와'."""
+    when = {"오늘(진행 중)": "지금 진행 중인"}.get(query.window_label, query.window_label)
+    where = f"{'·'.join(query.places)}에서 하는" if query.places else ""
+    what = " ".join(query.works + [c for c in query.characters if not any(_norm(c) in _norm(w) for w in query.works)])
+    return " ".join(x for x in (when, where, what) if x).strip()
+
+
+def understood(query: Query, rows: list[dict]) -> tuple[bool, list[str]]:
+    """질문에서 팝업 조건(작품·캐릭터·장소·기간)이나 데이터에 있는 낱말을 하나라도 읽었는가. (읽었나, 모르는 낱말)"""
+    text = _norm(" ".join(" ".join(str(r.get(c) or "") for c in ("work", "characters", "cafe_name", "perks", "goods", "tags"))
+                          for r in rows))
+    unknown = [w for w in query.words if _norm(w) not in text]
+    known = [w for w in query.words if _norm(w) in text]
+    if query.works or query.characters or query.places:
+        return True, unknown
+    if query.window:
+        # 날짜만 읽었는데 팝업과 상관없는 말이 섞였으면 ('오늘 날씨 어때?') 못 알아들은 것으로
+        return not unknown or bool(known), unknown
+    return bool(known), unknown
+
+
+def relax_hint(query: Query, rows: list[dict], today: date) -> str:
+    """0건일 때: 조건 하나를 빼면 몇 건인지 ('서울을 빼면 3건 있어요')."""
+    tips = []
+    for field_, label in (("places", lambda q: "·".join(q.places)), ("window", lambda q: q.window_label),
+                          ("characters", lambda q: ", ".join(q.characters)), ("works", lambda q: ", ".join(q.works))):
+        if not getattr(query, field_):
+            continue
+        q2 = Query(**{**query.__dict__})
+        if field_ == "window":
+            q2.window, q2.window_label = None, ""
+        else:
+            setattr(q2, field_, [])
+        if not (q2.works or q2.characters or q2.places or q2.window):
+            continue
+        n = len(search(q2, rows, today))
+        if n:
+            name = {"오늘(진행 중)": "지금"}.get(label(query), label(query))
+            tips.append(f"'{name}' 조건을 빼면 {n}건 있어요")
+    return (" " + " · ".join(tips[:2]) + ".") if tips else ""
+
+
+def count_answer(query: Query, n: int, rows: list[dict], today: date) -> str:
+    cond = phrase(query) or ("'" + "', '".join(query.words) + "' 이(가) 들어간")
+    if n:
+        return f"네, {cond} 팝업이 {n}건 있어요." + (" 아래에 5건까지 보여 드려요." if n > 5 else "")
+    return f"현재 진행하는 팝업이 없어요. ({cond} 조건으로 찾았어요.)" + relax_hint(query, rows, today)
+
+
 def answer(question: str, rows: list[dict], today: date, version: str | None = None,
            ctx: dict | None = None) -> Answer:
     """ctx: {'loc': {'lat','lng'} | None, 'ratings': {cafe_id: (평균, 개수)}, 'favs': {cafe_id: 북마크 수}}"""
@@ -287,13 +373,20 @@ def answer(question: str, rows: list[dict], today: date, version: str | None = N
     special = intent_answer(question, rows, today, ctx or {})
     if special is not None:
         return special
-    query, hits = retrieve(question, rows, today)
+    query, all_hits = retrieve(question, rows, today, k=None)
+    ok, unknown = understood(query, rows)
+    if not ok:                               # 팝업 조건을 하나도 못 읽음 → 묻는 법 안내
+        query.intent = "unknown"
+        return Answer(text=GUIDE, hits=[], used_ids=[], source="rule", badge="규칙 기반 대체", query=query,
+                      confidence="low")
+    head = count_answer(query, len(all_hits), rows, today)
+    hits = all_hits[:TOP_K]
     if not hits:
-        return Answer(text="", hits=[], used_ids=[], source="rule", badge="규칙 기반 대체", query=query,
+        return Answer(text=head, hits=[], used_ids=[], source="rule", badge="규칙 기반 대체", query=query,
                       confidence="low")
     week = _WEEKDAYS[today.weekday()]
     content = (f"질문: {question}\n오늘: {today.isoformat()} ({week})\n"
-               f"질문에서 읽은 조건: {query.describe()}\n\n[후보 팝업]\n" +
+               f"질문에서 읽은 조건: {query.describe()}\n조건에 모두 맞는 팝업 수: {len(all_hits)}건\n\n[후보 팝업]\n" +
                "\n".join(_card(h.row, today) for h in hits))
     res = ai.call_structured("ask", content, AskAnswer, fallback=lambda: _rule_answer(query, hits, today),
                              version=version)
@@ -301,9 +394,14 @@ def answer(question: str, rows: list[dict], today: date, version: str | None = N
     allowed = {str(h.row.get("entry_id")) for h in hits}
     used = [i for i in data.used_ids if i in allowed]
     dropped = [i for i in data.used_ids if i not in allowed]
-    return Answer(text=guard.mask(data.answer), hits=hits, used_ids=used,
-                  source=res.source if res.ok else "fallback", badge=res.badge if res.ok else "규칙 기반 대체",
-                  query=query, dropped_ids=dropped, confidence=data.confidence, error=res.error)
+    # 첫 문장은 늘 규칙으로 센 건수 (AI 가 다른 숫자를 말해도 흔들리지 않게), 그 뒤에 AI 설명
+    extra = guard.mask(data.answer) if res.ok and res.source == "ai" else ""
+    out = Answer(text=head + (("\n" + extra) if extra else ""), hits=hits, used_ids=used,
+                 source=res.source if res.ok else "fallback", badge=res.badge if res.ok else "규칙 기반 대체",
+                 query=query, dropped_ids=dropped, confidence=data.confidence, error=res.error)
+    out.summary = head
+    out.total = len(all_hits)
+    return out
 
 
 # ================================================================== 자주 묻는 질문 규칙 (의도)

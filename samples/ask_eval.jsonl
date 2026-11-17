@@ -33,3 +33,8 @@
 {"q": "12월 5일에 부산에서 열리는 팝업", "place": "부산", "window": true}
 {"q": "11.30에 서울 팝업 있어?", "place": "서울", "window": true}
 {"q": "안녕", "intent": "help", "empty": true}
+{"q": "주술회전 이번달에 서울에 하는 팝업 있어?", "work": "주술회전", "place": "서울", "window": true}
+{"q": "산리오 팝업 있어?", "work": "산리오"}
+{"q": "다음 달 서울 팝업", "place": "서울", "window": true}
+{"q": "오늘 날씨 어때?", "empty": true}
+{"q": "점심 뭐 먹지", "empty": true}
