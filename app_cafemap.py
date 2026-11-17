@@ -42,9 +42,9 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent
 TODAY = date.today()
 MAP_HEIGHT = 620
-# 제목 로고: 예전 '팝업 카페 등록하기' 화면의 흰 글자 + 민트 테두리 로고로 통일 (11/18 요청, 바꿔 돌리지 않음)
-LOGOS = ["logo_add.png"]
-FIXED_LOGO = "logo_add.png"
+# 제목 로고: 민트 로고 하나로 고정 (11/18 요청: 흰 글자 로고 → 다시 민트 로고, 크기는 그대로)
+LOGOS = ["logo_mint.png"]
+FIXED_LOGO = "logo_mint.png"
 ADD_LOGO = "logo_add.png"          # 등록 화면 로고 (흰 글자 + 민트 테두리)           # 상세·등록 화면에서는 이 로고로 고정
 TOPBAR_TOP = "0rem"      # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
 TOPBAR_H = "282px"        # 상단 묶음 높이 (로고 + 문구 + 검색 필터. '팝업 카페 N곳' 줄은 묶음 밖)
@@ -314,7 +314,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
 /* 로고 그림 아래 'ANIME POP-UP · CAFE · GOODS' 글씨까지 읽히게 로고 칸을 키운다 */
 .st-key-home_brand button {{ width: 330px !important; height: 100px !important;
-  background: url("app/static/logo_add.png") no-repeat left center / contain !important; }}
+  background: url("app/static/logo_mint.png") no-repeat left center / contain !important; }}
 .st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
 /* 로고는 눌러도·커서를 올려도 바탕·그림자·밝기 변화 없이 그대로 (모바일 탭 하이라이트도 끈다) */
 .st-key-home_brand button, .st-key-home_brand button:hover, .st-key-home_brand button:focus,
@@ -3640,7 +3640,9 @@ def page_map() -> None:
         # 칸을 위젯으로 집어서 숨긴다 (':not(:first-child)' 로 잡으면 '팝업 카페 N곳' 칸 안의 리스트 전체보기 버튼 칸까지 숨는다)
         # 정렬 칸은 남기고(보기 전환 아이콘이 그 위에 있다) 정렬 고르기만 숨긴다
         st.markdown("<style>.st-key-listtools [data-testid='stColumn']:has([class*='st-key-folsw_'], .st-key-regions),"
-                    " .st-key-listtools .st-key-sort, .st-key-m_only { display: none !important; }</style>",
+                    " .st-key-listtools .st-key-sort, .st-key-m_only { display: none !important; }"
+                    # 지도보기 PC: 목록 위 도구 줄은 비어 있어서 숨긴다 → 메뉴바와 지도 사이 간격이 반으로 (11/18 요청)
+                    " @media (min-width: 641px) { .st-key-listtools { display: none !important; } }</style>",
                     unsafe_allow_html=True)
 
     # 모바일 필터 시트 맨 아래 고정 줄: 조건을 모두 지우기 + 지금 조건에 맞는 수로 결과 보기(시트 닫기)
@@ -5768,12 +5770,14 @@ def _ask_panel_send(question: str) -> None:
                                 "없는 팝업이면 오른쪽 아래 + 로 직접 등록할 수 있어요.")
             chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체"})
         else:
-            limit = 5 if res.query.intent else 3
+            limit = 5
             used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:limit]]
             rows = {str(h.row.get("entry_id")): h.row for h in res.hits}
             cards = [_ask_card(i, rows[i], res.distances.get(i)) for i in used[:limit] if i in rows]
-            chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards,
-                         "head": res.summary or _ASK_HEADS.get(res.query.intent, "")})
+            # 검색 질문은 '네, N건 있어요' 를 말풍선으로 (규칙(의도) 질문은 그 안내 문장)
+            say = res.summary if not res.query.intent else (res.text or "")
+            chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards, "say": say,
+                         "head": "" if not res.query.intent else (res.summary or _ASK_HEADS.get(res.query.intent, ""))})
             _ask_log(q)
     del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
 
@@ -5873,9 +5877,10 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
             # 찾은 팝업이 있으면 요약 문장(회색 상자)은 아래 버튼과 겹쳐서 숨기고 'N곳' 만 (사용자 요청 11/18)
             if m.get("ids"):
                 head = f' · {escape(m["head"])}' if m.get("head") else ""
-                st.markdown(_ask_bot(f'찾은 팝업 <b>{len(m["ids"])}곳</b>{head}'), unsafe_allow_html=True)
+                body = escape(m["say"]) + head if m.get("say") else f'찾은 팝업 <b>{len(m["ids"])}곳</b>{head}'
+                st.markdown(_ask_bot(body), unsafe_allow_html=True)
             else:
-                st.markdown(_ask_bot(escape(m["text"])), unsafe_allow_html=True)
+                st.markdown(_ask_bot(escape(m["text"]).replace(chr(10), "<br>")), unsafe_allow_html=True)
             for card in m.get("ids", []):
                 if not isinstance(card, dict):          # 예전 모양 (id, 이름) 기록
                     card = {"id": card[0], "work": card[1], "cafe": "", "address": "", "dates": "",
@@ -5896,6 +5901,17 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                             st.rerun()
                     else:
                         st.button(f"{card['work']} 상세 보기", key=key, on_click=_ask_panel_open, args=(cid,))
+    # 새 답이 생기면 대화창을 맨 아래(가장 최근 말풍선)로 내린다 (11/18 요청). 대화 수가 바뀔 때만
+    n_chat = len(st.session_state.get("ask_chat", []))
+    if st.session_state.get(f"_{prefix}_seen") != n_chat:
+        st.session_state[f"_{prefix}_seen"] = n_chat
+        components.html(
+            "<script>(function(){const d=window.parent.document;let t=0;"
+            "const go=()=>{const box=d.querySelector('.st-key-" + prefix + "_log');if(!box)return;"
+            "[box,...box.querySelectorAll('*')].forEach(e=>{const o=getComputedStyle(e).overflowY;"
+            "if((o==='auto'||o==='scroll')&&e.scrollHeight>e.clientHeight+4){e.scrollTop=e.scrollHeight;}});};"
+            "const iv=setInterval(()=>{go();if(++t>12)clearInterval(iv);},150);})();</script>"
+            f"<!-- {prefix} {n_chat} -->", height=0)          # 내용이 같으면 다시 실행되지 않아서 번호를 붙인다
     with st.container(horizontal=True, key=f"{prefix}_chips"):
         for i, chip in enumerate(_ask_chips()):
             st.button(chip, key=f"{prefix}_chip_{i}", on_click=_ask_panel_send, args=(chip,))
