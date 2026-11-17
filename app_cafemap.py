@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 
 from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
                     kakao_postcode, mycal, notice, notion_sync, review, share, stats)
+from common import blog     # 블로그 후기 (네이버 블로그 검색 · API HUB)
 from common import links as links_check   # 참고 웹사이트 확인 (11/18 안정성)
 from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
@@ -758,7 +759,36 @@ def _detail_info_html(current: dict) -> str:
     src_foot = f'<div class="dintro-foot">{src_btn}</div>' if src_btn else ""
     intro_html = (f'<div class="dsec"><div class="dsec-title">팝업 소개</div>'
                   f'<div class="dintro">{_intro_body(intro)}{src_foot}</div></div>' if intro else "")
-    return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
+    return (f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
+            + _blog_html(current))
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _blog_posts(entry_id: str, work: str, cafe_name: str, start_date: str) -> tuple[list, str]:
+    """팝업별 네이버 블로그 후기 (하루 동안 기억 → 같은 팝업은 하루 한 번만 검색)."""
+    posts, err = blog.search({"work": work, "cafe_name": cafe_name, "start_date": start_date})
+    return [p.__dict__ for p in posts], err
+
+
+def _blog_html(current: dict) -> str:
+    """상세 '블로그 후기' 칸 (네이버 블로그 검색 결과: 제목·요약·블로거·날짜·원문 링크). 키가 없거나 0건이면 칸을 만들지 않는다."""
+    if not blog.enabled():
+        return ""
+    try:
+        posts, _ = _blog_posts(str(current.get("entry_id")), str(current.get("work") or ""),
+                               str(current.get("cafe_name") or ""), str(current.get("start_date") or "")[:10])
+    except Exception:
+        return ""
+    if not posts:
+        return ""
+    cards = "".join(
+        f'<a class="dblog" href="{escape(p["link"])}" target="_blank" rel="noopener">'
+        f'<div class="dblog-t">{escape(p["title"])}</div><div class="dblog-d">{escape(p["desc"])}</div>'
+        f'<div class="dblog-m">{_mi("person")}{escape(p["blogger"] or "블로그")}'
+        + (f' · {p["day"]:%Y.%m.%d}' if p.get("day") else "") + '</div></a>'
+        for p in posts)
+    return (f'<div class="dsec"><div class="dsec-title">블로그 후기 <span class="dsec-src">네이버 블로그 검색 결과</span></div>'
+            f'{cards}</div>')
 
 
 def render_detail(current: dict) -> None:
@@ -2275,6 +2305,15 @@ iframe[src*="kakao_map"] {{
 .dlink-url {{ color:#6B7672; font-size:.9rem; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
 .dlink-go {{ color:{MINT_DEEP}; font-size:1.4rem; line-height:1; flex:0 0 auto; }}
 .dlink.broken {{ background:#FFF4EA; }}
+/* 블로그 후기 카드: 제목(굵게) · 요약 2줄 · 블로거 · 날짜, 누르면 새 탭 */
+.dblog {{ display:block; background:{GRAY_SOFT}; border-radius:14px; padding:12px 16px; margin-bottom:8px;
+          text-decoration:none !important; color:#26302D !important; transition:background .15s; }}
+.dblog:hover {{ background:{MINT_SOFT}; }}
+.dblog-t {{ font-weight:800; font-size:.95rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.dblog-d {{ color:#6B7672; font-size:.82rem; line-height:1.45; margin-top:3px; display:-webkit-box; -webkit-line-clamp:2;
+            -webkit-box-orient:vertical; overflow:hidden; }}
+.dblog-m {{ color:#9AA5A1; font-size:.76rem; margin-top:4px; display:flex; align-items:center; gap:3px; }}
+.dsec-src {{ font-size:.72rem; font-weight:600; color:#9AA5A1; margin-left:6px; }}
 .dlink-warn {{ display:inline-flex; align-items:center; gap:2px; font-size:.75rem; font-weight:800; color:#C2560C;
   background:#fff; border:1px solid #F5C9A6; border-radius:999px; padding:1px 8px; margin-left:6px; vertical-align:2px; }}
 .dlink-warn .mi {{ font-size:.9rem; }}
