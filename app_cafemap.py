@@ -1586,6 +1586,7 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
             st.session_state["m_filters"] = not m_open
             st.rerun()
         _view_switch(wide)
+        st.button("", icon=":material/calendar_month:", key="m_cal_btn", on_click=_gnb_go, args=("cal",))
 
 
 def _view_switch(wide: bool) -> None:
@@ -2501,7 +2502,8 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .st-key-gnb_right [data-testid="stPopover"] button svg { display: none; }       /* 펼침 화살표 숨김 */
 .st-key-gnb_right .st-key-login_btn button p { font-size: 1rem !important; }
 .gnb-tag { color: #6B7672; font-size: .82rem; margin: -2px 0 6px; font-family: "Jua", sans-serif; }
-/* 예전 '지도로 보기 / 리스트로 보기' 버튼은 위 탭이 대신한다 */
+/* 예전 '지도로 보기 / 리스트로 보기' 버튼은 위 탭이 대신한다. 모바일용 캘린더 아이콘도 PC 에서는 숨김 */
+.st-key-m_cal_btn { display: none !important; }
 .st-key-map_icon { display: none !important; }
 .ntf-item { padding: 8px 2px; border-bottom: 1px solid #EEF1F0; font-size: .88rem; line-height: 1.5; }
 .ntf-item b { color: #2E9C82; }
@@ -2516,6 +2518,10 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
     padding: 0 9px !important; border: 1.5px solid var(--accent) !important; border-radius: 10px !important;
     background: #fff !important; box-shadow: none; }
   html body .st-key-view_tools .st-key-map_icon button p { display: none !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn { display: block !important; width: auto !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn button { height: 32px !important; min-width: 32px; padding: 0 9px !important;
+    border: 1.5px solid var(--accent) !important; border-radius: 10px !important; background: #fff !important; min-height: 0 !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn button span { color: var(--accent-deep) !important; font-size: 1.2rem !important; margin: 0 !important; }
   html body .st-key-view_tools .st-key-map_icon button span { color: var(--accent-deep) !important; font-size: 1.2rem !important;
     margin: 0 !important; }
   /* 모바일: 첫 줄 = 로고 + (검색·알림·로그인) */
@@ -2555,7 +2561,9 @@ def _gnb_go(view: str) -> None:
     if view == "ask":
         st.session_state["_gnb_ask"] = True
         return
-    st.session_state["list_only"] = view == "list"
+    st.session_state["cal_view"] = view == "cal"
+    if view != "cal":
+        st.session_state["list_only"] = view == "list"
     st.session_state["selected"] = None
     st.session_state["scroll_top"] = True
 
@@ -2659,9 +2667,13 @@ def _gnb(current: dict | None) -> None:
             st.session_state["scroll_top"] = True
             st.rerun()
         with st.container(horizontal=True, key="gnb_tabs"):
-            on_map, on_list = (not wide and not current), (wide and not current)
+            cal = bool(st.session_state.get("cal_view"))
+            on_map = not wide and not current and not cal
+            on_list = wide and not current and not cal
+            on_cal = cal and not current
             st.button("지도로 보기", key=f"gnbtab_{'on_' if on_map else ''}map", on_click=_gnb_go, args=("map",))
             st.button("리스트로 보기", key=f"gnbtab_{'on_' if on_list else ''}list", on_click=_gnb_go, args=("list",))
+            st.button("내 캘린더", key=f"gnbtab_{'on_' if on_cal else ''}cal", on_click=_gnb_go, args=("cal",))
         with st.container(horizontal=True, key="gnb_right"):
             # 검색 아이콘: 누르면 아래 검색 필터 줄(검색·작품·캐릭터·진행여부·날짜)을 펼치고 접는다.
             # 걸어 둔 조건이 있으면 아이콘 옆에 그 수. 모바일에서는 필터 시트를 연다
@@ -2707,6 +2719,96 @@ def _gnb(current: dict | None) -> None:
     if not current and st.button("", icon=":material/add:", key="add_btn", type="primary"):
         st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
         go("add")
+
+
+# ------------------------------------------------------------ '내 캘린더' 탭: 캘린더 + 알림 받은 내역
+MYCAL_CSS = """
+<style>
+.mc-title { font-family: "Jua", sans-serif; font-size: 1.35rem; color: #26302D; margin: 4px 0 2px; }
+.mc-sub { color: #8A9592; font-size: .82rem; margin-bottom: 10px; }
+.st-key-mycal_box, .st-key-ntf_box { border: 1.5px solid #E3E8E6; border-radius: 16px; padding: 14px 16px !important;
+  background: #fff; }
+.nh-day { color: #8A9592; font-size: .78rem; font-weight: 700; margin: 12px 0 4px; }
+.nh-item { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; background: #F4F8F6; }
+.nh-item img { width: 44px; height: 58px; object-fit: cover; border-radius: 8px; flex: 0 0 44px; }
+.nh-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800;
+  background: #E6F6F0; color: #2E9C82; margin-bottom: 2px; }
+.nh-tag.end { background: #FFECEC; color: #E05555; }
+.nh-name { font-weight: 800; font-size: .92rem; color: #26302D; }
+.nh-cafe { color: #6B7672; font-size: .8rem; }
+[class*="st-key-nh_"] { position: relative; margin-bottom: 6px; }
+[class*="st-key-nh_btn_"] { position: absolute !important; inset: 0; z-index: 2; width: 100% !important; height: 100% !important; }
+[class*="st-key-nh_btn_"] > div, [class*="st-key-nh_btn_"] .stButton { width: 100% !important; height: 100% !important; }
+[class*="st-key-nh_btn_"] button { width: 100% !important; height: 100% !important; opacity: 0 !important; }
+@media (max-width: 640px) {
+  html body .st-key-view_tools .st-key-m_cal_btn { display: block !important; width: auto !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn button { height: 32px !important; min-width: 32px; padding: 0 9px !important;
+    border: 1.5px solid var(--accent) !important; border-radius: 10px !important; background: #fff !important; min-height: 0 !important; }
+  html body .st-key-view_tools .st-key-m_cal_btn button span { color: var(--accent-deep) !important; font-size: 1.2rem !important; }
+  .st-key-mycal_mnav button { border: 1.5px solid var(--accent) !important; border-radius: 10px !important; }
+}
+</style>
+"""
+
+
+def _notice_history(days_back: int = 30) -> list[tuple[date, str, str, dict]]:
+    """알림 받은 내역: 북마크한 팝업마다 '오픈 D-3 ~ 당일', '종료 D-3 ~ 당일' 알림이 생긴 날을 거꾸로 계산한다.
+    (저장하지 않아도 북마크·기간만으로 같은 내역이 다시 나온다) → (알림 날, 종류, 글자, 행)"""
+    _, mine, _ = _fav_state()
+    out: list[tuple[date, str, str, dict]] = []
+    for r in mycal.latest_rows(store.all_rows()):
+        if str(r.get("entry_id")) not in mine:
+            continue
+        s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+        for kind, base in (("open", s_), ("end", e_)):
+            if not base:
+                continue
+            for d in range(3, -1, -1):
+                day = base - timedelta(days=d)
+                if day > TODAY or (TODAY - day).days > days_back:
+                    continue
+                if kind == "end" and s_ and day < s_:
+                    continue
+                label = ("오늘 오픈" if d == 0 else f"오픈 D-{d}") if kind == "open" else ("오늘 종료" if d == 0 else f"종료 D-{d}")
+                out.append((day, kind, label, r))
+    out.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return out
+
+
+def render_my_calendar_view() -> None:
+    st.markdown(CAL_CSS + MYCAL_CSS, unsafe_allow_html=True)
+    # 모바일은 메뉴바 탭이 없어서 리스트·지도로 돌아가는 아이콘을 둔다
+    with st.container(horizontal=True, horizontal_alignment="right", key="mycal_mnav"):
+        st.button("", icon=":material/format_list_bulleted:", key="mycal_to_list", on_click=_gnb_go, args=("list",))
+        st.button("", icon=":material/map:", key="mycal_to_map", on_click=_gnb_go, args=("map",))
+    st.markdown("<style>@media (min-width: 641px) { .st-key-mycal_mnav { display: none !important; } }</style>",
+                unsafe_allow_html=True)
+    left, right = st.columns([1.6, 1], gap="large")
+    with left, st.container(key="mycal_box"):
+        render_calendar()
+    with right, st.container(key="ntf_box"):
+        st.markdown('<div class="mc-title">알림 받은 내역</div>'
+                    '<div class="mc-sub">북마크한 팝업의 오픈 · 종료 3일 전부터 당일까지 알림 (최근 30일)</div>',
+                    unsafe_allow_html=True)
+        hist = _notice_history()
+        if not hist:
+            st.markdown('<div class="ntf-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
+                        '여기에 쌓여요.</div>', unsafe_allow_html=True)
+        last_day = None
+        for n, (day, kind, label, r) in enumerate(hist[:40]):
+            if day != last_day:
+                st.markdown(f'<div class="nh-day">{"오늘" if day == TODAY else f"{day.month}월 {day.day}일"}</div>',
+                            unsafe_allow_html=True)
+                last_day = day
+            eid = str(r.get("entry_id"))
+            with st.container(key=f"nh_{n}_{eid}"):
+                st.markdown(
+                    f'<div class="nh-item"><img src="{escape(_poster_url(r.get("images")))}" alt="">'
+                    f'<div><span class="nh-tag{" end" if kind == "end" else ""}">{escape(label)}</span>'
+                    f'<div class="nh-name">{escape(str(r.get("work") or ""))}</div>'
+                    f'<div class="nh-cafe">{escape(str(r.get("cafe_name") or ""))}</div></div></div>',
+                    unsafe_allow_html=True)
+                st.button(f"{r.get('work')} 상세", key=f"nh_btn_{n}_{eid}", on_click=_gnb_open, args=(eid,))
 
 
 def page_map() -> None:
@@ -2756,6 +2858,10 @@ def page_map() -> None:
         # ('문구', 아이콘) 이면 아이콘과 함께, 글자만이면 기본 체크 아이콘
         msg, icon = flash if isinstance(flash, tuple) else (flash, ":material/check_circle:")
         _toast(msg, icon)
+
+    if st.session_state.get("cal_view") and not current:
+        render_my_calendar_view()
+        return
 
     df = cafe.rows_to_frame(rows)
 
@@ -2954,8 +3060,8 @@ def page_map() -> None:
             render_daily(df)
         with col_map:
             draw_map()
-        with col_cal, st.container(key="map_cal"):
-            render_calendar(compact=True)
+        with col_cal, st.container(key="ask_panel"):     # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
+            render_ask_panel()
 
     # 지도에서 고른 게 이번 실행에서 바뀌었으면 왼쪽 패널·강조를 다시 그린다
     if st.session_state.get("selected") != selected:
