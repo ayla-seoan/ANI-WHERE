@@ -2770,7 +2770,7 @@ GNB_CSS = """
 <style>
 .st-key-gnb { align-items: center !important; gap: 4px !important; flex-wrap: nowrap; padding: 6px 0 2px; }
 /* 로고: 메뉴바 안에서는 작게 */
-.st-key-gnb .st-key-home_brand button { width: 190px !important; height: 58px !important; }
+.st-key-gnb .st-key-home_brand button { width: 155px !important; height: 47px !important; }   /* 11/18 로고 조금 작게 */
 /* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
 .st-key-gnb { position: relative; background: #E9F7F2; border-radius: 0 0 28px 28px;
   padding: 10px 28px !important; margin: 0 -28px; box-sizing: content-box; }
@@ -2881,7 +2881,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
   /* 모바일: 첫 줄 = 로고 + (검색·알림·로그인) */
   .st-key-gnb { flex-wrap: wrap !important; flex-direction: row !important; row-gap: 2px !important; }
   .st-key-gnb .st-key-home_brand { flex: 0 0 auto !important; width: auto !important; }
-  .st-key-gnb .st-key-home_brand button { width: 140px !important; height: 44px !important; }
+  .st-key-gnb .st-key-home_brand button { width: 118px !important; height: 37px !important; }
   .st-key-gnb > *:has(.st-key-gnb_right), .st-key-gnb > .st-key-gnb_right { order: 2; margin-left: auto !important; }
   .st-key-gnb > *:has(.st-key-gnb_tabs), .st-key-gnb > .st-key-gnb_tabs { order: 3; flex: 1 1 100% !important; width: 100% !important; }
   .st-key-gnb_right { flex-wrap: nowrap !important; }
