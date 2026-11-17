@@ -5162,6 +5162,15 @@ a.adm-card.adm-pcard img { width: 44px; height: 60px; object-fit: cover; border-
 .adm-pcard > div { min-width: 0; display: grid; gap: 1px; }
 a.adm-card.adm-link:hover { border-color: #14B8A6; }
 .gt-lab a.adm-link:hover b { color: #14B8A6; text-decoration: underline; }
+.adm-kpilist { margin: 0 0 10px; }
+.adm-kgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.adm-kgrid .adm-card { margin: 0; }
+@media (max-width: 900px) { .adm-kgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .adm-kgrid { grid-template-columns: 1fr; } }
+.adm-kpi span { display: flex; justify-content: space-between; align-items: center; }
+.adm-kpi .kpi-arr { font-size: 1.1rem; color: #9AA5A1; }
+[class*="st-key-admk_on_"] .adm-kpi .kpi-arr { color: #14B8A6; }
+.st-key-adm_kpi_foot { margin-bottom: 14px; }
 .adm-card .adm-go { float: right; color: #9AA5A1; font-size: .74rem; }
 @media (max-width: 900px) { .adm-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* 칸반 */
@@ -5559,30 +5568,34 @@ def _admin_kpis(pop_rows: list[dict], pend: int, n_members: int) -> None:
         for k, label, unit in ADM_KPIS:
             alert = " alert" if k == "requests" and pend else ""
             with st.container(key=f"admk_{'on_' if picked == k else ''}{k}"):
-                st.markdown(f'<div class="adm-kpi{alert}"><span>{label}</span><b>{nums[k]}<small>{unit}</small></b></div>',
-                            unsafe_allow_html=True)
+                arrow = ("expand_less" if picked == k else "expand_more") if k in ("new", "live", "soon") else "chevron_right"
+                st.markdown(f'<div class="adm-kpi{alert}"><span>{label}{_mi(arrow, "kpi-arr")}</span>'
+                            f'<b>{nums[k]}<small>{unit}</small></b></div>', unsafe_allow_html=True)
                 st.button("보기", key=f"admkb_{k}", on_click=_adm_kpi_pick, args=(k,))
     if picked not in lists:
         return
     rows = lists[picked]
     label = dict((k, l) for k, l, _ in ADM_KPIS)[picked]
-    with st.container(horizontal=True, vertical_alignment="center"):
-        st.markdown(f'<div class="adm-panel-h">{label} {len(rows)}곳 · 누르면 상세로 이동</div>', unsafe_allow_html=True)
-        st.button("닫기", icon=":material/close:", key="adm_kpi_close", type="tertiary",
+    # '고른 주 현황' 칸반과 같은 모양 (색 띠 머리 + 포스터 카드). 숫자 카드를 다시 누르면 접힌다
+    color = {"new": "#14B8A6", "live": "#23866A", "soon": "#3672BD"}[picked]
+    show_all = bool(st.session_state.get(f"adm_kpi_all_{picked}"))
+    shown = rows if show_all else rows[:12]
+    cards = "".join(
+        f'<a class="adm-card adm-link adm-pcard" href="{_adm_href(r)}" target="_self">'
+        f'<img src="{escape(_poster_url(r.get("images")))}" alt="" loading="lazy"><div>'
+        f'<b>{escape(str(r.get("work") or ""))}</b><span>{escape(str(r.get("cafe_name") or ""))}</span>'
+        f'<em>{escape(_period(r, lambda d: f"{d:%m-%d}", show_raw=False))}</em></div></a>'
+        for r in shown) or '<div class="adm-empty">해당하는 팝업이 없어요.</div>'
+    st.markdown(f'<div class="adm-col adm-kpilist" style="--c:{color}"><div class="adm-colhead">{label}'
+                f'<small>{len(rows)}곳 · 누르면 상세로</small></div><div class="adm-kgrid">{cards}</div></div>',
+                unsafe_allow_html=True)
+    with st.container(horizontal=True, horizontal_alignment="center", key="adm_kpi_foot"):
+        if len(rows) > 12:
+            st.button("접기" if show_all else f"{len(rows) - 12}곳 더 보기",
+                      icon=":material/expand_less:" if show_all else ":material/expand_more:", key=f"adm_kpi_more_{picked}",
+                      on_click=lambda k=f"adm_kpi_all_{picked}": st.session_state.update({k: not st.session_state.get(k)}))
+        st.button("목록 닫기", icon=":material/close:", key="adm_kpi_close", type="tertiary",
                   on_click=lambda: st.session_state.update(adm_kpi=None))
-    if not rows:
-        st.markdown('<div class="adm-empty">해당하는 팝업이 없어요.</div>', unsafe_allow_html=True)
-        return
-    with st.container(height=min(420, 64 * len(rows) + 20), border=False):
-        cols = st.columns(3, gap="small")
-        for n, r in enumerate(rows):
-            eid = str(r.get("entry_id"))
-            with cols[n % 3], st.container(key=f"admli_{picked}_{eid}"):
-                st.markdown(f'<div class="adm-card"><b>{escape(str(r.get("work") or ""))}</b>'
-                            f'<span>{escape(str(r.get("cafe_name") or ""))}</span>'
-                            f'<em>{escape(str(r.get("start_date") or "")[5:])} ~ {escape(str(r.get("end_date") or "")[5:])}'
-                            f'<span class="adm-go">상세 ›</span></em></div>', unsafe_allow_html=True)
-                st.button("열기", key=f"admlb_{picked}_{eid}", on_click=_adm_open_popup, args=(eid,))
 
 
 def page_data() -> None:
