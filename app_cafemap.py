@@ -1587,6 +1587,7 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
             st.rerun()
         _view_switch(wide)
         st.button("", icon=":material/calendar_month:", key="m_cal_btn", on_click=_gnb_go, args=("cal",))
+        st.button("", icon=":material/bookmarks:", key="m_box_btn", on_click=_gnb_go, args=("box",))
 
 
 def _view_switch(wide: bool) -> None:
@@ -2503,7 +2504,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .st-key-gnb_right .st-key-login_btn button p { font-size: 1rem !important; }
 .gnb-tag { color: #6B7672; font-size: .82rem; margin: -2px 0 6px; font-family: "Jua", sans-serif; }
 /* 예전 '지도로 보기 / 리스트로 보기' 버튼은 위 탭이 대신한다. 모바일용 캘린더 아이콘도 PC 에서는 숨김 */
-.st-key-m_cal_btn { display: none !important; }
+.st-key-m_cal_btn, .st-key-m_box_btn { display: none !important; }
 .st-key-map_icon { display: none !important; }
 .ntf-item { padding: 8px 2px; border-bottom: 1px solid #EEF1F0; font-size: .88rem; line-height: 1.5; }
 .ntf-item b { color: #2E9C82; }
@@ -2518,6 +2519,10 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
     padding: 0 9px !important; border: 1.5px solid var(--accent) !important; border-radius: 10px !important;
     background: #fff !important; box-shadow: none; }
   html body .st-key-view_tools .st-key-map_icon button p { display: none !important; }
+  html body .st-key-view_tools .st-key-m_box_btn { display: block !important; width: auto !important; }
+  html body .st-key-view_tools .st-key-m_box_btn button { height: 32px !important; min-width: 32px; padding: 0 9px !important;
+    border: 1.5px solid var(--accent) !important; border-radius: 10px !important; background: #fff !important; min-height: 0 !important; }
+  html body .st-key-view_tools .st-key-m_box_btn button span { color: var(--accent-deep) !important; font-size: 1.2rem !important; margin: 0 !important; }
   html body .st-key-view_tools .st-key-m_cal_btn { display: block !important; width: auto !important; }
   html body .st-key-view_tools .st-key-m_cal_btn button { height: 32px !important; min-width: 32px; padding: 0 9px !important;
     border: 1.5px solid var(--accent) !important; border-radius: 10px !important; background: #fff !important; min-height: 0 !important; }
@@ -2562,7 +2567,8 @@ def _gnb_go(view: str) -> None:
         st.session_state["_gnb_ask"] = True
         return
     st.session_state["cal_view"] = view == "cal"
-    if view != "cal":
+    st.session_state["box_view"] = view == "box"
+    if view not in ("cal", "box"):
         st.session_state["list_only"] = view == "list"
     st.session_state["selected"] = None
     st.session_state["scroll_top"] = True
@@ -2668,12 +2674,15 @@ def _gnb(current: dict | None) -> None:
             st.rerun()
         with st.container(horizontal=True, key="gnb_tabs"):
             cal = bool(st.session_state.get("cal_view"))
-            on_map = not wide and not current and not cal
-            on_list = wide and not current and not cal
+            box = bool(st.session_state.get("box_view"))
+            on_map = not wide and not current and not cal and not box
+            on_list = wide and not current and not cal and not box
             on_cal = cal and not current
+            on_box = box and not current
             st.button("지도로 보기", key=f"gnbtab_{'on_' if on_map else ''}map", on_click=_gnb_go, args=("map",))
             st.button("리스트로 보기", key=f"gnbtab_{'on_' if on_list else ''}list", on_click=_gnb_go, args=("list",))
             st.button("내 캘린더", key=f"gnbtab_{'on_' if on_cal else ''}cal", on_click=_gnb_go, args=("cal",))
+            st.button("보관함", key=f"gnbtab_{'on_' if on_box else ''}box", on_click=_gnb_go, args=("box",))
         with st.container(horizontal=True, key="gnb_right"):
             # 검색 아이콘: 누르면 아래 검색 필터 줄(검색·작품·캐릭터·진행여부·날짜)을 펼치고 접는다.
             # 걸어 둔 조건이 있으면 아이콘 옆에 그 수. 모바일에서는 필터 시트를 연다
@@ -2811,6 +2820,145 @@ def render_my_calendar_view() -> None:
                 st.button(f"{r.get('work')} 상세", key=f"nh_btn_{n}_{eid}", on_click=_gnb_open, args=(eid,))
 
 
+# ------------------------------------------------------------ '보관함' 탭: 찜 · 다녀온(내가 쓴 다녀온 후기) · 최근 본
+BOX_CSS = """
+<style>
+.bx-title { font-family: "Jua", sans-serif; font-size: 1.7rem; color: #26302D; margin: 6px 0 4px; }
+.st-key-box_tabs { gap: 0 !important; border-bottom: 1.5px solid #E3E8E6; margin-bottom: 14px; }
+.st-key-box_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  padding: 8px 16px 9px !important; border-bottom: 3px solid transparent !important; margin-bottom: -1.5px; }
+.st-key-box_tabs button p { font-size: 1.1rem !important; font-weight: 700 !important; color: #9AA5A1 !important; }
+.st-key-box_tabs [class*="st-key-boxtab_on_"] button { border-bottom-color: #26302D !important; }
+.st-key-box_tabs [class*="st-key-boxtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
+.bx-tip { display: flex; align-items: center; gap: 8px; background: #F4F8F6; border-radius: 14px; padding: 12px 16px;
+  color: #4B5260; font-size: .9rem; margin-bottom: 14px; }
+.bx-empty { text-align: center; padding: 56px 12px 40px; }
+.bx-empty .ic { font-family: "Material Symbols Rounded"; font-size: 4.2rem; color: #C9D6D2; line-height: 1; }
+.bx-empty h4 { margin: 14px 0 4px; }
+.bx-empty p { color: #8A9592; font-size: .92rem; margin: 0; }
+[class*="st-key-bx_"] { position: relative; }
+.bxc { display: flex; gap: 12px; background: #fff; border: 1.5px solid #E3E8E6; border-radius: 16px; padding: 10px; }
+.bxc img.pst { width: 82px; height: 110px; object-fit: cover; border-radius: 10px; flex: 0 0 82px; }
+.bxc .t { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bxc .w { font-family: "Jua", sans-serif; font-size: 1.15rem; color: #2E9C82; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bxc .c { font-weight: 800; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bxc .d { color: #2E9C82; font-weight: 800; font-size: .85rem; }
+.bxc .st { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800; background: #E6F6F0;
+  color: #2E9C82; width: fit-content; }
+.bxc .st.end { background: #EEF1F0; color: #8A9592; }
+.bxr { margin-top: 8px; background: #F4F8F6; border-radius: 12px; padding: 10px 12px; font-size: .88rem; line-height: 1.55; }
+.bxr .stars { color: #F5A623; letter-spacing: 1px; font-size: .95rem; }
+.bxr .when { color: #9AA5A1; font-size: .75rem; margin-left: 6px; }
+.bxr .imgs { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.bxr .imgs img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
+[class*="st-key-bxbtn_"] { position: absolute !important; inset: 0; z-index: 2; width: 100% !important; height: 100% !important; }
+[class*="st-key-bxbtn_"] > div, [class*="st-key-bxbtn_"] .stButton { width: 100% !important; height: 100% !important; }
+[class*="st-key-bxbtn_"] button { width: 100% !important; height: 100% !important; opacity: 0 !important; }
+</style>
+"""
+
+
+def _remember_recent(cafe_id: str) -> None:
+    """최근 본 팝업 (이 브라우저 세션 안에서, 최신 20개)."""
+    rec = [x for x in st.session_state.get("recent_seen", []) if x != cafe_id]
+    st.session_state["recent_seen"] = ([cafe_id] + rec)[:20]
+
+
+def _box_tab(t: str) -> None:
+    st.session_state["box_tab"] = t
+
+
+def _box_card(r: dict, key: str, review_html: str = "") -> None:
+    eid = str(r.get("entry_id"))
+    s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+    md = lambda d: f"{d.month}.{d.day}" if d else ""          # noqa: E731
+    state = ("종료" if e_ and e_ < TODAY else "예정" if s_ and s_ > TODAY else "진행 중") if s_ else ""
+    with st.container(key=f"bx_{key}_{eid}"):
+        st.markdown(
+            f'<div class="bxc"><img class="pst" src="{escape(_poster_url(r.get("images")))}" alt="">'
+            f'<div class="t"><span class="st{" end" if state == "종료" else ""}">{state}</span>'
+            f'<div class="w">{escape(str(r.get("work") or ""))}</div><div class="c">{escape(str(r.get("cafe_name") or ""))}</div>'
+            f'<div class="d">{md(s_)} ~ {md(e_)}</div></div></div>{review_html}', unsafe_allow_html=True)
+        st.button(f"{r.get('work')} 상세", key=f"bxbtn_{key}_{eid}", on_click=_gnb_open, args=(eid,))
+
+
+def _box_empty(title: str, hint: str, icon: str) -> None:
+    st.markdown(f'<div class="bx-empty"><div class="ic">{icon}</div><h4>{title}</h4><p>{hint}</p></div>',
+                unsafe_allow_html=True)
+
+
+def _box_grid(items: list[tuple[dict, str]], key: str) -> None:
+    """카드 목록: PC 는 2칸, 모바일은 1칸 (Streamlit 칸은 좁은 화면에서 저절로 쌓인다)."""
+    for i in range(0, len(items), 2):
+        cols = st.columns(2, gap="medium")
+        for col, (r, review_html) in zip(cols, items[i:i + 2]):
+            with col:
+                _box_card(r, key, review_html)
+
+
+def render_box_view() -> None:
+    st.markdown(BOX_CSS, unsafe_allow_html=True)
+    with st.container(horizontal=True, horizontal_alignment="right", key="box_mnav"):
+        st.button("", icon=":material/format_list_bulleted:", key="box_to_list", on_click=_gnb_go, args=("list",))
+        st.button("", icon=":material/map:", key="box_to_map", on_click=_gnb_go, args=("map",))
+    st.markdown("<style>@media (min-width: 641px) { .st-key-box_mnav { display: none !important; } }</style>",
+                unsafe_allow_html=True)
+    st.markdown('<div class="bx-title">보관함</div>', unsafe_allow_html=True)
+    tab = st.session_state.get("box_tab", "fav")
+    with st.container(horizontal=True, key="box_tabs"):
+        for t, label in (("fav", "찜"), ("visited", "다녀온"), ("recent", "최근 본")):
+            st.button(label, key=f"boxtab_{'on_' if tab == t else ''}{t}", on_click=_box_tab, args=(t,))
+    latest = {str(r.get("entry_id")): r for r in mycal.latest_rows(store.all_rows())}
+
+    if tab == "fav":
+        st.markdown(f'<div class="bx-tip">{_mi("notifications")} 찜한 팝업은 오픈·종료 3일 전부터 알림으로 알려 드려요.</div>',
+                    unsafe_allow_html=True)
+        _, mine, _ = _fav_state()
+        rows = sorted((latest[i] for i in mine if i in latest),
+                      key=lambda r: (str(r.get("end_date") or "") < TODAY.isoformat(), str(r.get("start_date") or "")))
+        if not rows:
+            _box_empty("아직 찜한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.", "bookmark_add")
+            return
+        _box_grid([(r, "") for r in rows], "fav")
+
+    elif tab == "visited":
+        st.markdown(f'<div class="bx-tip">{_mi("rate_review")} \'다녀온 후기\'를 쓴 팝업이 여기에 모여요. 쓴 후기도 함께 보여요.</div>',
+                    unsafe_allow_html=True)
+        me = _me()
+        mine_reviews = [r for r in reviews.current_rows()
+                        if r.get("kind") == review.RATED_KIND and not r.get("parent_id") and review.can_delete(r, me)]
+        by_cafe: dict[str, list[dict]] = {}
+        for rv in sorted(mine_reviews, key=lambda x: str(x.get("updated_at", "")), reverse=True):
+            by_cafe.setdefault(str(rv.get("cafe_id")), []).append(rv)
+        items = []
+        for cid, rvs in by_cafe.items():
+            if cid not in latest:
+                continue
+            html_parts = []
+            for rv in rvs:
+                pics = images.paths(rv.get("images"))        # 리뷰 화면과 같은 방법으로 사진 경로를 고른다
+                imgs = "".join(f'<img src="{escape(images.url(x))}" alt="">' for x in pics[:4])
+                html_parts.append(
+                    f'<div class="bxr"><span class="stars">{review.stars(rv.get("rating"))}</span>'
+                    f'<span class="when">{escape(_when(str(rv.get("updated_at", ""))))}</span>'
+                    f'<div>{escape(str(rv.get("body") or ""))}</div>'
+                    f'{f"<div class=imgs>{imgs}</div>" if imgs else ""}</div>')
+            items.append((latest[cid], "".join(html_parts)))
+        if not items:
+            _box_empty("다녀온 팝업이 없어요", "팝업 상세의 리뷰 탭에서 '다녀온 후기'를 쓰면 여기에 기록돼요.", "where_to_vote")
+            return
+        _box_grid(items, "visited")
+
+    else:
+        ids = [i for i in st.session_state.get("recent_seen", []) if i in latest]
+        st.markdown(f'<div class="bx-tip">{_mi("history")} 이 브라우저에서 최근에 연 팝업 상세예요 (최대 20개).</div>',
+                    unsafe_allow_html=True)
+        if not ids:
+            _box_empty("최근 본 팝업이 없어요", "리스트나 지도에서 팝업을 눌러 상세를 열면 여기에 남아요.", "history")
+            return
+        _box_grid([(latest[i], "") for i in ids], "recent")
+
+
 def page_map() -> None:
     st.markdown(GLOBAL_CSS + LIST_CSS, unsafe_allow_html=True)
     _no_translate()
@@ -2859,8 +3007,13 @@ def page_map() -> None:
         msg, icon = flash if isinstance(flash, tuple) else (flash, ":material/check_circle:")
         _toast(msg, icon)
 
+    if current:
+        _remember_recent(str(current["entry_id"]))
     if st.session_state.get("cal_view") and not current:
         render_my_calendar_view()
+        return
+    if st.session_state.get("box_view") and not current:
+        render_box_view()
         return
 
     df = cafe.rows_to_frame(rows)
