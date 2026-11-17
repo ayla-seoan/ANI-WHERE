@@ -2686,11 +2686,7 @@ def _gnb(current: dict | None) -> None:
                 go("login")
     with st.container(key="gnb_loc_box"):
         my_place.my_location(key="gnb_loc")
-    if current:
-        if st.button("리스트로 돌아가기", icon=":material/arrow_back:", key="back_to_list", type="primary"):
-            st.session_state["selected"] = None
-            st.session_state["scroll_top"] = True
-            st.rerun()
+    # 상세에서 돌아가기는 위 '리스트로 보기 / 지도로 보기' 탭이나 로고로 (별도 '리스트로 돌아가기' 버튼은 뺐다, 11/18 요청)
     # 모바일: 등록 + 위에 물어보기 플로팅 버튼 → 팝업 대화창 (PC 는 리스트 옆 대화창이 있어 숨긴다)
     st.markdown(ASK_FAB_CSS, unsafe_allow_html=True)
     if st.button("", icon=":material/forum:", key="ask_fab"):

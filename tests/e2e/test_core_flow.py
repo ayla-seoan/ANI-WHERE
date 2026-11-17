@@ -51,7 +51,7 @@ def pick_cafe(data_dir, with_links: bool = False) -> dict:
 def open_detail(page: Page, eid: str) -> None:
     """카드 전체를 덮는 '자세히 보기' 버튼을 눌러 상세를 연다."""
     page.locator(f".st-key-open_{eid} button").click(force=True)
-    expect(page.get_by_role("button", name=re.compile("리스트로 돌아가기"))).to_be_visible(timeout=LONG)
+    expect(page.locator(".dtitle")).to_be_visible(timeout=LONG)
     wait_idle(page)
 
 
@@ -68,6 +68,9 @@ def test_2_검색으로_좁혀지고_없으면_안내가_뜬다(page: Page, app_
     total = open_list(page, app_url)
     target = pick_cafe(data_dir)
     word = str(target["work"])
+    # 검색 필터 줄은 메뉴바의 검색 아이콘을 눌러야 펼쳐진다 (11/18 화면 변경)
+    page.locator(".st-key-gnb_search_off button").click()
+    wait_idle(page)
     box = page.get_by_role("textbox", name="검색")
     box.fill(word)
     box.press("Enter")
@@ -87,7 +90,7 @@ def test_2_검색으로_좁혀지고_없으면_안내가_뜬다(page: Page, app_
 
 
 # ------------------------------------------------------------------ 3. 상세
-def test_3_카드를_누르면_상세가_열리고_돌아올_수_있다(page: Page, app_url, data_dir):
+def test_3_카드를_누르면_상세가_열리고_탭으로_돌아올_수_있다(page: Page, app_url, data_dir):
     open_list(page, app_url)
     target = pick_cafe(data_dir, with_links=True)
     open_detail(page, target["entry_id"])
@@ -95,7 +98,8 @@ def test_3_카드를_누르면_상세가_열리고_돌아올_수_있다(page: Pa
     expect(page.get_by_text("방문 전 확인", exact=True)).to_be_visible()
     expect(page.get_by_text("참고 웹사이트", exact=True).first).to_be_visible()
 
-    page.get_by_role("button", name=re.compile("리스트로 돌아가기")).click()
+    # 상세에서 돌아가기는 메뉴바의 '리스트로 보기' 탭 ('리스트로 돌아가기' 버튼은 11/18 에 뺐다)
+    page.locator(".st-key-gnb_tabs").get_by_role("button", name="리스트로 보기").click()
     wait_idle(page)
     expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
     expect(page.locator(".dtitle")).to_have_count(0)
