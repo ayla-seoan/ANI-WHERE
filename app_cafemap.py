@@ -2446,6 +2446,205 @@ def _reset_filters() -> None:
     st.session_state["regions_m"] = []
 
 
+# ------------------------------------------------------------ 상단 메뉴바 (로고 · 보기 탭 · 검색 / 알림 / 로그인)
+GNB_CSS = """
+<style>
+.st-key-gnb { align-items: center !important; gap: 4px !important; flex-wrap: nowrap; padding: 6px 0 2px; }
+/* 로고: 메뉴바 안에서는 작게 */
+.st-key-gnb .st-key-home_brand button { width: 190px !important; height: 58px !important; }
+/* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
+.st-key-gnb { position: relative; }
+/* 탭은 메뉴바 정가운데 (로고·오른쪽 아이콘 폭과 상관없이) */
+.st-key-gnb_tabs { gap: 0 !important; width: auto !important; flex: 0 0 auto; position: absolute !important;
+  left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
+.st-key-gnb_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important;
+  box-shadow: none !important; padding: 10px 16px 9px !important; border-bottom: 3px solid transparent !important; }
+.st-key-gnb_tabs button p { font-size: 1.05rem !important; font-weight: 600 !important; color: #8A9592 !important; }
+.st-key-gnb_tabs button:hover p { color: #26302D !important; }
+.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: #26302D !important; }
+.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
+/* 오른쪽 끝: 검색 · 알림 · 로그인 */
+.st-key-gnb_right { margin-left: auto; width: auto !important; flex: 0 0 auto; gap: 2px !important; align-items: center; }
+.st-key-gnb_right [data-testid="stPopover"] button, .st-key-gnb_right .st-key-login_btn button {
+  background: transparent !important; border: 0 !important; box-shadow: none !important; }
+.st-key-gnb_right [data-testid="stPopover"] button span[data-testid="stIconMaterial"] { font-size: 1.6rem !important; }
+.st-key-gnb_right [data-testid="stPopover"] button svg { display: none; }       /* 펼침 화살표 숨김 */
+.st-key-gnb_right .st-key-login_btn button p { font-size: 1rem !important; }
+.gnb-tag { color: #6B7672; font-size: .82rem; margin: -2px 0 6px; font-family: "Jua", sans-serif; }
+/* 예전 '지도로 보기 / 리스트로 보기' 버튼은 위 탭이 대신한다 */
+.st-key-map_icon { display: none !important; }
+.ntf-item { padding: 8px 2px; border-bottom: 1px solid #EEF1F0; font-size: .88rem; line-height: 1.5; }
+.ntf-item b { color: #2E9C82; }
+.ntf-empty { color: #8A9592; font-size: .88rem; padding: 6px 2px; }
+.st-key-gnb_loc_box { height: 0 !important; overflow: hidden !important; margin: 0 !important; }
+@media (max-width: 640px) {
+  /* 모바일: 첫 줄 = 로고 + (검색·알림·로그인), 둘째 줄 = 가운데 탭 */
+  .st-key-gnb { flex-wrap: wrap !important; flex-direction: row !important; row-gap: 2px !important; }
+  .st-key-gnb .st-key-home_brand { flex: 0 0 auto !important; width: auto !important; }
+  .st-key-gnb .st-key-home_brand button { width: 140px !important; height: 44px !important; }
+  .st-key-gnb > *:has(.st-key-gnb_right), .st-key-gnb > .st-key-gnb_right { order: 2; margin-left: auto !important; }
+  .st-key-gnb > *:has(.st-key-gnb_tabs), .st-key-gnb > .st-key-gnb_tabs { order: 3; flex: 1 1 100% !important; width: 100% !important; }
+  .st-key-gnb_right { flex-wrap: nowrap !important; }
+  .st-key-gnb_tabs { order: 3; flex: 1 1 100% !important; width: 100% !important; justify-content: center !important;
+    flex-wrap: nowrap !important; position: static !important; transform: none !important; }
+  .st-key-gnb_tabs > div { width: auto !important; flex: 0 0 auto !important; }
+  .st-key-gnb_tabs button { white-space: nowrap; padding: 8px 14px 7px !important; }
+  .st-key-gnb_tabs button p { font-size: .95rem !important; }
+  .st-key-gnb_right .st-key-login_btn button p { font-size: .85rem !important; }
+}</style>
+"""
+
+
+ASK_FAB_CSS = """
+<style>
+.st-key-ask_fab { display: none; }
+@media (max-width: 640px) {
+  /* 등록(+) 버튼과 같은 크기(50px)·같은 오른쪽 줄, 그 바로 위 (+ 는 right 16px · bottom 76px) */
+  .st-key-ask_fab { display: block; position: fixed !important; right: 16px; bottom: calc(76px + 50px + 12px);
+    z-index: 1003; width: 50px !important; height: 50px; }
+  .st-key-ask_fab button { width: 50px !important; height: 50px !important; min-height: 0 !important; border-radius: 50% !important;
+    padding: 0 !important; background: #14B8A6 !important; border: 0 !important; box-shadow: 0 6px 16px rgba(20,184,166,.4) !important;
+    display: flex !important; align-items: center !important; justify-content: center !important; }
+  .st-key-ask_fab button span { font-size: 1.55rem !important; color: #fff !important; margin: 0 !important; }
+}</style>
+"""
+
+
+def _gnb_go(view: str) -> None:
+    """탭: 지도로 보기 / 리스트로 보기 / 물어보기."""
+    if view == "ask":
+        st.session_state["_gnb_ask"] = True
+        return
+    st.session_state["list_only"] = view == "list"
+    st.session_state["selected"] = None
+    st.session_state["scroll_top"] = True
+
+
+def _gnb_search() -> None:
+    # 위 검색칸에 쓴 글자를 아래 필터의 검색칸(f_query)으로 넘긴다 (리스트에서 바로 걸러진다)
+    st.session_state["f_query"] = st.session_state.get("gnb_q", "")
+    st.session_state["list_only"] = True
+    st.session_state["selected"] = None
+
+
+def _my_loc() -> dict | None:
+    """내 위치 {'lat','lng'} (지도보기 데일리 노트 또는 메뉴바에서 받은 값). 모르면 None."""
+    for key in ("_my_loc", "gnb_loc"):
+        loc = st.session_state.get(key)
+        if isinstance(loc, dict) and "lat" in loc:
+            return loc
+    return None
+
+
+def _notices() -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """알림 두 묶음 (글자 HTML, cafe_id).
+    1) 북마크한 팝업: 오픈 D-3 ~ 당일, 그리고 3일 안에 끝나는 것
+    2) 내 위치 기반 추천: 지금 열려 있는 팝업 중 가까운 3곳 (북마크한 곳은 빼고)"""
+    _, mine, _ = _fav_state()
+    rows = [r for r in mycal.latest_rows(store.all_rows()) if r.get("status") != "deleted"]
+    marks: list[tuple[str, str]] = []
+    for r in rows:
+        eid = str(r.get("entry_id"))
+        if eid not in mine:
+            continue
+        s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+        name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
+        if s and 0 <= (s - TODAY).days <= 3:
+            d = (s - TODAY).days
+            marks.append((f"<b>{'오늘 오픈' if d == 0 else f'오픈 D-{d}'}</b> · {name}", eid))
+        elif e and s and s <= TODAY and 0 <= (e - TODAY).days <= 3:
+            d = (e - TODAY).days
+            marks.append((f"<b>{'오늘 종료' if d == 0 else f'종료 D-{d}'}</b> · {name}", eid))
+    marks.sort(key=lambda t: t[0])
+    near: list[tuple[str, str]] = []
+    loc = _my_loc()
+    if loc:
+        me = (float(loc["lat"]), float(loc["lng"]))
+        cand = []
+        for r in rows:
+            s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+            try:
+                pt = (float(r.get("lat")), float(r.get("lng")))
+            except (TypeError, ValueError):
+                continue
+            if str(r.get("entry_id")) in mine or not (s and e and s <= TODAY <= e):
+                continue
+            cand.append((my_place._km(me, pt), r))
+        for km, r in sorted(cand, key=lambda t: t[0])[:3]:
+            name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
+            dist = f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km"
+            near.append((f"<b>내 주변 {dist}</b> · {name}", str(r.get("entry_id"))))
+    return marks[:8], near
+
+
+def _gnb_open(cafe_id: str) -> None:
+    st.session_state["selected"] = str(cafe_id)
+    st.session_state["scroll_top"] = True
+
+
+def _gnb(current: dict | None) -> None:
+    """상단 메뉴바: [로고] … [지도로 보기 · 리스트로 보기] (가운데) … [검색] [알림] [로그인]
+    물어보기는 리스트 옆 대화창으로 (탭에서는 뺐다)."""
+    if st.session_state.pop("_gnb_ask", False):
+        go("ask")
+    st.markdown(GNB_CSS, unsafe_allow_html=True)
+    wide = bool(st.session_state.get("list_only"))
+    with st.container(horizontal=True, key="gnb"):
+        _logo_swap()
+        if current:
+            st.markdown(f'<style>html body .st-key-home_brand button {{ background-image: url("app/static/{FIXED_LOGO}")'
+                        ' !important; }</style>', unsafe_allow_html=True)
+        if st.button("ANI:WHERE", key="home_brand", type="tertiary"):
+            st.session_state["selected"] = None
+            st.session_state["scroll_top"] = True
+            st.rerun()
+        with st.container(horizontal=True, key="gnb_tabs"):
+            on_map, on_list = (not wide and not current), (wide and not current)
+            st.button("지도로 보기", key=f"gnbtab_{'on_' if on_map else ''}map", on_click=_gnb_go, args=("map",))
+            st.button("리스트로 보기", key=f"gnbtab_{'on_' if on_list else ''}list", on_click=_gnb_go, args=("list",))
+        with st.container(horizontal=True, key="gnb_right"):
+            with st.popover("", icon=":material/search:"):
+                st.text_input("검색", key="gnb_q", placeholder="작품·카페명·캐릭터·주소", on_change=_gnb_search,
+                              label_visibility="collapsed")
+                st.caption("엔터를 누르면 리스트에서 바로 찾아 줘요.")
+            marks, near = _notices()
+            with st.popover(str(len(marks) + len(near)) if (marks or near) else "", icon=":material/notifications:"):
+                st.markdown("**북마크한 팝업**")
+                if not marks:
+                    st.markdown('<div class="ntf-empty">오픈 3일 전부터 당일까지, 그리고 끝나기 3일 전부터 알려 드려요. '
+                                '팝업을 북마크해 보세요.</div>', unsafe_allow_html=True)
+                for n, (text, eid) in enumerate(marks):
+                    st.markdown(f'<div class="ntf-item">{text}</div>', unsafe_allow_html=True)
+                    st.button("보기", key=f"ntf_m{n}_{eid}", type="tertiary", on_click=_gnb_open, args=(eid,))
+                st.markdown("**내 주변 추천**")
+                if not _my_loc():
+                    st.markdown('<div class="ntf-empty">위치를 허용하면 지금 열려 있는 가까운 팝업을 추천해 드려요. '
+                                '브라우저 주소창의 위치 권한을 허용해 주세요.</div>', unsafe_allow_html=True)
+                elif not near:
+                    st.markdown('<div class="ntf-empty">지금 주변에 열려 있는 팝업이 없어요.</div>', unsafe_allow_html=True)
+                for n, (text, eid) in enumerate(near):
+                    st.markdown(f'<div class="ntf-item">{text}</div>', unsafe_allow_html=True)
+                    st.button("보기", key=f"ntf_n{n}_{eid}", type="tertiary", on_click=_gnb_open, args=(eid,))
+            who = _member()
+            if st.button(who["nickname"] if who else "로그인", key="login_btn"):
+                go("login")
+    with st.container(key="gnb_loc_box"):
+        my_place.my_location(key="gnb_loc")
+    if current:
+        if st.button("리스트로 돌아가기", icon=":material/arrow_back:", key="back_to_list", type="primary"):
+            st.session_state["selected"] = None
+            st.session_state["scroll_top"] = True
+            st.rerun()
+    # 모바일: 등록 + 위에 물어보기 플로팅 버튼 → 팝업 대화창 (PC 는 리스트 옆 대화창이 있어 숨긴다)
+    st.markdown(ASK_FAB_CSS, unsafe_allow_html=True)
+    if st.button("", icon=":material/forum:", key="ask_fab"):
+        ask_dialog()
+    # 오른쪽 아래 코랄색 + (등록) — 화면에 떠 있다 (CSS .st-key-add_btn)
+    if not current and st.button("", icon=":material/add:", key="add_btn", type="primary"):
+        st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
+        go("add")
+
+
 def page_map() -> None:
     st.markdown(GLOBAL_CSS + LIST_CSS, unsafe_allow_html=True)
     _no_translate()
@@ -2481,34 +2680,7 @@ def page_map() -> None:
     # 제목·등록하기(상세에서는 돌아가기)·검색 필터는 스크롤해도 늘 위에 붙어 있다 (LIST_CSS 의 .st-key-topbar)
     top = st.container(key="topbar")
     with top:
-        head, btn = st.columns([4, 2], vertical_alignment="bottom")
-    with head:
-        # 제목을 누르면 상세를 닫고 보던 모드(리스트 전체보기 / 지도보기)의 첫 화면으로 돌아간다
-        if _brand(fixed=current is not None):     # 상세에서는 로고 고정
-            st.session_state["selected"] = None
-            st.session_state["scroll_top"] = True
-            st.rerun()
-    with btn:
-        # 상세에서는 등록하기 자리에 '리스트로 돌아가기' (상단에 늘 떠 있다)
-        if current:
-            if st.button("리스트로 돌아가기", icon=":material/arrow_back:", key="back_to_list", type="primary", width="stretch"):
-                st.session_state["selected"] = None
-                st.session_state["scroll_top"] = True
-                st.rerun()
-        else:
-            # 내 캘린더는 지도보기 오른쪽에 바로 보여서 따로 버튼을 두지 않는다
-            with st.container(horizontal=True, horizontal_alignment="right", key="top_btns"):
-                # 글자 '+' 는 글꼴 때문에 동그라미 가운데에서 살짝 비껴 보여서, 가운데에 정확히 놓이는 아이콘을 쓴다
-                # 팝업 Q&A (2차: RAG). 등록 버튼 왼쪽의 말풍선 아이콘
-                if st.button("물어보기", icon=":material/forum:", key="ask_btn"):
-                    go("ask")
-                who = _member()
-                if st.button(who["nickname"] if who else "로그인",
-                             icon=":material/account_circle:" if who else ":material/login:", key="login_btn"):
-                    go("login")
-                if st.button("", icon=":material/add:", key="add_btn", type="primary"):
-                    st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
-                    go("add")
+        _gnb(current)
 
     report = st.session_state.pop("save_report", None)
     if report:
@@ -4038,10 +4210,14 @@ def page_data() -> None:
 # ------------------------------------------------------------ 리스트 옆 '팝업에게 물어보기' 대화창
 ASK_PANEL_CSS = """
 <style>
-.st-key-ask_panel { position: sticky; top: 96px; border: 1.5px solid #E3E8E6; border-radius: 16px; background: #fff;
+[data-testid="stColumn"]:has(> div > .st-key-ask_panel), [data-testid="stColumn"]:has(.st-key-ask_panel) {
+  position: sticky !important; top: var(--apn-top, 214px); align-self: flex-start !important; z-index: 5; }
+/* 위 고정줄(메뉴·검색 필터) 아래에 붙고, 대화 영역은 화면 높이에 맞춘다 */
+.st-key-apn_log { height: max(200px, calc(100vh - var(--apn-top, 214px) - 250px)) !important; }
+.st-key-ask_panel { border: 1.5px solid #E3E8E6; border-radius: 16px; background: #fff;
   padding: 0 !important; gap: 0 !important; overflow: hidden; box-shadow: 0 4px 18px rgba(38,48,45,.06); }
 .st-key-ask_panel > div { padding-left: 14px; padding-right: 14px; }
-.apn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+.apn-head { display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
   padding: 14px 0 12px; border-bottom: 1px solid #EEF1F0; }
 .apn-title { font-family: "Jua", sans-serif; font-size: 1.25rem; color: #26302D; }
 .apn-sub { color: #9AA5A1; font-size: .78rem; white-space: nowrap; }
@@ -4054,12 +4230,12 @@ ASK_PANEL_CSS = """
 .apn-badge { display: inline-block; margin-top: 6px; padding: 1px 8px; border-radius: 999px; font-size: .7rem;
   font-weight: 700; border: 1px solid #9EDDCC; color: #2E9C82; background: #fff; }
 .apn-badge.fb { border-color: #C9D1CE; color: #6B7672; }
-.st-key-ask_panel [class*="st-key-apn_hit_"] button { justify-content: flex-start; text-align: left; font-size: .8rem;
+[class*="st-key-apn_hit_"] button, [class*="st-key-apd_hit_"] button { justify-content: flex-start; text-align: left; font-size: .8rem;
   min-height: 0; padding: 4px 10px; border-radius: 10px; }
-.st-key-apn_chips { padding-top: 10px; border-top: 1px solid #EEF1F0; gap: 6px !important; flex-wrap: wrap; }
-.st-key-apn_chips button { border-radius: 999px !important; font-size: .78rem; min-height: 0; padding: 4px 12px; }
-.st-key-apn_form [data-testid="stForm"] { padding: 10px 0 14px; }
-.st-key-apn_form [data-testid="stFormSubmitButton"] button { background: #E0895A !important; border-color: #E0895A !important;
+.st-key-apn_chips, .st-key-apd_chips { padding-top: 10px; border-top: 1px solid #EEF1F0; gap: 6px !important; flex-wrap: wrap; }
+.st-key-apn_chips button, .st-key-apd_chips button { border-radius: 999px !important; font-size: .78rem; min-height: 0; padding: 4px 12px; }
+.st-key-apn_form [data-testid="stForm"], .st-key-apd_form [data-testid="stForm"] { padding: 10px 0 14px; }
+.st-key-apn_form [data-testid="stFormSubmitButton"] button, .st-key-apd_form [data-testid="stFormSubmitButton"] button { background: #E0895A !important; border-color: #E0895A !important;
   color: #fff !important; font-weight: 800; }
 @media (max-width: 640px) { .st-key-ask_panel { display: none !important; } }
 </style>
@@ -4091,9 +4267,9 @@ def _ask_panel_send(question: str) -> None:
     del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
 
 
-def _ask_panel_submit() -> None:
-    _ask_panel_send(st.session_state.get("apn_q", ""))
-    st.session_state["apn_q"] = ""
+def _ask_panel_submit(prefix: str = "apn") -> None:
+    _ask_panel_send(st.session_state.get(f"{prefix}_q", ""))
+    st.session_state[f"{prefix}_q"] = ""
 
 
 def _ask_panel_open(cafe_id: str) -> None:
@@ -4101,33 +4277,53 @@ def _ask_panel_open(cafe_id: str) -> None:
     st.session_state["scroll_top"] = True
 
 
-def render_ask_panel() -> None:
-    st.markdown(ASK_PANEL_CSS, unsafe_allow_html=True)
-    st.markdown('<div class="apn-head"><span class="apn-title">팝업에게 물어보기</span>'
-                '<span class="apn-sub">질문 → 팝업 데이터 검색</span></div>', unsafe_allow_html=True)
-    with st.container(height=430, border=False, key="apn_log"):
+def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> None:
+    """대화 기록 · 예시 칩 · 입력칸. PC 옆 대화창(apn)과 모바일 팝업(apd)이 같은 기록(ask_chat)을 쓴다."""
+    with st.container(height=log_height, border=False, key=f"{prefix}_log"):
         st.markdown('<div class="apn-who">ANI:WHERE</div><div class="apn-bot">안녕하세요. 지금 등록된 팝업에서 찾아 드릴게요. '
                     '<b>작품 · 지역 · 날짜</b>로 물어보면 더 정확해요.</div>', unsafe_allow_html=True)
         for n, m in enumerate(st.session_state.get("ask_chat", [])):
             if m["role"] == "me":
                 st.markdown(f'<div class="apn-me"><span>{escape(m["text"])}</span></div>', unsafe_allow_html=True)
                 continue
-            badge = (f'<br><span class="apn-badge{"" if m.get("badge") == "AI 산출" else " fb"}">{escape(m["badge"])}</span>'
-                     if m.get("badge") else "")
-            st.markdown(f'<div class="apn-who">ANI:WHERE</div><div class="apn-bot">{escape(m["text"])}{badge}</div>',
+            # 대화창에서는 'AI 산출 / 규칙 기반 대체' 배지를 보이지 않는다 (사용자 요청 11/18). /ask 화면에는 남아 있다
+            st.markdown(f'<div class="apn-who">ANI:WHERE</div><div class="apn-bot">{escape(m["text"])}</div>',
                         unsafe_allow_html=True)
             for cid, label in m.get("ids", []):
-                st.button(label, key=f"apn_hit_{n}_{cid}", icon=":material/location_on:", width="stretch",
-                          on_click=_ask_panel_open, args=(cid,))
-    with st.container(horizontal=True, key="apn_chips"):
+                key = f"{prefix}_hit_{n}_{cid}"
+                if in_dialog:
+                    # 팝업 안에서는 상세로 옮기려면 팝업을 닫고 앱 전체를 다시 그려야 한다
+                    if st.button(label, key=key, icon=":material/location_on:", width="stretch"):
+                        _ask_panel_open(cid)
+                        st.rerun()
+                else:
+                    st.button(label, key=key, icon=":material/location_on:", width="stretch",
+                              on_click=_ask_panel_open, args=(cid,))
+    with st.container(horizontal=True, key=f"{prefix}_chips"):
         for i, chip in enumerate(ASK_PANEL_CHIPS):
-            st.button(chip, key=f"apn_chip_{i}", on_click=_ask_panel_send, args=(chip,))
-    with st.container(key="apn_form"):
-        with st.form("apn", border=False, clear_on_submit=False):
+            st.button(chip, key=f"{prefix}_chip_{i}", on_click=_ask_panel_send, args=(chip,))
+    with st.container(key=f"{prefix}_form"):
+        with st.form(prefix, border=False, clear_on_submit=False):
             c1, c2 = st.columns([4, 1.4], vertical_alignment="bottom")
-            c1.text_input("질문", key="apn_q", max_chars=ask.MAX_QUESTION, label_visibility="collapsed",
+            c1.text_input("질문", key=f"{prefix}_q", max_chars=ask.MAX_QUESTION, label_visibility="collapsed",
                           placeholder="예: 이번 주말 홍대 근처 팝업 있어?")
-            c2.form_submit_button("보내기", on_click=_ask_panel_submit, width="stretch")
+            c2.form_submit_button("보내기", on_click=_ask_panel_submit, args=(prefix,), width="stretch")
+
+
+def render_ask_panel() -> None:
+    """PC 리스트 옆 대화창 (모바일에서는 숨기고 플로팅 버튼 → 팝업으로)."""
+    st.markdown(ASK_PANEL_CSS, unsafe_allow_html=True)
+    st.markdown('<div class="apn-head"><span class="apn-title">ANI:WHERE에게 물어보기</span>'
+                '<span class="apn-sub">질문 → 팝업 데이터 검색</span></div>', unsafe_allow_html=True)
+    _ask_chat_body("apn", 430)
+
+
+@st.dialog("ANI:WHERE에게 물어보기", width="small")
+def ask_dialog() -> None:
+    """모바일: 오른쪽 아래 물어보기 플로팅 버튼을 누르면 뜨는 팝업."""
+    st.markdown(ASK_PANEL_CSS, unsafe_allow_html=True)
+    st.markdown('<div class="apn-sub" style="margin:-6px 0 4px">질문 → 팝업 데이터 검색</div>', unsafe_allow_html=True)
+    _ask_chat_body("apd", 360, in_dialog=True)
 
 
 # ------------------------------------------------------------ 2차: 팝업 Q&A (/ask)
