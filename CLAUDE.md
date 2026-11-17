@@ -48,10 +48,15 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
 ## 저장소
 - `common/storage.py` 는 **append-only** 다. 수정·삭제도 새 행을 쌓는다 (`revision` 증가).
 - 기존 행을 덮어쓰거나 지우는 코드를 쓰지 않는다. 되돌리기가 여기에 걸려 있다.
+  - **유일한 예외:** 탈퇴 회원 개인정보 파기 (`auth.purge_withdrawn`, `supabase/migrations/009`). 법적 파기 의무라 예전 행의 닉네임·사진을 지운다.
 
 ## 기록
 - AI가 틀린 사례를 발견하면 `docs/ai-mistakes.md` 에 한 줄 추가한다.
 - 커밋 메시지에 프롬프트 버전을 바꿨으면 그 사실을 적는다.
+
+## 개인정보
+- 가입 동의는 필수(만 14세 이상 · 이용약관 · 개인정보 수집·이용)와 선택(프로필 사진)을 나눈다. 새로 받는 정보가 생기면 동의 표(`PRIVACY_TABLE`)와 `docs/privacy-policy.md` 를 같이 고친다.
+- 비밀번호는 직접 저장하지 않는다 (Supabase DB 함수의 bcrypt). 선택 동의 없이 사진을 저장하지 않는다.
 
 ## 2차에서 더한 것
 - 지표 계산은 `common/stats.py` 한곳에서만 한다. `/stats` 화면 · `scripts/metrics_snapshot.py` · MCP 서버가 같은 함수를 써서 숫자가 어긋나지 않게.

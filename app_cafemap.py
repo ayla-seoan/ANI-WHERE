@@ -13,13 +13,14 @@
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import os
 import re
 import time
 from urllib.parse import quote
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
 
@@ -30,6 +31,8 @@ from dotenv import load_dotenv
 
 from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
                     kakao_postcode, mycal, notice, notion_sync, review, share, stats)
+from common import links as links_check   # 참고 웹사이트 확인 (11/18 안정성)
+from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
 from common.schema import CafeEntry
 from common.storage import Storage, StorageWriteError
@@ -57,12 +60,20 @@ GLOBAL_CSS = f"""
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 @import url('https://cdn.jsdelivr.net/gh/moonspam/NanumSquareRound@1.0/nanumsquareround.min.css');
 /* @import 는 맨 앞에 와야 해서(앞에 다른 규칙이 있으면 폰트가 무시된다) 변수는 그 뒤에 둔다 */
+/* 이미지가 안 열리면(주소 깨짐·서버 재시작으로 파일 없음) 깨진 아이콘 대신 기본 포스터가 보이게 (11/18 안정성).
+   alt 가 빈 <img> 는 실패하면 아무것도 그리지 않아서 뒤의 배경 그림이 보인다 */
+img.pst, .apc img, .nh-item img, .cal-pop img, .adm-pcard img, .rv-pics img, .bxr .imgs img {{
+  background: #F4F6F5 url('app/static/default_poster.png') center / cover no-repeat; }}
+img.rv-av, img.me-avimg, .auth-av img {{ background: #DDF3EC; }}
+/* 긴 행사명(「○○○」 팝업스토어 in 홍대 2호점 …)이 모바일에서 화면 밖으로 나가지 않게 */
+.dtitle, .dcafe, .daddr, .nh-name, .apc-cafe, .apc-addr {{ overflow-wrap: anywhere; }}
 /* 포인트 컬러 변수 (map-template.html 과 같은 값). 지도·등록하기 버튼 등이 쓴다 */
 :root {{ --accent: #14b8a6; --accent-soft: #e6fbf7; --accent-deep: #0d9488; }}
 html, body, [class*="st-"], .stMarkdown, button, input, textarea {{
   font-family: "NanumSquareRound", "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }}
 /* 위의 글꼴 지정이 아이콘 글꼴까지 덮지 않게 (안 그러면 '_arrow_right' 같은 이름 글자가 보인다) */
-[data-testid="stIconMaterial"], .material-symbols-rounded {{
+[data-testid="stIconMaterial"], [data-testid="stAlertDynamicIcon"], [data-testid="stExpanderIcon"],
+.material-symbols-rounded {{
   font-family: "Material Symbols Rounded" !important; }}
 h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !important;
   font-weight: 400 !important; letter-spacing: .01em; }}
@@ -571,6 +582,8 @@ def _author(name) -> tuple[str, str]:
     row = _member_by_tag().get(tag) if tag.startswith("m") else None
     if row and str(row.get("nickname") or "").strip():
         return str(row["nickname"]).strip(), str(row.get("avatar") or "")
+    if tag.startswith("m"):                 # 회원 글인데 지금 회원이 아님 = 탈퇴
+        return auth.WITHDRAWN, ""
     return (text.rsplit("#", 1)[0].strip() or "익명"), ""
 
 
@@ -641,6 +654,20 @@ def _mi(name: str, cls: str = "") -> str:
     return f'<span class="mi {cls}" aria-hidden="true">{name}</span>'
 
 
+def _period(r, fmt=lambda d: f"{d.month}.{d.day}", show_raw: bool = True) -> str:
+    """기간 글자. 끝이 없는 팝업은 '11.20 ~ 상시', 기간을 못 읽은 팝업은 '기간 확인 필요 · 원문 ...'."""
+    tags = _split(r.get("tags") or "") if not isinstance(r.get("tags"), list) else r.get("tags")
+    if pdates.TAG_CHECK in tags:
+        raw = pdates.raw_from_note(r.get("note"))
+        return "기간 확인 필요" + (f" · 원문 '{raw}'" if show_raw and raw and not raw.startswith("(") else "")
+    s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+    if not s_:
+        return "기간 확인 필요"
+    if not e_ or pdates.is_always(e_):
+        return f"{fmt(s_)} ~ 상시"
+    return f"{fmt(s_)} ~ {fmt(e_)}"
+
+
 def _day(d, with_year: bool) -> str:
     """'26.10.27(화)' / '11.11(수)'."""
     d = pd.to_datetime(d).date()
@@ -669,12 +696,23 @@ def _intro_body(text: str) -> str:
     return "".join(parts)
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def _link_status(urls: tuple[str, ...]) -> dict:
+    """참고 웹사이트가 열리는지 (True/False/None). 같은 링크는 하루 동안 다시 확인하지 않는다."""
+    try:
+        return links_check.check_many(list(urls))
+    except Exception:
+        return {}
+
+
 def _detail_info_html(current: dict) -> str:
     """상세 정보 블록: 위치(주소 + 지도에서 확인하기) · 일정 → 혜택(특전·굿즈·이벤트) → 참고 웹사이트 카드 → 팝업 소개."""
     # 위치 · 일정: 왼쪽에 항목 이름, 오른쪽에 내용 (오른쪽 정렬)
     addr = str(current.get("address") or "-")
     start, end = pd.to_datetime(current.get("start_date")), pd.to_datetime(current.get("end_date"))
     span = f"{_day(start, True)} - {_day(end, end.year != start.year)}"
+    if pdates.is_always(end) or pdates.TAG_CHECK in _split(current.get("tags") or ""):
+        span = _period(current, lambda d: _day(d, True))
     # 위치: 카페 이름을 크고 굵게 맨 위에, 그 아래 주소, 그 아래 '지도에서 확인하기'
     # '방문 전 확인' 회색 상자: 왼쪽 항목 이름(고정 폭), 오른쪽 내용(왼쪽 정렬)
     rows = (
@@ -702,10 +740,12 @@ def _detail_info_html(current: dict) -> str:
     links = cafe.order_links(cafe.parse_links(current.get("links") or "")[0])
     link_html = ""
     if links:
+        status = _link_status(tuple(links))      # 깨진 공식 링크는 '링크 확인 필요' (하루 동안 기억)
         cards = "".join(
-            f'<a class="dlink" href="{escape(u)}" target="_blank" rel="noopener">'
-            f'<div class="dlink-text"><div class="dlink-title">{escape(_site_name(u))}</div>'
-            f'<div class="dlink-url">{escape(u)}</div></div><span class="dlink-go">↗</span></a>'
+            f'<a class="dlink{" broken" if status.get(u) is False else ""}" href="{escape(u)}" target="_blank" rel="noopener">'
+            f'<div class="dlink-text"><div class="dlink-title">{escape(_site_name(u))}'
+            + (f' <span class="dlink-warn">{_mi("link_off")} 링크 확인 필요</span>' if status.get(u) is False else "")
+            + f'</div><div class="dlink-url">{escape(u)}</div></div><span class="dlink-go">↗</span></a>'
             for u in links)
         link_html = f'<div class="dsec"><div class="dsec-title">참고 웹사이트</div>{cards}</div>'
     # 팝업 소개: 쓴 글(간편등록은 공지)을 줄바꿈 그대로. 없으면 칸을 만들지 않는다
@@ -1325,7 +1365,9 @@ _CLEAR_JS = """
 def _keep_notion(note: str, current: dict) -> str:
     """고쳐 저장해도 Notion 에서 가져온 표시('| notion:…')는 남긴다 (다음 가져오기 때 같은 팝업으로 알아보게)."""
     m = re.search(r"\|\s*notion:\S+", str(current.get("note") or ""))
-    return f"{note} {m.group(0)}" if m else note
+    out = f"{note} {m.group(0)}" if m else note
+    raw = pdates.raw_from_note(current.get("note"))
+    return f"{out} | {pdates.RAW_MARK}{raw}" if raw else out
 
 
 def render_edit(current: dict) -> None:
@@ -1358,9 +1400,19 @@ def render_edit(current: dict) -> None:
     with d1:
         new_start = st.date_input("시작", value=pd.to_datetime(current["start_date"]).date(),
                                   key=f"start_{k}")
+    old_start, old_end = pd.to_datetime(current["start_date"]).date(), pd.to_datetime(current["end_date"]).date()
+    was_always = pdates.is_always(old_end)
+    always = st.checkbox("종료일 없음 (상시)", value=was_always, key=f"always_{k}")
     with d2:
-        new_end = st.date_input("종료", value=pd.to_datetime(current["end_date"]).date(),
-                                key=f"end_{k}")
+        new_end = st.date_input("종료", value=(old_start + timedelta(days=30)) if was_always else old_end,
+                                key=f"end_{k}", disabled=always)
+    if always:
+        new_end = pdates.ALWAYS_END
+    old_flags = [t for t in _split(current.get("tags") or "") if t in cafe.PERIOD_TAGS]
+    if pdates.TAG_CHECK in old_flags:
+        raw = pdates.raw_from_note(current.get("note"))
+        st.warning("기간을 정확히 읽지 못한 팝업이에요" + (f" (원문: '{raw}')" if raw and not raw.startswith("(") else "")
+                   + ". 공식 공지를 보고 시작·종료일을 고쳐 주세요.", icon=":material/event_busy:")
     new_perks = st.text_input("특전", value=str(current.get("perks", "")), key=f"perks_{k}",
                               help="쉼표로 구분")
     new_goods = st.text_input("굿즈", value=str(current.get("goods", "")), key=f"goods_{k}",
@@ -1390,6 +1442,10 @@ def render_edit(current: dict) -> None:
             perks=_split(new_perks), goods=_split(new_goods),
             confidence="high",
         )
+        # 기간 표시: 상시면 '상시', 사람이 기간을 고쳤으면 '기간 확인 필요' 를 지운다 (안 고쳤으면 그대로)
+        dates_changed = (new_start, new_end) != (old_start, old_end)
+        new_tags = list(new_tags) + ([pdates.TAG_ALWAYS] if always else []) \
+            + ([pdates.TAG_CHECK] if pdates.TAG_CHECK in old_flags and not dates_changed else [])
         v = guard.validate_cafe(entry, today=TODAY)
         g = locate(entry.address, picked)
         if not g.ok:
@@ -1504,8 +1560,7 @@ def _history_card_html(r: dict, older: dict | None, now: bool) -> str:
     label, icon = _SOURCE_VIEW.get(source, (source or "기록", "undo" if source.endswith("되돌리기") else "history"))
     when = pd.to_datetime(r["updated_at"], utc=True).tz_convert("Asia/Seoul").strftime("%Y.%m.%d %H:%M")
     if older is None:
-        period = (pd.to_datetime(r["start_date"]).strftime("%Y.%m.%d") + " ~ "
-                  + pd.to_datetime(r["end_date"]).strftime("%Y.%m.%d"))
+        period = _period(r, lambda d: f"{d:%Y.%m.%d}")
         body = (f'<div class="hx-chg">처음 등록</div>'
                 f'<div class="hx-meta">{_mi("local_cafe")}{escape(str(r.get("cafe_name") or "-"))}'
                 f' · {escape(str(r.get("work") or "-"))}</div>'
@@ -1556,7 +1611,10 @@ def _poster_url(value) -> str:
 def _chips(r, full: bool = False) -> str:
     """이벤트 정보는 민트로 채운 칩, 굿즈는 민트 테두리 칩. full 이 아니면 몇 개만 보이고 나머지는 +N 으로 줄인다."""
     all_tags, goods = _split(r.get("tags") or ""), _split(r.get("goods") or "")
-    tags = [f'<span class="chip tag">{escape(t)}</span>' for t in (all_tags if full else all_tags[:2])]
+    flags = [t for t in all_tags if t in (pdates.TAG_ALWAYS, pdates.TAG_CHECK)]
+    all_tags = [t for t in all_tags if t not in flags]
+    tags = [f'<span class="chip {"warn" if t == pdates.TAG_CHECK else "tag"}">{escape(t)}</span>' for t in flags] if full else []
+    tags += [f'<span class="chip tag">{escape(t)}</span>' for t in (all_tags if full else all_tags[:2])]
     shown = [f'<span class="chip">{escape(g)}</span>' for g in (goods if full else goods[:3])]
     more = [f'<span class="chip">+{len(goods) - 3}</span>'] if not full and len(goods) > 3 else []
     return "".join(tags + shown + more)
@@ -1637,13 +1695,13 @@ def _home_area(mapped: pd.DataFrame) -> dict | None:
 
 def _poster_card(r, label: str) -> str:
     return f"""
-<div class="pcard" style="background-image:url('{_poster_url(r.get("images"))}')">
+<div class="pcard" style="background-image:url('{_poster_url(r.get("images"))}'), url('{images.DEFAULT_POSTER_URL}')">
   {_area_badge(r.get("address"), cls="area")}
   <span class="state">{escape(label)}</span>
   <div class="info">
     <div class="t">{escape(str(r['work']))}</div>
     <div class="s">{_mi("local_cafe")}{escape(str(r['cafe_name']))}</div>
-    <div class="d"><span class="d-long">{r['start_date']:%m월 %d일} - {r['end_date']:%m월 %d일}</span><span class="d-short">{r['start_date']:%m/%d}-{r['end_date']:%m/%d}</span></div>
+    <div class="d"><span class="d-long">{escape(_period(r, lambda d: f"{d:%m월 %d일}", show_raw=False))}</span><span class="d-short">{escape(_period(r, lambda d: f"{d:%m/%d}", show_raw=False))}</span></div>
     <div class="chips short">{_chips(r)}</div>
     <div class="more">{_card_more(r)}</div>
   </div>
@@ -1721,10 +1779,14 @@ def _view_switch(wide: bool) -> None:
         st.rerun()
 
 
-def render_list(view: pd.DataFrame, wide: bool = False) -> None:
+def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | None = None,
+                fcond: dict | None = None) -> None:
     """카페 카드 목록. wide 면 지도 없이 화면 전체에 4열로 깐다."""
     if view.empty:
-        st.info("조건에 맞는 카페가 없습니다. 검색어나 필터를 넓혀 보세요.")
+        if df_all is not None:
+            _empty_state(df_all, fcond or {})
+        else:
+            st.info("조건에 맞는 카페가 없습니다. 검색어나 필터를 넓혀 보세요.")
         return
     n_reviews = review.counts(reviews.current_rows())
 
@@ -1763,7 +1825,7 @@ def render_list(view: pd.DataFrame, wide: bool = False) -> None:
                 _heart(r["entry_id"], "s")
                 thumb, top = st.columns([1.1, 3], vertical_alignment="center")
                 with thumb:
-                    st.markdown(f'<div class="thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\')"></div>',
+                    st.markdown(f'<div class="thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')"></div>',
                                 unsafe_allow_html=True)
                 with top:
                     # 📍 지역은 시마다 다른 색 (CITY_COLORS). 진행 상태는 아래 작품 이름 오른쪽에
@@ -2092,6 +2154,15 @@ iframe[src*="kakao_map"] {{
 .chip {{ font-size:12.5px; font-weight:600; padding:3px 10px; border-radius:999px; background:{MINT_SOFT};
         color:{MINT_DEEP}; border:1px solid {MINT}; white-space:nowrap; }}
 .chip.tag {{ background:{MINT}; color:#fff; border-color:{MINT}; }}
+.upd {{ color:#8A9592; font-size:.78rem; margin:-4px 0 6px; display:flex; align-items:center; gap:4px; }}
+.upd .mi {{ font-size:.95rem; }}
+.upd.warn {{ color:#C2560C; background:#FFF4EA; border-radius:10px; padding:6px 10px; margin:0 0 8px; }}
+.empty-box {{ text-align:center; padding:40px 16px 14px; }}
+.empty-ic .mi {{ font-size:3.4rem; color:#C9D6D2; }}
+.empty-t {{ font-family:"Jua", sans-serif; font-size:1.35rem; color:#26302D; margin-top:6px; }}
+.empty-s {{ color:#7A8582; font-size:.9rem; margin-top:4px; }}
+.st-key-empty_relax {{ gap:8px !important; flex-wrap:wrap; margin-bottom:28px; }}
+.chip.warn {{ background:#FFF1E6; color:#C2560C; border-color:#F5C9A6; font-weight:700; }}
 /* 반반 보기 카드: 카페 이름은 회색, 캐릭터 이름은 민트 포인트 */
 .ctitle .ccafe {{ color: #6b7672; }}
 .ctitle .cchars {{ color: {MINT_DEEP}; font-weight: 600; }}
@@ -2199,6 +2270,10 @@ iframe[src*="kakao_map"] {{
 .dlink-title {{ font-weight:700; font-size:1.05rem; }}
 .dlink-url {{ color:#6B7672; font-size:.9rem; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
 .dlink-go {{ color:{MINT_DEEP}; font-size:1.4rem; line-height:1; flex:0 0 auto; }}
+.dlink.broken {{ background:#FFF4EA; }}
+.dlink-warn {{ display:inline-flex; align-items:center; gap:2px; font-size:.75rem; font-weight:800; color:#C2560C;
+  background:#fff; border:1px solid #F5C9A6; border-radius:999px; padding:1px 8px; margin-left:6px; vertical-align:2px; }}
+.dlink-warn .mi {{ font-size:.9rem; }}
 /* 상세 화면의 특전·굿즈 칩: 크게, 긴 문구는 줄바꿈 */
 .dchips {{ margin:4px 0 14px; }}
 .dchips .lbl {{ font-weight:700; font-size:1rem; margin-bottom:6px; }}
@@ -2555,6 +2630,121 @@ MOBILE_SHEET_CSS = """
   background: #26302D !important; border: 0 !important; }
 .st-key-m_sheet_done button p { font-size: 1.02rem !important; font-weight: 700 !important; color: #fff !important; }
 """
+
+
+def _update_note() -> None:
+    """목록 위 '마지막 업데이트 ○월 ○일 HH:MM'. 수집이 실패했거나 2일 넘게 새 정보가 없으면 주황색으로 알린다.
+    (소스 사이트가 죽어도 조용히 빈 화면이 되지 않게: 기존 데이터는 그대로 보여 준다)"""
+    last = notion_sync.last_update(store.all_rows())
+    if last is None:
+        return
+    kst = last.astimezone(timezone(timedelta(hours=9)))
+    stamp = f"{kst.month}월 {kst.day}일 {kst:%H:%M}"
+    failed = st.session_state.get("_sync_failed") or bool(notion_sync.last_status().get("error"))
+    stale = (datetime.now(timezone.utc) - last) > timedelta(days=2)
+    if failed or stale:
+        msg = (f"최신 정보를 가져오지 못했어요. 마지막 업데이트 {stamp} 기준으로 보여 드려요."
+               if failed else f"마지막 업데이트 {stamp} — 새 정보가 이틀 넘게 없어요. 기간은 공식 공지에서 한 번 더 확인해 주세요.")
+        st.markdown(f'<div class="upd warn">{_mi("sync_problem")} {escape(msg)}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="upd">{_mi("update")} 마지막 업데이트 {stamp} · 매일 아침 자동 수집</div>',
+                    unsafe_allow_html=True)
+
+
+def _filter_view(df: pd.DataFrame, f: dict) -> pd.DataFrame:
+    """검색 조건(f) 으로 거른다. 빈 화면에서 '이 조건만 풀면 몇 곳' 을 세는 데도 같은 함수를 쓴다."""
+    view = df
+    query = str(f.get("query") or "")
+    if query.strip():
+        q = re.sub(r"\s+", "", query)
+        hit = lambda col: view[col].astype(str).str.replace(r"\s+", "", regex=True).str.contains(q, case=False, regex=False)
+        view = view[hit("cafe_name") | hit("work") | hit("characters") | hit("address")]
+    if f.get("work", "전체") != "전체":
+        view = view[view["work"] == f["work"]]
+    if f.get("chars"):
+        same = lambda a, b: a == b or a in b or b in a
+        view = view[view["characters"].fillna("").apply(
+            lambda v: any(same(p, c) for p in f["chars"] for c in _split(v)))]
+    span = f.get("span", "진행중 + 예정")
+    if span == "진행중 + 예정":
+        view = view[view["end_date"] >= TODAY]
+    elif span == "예정":
+        view = view[view["start_date"] > TODAY]
+    elif span == "진행중":
+        view = view[(view["start_date"] <= TODAY) & (view["end_date"] >= TODAY)]
+    if f.get("day"):
+        view = view[(view["start_date"] <= f["day"]) & (view["end_date"] >= f["day"])]
+    if f.get("regions"):
+        view = view[view["area"].isin(f["regions"])]
+    if f.get("fav"):
+        view = view[view["entry_id"].astype(str).isin(_fav_state()[1])]
+    return view
+
+
+def _relax(what: str) -> None:
+    """빈 화면의 '조건 풀기' 버튼. 그 조건 하나만 처음 값으로 돌린다."""
+    ss = st.session_state
+    if what == "regions":
+        ss["regions"], ss["regions_m"] = [], []
+    elif what == "day":
+        ss.pop(f"f_date_{ss.get('date_ver', 0)}", None)
+        ss["date_ver"] = ss.get("date_ver", 0) + 1
+    elif what == "span":
+        ss["f_span"] = "진행중 + 예정"
+    elif what == "soon":
+        ss["f_span"] = "예정"
+    elif what == "work":
+        ss["f_work"] = "전체"
+        for k in [k for k in ss if str(k).startswith("filter_chars_")]:
+            ss[k] = []
+    elif what == "chars":
+        for k in [k for k in ss if str(k).startswith("filter_chars_")]:
+            ss[k] = []
+    elif what == "query":
+        ss["f_query"] = ""
+    elif what == "fav":
+        ss["fav_only"] = False
+
+
+def _empty_state(df: pd.DataFrame, f: dict) -> None:
+    """조건에 맞는 팝업이 0곳일 때: 빈 표 대신 이유와 '조건 하나 풀기' 버튼 (각 버튼에 풀면 몇 곳인지)."""
+    live_or_soon = df[df["end_date"] >= TODAY]
+    live = df[(df["start_date"] <= TODAY) & (df["end_date"] >= TODAY)]
+    soon = df[df["start_date"] > TODAY]
+    if live_or_soon.empty:
+        title, sub = "지금은 열려 있거나 예정된 팝업이 없어요", "새 팝업은 매일 아침 자동으로 모아요. 내일 다시 들러 주세요."
+    elif f.get("span") == "진행중" and live.empty:
+        title, sub = "지금 진행 중인 팝업이 없어요", f"곧 열리는 팝업은 {len(soon)}곳 있어요."
+    else:
+        title, sub = "이 조건엔 행사가 없어요", "조건을 하나씩 풀어 보세요. 버튼 옆 숫자는 풀었을 때 보이는 팝업 수예요."
+    st.markdown(f'<div class="empty-box"><div class="empty-ic">{_mi("search_off")}</div>'
+                f'<div class="empty-t">{escape(title)}</div><div class="empty-s">{escape(sub)}</div></div>',
+                unsafe_allow_html=True)
+    options = []
+    if f.get("span") == "진행중" and live.empty and len(soon):
+        options.append(("soon", f"곧 열리는 팝업 보기 ({len(soon)}곳)"))
+    for what, label, changed in (
+        ("regions", "지역만 풀기", {"regions": []}),
+        ("day", "날짜 풀기", {"day": None}),
+        ("span", "진행 여부 풀기", {"span": "진행중 + 예정"}),
+        ("chars", "캐릭터 풀기", {"chars": []}),
+        ("work", "작품 풀기", {"work": "전체", "chars": []}),
+        ("query", "검색어 지우기", {"query": ""}),
+        ("fav", "북마크만 보기 끄기", {"fav": False}),
+    ):
+        key = {"chars": "chars", "work": "work", "query": "query", "fav": "fav", "regions": "regions",
+               "day": "day", "span": "span"}[what]
+        cur = f.get(key)
+        if not cur or cur in ("전체", "진행중 + 예정"):
+            continue
+        n = len(_filter_view(df, {**f, **changed}))
+        if n:
+            options.append((what, f"{label} ({n}곳)"))
+    with st.container(horizontal=True, horizontal_alignment="center", key="empty_relax"):
+        for what, label in options:
+            st.button(label, key=f"relax_{what}", on_click=_relax, args=(what,))
+        if _active_filters():
+            st.button("조건 모두 초기화", key="relax_all", type="primary", on_click=_reset_filters)
 
 
 def _reset_filters() -> None:
@@ -3225,7 +3415,7 @@ def _box_card(r: dict, key: str, review_html: str = "") -> None:
             f'<div class="bxc"><img class="pst" src="{escape(_poster_url(r.get("images")))}" alt="">'
             f'<div class="t"><span class="st{" end" if state == "종료" else ""}">{state}</span>'
             f'<div class="w">{escape(str(r.get("work") or ""))}</div><div class="c">{escape(str(r.get("cafe_name") or ""))}</div>'
-            f'<div class="d">{md(s_)} ~ {md(e_)}</div></div></div>{review_html}', unsafe_allow_html=True)
+            f'<div class="d">{escape(_period(r))}</div></div></div>{review_html}', unsafe_allow_html=True)
         st.button(f"{r.get('work')} 상세", key=f"bxbtn_{key}_{eid}", on_click=_gnb_open, args=(eid,))
 
 
@@ -3313,6 +3503,8 @@ def page_map() -> None:
     synced = notion_sync.maybe_sync(store, TODAY)
     if synced and synced.get("added"):
         _toast(f"노션에서 {len(synced['added'])}곳을 새로 가져왔어요", ":material/cloud_download:")
+    if synced and synced.get("error"):
+        st.session_state["_sync_failed"] = True       # 수집 실패: 기존 데이터를 그대로 보여 주고 아래 안내를 띄운다
     # 기간이 지난 카페는 자동으로 지도에서 내린다 (기록은 남아서 수정 이력에서 되돌릴 수 있다)
     cafe.expire_ended(store, TODAY)    # 조용히 처리한다 (안내는 띄우지 않는다)
     rows = store.current_rows()
@@ -3434,36 +3626,14 @@ def page_map() -> None:
         st.multiselect("지역", areas, key="regions_m", placeholder="지역 고르기 (여러 곳 가능)",
                        on_change=lambda: ss.update(regions=ss["regions_m"]))
 
-    view = df.copy()
-    if query.strip():
-        # 띄어쓰기는 보지 않는다: 작품명이 목록 이름('짱구는 못말려')으로 바뀌어 '짱구는못말려' 로 찾으면 0곳이 나왔다
-        q = re.sub(r"\s+", "", query)
-        hit = lambda col: view[col].astype(str).str.replace(r"\s+", "", regex=True).str.contains(q, case=False, regex=False)
-        view = view[hit("cafe_name") | hit("work") | hit("characters") | hit("address")]
-    if pick_work != "전체":
-        view = view[view["work"] == pick_work]
-    if pick_chars:
-        # '아냐' 로 등록된 카페도 목록의 '아냐 포저' 로 찾히게, 한쪽이 다른 쪽을 품으면 같은 캐릭터로 본다
-        same = lambda a, b: a == b or a in b or b in a
-        view = view[view["characters"].fillna("").apply(
-            lambda v: any(same(p, c) for p in pick_chars for c in _split(v)))]
-    if span == "진행중 + 예정":
-        view = view[view["end_date"] >= TODAY]
-    elif span == "예정":
-        view = view[view["start_date"] > TODAY]
-    elif span == "진행중":
-        view = view[(view["start_date"] <= TODAY) & (view["end_date"] >= TODAY)]
-    if pick_day:
-        view = view[(view["start_date"] <= pick_day) & (view["end_date"] >= pick_day)]
+    # 띄어쓰기는 보지 않는다 · '아냐' 는 '아냐 포저' 로도 찾힌다 (_filter_view)
     # 팔로우한 곳만·지역·정렬은 리스트 전체보기에서만 보이고 걸린다 (지도보기에서는 숨기기만 해서 고른 값은 남는다)
     wide = bool(st.session_state.get("list_only")) and not current
-    view = view.assign(area=df.loc[view.index, "area"])
+    fcond = {"query": query, "work": pick_work, "chars": pick_chars, "span": span, "day": pick_day,
+             "regions": st.session_state.get("regions", []) if wide else [],
+             "fav": bool(st.session_state.get("fav_only")) if wide else False}
+    view = _filter_view(df, fcond)
     if wide:
-        regions = st.session_state.get("regions", [])
-        if regions:
-            view = view[view["area"].isin(regions)]
-        if st.session_state.get("fav_only"):
-            view = view[view["entry_id"].astype(str).isin(_fav_state()[1])]
         view = _sort_view(view, st.session_state.get("sort", SORTS[0]))
     else:
         # 칸을 위젯으로 집어서 숨긴다 (':not(:first-child)' 로 잡으면 '팝업 카페 N곳' 칸 안의 리스트 전체보기 버튼 칸까지 숨는다)
@@ -3499,26 +3669,27 @@ def page_map() -> None:
         _view_icon_button(wide, active, m_open)
         st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
 
+    _update_note()
     # '리스트 전체보기' 를 누르면 지도 없이 리스트만 크게 본다. '지도보기' 를 누르면 다시 반반으로
     if wide:
         # 리스트 전체보기: 왼쪽 목록 + 오른쪽 '팝업에게 물어보기' 대화창 (PC). 모바일은 대화창을 숨기고 위 '물어보기' 버튼으로
         lst, chat = st.columns([3.3, 1.35], gap="medium")
         with lst:
-            render_list(view, wide=True)
+            render_list(view, wide=True, df_all=df, fcond=fcond)
         with chat, st.container(key="ask_panel"):
             render_ask_panel()
         return
 
     def draw_map() -> None:
         if mapped.empty:
-            st.caption("지도에 표시할 카페가 없습니다.")
+            _empty_state(df, fcond)
             return
         clicked = kakao_map.kakao_map(
             # 점에 커서를 올리면 포스터 · 작품 · 카페 · 위치 · 기간 카드가 뜬다
             points=[{"id": str(r["entry_id"]), "lat": float(r["lat"]), "lng": float(r["lng"]),
                      "work": str(r["work"]), "cafe": str(r["cafe_name"]),
                      "address": str(r["address"] or "-"),
-                     "dates": f"{r['start_date']:%m.%d} ~ {r['end_date']:%m.%d}",
+                     "dates": _period(r, lambda d: f"{d:%m.%d}"),
                      "poster": _poster_url(r.get("images"))}
                     for _, r in mapped.iterrows()],
             selected=selected, height=MAP_HEIGHT,
@@ -3710,7 +3881,7 @@ def render_daily(df: pd.DataFrame) -> None:
     items = "".join(
         f'<a class="dn-item" data-id="{escape(str(r["entry_id"]))}" href="./?cafe={quote(str(r["entry_id"]))}" target="_self"'
         f'>'
-        f'<span class="dn-thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\')"></span>'
+        f'<span class="dn-thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')"></span>'
         f'<div class="dn-body">{_area_badge(r.get("address"))}'
         f'<div class="dn-name">{escape(str(r["work"]))}</div></div></a>'
         for r in rows)
@@ -4162,13 +4333,18 @@ def _step_dates(w: dict) -> None:
     d1, d2 = st.columns(2)
     with d1:
         start = st.date_input("시작", value=w["start_date"], key=f"start_{w['v']}")
+    always = st.checkbox("종료일 없음 (상시)", value=pdates.is_always(w["end_date"]), key=f"always_{w['v']}")
     with d2:
-        end = st.date_input("종료", value=w["end_date"], key=f"end_{w['v']}")
+        end = st.date_input("종료", value=w["start_date"] + timedelta(days=30) if pdates.is_always(w["end_date"]) else w["end_date"],
+                            key=f"end_{w['v']}", disabled=always)
+    if always:
+        end = pdates.ALWAYS_END
     if end < start:
         st.caption("종료일이 시작일보다 빠릅니다.")
 
     def save():
         w["start_date"], w["end_date"] = start, end
+        w["tags"] = [t for t in w["tags"] if t != pdates.TAG_ALWAYS] + ([pdates.TAG_ALWAYS] if always else [])
 
     _nav(next_ok=end >= start, on_next=save)
 
@@ -4459,18 +4635,18 @@ def _cal_pop(b, top: int) -> str:
             f'<img src="{_poster_url(e.images)}" alt=""/>'
             f'<div><div class="w">{escape(e.work)}</div><div class="c">{escape(e.cafe_name)}</div>'
             f'<div class="a">{escape(e.address or "-")}</div>'
-            f'<div class="d">{e.start:%m.%d} ~ {e.end:%m.%d}</div></div></div>')
+            f'<div class="d">{e.start:%m.%d} ~ {"상시" if pdates.is_always(e.end) else f"{e.end:%m.%d}"}</div></div></div>')
 
 
 def _upcoming_html(events: list) -> str:
     items = []
     for e in mycal.upcoming(events, TODAY):
         label, color = mycal.status(e, TODAY)
-        when = _day(e.start, False) + ("" if e.start == e.end else f" - {_day(e.end, False)}")
+        when = _day(e.start, False) + ("" if e.start == e.end else " - 상시" if pdates.is_always(e.end) else f" - {_day(e.end, False)}")
         items.append(
             f'<a class="up-item" href="./?cafe={quote(e.cafe_id)}" target="_self">'
             f'<span class="up-bar" style="background:{_cal_color(e.work)}"></span>'
-            f'<span class="up-thumb" style="background-image:url(\'{_poster_url(e.images)}\')"></span>'
+            f'<span class="up-thumb" style="background-image:url(\'{_poster_url(e.images)}\'), url(\'{images.DEFAULT_POSTER_URL}\')"></span>'
             f'<span class="up-text"><div class="up-name">{escape(e.work)} · {escape(e.cafe_name)}</div>'
             f'<div class="up-when">{when}</div></span>'
             f'<span class="up-state {color}">{escape(label)}</span></a>')
@@ -4531,6 +4707,15 @@ AUTH_CSS = """
 .auth-or { display: flex; align-items: center; gap: .6rem; max-width: 380px; color: #9AA5A1; font-size: .8rem;
   margin: 1rem 0 .3rem; }
 .me-av { margin-bottom: 8px; }
+.consent-box { background: #F4F8F6; border-radius: 12px; padding: 10px 12px; margin: 6px 0 8px; font-size: .82rem; color: #3A4542; }
+.consent-box table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.consent-box th { width: 44px; text-align: left; color: #2E9C82; font-weight: 800; padding: 3px 6px 3px 0; vertical-align: top; border: 0; }
+.consent-box td { padding: 3px 0; border: 0; line-height: 1.5; }
+.consent-box span { color: #7A8582; font-size: .76rem; }
+.consent-link { font-size: .76rem; color: #8A9592; margin: 2px 0 8px; }
+.consent-link a { color: #2E9C82 !important; font-weight: 700; }
+.st-key-privacy_wrap { max-width: 860px; margin: 0 auto; }
+.st-key-privacy_wrap table { font-size: .88rem; }
 .me-avimg { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #DDF3EC; background: #DDF3EC; }
 .auth-av { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: .86rem; color: #6B7672; }
 .auth-av img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 1px solid #E3E8E6; }
@@ -4563,6 +4748,23 @@ def _login_done(row: dict, msg: str) -> None:
     st.session_state.pop("_fav_cache", None)
     st.session_state["_cookie_pending"] = auth.make_session(str(row["entry_id"]), str(row.get("provider", "")))
     st.session_state["flash"] = (msg, ":material/waving_hand:")
+
+
+PRIVACY_URL = "./privacy"
+PRIVACY_FILE = Path(__file__).resolve().parent / "docs" / "privacy-policy.md"
+
+
+def page_privacy() -> None:
+    """개인정보처리방침 · 이용약관 (상시 공개, 로그인 없이 누구나). 내용은 docs/privacy-policy.md 한 곳."""
+    st.markdown(GLOBAL_CSS + AUTH_CSS, unsafe_allow_html=True)
+    _no_translate()
+    with st.container(key="topbar"):
+        _gnb(None, on_map=False)
+    with st.container(key="privacy_wrap"):
+        try:
+            st.markdown(PRIVACY_FILE.read_text(encoding="utf-8"))
+        except OSError:
+            st.warning("개인정보처리방침을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.", icon=":material/error:")
 
 
 def page_login() -> None:
@@ -4656,6 +4858,41 @@ def _password_login_form() -> None:
     go("map")                                # 로그인하면 메인으로 (11/18)
 
 
+PRIVACY_TABLE = {
+    "local": "아이디 · 일방향 암호화한 비밀번호 · 닉네임 · 동의 시각",
+    "social": "로그인 수단 · 계정 번호를 되돌릴 수 없게 바꾼 값 · 닉네임 · 동의 시각",
+}
+
+
+def _consent_boxes(kind: str, key: str, photo_label: str | None = None) -> dict:
+    """가입 동의: 필수(만 14세 이상 · 이용약관 · 개인정보 수집·이용)와 선택(프로필 사진)을 따로 받는다.
+    무엇을·왜·얼마나 보관하는지 바로 보이게 표로 고지한다 (11/18 개인정보 설계)."""
+    st.markdown(
+        '<div class="consent-box"><b>개인정보 수집·이용 안내</b>'
+        '<table><tr><th>항목</th><td>' + PRIVACY_TABLE[kind] + '</td></tr>'
+        '<tr><th>목적</th><td>회원 식별·로그인, 리뷰 작성자 표시, 북마크·알림</td></tr>'
+        '<tr><th>보관</th><td><b>탈퇴할 때까지</b> (탈퇴하면 지난 기록까지 바로 지워요)</td></tr></table>'
+        '<span>이메일·전화번호·실명은 받지 않아요. 동의하지 않으면 가입할 수 없지만, 로그인 없이도 둘러볼 수 있어요.</span></div>',
+        unsafe_allow_html=True)
+    out = {
+        "age": st.checkbox("[필수] 만 14세 이상이에요", key=f"{key}_age"),
+        "terms": st.checkbox("[필수] 이용약관에 동의해요", key=f"{key}_terms"),
+        "privacy": st.checkbox("[필수] 위 개인정보 수집·이용에 동의해요", key=f"{key}_priv"),
+        "photo": st.checkbox(photo_label, key=f"{key}_photo") if photo_label else False,
+    }
+    st.markdown(f'<div class="consent-link">전문 보기: <a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
+                ' · 만 14세 미만은 가입할 수 없어요 (법정대리인 동의 절차를 갖추지 않았어요)</div>', unsafe_allow_html=True)
+    return out
+
+
+def _consent_error(c: dict) -> str:
+    if not c["age"]:
+        return "만 14세 이상만 가입할 수 있어요."
+    if not (c["terms"] and c["privacy"]):
+        return "필수 항목(이용약관 · 개인정보 수집·이용)에 동의해야 가입할 수 있어요."
+    return ""
+
+
 def _password_signup_form() -> None:
     """일반 회원가입: 필수 정보(아이디·비밀번호·닉네임·동의)만 받는다."""
     with st.form("pw_signup", border=False):
@@ -4667,13 +4904,15 @@ def _password_signup_form() -> None:
         nick = st.text_input("닉네임 (필수)", max_chars=auth.MAX_NICK,
                              placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
         st.caption("다른 회원과 같은 닉네임, 욕설·음란한 말, 관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
-        agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 아이디 · 닉네임 · 암호화한 비밀번호")
-        st.caption("이메일·전화번호를 받지 않아서 비밀번호를 잊으면 찾을 수 없어요. 꼭 기억해 두세요.")
+        consent = _consent_boxes("local", "pwc")
+        st.caption("이메일·전화번호를 받지 않아서 비밀번호를 잊으면 찾을 수 없어요. 꼭 기억해 두세요. "
+                   "프로필 사진(선택)은 가입한 뒤 마이페이지에서 올릴 수 있어요.")
         done = st.form_submit_button("가입하기", type="primary", icon=":material/person_add:", width="stretch")
     if not done:
         return
-    if not agree:
-        st.warning("동의해야 가입할 수 있어요.", icon=":material/error:")
+    err = _consent_error(consent)
+    if err:
+        st.warning(err, icon=":material/error:")
         return
     try:
         if not " ".join(str(nick or "").split()):      # 닉네임을 비워 두면 '꾸밈말 + 캐릭터' 로 자동 (11/18)
@@ -4722,8 +4961,10 @@ def _my_account(row: dict) -> None:
         st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
         n = st.session_state.get("_av_n", 0)
         up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n}")
+        ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 그림으로'를 누르면 바로 지워요",
+                               key=f"av_agree_{n}")
         c1, c2 = st.columns(2)
-        if c1.button("이 사진으로 저장", type="primary", width="stretch", disabled=up is None, key="av_save"):
+        if c1.button("이 사진으로 저장", type="primary", width="stretch", disabled=up is None or not ok_photo, key="av_save"):
             data = up.getvalue()
             if images.too_big(data, 5):
                 st.warning("5MB 이하 사진만 올릴 수 있어요.", icon=":material/error:")
@@ -4734,8 +4975,7 @@ def _my_account(row: dict) -> None:
             auth.set_avatar(members, row, "none")
             _avatar_saved("기본 그림으로 바꿨어요.")
         if row.get("provider") in ("kakao", "naver"):
-            st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 처음 가입할 때(또는 사진이 없을 때 다시 로그인하면) '
-                       '자동으로 불러와요.')
+            st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.')
     with st.form("rename", border=False):
         nick = st.text_input("닉네임 바꾸기", value=row.get("nickname", ""), max_chars=auth.MAX_NICK)
         if st.form_submit_button("저장", icon=":material/check:"):
@@ -4761,13 +5001,16 @@ def _my_account(row: dict) -> None:
                         st.rerun()
                     except auth.AuthError as e:
                         st.warning(str(e), icon=":material/error:")
+    st.markdown(f'<div class="consent-link"><a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a></div>',
+                unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     if c1.button("로그아웃", icon=":material/logout:", width="stretch"):
         _logout()
         st.session_state["flash"] = ("로그아웃했어요.", ":material/logout:")
         st.rerun()
     with c2.popover("탈퇴하기", icon=":material/person_remove:", width="stretch"):
-        st.write("닉네임을 지우고 로그인 연결을 끊어요. 이미 쓴 리뷰는 남지만 더 이상 고칠 수 없어요.")
+        st.write("닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 **지난 기록까지 바로 지워요**. "
+                 "쓴 리뷰는 다른 이용자를 위해 '탈퇴한 회원'으로 남아요 (지우고 싶은 글은 먼저 삭제 요청해 주세요).")
         if local:
             st.caption("아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.")
             w_id = st.text_input("아이디", key="w_id")
@@ -4780,6 +5023,7 @@ def _my_account(row: dict) -> None:
                     st.warning(str(e), icon=":material/error:")
                     st.stop()
             auth.withdraw(members, row)
+            auth.purge_withdrawn(str(row["entry_id"]))     # 개인정보 파기 (지난 기록까지)
             _logout()
             st.session_state["flash"] = ("탈퇴했어요. 그동안 고마웠어요.", ":material/check_circle:")
             st.rerun()
@@ -4813,11 +5057,6 @@ def _auth_body() -> None:
             return
         row = auth.find(members, ident.member_key)
         if row:
-            if not str(row.get("avatar") or "") and ident.avatar:   # 사진을 정한 적 없으면 카카오·네이버 사진으로
-                try:
-                    row = auth.set_avatar(members, row, ident.avatar)
-                except Exception:
-                    pass
             _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
             go("map")
             return
@@ -4831,19 +5070,22 @@ def _auth_body() -> None:
     st.markdown(f'<div class="auth-title">거의 다 됐어요</div><div class="auth-sub">{label} 계정으로 처음 오셨어요. '
                 '앱에서 쓸 닉네임만 정하면 가입이 끝나요.</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="auth-av">{_avatar_img(ident.avatar, 48, "")}'
-                + (f"{label} 프로필 사진을 불러왔어요. 마이페이지에서 언제든 바꿀 수 있어요." if ident.avatar
+                + (f"{label} 프로필 사진이 있어요. 아래 [선택] 항목에 동의하면 리뷰 옆에 보여요." if ident.avatar
                    else "프로필 사진은 선택이에요. 마이페이지에서 언제든 올릴 수 있어요.") + '</div>', unsafe_allow_html=True)
     with st.form("signup", border=False):
         nick = st.text_input("닉네임", value=ident.nickname, max_chars=auth.MAX_NICK,
                              placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
         st.caption("다른 회원과 같은 닉네임, 욕설·음란한 말, 관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
-        agree = st.checkbox("이용약관과 개인정보 처리에 동의해요 (필수) — 저장: 닉네임 · 로그인 수단 · 해시한 계정 번호 · "
-                            "프로필 사진 주소(선택)")
+        consent = _consent_boxes("social", "soc", f"[선택] {label} 프로필 사진을 불러와 리뷰 옆에 보여 줘요 (사진 주소 저장, "
+                                 "마이페이지에서 언제든 지울 수 있어요)" if ident.avatar else None)
         done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")
     if done:
-        if not agree:
-            st.warning("동의해야 가입할 수 있어요.", icon=":material/error:")
+        err = _consent_error(consent)
+        if err:
+            st.warning(err, icon=":material/error:")
             return
+        if not consent["photo"]:                 # 사진은 선택 동의한 경우에만 저장
+            ident = dataclasses.replace(ident, avatar="none")
         try:
             if not " ".join(str(nick or "").split()):
                 nick = _auto_nick(ident.member_key)
@@ -5578,7 +5820,7 @@ def _ask_card(cafe_id: str, r: dict, km: float | None = None) -> dict:
     def md(v) -> str:
         d = mycal._day(v)
         return f"{d.month}.{d.day}" if d else ""
-    dates = f"{md(r.get('start_date'))} ~ {md(r.get('end_date'))}".strip(" ~")
+    dates = _period(r)
     if km is not None:
         dates = (f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km") + " · " + dates
     return {"id": str(cafe_id), "work": str(r.get("work") or ""), "cafe": str(r.get("cafe_name") or ""),
@@ -5847,6 +6089,7 @@ PAGES = {
     "login": st.Page(page_login, title="로그인 · ANI:WHERE", icon=":material/login:", url_path="login"),
     "auth": st.Page(page_auth, title="가입 · ANI:WHERE", icon=":material/person_add:", url_path="auth"),
     "data": st.Page(page_data, title="데이터 보기 · ANI:WHERE", icon=":material/database:", url_path="data"),
+    "privacy": st.Page(page_privacy, title="개인정보처리방침 · ANI:WHERE", icon=":material/policy:", url_path="privacy"),
 }
 try:
     st.navigation(list(PAGES.values()), position="hidden").run()

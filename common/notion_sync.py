@@ -20,7 +20,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import cafe, geo, guard, images, notice
+from . import dates, cafe, geo, guard, images, notice
 from .schema import CafeEntry
 
 DATABASE_ID = os.getenv("NOTION_DATABASE_ID", "3da1fd80371141c697fabf7b742e0edc")
@@ -71,14 +71,27 @@ def _page_id(url: str) -> str:
     return m.group(1) if m else ""
 
 
-def entry_from_row(row: dict) -> tuple[CafeEntry | None, dict, str]:
+def entry_from_row(row: dict, today: date | None = None) -> tuple[CafeEntry | None, dict, str]:
     """평평한 행 → (CafeEntry, 덧붙일 정보, 건너뛴 이유). 행 키는 Notion 속성 이름 그대로
     ('작품명', '장소명', ..., 'date:기간:start', 'date:기간:end', 'url')."""
     if row.get("검수상태") != "검토 완료":
         return None, {}, "검토 필요"
     start, end = row.get("date:기간:start"), row.get("date:기간:end")
-    if not start or not end:
-        return None, {}, "기간 없음"
+    # 기간이 비었거나 끝이 없어도 버리지 않는다 (11/18 안정성): 끝이 없으면 '상시',
+    # 아예 없으면 글로 적힌 기간(기간원문·이벤트·팝업소개)을 읽고, 그래도 못 읽으면 '기간 확인 필요' + 원문
+    today = today or date.today()
+    period = None
+    if start and end:
+        s_day, e_day = date.fromisoformat(str(start)[:10]), date.fromisoformat(str(end)[:10])
+    elif start:
+        period = dates.Period(date.fromisoformat(str(start)[:10]), dates.ALWAYS_END, "always", f"{str(start)[:10]} ~")
+    else:
+        raw = " ".join(str(row.get(k) or "") for k in ("기간원문", "기간", "이벤트")).strip()
+        period = dates.parse_period(raw or str(row.get("팝업소개") or "")[:200], today)
+        if not raw and period.kind == "unknown":
+            period.raw = "(기간 정보 없음)"
+    if period:
+        s_day, e_day = period.start, period.end
     place = _place(row.get("장소명"))
     work = _work(row.get("작품명"))
     if not place or not work:
@@ -91,7 +104,7 @@ def entry_from_row(row: dict) -> tuple[CafeEntry | None, dict, str]:
     entry = CafeEntry(
         cafe_name=place, work=work, characters=_split(row.get("캐릭터"), r",|·"),
         address=address,
-        start_date=date.fromisoformat(str(start)[:10]), end_date=date.fromisoformat(str(end)[:10]),
+        start_date=s_day, end_date=e_day,
         perks=_split(row.get("특전")), goods=_split(row.get("굿즈"), r","),
         confidence="high",
     )
@@ -99,7 +112,9 @@ def entry_from_row(row: dict) -> tuple[CafeEntry | None, dict, str]:
     found = re.findall(r"https?://\S+", " ".join(str(row.get(k) or "") for k in LINK_FIELDS))
     lat, lng = row.get("위도"), row.get("경도")
     # recal.kr 은 공식 공지·주최 링크 뒤로 (다른 사이트가 없으면 그대로 첫 번째)
-    extra = {"tags": tags, "links": cafe.order_links(cafe.parse_links(" ".join(found))[0])[:cafe.MAX_LINKS],
+    if period:
+        tags = list(dict.fromkeys(list(tags) + period.tags))
+    extra = {"date_raw": period.raw if period and period.kind != "exact" else "", "tags": tags, "links": cafe.order_links(cafe.parse_links(" ".join(found))[0])[:cafe.MAX_LINKS],
              "intro": clean_intro(row.get("팝업소개")), "intro_src": intro_source(row),
              "images": image_urls(row), "notion_id": _page_id(row.get("url")),
              "latlng": (float(lat), float(lng)) if lat and lng else None}
@@ -293,7 +308,7 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
     rows = [b for row in rows for b in expand_branches(row)]
     for row in rows:
         name = f"{row.get('작품명')} · {row.get('장소명')}"
-        entry, extra, why = entry_from_row(row)
+        entry, extra, why = entry_from_row(row, today)
         if entry is None:
             report["skipped"].append((name, why))
             continue
@@ -331,7 +346,8 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
         saved = _download(extra["images"])
         store.append(cafe.entry_to_row(
             entry, g.lat, g.lng, source=SOURCE, editor="AI",
-            note=f"{g.badge} ({g.matched}) | notion:{extra['notion_id']}",
+            note=f"{g.badge} ({g.matched}) | notion:{extra['notion_id']}"
+                 + (f" | {dates.RAW_MARK}{extra['date_raw']}" if extra.get("date_raw") else ""),
             images=saved, tags=extra["tags"], links=extra["links"], intro=extra["intro"],
             intro_src=extra["intro_src"]))
         report["added"].append(name)
@@ -438,8 +454,43 @@ def maybe_sync(store, today: date) -> dict | None:
     except Exception:
         pass
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps({"last": now.isoformat()}), encoding="utf-8")
+    prev = last_status()
     try:
-        return import_rows(store, fetch_rows(token), today)
-    except Exception as exc:
+        rows = fetch_rows(token)
+        report = import_rows(store, rows, today)     # 0건이어도 지우지 않는다 (append-only, 새 것만 더함)
+        _save_state({"last": now.isoformat(), "last_ok": now.isoformat(), "error": "", "fetched": len(rows)})
+        return report
+    except Exception as exc:                          # 소스가 죽거나 모양이 바뀜 → 기존 데이터 그대로, 실패만 기록
+        _save_state({"last": now.isoformat(), "last_ok": prev.get("last_ok", ""), "error": type(exc).__name__,
+                     "fetched": prev.get("fetched", 0)})
         return {"added": [], "skipped": [], "error": str(exc)}
+
+
+def _save_state(state: dict) -> None:
+    try:
+        STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def last_status() -> dict:
+    """마지막 가져오기 결과 {'last', 'last_ok', 'error', 'fetched'} (없으면 빈 dict)."""
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def last_update(rows: list[dict]) -> datetime | None:
+    """팝업 정보가 마지막으로 들어온 시각: 자동 수집(매일 아침)·사람이 등록·수정한 기록 중 가장 늦은 것."""
+    best = None
+    for r in rows:
+        try:
+            ts = datetime.fromisoformat(str(r.get("updated_at") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        if best is None or ts > best:
+            best = ts
+    return best

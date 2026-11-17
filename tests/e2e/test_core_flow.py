@@ -36,7 +36,9 @@ def sign_up(page: Page, url: str) -> None:
     f.get_by_label("비밀번호 (필수)").fill("qatest1234")
     f.get_by_label("비밀번호 확인 (필수)").fill("qatest1234")
     f.get_by_label("닉네임 (필수)").fill("테스트봇" + uuid.uuid4().hex[:4])   # 닉네임 중복 가입 금지 (11/18)
-    f.locator('[data-testid="stCheckbox"] label').first.click()
+    # 필수 동의 3개 (만 14세 이상 · 이용약관 · 개인정보 수집·이용) — 11/18 개인정보 설계
+    for i in range(3):
+        f.locator('[data-testid="stCheckbox"] label').nth(i).click()
     f.get_by_role("button", name="가입하기").click()
     # 가입하면 메인으로 가고, 메뉴바의 '로그인' 자리에 닉네임이 보인다
     expect(page).to_have_url(re.compile(r"/$"), timeout=LONG)          # 메인으로 옮겨졌는지 먼저
@@ -103,10 +105,16 @@ def test_2_검색으로_좁혀지고_없으면_안내가_뜬다(page: Page, app_
     box.fill("zzqx없는작품9876")
     box.press("Enter")
     wait_idle(page)
-    expect(page.get_by_text("조건에 맞는 카페가 없습니다")).to_be_visible(timeout=LONG)
+    expect(page.get_by_text("이 조건엔 행사가 없어요")).to_be_visible(timeout=LONG)
     assert page.locator(CARD).count() == 0
     # 빈 표(dataframe)가 아니라 안내 문구여야 한다
     assert page.locator('[data-testid="stDataFrame"], [data-testid="stTable"]').count() == 0
+    # 조건 완화 버튼: '검색어 지우기 (N곳)' 을 누르면 다시 카드가 보인다 (11/18 안정성)
+    relax = page.locator(".st-key-relax_query button")
+    expect(relax).to_contain_text("검색어 지우기", timeout=LONG)
+    relax.click()
+    wait_idle(page)
+    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
 
 
 # ------------------------------------------------------------------ 3. 상세

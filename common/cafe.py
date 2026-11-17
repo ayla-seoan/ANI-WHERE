@@ -218,6 +218,8 @@ def build_user_content(raw_text: str, today: date | None = None) -> str:
 # ------------------------------------------------------------------ 변환
 # 등록 화면의 '이벤트 추가 정보' 체크 항목
 EVENT_TAGS = ["사전 예약", "럭키 드로우", "가챠", "미성년자 입장불가", "포토부스", "스탬프 투어", "랜덤 특전"]
+# 기간 표시용 (common/dates.py): 종료일 없는 팝업 · 기간을 못 읽은 팝업. 이벤트 칩이 아니라 기간 옆 표시로 쓴다
+PERIOD_TAGS = ["상시", "기간 확인 필요"]
 
 
 MAX_LINKS = 5
@@ -269,7 +271,7 @@ def entry_to_row(entry: CafeEntry, lat: float | None, lng: float | None,
         "intro": mask(intro.strip())[:MAX_INTRO],   # 전화번호·이메일 등은 저장 전에 가린다
         "links": " ".join((links or [])[:MAX_LINKS]),
         "images": ", ".join(images or []),
-        "tags": ", ".join(t for t in (tags or []) if t in EVENT_TAGS),
+        "tags": ", ".join(t for t in (tags or []) if t in EVENT_TAGS + PERIOD_TAGS),
         "cafe_name": entry.cafe_name,
         "work": entry.work,
         "characters": ", ".join(entry.characters),
