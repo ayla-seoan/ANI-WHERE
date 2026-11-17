@@ -187,7 +187,7 @@ def parse(question: str, rows: list[dict], today: date) -> Query:
             query.places.append(p)
 
     query.window, query.window_label = _window(q, today)
-    query.include_ended = any(w in q for w in ("지난", "끝난", "종료"))
+    query.include_ended = False      # 끝난 팝업은 답하지 않는다 (11/18 요청: 종료된 팝업은 어디에도 안 보이게)
     known = [_norm(x) for x in query.works + query.characters + query.places]
     words = []
     for w in re.findall(r"[가-힣A-Za-z0-9]{2,}", q):
@@ -445,6 +445,9 @@ def _filtered(query: Query, rows: list[dict], today: date, ongoing_only: bool = 
     """질문 속 작품·지역·날짜 조건 + (기본) 진행 중만."""
     out = []
     for r in rows:
+        e = mycal._day(r.get("end_date"))
+        if e and e < today:
+            continue                     # 끝난 팝업은 어떤 질문에도 내밀지 않는다
         if ongoing_only and not query.window and not _ongoing(r, today):
             continue
         if query.window and not _overlaps(r, query.window):

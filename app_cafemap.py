@@ -2857,6 +2857,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .ntf-item.has-pst::before { display: none; }
 .ntf-item .ntf-pst { width: 42px; height: 56px; flex: 0 0 42px; object-fit: cover; border-radius: 6px; }
 .ntf-body { min-width: 0; flex: 1 1 auto; }
+.ntf-body .ntf-cafe { color: #6B7672; font-size: .82rem; }
 .ntf-item.has-pst .ntf-body { padding-right: 52px; }
 .ntf-item.has-pst .ntf-st { position: absolute; top: 10px; right: 12px; float: none; }
 .ntf-item.has-pst .ntf-body > b:first-of-type::before { content: ""; display: inline-block; width: 7px; height: 7px;
@@ -3317,6 +3318,8 @@ def _notice_history(days_back: int = 2) -> list[tuple[date, str, str, dict]]:
         if str(r.get("entry_id")) not in mine:
             continue
         s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+        if e_ and e_ < TODAY:
+            continue                         # 끝난 팝업의 알림 내역은 보이지 않게 (11/18 요청)
         for kind, base in (("open", s_), ("end", e_)):
             if not base or not rules[kind]["enabled"]:
                 continue
@@ -3353,7 +3356,7 @@ def render_my_calendar_view() -> None:
         if tab not in ("fav", "visited", "recent"):
             tab = "fav"
         with st.container(horizontal=True, key="box_tabs"):
-            for t, label in (("fav", "찜"), ("visited", "다녀온"), ("recent", "최근 본")):
+            for t, label in (("fav", "북마크"), ("visited", "다녀온 팝업"), ("recent", "최근 본 팝업")):
                 st.button(label, key=f"boxtab_{'on_' if tab == t else ''}{t}", on_click=_box_tab, args=(t,))
         render_box_view(tab)
 
@@ -3386,8 +3389,11 @@ def _render_notice_history() -> None:
             last_day = day
         eid = str(r.get("entry_id"))
         name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
-        text = f"<b>{label}</b> · {name}" + _why_html(kind)      # 종 알림(_notices)과 같은 글
-        nid = _ntf_id(f"m{TODAY}{eid}{text}") if day == TODAY else _ntf_id(f"h{day}{eid}{label}")
+        bell = f"<b>{label}</b> · {name}" + _why_html(kind)      # 종 알림(_notices)과 같은 글 → 같은 번호(읽음 공유)
+        nid = _ntf_id(f"m{TODAY}{eid}{bell}") if day == TODAY else _ntf_id(f"h{day}{eid}{label}")
+        # 화면에는 종류 / 작품 / 매장을 줄바꿈으로 (11/18 요청)
+        text = (f"<b>{label}</b><br>{escape(str(r.get('work') or ''))}<br>"
+                f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>" + _why_html(kind))
         _ntf_cell(nid, text, eid, poster=_poster_url(r.get("images")), kp="h", past=day != TODAY)
     _render_near_picks()
 
@@ -3434,13 +3440,10 @@ def _render_near_picks() -> None:
         return
     for _, _, km, r, avg, n in cand[:3]:
         eid = str(r.get("entry_id"))
-        s_ = mycal._day(r.get("start_date"))
         dist = f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km"
-        state = "진행 중" if s_ <= TODAY else ("오늘 오픈" if s_ == TODAY else f"오픈 D-{(s_ - TODAY).days}")
-        star = f"별점 {avg:.1f} · 후기 {n}개" if n else "아직 후기 없음"
-        name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
-        text = (f"<b>내 주변 {dist}</b> · {name}"
-                f'<div class="ntf-why">{_mi("star")} {escape(star)} · {escape(state)} (별점 높은 순 → 후기 많은 순)</div>')
+        # 거리 / 작품 / 매장 줄바꿈 (별점·상태 줄은 뺐다, 기준은 제목 옆 ? 에) — 11/18 요청
+        text = (f"<b>내 주변 {dist}</b><br>{escape(str(r.get('work') or ''))}<br>"
+                f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>")
         _ntf_cell(_ntf_id(f"r{TODAY}{eid}"), text, eid, poster=_poster_url(r.get("images")), kp="h")
 
 
@@ -3538,16 +3541,19 @@ def _box_grid(items: list[tuple[dict, str]], key: str) -> None:
 
 def render_box_view(tab: str) -> None:
     """내 캘린더 오른쪽 칸의 찜 · 다녀온 · 최근 본."""
-    latest = {str(r.get("entry_id")): r for r in mycal.latest_rows(store.all_rows())}
+    # 끝난 팝업은 어디에도 보이지 않게 (11/18 요청): 북마크·다녀온·최근 본 모두 종료일이 오늘 이후인 것만
+    latest = {str(r.get("entry_id")): r for r in mycal.latest_rows(store.all_rows())
+              if r.get("status") != "deleted" or r.get("source") == "기간 종료"}
+    latest = {k: r for k, r in latest.items() if (mycal._day(r.get("end_date")) or TODAY) >= TODAY}
 
     if tab == "fav":
-        st.markdown(f'<div class="bx-tip">{_mi("notifications")} 찜한 팝업은 오픈·종료 3일 전부터 알림으로 알려 드려요.</div>',
+        st.markdown(f'<div class="bx-tip">{_mi("notifications")} 북마크한 팝업은 오픈·종료 3일 전부터 알림으로 알려 드려요.</div>',
                     unsafe_allow_html=True)
         _, mine, _ = _fav_state()
         rows = sorted((latest[i] for i in mine if i in latest),
                       key=lambda r: (str(r.get("end_date") or "") < TODAY.isoformat(), str(r.get("start_date") or "")))
         if not rows:
-            _box_empty("아직 찜한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.", "bookmark_add")
+            _box_empty("아직 북마크한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.", "bookmark_add")
             return
         _box_grid([(r, "") for r in rows], "fav")
 
@@ -4792,6 +4798,7 @@ def render_calendar(compact: bool = False) -> None:
     _, mine, _ = _fav_state()
     # 기간이 끝나 지도에서 내려간 팔로우도 지난 달력에 남도록, 내린 기록까지 포함한 최신 행에서 고른다
     events = mycal.fav_events(mycal.latest_rows(store.all_rows()), mine, TODAY)
+    events = [e for e in events if e.end >= TODAY]          # 끝난 팝업은 달력에서도 뺀다 (11/18 요청)
 
     year, month = st.session_state.get("cal_month") or (TODAY.year, TODAY.month)
     # 머리글 한 줄: '2026년 10월'  ‹  ›  [오늘]
@@ -4826,6 +4833,10 @@ AUTH_CSS = """
 .auth-or { display: flex; align-items: center; gap: .6rem; max-width: 380px; color: #9AA5A1; font-size: .8rem;
   margin: 1rem 0 .3rem; }
 .me-av { margin-bottom: 8px; }
+.auth-card.me-card { display: flex; align-items: center; gap: 16px; }
+.me-card .me-av { margin: 0; flex: 0 0 auto; }
+.me-card .me-info { min-width: 0; text-align: left; }
+.me-card .me-info b { font-size: 1.05rem; }
 .consent-box { background: #F4F8F6; border-radius: 12px; padding: 10px 12px; margin: 6px 0 8px; font-size: .82rem; color: #3A4542; }
 .consent-box table { width: 100%; border-collapse: collapse; margin: 6px 0; }
 .consent-box th { width: 44px; text-align: left; color: #2E9C82; font-weight: 800; padding: 3px 6px 3px 0; vertical-align: top; border: 0; }
@@ -4847,7 +4858,8 @@ AUTH_CSS = """
 .st-key-auth_tabs { align-items: center !important; }
 .st-key-auth_wrap .auth-sub, .st-key-auth_wrap .auth-note { word-break: keep-all; }
 .st-key-auth_wrap [data-testid="stPageLink"] { display: flex; justify-content: center; }
-.auth-card { border: 1.5px solid #9EDDCC; border-radius: 14px; padding: 1rem 1.1rem; max-width: 460px; background: #fff; }
+.auth-card { border: 1.5px solid #9EDDCC; border-radius: 14px; padding: 1rem 1.1rem; max-width: 460px; background: #fff;
+  margin-bottom: 14px; }   /* 아래 '프로필 사진 바꾸기' 칸과 붙지 않게 (11/18) */
 </style>
 """
 
@@ -5071,16 +5083,17 @@ def _avatar_saved(msg: str) -> None:
 
 def _my_account(row: dict) -> None:
     prov = auth.PROVIDER_LABEL.get(str(row.get("provider")), "")
-    st.markdown(f'<div class="auth-title">내 계정</div><div class="auth-card">'
-                f'<div class="me-av">{_avatar_img(row.get("avatar"), 72, "me-avimg")}</div>'
+    # 프로필 사진 옆에 닉네임 · 로그인 수단 · 가입일 · 회원 번호 (11/18 요청)
+    st.markdown(f'<div class="auth-title">내 계정</div><div class="auth-card me-card">'
+                f'<div class="me-av">{_avatar_img(row.get("avatar"), 72, "me-avimg")}</div><div class="me-info">'
                 f'<b>{escape(_nick_only(auth.display_name(row)))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
                 f'가입 {escape(str(row.get("agreed_at", ""))[:10])}<br>회원 번호 <code>{escape(str(row["entry_id"]))}</code>'
-                f'{" · 관리자" if _is_admin() else ""}</span></div>', unsafe_allow_html=True)
+                f'{" · 관리자" if _is_admin() else ""}</span></div></div>', unsafe_allow_html=True)
     with st.expander("프로필 사진 바꾸기"):
         st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
         n = st.session_state.get("_av_n", 0)
         up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n}")
-        ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 그림으로'를 누르면 바로 지워요",
+        ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 사진 설정'을 누르면 바로 지워요",
                                key=f"av_agree_{n}")
         c1, c2 = st.columns(2)
         if c1.button("이 사진으로 저장", type="primary", width="stretch", disabled=up is None or not ok_photo, key="av_save"):
@@ -5090,14 +5103,14 @@ def _my_account(row: dict) -> None:
             else:
                 auth.set_avatar(members, row, images.save(up.name, data))
                 _avatar_saved("프로필 사진을 바꿨어요.")
-        if c2.button("기본 그림으로", width="stretch", key="av_default"):
+        if c2.button("기본 사진 설정", width="stretch", key="av_default"):
             auth.set_avatar(members, row, "none")
-            _avatar_saved("기본 그림으로 바꿨어요.")
+            _avatar_saved("기본 사진으로 바꿨어요.")
         if row.get("provider") in ("kakao", "naver"):
             st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.')
     with st.form("rename", border=False):
         nick = st.text_input("닉네임 바꾸기", value=row.get("nickname", ""), max_chars=auth.MAX_NICK)
-        if st.form_submit_button("저장", icon=":material/check:"):
+        if st.form_submit_button("저장", icon=":material/check:", type="primary", width="stretch"):   # 길게 · 포인트 색 (11/18)
             try:
                 auth.rename(members, row, nick)
                 st.session_state.pop("_member_cache", None)
