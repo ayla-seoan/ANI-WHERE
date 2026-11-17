@@ -42,8 +42,9 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent
 TODAY = date.today()
 MAP_HEIGHT = 620
-LOGOS = ["logo_mint.png", "logo.png", "logo2.png"]   # static/ 의 제목 로고. 화면을 누를 때마다 다음 것으로 바뀐다
-FIXED_LOGO = "logo_mint.png"
+# 제목 로고: 예전 '팝업 카페 등록하기' 화면의 흰 글자 + 민트 테두리 로고로 통일 (11/18 요청, 바꿔 돌리지 않음)
+LOGOS = ["logo_add.png"]
+FIXED_LOGO = "logo_add.png"
 ADD_LOGO = "logo_add.png"          # 등록 화면 로고 (흰 글자 + 민트 테두리)           # 상세·등록 화면에서는 이 로고로 고정
 TOPBAR_TOP = "0rem"      # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
 TOPBAR_H = "282px"        # 상단 묶음 높이 (로고 + 문구 + 검색 필터. '팝업 카페 N곳' 줄은 묶음 밖)
@@ -313,7 +314,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
 /* 로고 그림 아래 'ANIME POP-UP · CAFE · GOODS' 글씨까지 읽히게 로고 칸을 키운다 */
 .st-key-home_brand button {{ width: 330px !important; height: 100px !important;
-  background: url("app/static/logo_mint.png") no-repeat left center / contain !important; }}
+  background: url("app/static/logo_add.png") no-repeat left center / contain !important; }}
 .st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
 /* 로고는 눌러도·커서를 올려도 바탕·그림자·밝기 변화 없이 그대로 (모바일 탭 하이라이트도 끈다) */
 .st-key-home_brand button, .st-key-home_brand button:hover, .st-key-home_brand button:focus,
