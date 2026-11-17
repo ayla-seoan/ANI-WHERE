@@ -29,6 +29,8 @@
   /* 지도 그림 색: 밝은 회색 = 흑백, 다크 = 흑백을 뒤집은 것.
      대비를 세게 줘서 옅은 바탕·도로는 더 옅게(다크는 더 어둡게), 진한 지명 글자는 더 또렷하게 남긴다 */
   .tiles-light { filter: grayscale(1) contrast(1.3) brightness(1.06); }
+  /* 기본: 네이버·카카오 지도처럼 또렷하게 — 원색을 조금 눌러 핀이 더 잘 보이게 하고 글자 대비는 살린다 */
+  .tiles-base { filter: saturate(.8) contrast(1.05) brightness(1.02); }
   .tiles-dark { filter: grayscale(1) invert(1) contrast(1.3) brightness(.95); }
   #map.dark { background: #1f2224; }
   /* 커서를 올리면 뜨는 카드: 포스터 · 작품 · 카페 · 위치 · 기간 */
@@ -289,6 +291,92 @@ const Kakao = {
   fit() { this.overview(); },
 };
 
+/* ---------- 네이버 지도 (NAVER_MAPS_CLIENT_ID = 네이버 클라우드 Maps 의 Client ID, Dynamic Map 사용 체크) ---------- */
+let naverAuthFailed = false;
+window.navermap_authFailure = () => {          // 키·도메인이 틀리면 네이버가 이 함수를 부른다 → 다른 지도로 바꿔 그린다
+  naverAuthFailed = true;
+  console.warn("네이버 지도 인증에 실패해 다른 지도로 표시합니다. 네이버 클라우드 콘솔 > Maps > Application 에 이 주소(Web 서비스 URL)를 등록했는지 확인해 주세요.");
+  if (engine === Naver) fallbackFromNaver();
+};
+
+const Naver = {
+  map: null, markers: [], tip: null,
+
+  load(key) {
+    return loadScript("https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" + encodeURIComponent(key))
+      .then(() => new Promise((resolve, reject) => {
+        const t0 = Date.now();
+        (function wait() {
+          if (naverAuthFailed) return reject(new Error("naver auth failed"));
+          if (window.naver && naver.maps && naver.maps.Map) return resolve();
+          if (Date.now() - t0 > 6000) return reject(new Error("naver maps timeout"));
+          setTimeout(wait, 100);
+        })();
+      }));
+  },
+
+  init() {
+    const N = naver.maps;
+    this.map = new N.Map("map", {
+      center: new N.LatLng(KOREA.lat, KOREA.lng), zoom: 7, minZoom: 6,
+      maxBounds: new N.LatLngBounds(new N.LatLng(ASIA.south, ASIA.west), new N.LatLng(ASIA.north, ASIA.east)),
+      zoomControl: true, zoomControlOptions: { position: N.Position.RIGHT_CENTER, style: N.ZoomControlStyle.SMALL },
+      mapDataControl: false, scaleControl: false, logoControlOptions: { position: N.Position.BOTTOM_LEFT },
+    });
+    document.getElementById("styles").style.display = "none";   // 지도 그림 바꾸기는 기본 지도에서만
+    N.Event.addListener(this.map, "click", closeSpot);
+    this.overview();
+  },
+
+  overview() {
+    const N = naver.maps, h = homeBox();
+    this.map.fitBounds(new N.LatLngBounds(new N.LatLng(h.south, h.west), new N.LatLng(h.north, h.east)),
+                       { top: 20, right: 20, bottom: 20, left: 20 });
+  },
+
+  draw(points, selected) {
+    const N = naver.maps;
+    this.markers.forEach((m) => m.setMap(null));
+    this.markers = [];
+    if (this.tip) { this.tip.setMap(null); this.tip = null; }
+    points.forEach((p) => {
+      const sel = p.id === selected;
+      const size = sel ? 34 : 26;
+      const el = document.createElement("div");
+      el.className = "pin" + (sel ? " sel" : "");
+      const pos = new N.LatLng(p.lat, p.lng);
+      // 물방울 핀의 뾰족한 끝(아래 가운데)이 카페 자리에 오게
+      const m = new N.Marker({ position: pos, map: this.map, zIndex: sel ? 2 : 1,
+        icon: { content: el, size: new N.Size(size, size), anchor: new N.Point(size / 2, size * 1.15) } });
+      N.Event.addListener(m, "click", () => onPick(p));
+      N.Event.addListener(m, "mouseover", () => {
+        if (this.tip) this.tip.setMap(null);
+        const t = tipCard(p);
+        t.classList.add("kcard");
+        this.tip = new N.Marker({ position: pos, map: this.map, zIndex: 3, clickable: false,
+          icon: { content: t, anchor: new N.Point(125, (t.offsetHeight || 230) + size + 6) } });
+      });
+      N.Event.addListener(m, "mouseout", () => { if (this.tip) { this.tip.setMap(null); this.tip = null; } });
+      this.markers.push(m);
+    });
+  },
+
+  focus(p) { this.map.setZoom(16, false); this.map.setCenter(new naver.maps.LatLng(p.lat, p.lng)); },
+  peek(p) { if (this.map.getZoom() < 15) this.map.setZoom(15, false); this.map.panTo(new naver.maps.LatLng(p.lat, p.lng)); },
+  fit() { this.overview(); },
+};
+
+// 네이버가 안 되면: 카카오 키가 있으면 카카오, 아니면 기본 지도로 다시 그린다 (지도가 비지 않게)
+let kakaoKey = null;
+function fallbackFromNaver() {
+  document.getElementById("map").innerHTML = "";
+  document.getElementById("styles").style.display = "";
+  const next = kakaoKey
+    ? Kakao.load(kakaoKey).then(() => { engine = Kakao; }).catch(() => Basic.load().then(() => { engine = Basic; }))
+    : Basic.load().then(() => { engine = Basic; });
+  return next.then(() => { engine.map = null; lastView = ""; loaded = true; if (pending) draw(pending); });
+}
+
 /* ---------- 기본 지도 (키가 없을 때: Leaflet + OpenStreetMap) ---------- */
 const Basic = {
   map: null, layer: null,
@@ -341,10 +429,11 @@ const Basic = {
     // 세 가지 모두 같은 OpenStreetMap 지도(한글 지명이 다 나온다)를 쓰고, 색만 CSS 필터로 바꾼다.
     // (Esri 회색 지도는 지명이 적고 영어라서 바꿨다. 필터는 지도 그림에만 걸고 핀에는 걸지 않는다)
     const OSM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    const STYLES = { "밝은 회색": "tiles-light", "컬러": "", "다크": "tiles-dark" };
-    let saved = "밝은 회색";
-    try { saved = localStorage.getItem("aniwhere-map-style") || saved; } catch (e) {}
-    if (!STYLES[saved]) saved = "밝은 회색";
+    const STYLES = { "기본": "tiles-base", "흑백": "tiles-light", "다크": "tiles-dark" };
+    let saved = "기본";
+    // 예전 이름('밝은 회색' 등)이 저장돼 있으면 새 기본값으로 (흐려 보인다는 피드백)
+    try { saved = localStorage.getItem("aniwhere-map-style-v2") || saved; } catch (e) {}
+    if (!STYLES[saved]) saved = "기본";
     let layers = [];
     const use = (key) => {
       layers.forEach((l) => this.map.removeLayer(l));
@@ -353,7 +442,7 @@ const Basic = {
       document.getElementById("map").classList.toggle("dark", key === "다크");
       layers.forEach((l) => l.bringToBack());
       [...bar.children].forEach((b) => b.setAttribute("aria-pressed", b.textContent === key ? "true" : "false"));
-      try { localStorage.setItem("aniwhere-map-style", key); } catch (e) {}
+      try { localStorage.setItem("aniwhere-map-style-v2", key); } catch (e) {}
     };
     const bar = document.getElementById("styles");
     bar.innerHTML = "";
@@ -458,6 +547,13 @@ window.addEventListener("message", (event) => {
     // 카카오 키가 있으면 카카오맵, 못 불러오면(도메인 미등록 등) 기본 지도로 바꿔 그린다 (지도가 비지 않게)
     const useBasic = () => { engine = Basic; return Basic.load(); };
     const fail = () => showMessage("지도를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.");
+    kakaoKey = args.app_key || null;
+    if (args.naver_key) {
+      engine = Naver;
+      ready = Naver.load(args.naver_key).catch(() => fallbackFromNaver().then(() => { throw "handled"; }))
+        .then(() => { loaded = true; draw(pending); }, (e) => { if (e !== "handled") fail(); });
+      return;
+    }
     engine = args.app_key ? Kakao : Basic;
     ready = (args.app_key
       ? Kakao.load(args.app_key).then(

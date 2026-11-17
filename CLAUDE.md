@@ -14,9 +14,9 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
 - 포인트 색은 CSS 변수 `--accent`(#14b8a6) · `--accent-soft` · `--accent-deep` 를 쓴다. `@import`(글꼴) 는 `<style>` 맨 앞에 둔다 — 앞에 다른 규칙이 있으면 글꼴이 무시된다.
 - 모바일은 폭 640px 이하. PC 와 모바일 화면을 모두 확인한다.
 - 참고 웹사이트에서 `recal.kr` 은 다른 사이트 뒤로 보낸다 (`cafe.order_links`).
-- Notion 규칙은 `docs/notion-import.md` 가 기준이다 (1부: 예약 작업 '애니 팝업·콜라보 주간 수집' 의 수집 규칙, 2부: 앱 가져오기). 예약 작업 지시문이나 `notion_sync.py` 를 바꾸면 그 문서도 같이 고친다.
+- Notion 규칙은 `docs/notion-import.md` 가 기준이다 (1부: 예약 작업 '애니 팝업·콜라보 매일 수집' 의 수집 규칙, 2부: 앱 가져오기). 예약 작업 지시문이나 `notion_sync.py` 를 바꾸면 그 문서도 같이 고친다.
   - Notion DB 는 '행사 × 지점 = 1행' 이고 '지점' 칸은 형제 목록이다. 앱에서 행을 다시 나누지 않는다.
-  - 매주 월요일 10:00 KST GitHub Actions(`.github/workflows/notion-sync.yml` → `scripts/notion_import.py`)가 가져와 `data/cafes.json` 을 커밋한다. 로컬에서 `data/cafes.json` 을 올리기 전에 `git pull` 로 그 커밋을 먼저 받는다.
+  - 매일 08:40 KST GitHub Actions(`.github/workflows/notion-sync.yml` → `scripts/notion_import.py`)가 가져와 `data/cafes.json` 을 커밋한다. 로컬에서 `data/cafes.json` 을 올리기 전에 `git pull` 로 그 커밋을 먼저 받는다.
   - 가져온 기록의 `note` 끝 `| notion:<번호>` 는 지우지 않는다 (앱에서 고쳐도 `_keep_notion` 으로 남김).
   - 팝업 소개는 Notion 기준으로 맞추되, 사람이 앱에서 쓴 소개는 덮어쓰지 않는다.
   - 실제 데이터에 넣기 전에 임시 복사본으로 먼저 돌려 본다.
@@ -52,3 +52,15 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
 ## 기록
 - AI가 틀린 사례를 발견하면 `docs/ai-mistakes.md` 에 한 줄 추가한다.
 - 커밋 메시지에 프롬프트 버전을 바꿨으면 그 사실을 적는다.
+
+## 2차에서 더한 것
+- 지표 계산은 `common/stats.py` 한곳에서만 한다. `/stats` 화면 · `scripts/metrics_snapshot.py` · MCP 서버가 같은 함수를 써서 숫자가 어긋나지 않게.
+- 물어보기(`/ask`)의 검색은 `common/ask.py` 규칙, 답은 `ask` 프롬프트. 검색 규칙을 고치면 `python -X utf8 scripts/eval_ask.py --save` 로 전후를 남긴다.
+  - 평가 세트(`samples/ask_eval.jsonl`)는 **추가만** 한다. 점수를 올리려고 기존 문항을 고치지 않는다.
+  - 평가 데이터는 `DATA_ASOF` 전 기록으로 고정돼 있다. 새 데이터로 평가하려면 날짜를 바꾸고 그 사실을 기록한다.
+- `docs/metrics-log.md` · `docs/ask-eval.md` · `docs/qa-results.md` · `docs/user-test/report.md` 는 날짜별로 **쌓기만** 한다.
+- 저장소 모드는 `local | sheets | supabase`. Supabase 쓰기 실패는 `StorageWriteError` 로 올라온다 (조용히 로컬에 쓰지 않음). 표·정책을 바꾸면 `supabase/migrations/` 에 **새 번호 파일**을 만들고 `db.md` 를 고친다.
+- 공개 웹(`web/`)은 읽기 전용. Supabase 키는 서버 코드에서만 쓰고 `NEXT_PUBLIC_` 으로 내보내지 않는다.
+- MCP 서버(`mcp_server/`)는 읽기 전용. 쓰기 도구를 만들지 않고, `note`·`editor`·`source`·리뷰 본문·닉네임은 내보내지 않는다. stdout 에 print 하지 않는다.
+- 테스트·로컬 실행은 실제 `data/` 를 바꿀 수 있다 (앱을 켜면 Notion 동기화·기간 종료 처리가 돈다). 시험할 때는 `ANIWHERE_DATA_DIR` 로 임시 복사본을 쓴다 (`tests/e2e/conftest.py` 참고).
+- `.claude/hooks/` 가 커밋 전 검사(키·민감정보·코드 속 프롬프트)와 프롬프트 덮어쓰기 차단을 한다. 훅에 걸리면 우회하지 말고 원인을 고친다.

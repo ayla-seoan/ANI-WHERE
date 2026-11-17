@@ -1,0 +1,1 @@
+{"at": "2026-11-17T14:58:43+00:00", "hook": "precommit_guard", "via": "git", "blocked": true, "problems": ["data/cafes.json: 주민등록번호 로 보이는 값이 있습니다 → guard.mask() 로 가리거나 지우세요"]}
