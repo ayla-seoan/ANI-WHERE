@@ -161,13 +161,15 @@ def pending_for(req_rows: list[dict], target_id: str, requester: str) -> bool:
                and r.get("decision") == "pending" for r in req_rows)
 
 
-def decide(req_store, notice_store, req: dict, approve: bool, admin_reason: str = "") -> dict:
+def decide(req_store, notice_store, req: dict, approve: bool, admin_reason: str = "", notify: bool = True) -> dict:
     """승인/거부 기록을 쌓고, 요청한 회원에게 알림을 보낸다. 게시글 삭제는 부르는 쪽(화면)이 한다."""
     payload = {k: req.get(k, "") for k in REQ_HEADERS if k not in ("row_id", "entry_id", "revision", "status", "updated_at")}
     payload.update({"decision": "approved" if approve else "rejected",
                     "admin_reason": " ".join(str(admin_reason or "").split()),
                     "decided_at": datetime.now().isoformat(timespec="seconds")})
     row = req_store.append(payload, entry_id=str(req["entry_id"]))
+    if not notify:                          # 관리자가 이 알림 규칙을 꺼 두었으면 처리 기록만 남긴다
+        return row
     what = f'{TARGET_LABEL.get(req.get("target_type"), "게시글")} \'{req.get("target_title", "")}\''
     if approve:
         send(notice_store, str(req.get("requester")), "삭제 승인", "삭제 요청이 승인되었어요",
@@ -196,3 +198,90 @@ def notices_for(notice_rows: list[dict], member_key: str, days: int = 60, today:
             continue
         out.append(r)
     return sorted(out, key=lambda r: str(r.get("updated_at", "")), reverse=True)
+
+
+def daily_events(events: pd.DataFrame, event: str, week_start: date) -> pd.DataFrame:
+    """고른 주의 요일별 가입·탈퇴 수."""
+    days = [week_start + timedelta(days=i) for i in range(7)]
+    wd = "월화수목금토일"
+    counts = [0 if events.empty else int(((events["event"] == event) & (events["day"] == d)).sum()) for d in days]
+    return pd.DataFrame({"날": [f"{d.month}/{d.day}({wd[d.weekday()]})" for d in days], "명": counts})
+
+
+def gantt_rows(all_rows: list[dict], start: date, end: date, limit: int = 60) -> list[dict]:
+    """간트 차트용: [start, end] 기간에 걸친 팝업 (기간 종료로 내려간 것 포함, 관리자 삭제 제외), 시작일 순."""
+    out = []
+    for r in mycal.latest_rows(all_rows):
+        if r.get("status") == "deleted" and r.get("source") != "기간 종료":
+            continue
+        s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+        if s and e and s <= end and e >= start:
+            out.append(r)
+    out.sort(key=lambda r: (str(r.get("start_date") or ""), str(r.get("end_date") or "")))
+    return out[:limit]
+
+
+# ------------------------------------------------------------------ 자동 알림 규칙 (관리자 '알림 관리' 에서 고친다)
+RULE_HEADERS = ["row_id", "entry_id", "revision", "status", "updated_at", "rule", "enabled", "days", "max_items"]
+
+# 규칙 번호 → 기본값. days = 며칠 전부터(또는 며칠 동안) / max_items = 한 번에 보이는 최대 개수. None 이면 고칠 수 없는 칸
+RULES = {
+    "open":   {"name": "북마크한 팝업 오픈", "when": "오픈 {days}일 전부터 오픈 당일까지 매일", "who": "그 팝업을 북마크한 회원",
+               "where": "종 알림 · 내 캘린더 알림 내역", "days": 3, "max_items": 8, "why": "북마크한 팝업이 곧 열려요 (오픈 {days}일 전부터 알려 드려요)"},
+    "end":    {"name": "북마크한 팝업 종료", "when": "종료 {days}일 전부터 종료 당일까지 매일 (진행 중일 때)", "who": "그 팝업을 북마크한 회원",
+               "where": "종 알림 · 내 캘린더 알림 내역", "days": 3, "max_items": 8, "why": "북마크한 팝업이 곧 끝나요 (종료 {days}일 전부터 알려 드려요)"},
+    "near":   {"name": "내 주변 추천", "when": "위치를 허용했을 때, 지금 열려 있는 가까운 팝업 (북마크한 곳 제외)", "who": "로그인한 회원",
+               "where": "종 알림", "days": None, "max_items": 3, "why": "내 위치에서 가까운 곳에 지금 열려 있어요"},
+    "del_ok": {"name": "삭제 요청 승인", "when": "관리자가 삭제 요청을 승인하고 게시글이 삭제됐을 때", "who": "요청한 회원",
+               "where": "종 알림 · 내 캘린더 알림 내역", "days": None, "max_items": None, "why": "내가 보낸 삭제 요청이 처리됐어요"},
+    "del_no": {"name": "삭제 요청 거부", "when": "관리자가 거부 사유를 적어 거부했을 때 (사유 포함)", "who": "요청한 회원",
+               "where": "종 알림 · 내 캘린더 알림 내역", "days": None, "max_items": None, "why": "내가 보낸 삭제 요청이 처리됐어요"},
+    "notice": {"name": "관리자 공지", "when": "관리자가 공지를 추가·수정했을 때 ({days}일간 종에 보임)", "who": "모든 회원",
+               "where": "종 알림 · 내 캘린더 알림 내역", "days": 14, "max_items": 5, "why": "ANI:WHERE 운영 공지예요"},
+}
+KIND_RULE = {"공지": "notice", "삭제 승인": "del_ok", "삭제 거부": "del_no"}
+
+
+def rule_settings(rule_rows: list[dict]) -> dict[str, dict]:
+    """규칙마다 지금 값 (기본값 + 관리자가 고친 최신 기록). '삭제'(status=deleted) 한 규칙은 꺼진 것."""
+    out = {k: {"enabled": True, "days": v["days"], "max_items": v["max_items"]} for k, v in RULES.items()}
+    for r in mycal.latest_rows(rule_rows):
+        k = str(r.get("entry_id"))
+        if k not in out:
+            continue
+        cur = out[k]
+        cur["enabled"] = r.get("status") != "deleted" and str(r.get("enabled", "1")) not in ("0", "false", "False")
+        for f in ("days", "max_items"):
+            if RULES[k][f] is not None and str(r.get(f) or "").strip().isdigit():
+                cur[f] = max(0, int(r.get(f)))
+    return out
+
+
+def save_rule(rule_store, key: str, enabled: bool, days: int | None, max_items: int | None) -> dict:
+    d = RULES[key]
+    return rule_store.append({"rule": key, "enabled": "1" if enabled else "0",
+                              "days": "" if d["days"] is None or days is None else str(int(days)),
+                              "max_items": "" if d["max_items"] is None or max_items is None else str(int(max_items))},
+                             entry_id=key)
+
+
+def rules_table(settings: dict[str, dict]) -> pd.DataFrame:
+    rows = []
+    for k, d in RULES.items():
+        cur = settings[k]
+        rows.append({"알림": d["name"], "상태": "켜짐" if cur["enabled"] else "꺼짐",
+                     "언제": d["when"].format(days=cur["days"]),
+                     "최대 개수": "-" if d["max_items"] is None else f'{cur["max_items"]}개',
+                     "누구에게": d["who"], "어디에": d["where"]})
+    rows.append({"알림": "주간 브리핑 메일", "상태": "켜짐", "언제": "매주 월요일 11:00", "최대 개수": "-",
+                 "누구에게": "운영자 본인 메일", "어디에": "메일 (automation/weekly_briefing.gs) — 앱에서 못 고침"})
+    return pd.DataFrame(rows)
+
+
+def why(key: str, settings: dict[str, dict] | None = None) -> str:
+    """이 알림이 왜 왔는지 한 줄."""
+    d = RULES.get(key)
+    if not d:
+        return ""
+    days = (settings or {}).get(key, {}).get("days", d["days"])
+    return d["why"].format(days=days)

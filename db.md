@@ -153,4 +153,19 @@ Supabase popups_current ──▶ Next.js 공개 웹 (ISR 10분) · MCP 서버 �
 | Automatically expose new tables | **끔** (Supabase 권장) | 권한을 `004_grants.sql` 로 필요한 만큼만 직접 준다 |
 | Enable automatic RLS | **켬** | 마이그레이션에서도 켜지만, 새 표를 만들 때 잊어도 RLS 가 걸리게 한 겹 더 |
 
-SQL Editor 에서 `001 → 002 → 003 → 004 → 005` 순서로 돌린다. (005 = 아이디·비밀번호 가입, `docs/login.md`)
+SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007` 순서로 돌린다. (005 = 아이디·비밀번호 가입, `docs/login.md` · 006·007 = 관리자 표, 10절)
+
+## 10. 관리자 표 (006, 11/18)
+
+`supabase/migrations/006_admin.sql`. 세 표 모두 다른 표와 같은 append-only (anon 은 SELECT·INSERT 만, 처리·수정·삭제도 새 행).
+
+| 표 | 한 행 | 주요 칸 | 쓰는 곳 |
+| --- | --- | --- | --- |
+| `del_requests` | 삭제 요청 1건의 한 상태 | `target_type`(review/cafe) · `target_id` · `reason`(≤300자) · `requester`(회원 번호) · `decision`(pending/approved/rejected) · `admin_reason` | 일반 회원 `삭제 요청` → 관리자 승인/거부 |
+| `notices` | 알림 1건 | `target`('all' = 전체 공지, 아니면 회원 번호) · `kind`(공지/삭제 승인/삭제 거부) · `title`(≤60) · `body`(≤500) | 종 알림 · 내 캘린더 알림 내역 · 관리자 알림 관리 |
+| `visits` | 회원 × 날짜 1행 (`entry_id` = `<회원 번호>:<날짜>`) | `member` · `day` | 관리자 이용 지표의 일별 접속 회원 |
+
+- `reason`·`admin_reason`·`title`·`body` 는 `has_sensitive()` 검사로 전화번호·이메일 등을 막는다.
+| `alert_rules` (007) | 자동 알림 규칙 1개의 한 설정 (`entry_id` = 규칙 번호) | `enabled`(0/1) · `days`(며칠 전부터) · `max_items`(최대 노출 개수). 끄기 = `status=deleted` 행 | 관리자 알림 관리 → 종 알림·알림 내역·삭제 결과 알림 |
+
+- 계산(주별 칸반·간트·일별 수·자동 알림 규칙 `RULES`·`rule_settings`)은 `common/admin.py` 한곳. 007 을 돌리기 전에는 표가 없어 기본값(오픈·종료 3일 전, 북마크 8개, 주변 3개, 공지 14일·5개)으로 동작한다.

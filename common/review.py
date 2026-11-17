@@ -162,3 +162,17 @@ def can_delete(row: dict, nickname: str) -> bool:
     """내가 쓴 글인지: 접속 IP 로 정해지는 '#네 글자' 가 같을 때만 고치고 지울 수 있다.
     (닉네임 앞부분 규칙이 바뀌기 전에 쓴 글도 그대로 내 글로 알아본다)"""
     return bool(nickname) and _tag(str(row.get("nickname") or "")) == _tag(nickname)
+
+
+def auto_nickname(seed: str, max_len: int = 16) -> str:
+    """회원가입 때 닉네임을 비워 두면 쓰는 이름. 손님 닉네임처럼 '꾸밈말 + 캐릭터' 이고 #꼬리표는 없다
+    (회원은 뒤에 #m네 글자가 따로 붙는다). 같은 seed(아이디·계정 번호)면 늘 같은 이름, max_len 을 넘지 않는다."""
+    h = hashlib.sha256(f"member-nick:{seed}".encode()).hexdigest()
+    names = [n for n in _characters() if "#" not in n] or _NOUN_FALLBACK
+    name = names[int(h[20:28], 16) % len(names)]
+    start = int(h[12:20], 16) % len(_ADJ)
+    for i in range(len(_ADJ)):                       # 길이에 맞는 꾸밈말을 같은 순서로 찾는다
+        nick = f"{_ADJ[(start + i) % len(_ADJ)]} {name}"
+        if len(nick) <= max_len:
+            return nick
+    return name[:max_len] if len(name) >= 2 else _NOUN_FALLBACK[0]
