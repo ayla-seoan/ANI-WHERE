@@ -311,9 +311,10 @@ def _rule_answer(query: Query, hits: list[Hit], today: date) -> AskAnswer:
                      confidence="high")
 
 
-GUIDE = ("말씀을 못 알아들었어요. 작품 이름 · 장소 · 날짜를 넣어서 물어봐 주세요.\n"
-         "예) '치이카와 이번 달 서울 팝업 있어?' · '이번 주말 홍대 팝업' · '12월 5일 부산에서 하는 팝업' · "
-         "'주술회전 팝업 언제까지야?' · '곧 끝나는 팝업'")
+GUIDE_HEAD = "말씀을 못 알아들었어요. 작품 이름 · 장소 · 날짜를 넣어서 물어봐 주세요."
+GUIDE_EXAMPLES = ["치이카와 이번 달 서울 팝업 있어?", "이번 주말 홍대 팝업", "12월 5일 부산에서 하는 팝업",
+                  "주술회전 팝업 언제까지야?", "곧 끝나는 팝업"]
+GUIDE = GUIDE_HEAD + "\n예) " + " · ".join(f"'{x}'" for x in GUIDE_EXAMPLES)
 
 
 def phrase(query: Query) -> str:

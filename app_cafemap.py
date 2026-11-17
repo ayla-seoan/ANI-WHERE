@@ -5846,6 +5846,11 @@ ASK_PANEL_CSS = """
 .apn-ava { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 50%; border: 1.5px solid #CDEDE3; background: #EAF8F3; }
 .apn-col { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .apn-name { color: #6B7672; font-size: .74rem; font-weight: 700; }
+.apn-exbox { margin-top: 8px; border: 1.5px solid var(--accent, #14b8a6); background: #E6FBF7; border-radius: 12px;
+  padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 5px; }
+.apn-exbox b { width: 100%; font-size: .74rem; color: var(--accent-deep, #0d9488); margin-bottom: 1px; }
+.apn-ex { font-size: .74rem; line-height: 1.35; color: #0F5E57; background: #fff; border: 1px solid #A7E6D8;
+  border-radius: 999px; padding: 2px 9px; }
 .apn-bot { background: #EEF1F0; border: 0; border-radius: 4px 18px 18px 18px; padding: 10px 14px;
   color: #26302D; font-size: .9rem; line-height: 1.6; word-break: keep-all; align-self: flex-start; }
 /* 찾은 팝업 카드는 말풍선과 같은 줄에서 시작 (캐릭터 폭만큼 들여쓰기) */
@@ -5907,7 +5912,8 @@ def _ask_panel_send(question: str) -> None:
             # 규칙(의도)이 준 안내가 있으면 그대로 (위치 모름·사용법 등), 없으면 기본 안내
             text = res.text or ("조건에 맞는 팝업을 찾지 못했어요. 작품 이름을 줄이거나(예: 주술회전) 날짜·지역 조건을 하나 빼 보세요. "
                                 "없는 팝업이면 오른쪽 아래 + 로 직접 등록할 수 있어요.")
-            chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체"})
+            chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체",
+                         "guide": res.query.intent == "unknown"})
         else:
             limit = 5
             used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:limit]]
@@ -6019,7 +6025,12 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                 body = escape(m["say"]) + head if m.get("say") else f'찾은 팝업 <b>{len(m["ids"])}곳</b>{head}'
                 st.markdown(_ask_bot(body), unsafe_allow_html=True)
             else:
-                st.markdown(_ask_bot(escape(m["text"]).replace(chr(10), "<br>")), unsafe_allow_html=True)
+                if m.get("guide"):           # 못 알아들음: 안내 한 줄 + 예시는 작은 민트 테두리 상자 (11/18 요청)
+                    ex = "".join(f'<span class="apn-ex">{escape(x)}</span>' for x in ask.GUIDE_EXAMPLES)
+                    st.markdown(_ask_bot(f'{escape(ask.GUIDE_HEAD)}<div class="apn-exbox"><b>이렇게 물어보세요</b>{ex}</div>'),
+                                unsafe_allow_html=True)
+                else:
+                    st.markdown(_ask_bot(escape(m["text"]).replace(chr(10), "<br>")), unsafe_allow_html=True)
             for card in m.get("ids", []):
                 if not isinstance(card, dict):          # 예전 모양 (id, 이름) 기록
                     card = {"id": card[0], "work": card[1], "cafe": "", "address": "", "dates": "",
