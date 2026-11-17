@@ -3690,6 +3690,14 @@ AUTH_CSS = """
 .auth-or { display: flex; align-items: center; gap: .6rem; max-width: 380px; color: #9AA5A1; font-size: .8rem;
   margin: 1rem 0 .3rem; }
 .auth-or::before, .auth-or::after { content: ""; flex: 1; border-top: 1px solid #E3E8E6; }
+/* 로그인·회원가입: 가운데 좁은 칸 (PC 에서 왼쪽으로 쏠리지 않게) */
+.st-key-auth_wrap { width: 100%; max-width: 420px; margin-left: auto !important; margin-right: auto !important; }
+.st-key-auth_wrap .auth-title, .st-key-auth_wrap .auth-sub, .st-key-auth_wrap .auth-note { text-align: center; }
+.st-key-auth_wrap .auth-btn, .st-key-auth_wrap .auth-or, .st-key-auth_wrap .auth-card,
+.st-key-auth_wrap .auth-note { max-width: 100%; margin-left: auto; margin-right: auto; }
+.st-key-auth_tabs { align-items: center !important; }
+.st-key-auth_wrap .auth-sub, .st-key-auth_wrap .auth-note { word-break: keep-all; }
+.st-key-auth_wrap [data-testid="stPageLink"] { display: flex; justify-content: center; }
 .auth-card { border: 1.5px solid #9EDDCC; border-radius: 14px; padding: 1rem 1.1rem; max-width: 460px; background: #fff; }
 </style>
 """
@@ -3723,12 +3731,18 @@ def page_login() -> None:
     flash = st.session_state.pop("flash", None)
     if flash:
         _toast(*flash) if isinstance(flash, tuple) else _toast(flash)
+    with st.container(key="auth_wrap"):         # 로그인·회원가입은 화면 가운데 좁은 칸에
+        _login_body()
+
+
+def _login_body() -> None:
     row = _member()
     if row:
         _my_account(row)
         return
-    mode = st.segmented_control("로그인 또는 회원가입", ["로그인", "회원가입"], default="로그인",
-                                label_visibility="collapsed", key="auth_mode") or "로그인"
+    with st.container(key="auth_tabs"):        # 탭을 가운데에 두려고 따로 묶는다
+        mode = st.segmented_control("로그인 또는 회원가입", ["로그인", "회원가입"], default="로그인",
+                                    label_visibility="collapsed", key="auth_mode") or "로그인"
     if mode == "로그인":
         st.markdown('<div class="auth-title">다시 오셨네요</div>'
                     '<div class="auth-sub">아이디로 가입했다면 아래에, 카카오·네이버로 가입했다면 그 버튼으로 로그인해요.</div>',
@@ -3765,7 +3779,7 @@ def _password_login_form() -> None:
     """아이디·비밀번호 로그인. 5번 틀리면 5분 동안 잠근다 (무작위 대입 늦추기)."""
     ss = st.session_state
     locked = ss.get("_pw_lock_until", 0) - time.time()
-    with st.form("pw_login", border=False, width=380):
+    with st.form("pw_login", border=False):
         lid = st.text_input("아이디", max_chars=20, autocomplete="username")
         pw = st.text_input("비밀번호", type="password", max_chars=auth.PW_MAX, autocomplete="current-password")
         go_in = st.form_submit_button("로그인", type="primary", icon=":material/login:", width="stretch")
@@ -3794,7 +3808,7 @@ def _password_login_form() -> None:
 
 def _password_signup_form() -> None:
     """일반 회원가입: 필수 정보(아이디·비밀번호·닉네임·동의)만 받는다."""
-    with st.form("pw_signup", border=False, width=380):
+    with st.form("pw_signup", border=False):
         lid = st.text_input("아이디 (필수)", max_chars=20, placeholder="영어 소문자·숫자·_ 4~20자",
                             autocomplete="username")
         pw = st.text_input("비밀번호 (필수)", type="password", max_chars=auth.PW_MAX,
@@ -3897,6 +3911,11 @@ def page_auth() -> None:
     with st.container(key="topbar"):
         if _brand(home=True, fixed=True):
             go("map")
+    with st.container(key="auth_wrap"):
+        _auth_body()
+
+
+def _auth_body() -> None:
     qp = st.query_params
     if qp.get("error"):            # 동의 화면에서 '취소' — 중간 이탈
         st.query_params.clear()
