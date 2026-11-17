@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 
 from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
                     kakao_postcode, mycal, notice, notion_sync, review, share, stats)
+from common import blog     # 블로그 후기 (네이버 블로그 검색 · API HUB)
 from common import links as links_check   # 참고 웹사이트 확인 (11/18 안정성)
 from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
@@ -338,6 +339,7 @@ favs = Storage(worksheet="favorites", headers=favorite.HEADERS)
 members = Storage(worksheet="members", headers=auth.HEADERS)
 del_requests = Storage(worksheet="del_requests", headers=admin.REQ_HEADERS)      # 일반 회원의 삭제 요청
 alert_rules = Storage(worksheet="alert_rules", headers=admin.RULE_HEADERS)       # 자동 알림 규칙 (관리자가 고침)
+api_usage = Storage(worksheet="api_usage", headers=blog.USAGE_HEADERS)            # 블로그 검색 호출 수 (한 달 한도)
 notices_store = Storage(worksheet="notices", headers=admin.NOTICE_HEADERS)       # 회원에게 가는 알림·공지
 visits = Storage(worksheet="visits", headers=admin.VISIT_HEADERS)                # 회원이 접속한 날
 # 실행 번호: 찜 정보를 한 번 그릴 때 한 번만 읽고, 다음 실행에서는 새로 읽게 한다
@@ -761,6 +763,49 @@ def _detail_info_html(current: dict) -> str:
     return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def _blog_posts(entry_id: str, work: str, cafe_name: str, start_date: str, address: str = "") -> tuple[list, str]:
+    """팝업별 네이버 블로그 후기 (하루 동안 기억 → 같은 팝업은 하루 한 번만 검색)."""
+    posts, err = blog.search({"work": work, "cafe_name": cafe_name, "start_date": start_date, "address": address}, limit=15,
+                             usage=api_usage)        # 한 달 30,000번이 넘으면 부르지 않음
+    return [{**p.__dict__, "thumb": th} for p, th in blog.with_thumbs(posts)], err
+
+
+def _blog_list(current: dict) -> list[dict]:
+    if not blog.enabled():
+        return []
+    try:
+        posts, _ = _blog_posts(str(current.get("entry_id")), str(current.get("work") or ""),
+                               str(current.get("cafe_name") or ""), str(current.get("start_date") or "")[:10],
+                               str(current.get("address") or ""))
+    except Exception:
+        return []
+    return posts
+
+
+def _bcard(p: dict) -> str:
+    day = f'{p["day"]:%Y. %m. %d}' if p.get("day") else ""
+    pic = (f'<img class="bcard-img" src="{escape(p["thumb"])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
+           if p.get("thumb") else "")
+    return (f'<a class="bcard" href="{escape(p["link"])}" target="_blank" rel="noopener"><div class="bcard-txt">'
+            f'<div class="bcard-t">{escape(p["title"])}</div><div class="bcard-d">{escape(p["desc"])}</div>'
+            f'<div class="bcard-m"><span>{escape(p["blogger"] or "블로그")}</span><span>{day}</span></div></div>{pic}</a>')
+
+
+def _render_blog_tab(current: dict, posts: list[dict]) -> None:
+    """'블로그 후기' 탭: 안내 한 줄 + 카드 (제목 · 요약 2줄 · 블로거 · 날짜, 오른쪽 대표 사진). 누르면 원문 새 탭."""
+    st.markdown(f'<div class="blog-note">{_mi("check_circle")} 네이버 블로그 검색 결과예요. '
+                '부정확한 결과가 포함될 수 있으니 참고로만 봐 주세요.</div>', unsafe_allow_html=True)
+    if not blog.enabled():
+        st.markdown('<div class="blog-empty">블로그 후기는 네이버 검색을 연결한 뒤에 보여요.</div>', unsafe_allow_html=True)
+        return
+    if not posts:
+        st.markdown('<div class="blog-empty">아직 이 팝업의 블로그 후기를 찾지 못했어요.</div>', unsafe_allow_html=True)
+        return
+    # <a> 로 시작하면 마크다운이 첫 카드를 문단으로 쪼개서, 바깥을 <div> 로 감싼다
+    st.markdown('<div class="bcards">' + "".join(_bcard(p) for p in posts) + '</div>', unsafe_allow_html=True)
+
+
 def render_detail(current: dict) -> None:
     """상세 화면 왼쪽: 이미지 슬라이드 · 작품(+캐릭터) · 위치(카페명·주소)·일정 · 혜택 · 참고 웹사이트 · 공유.
     지도는 상세에 따로 그리지 않고, 위치의 '지도에서 확인하기' 로 카카오맵을 연다."""
@@ -832,7 +877,21 @@ def render_detail_tabs(current: dict) -> None:
     tab_review, tab_edit = st.tabs([f":material/chat_bubble: 리뷰 {n}", ":material/edit: 수정하기"], key=f"detail_tabs_{entry_id}",
                                    on_change="rerun")
     with tab_review:
-        render_reviews(entry_id)
+        posts = _blog_list(current)
+        sub = st.session_state.get(f"rvsub_{entry_id}", "review")
+
+        def subtabs() -> bool:
+            # 리뷰 쓰기 칸 아래에 '리뷰 후기 / 블로그 후기' (11/18 요청)
+            with st.container(horizontal=True, key="rv_subtabs"):
+                for k, label in (("review", f"리뷰 후기 ({n})"), ("blog", f"블로그 후기 ({len(posts)})")):
+                    st.button(label, key=f"rvsub_{'on_' if sub == k else ''}{k}_{entry_id}",
+                              on_click=lambda k=k: st.session_state.update({f"rvsub_{entry_id}": k}))
+            if sub == "blog":
+                _render_blog_tab(current, posts)
+                return False
+            return True
+
+        render_reviews(entry_id, after_write=subtabs)
     with tab_edit:
         render_edit(current)
 
@@ -1161,11 +1220,14 @@ def _avg_rating_html(avg: float, n: int) -> str:
             f'<span class="rv-avg-cnt">다녀온 후기 {n}개 평균</span></div>')
 
 
-def render_reviews(cafe_id: str) -> None:
+def render_reviews(cafe_id: str, after_write=None) -> None:
+    """after_write: 리뷰 쓰기 칸 바로 아래에 그릴 것 ('리뷰 후기 / 블로그 후기' 탭). False 를 돌려주면 리뷰 목록은 그리지 않는다."""
     _review_lightbox()      # 리뷰 사진을 누르면 확대 보기 팝업
     # 맨 위 리뷰 쓰기: 닉네임·종류·별점·입력칸·리뷰 등록 버튼을 처음부터 펼쳐 둔다. 그 아래에 리뷰를 보여 준다
     with st.container(border=True, key=f"rvbox_{cafe_id}"):
         _write_box(cafe_id)
+    if after_write is not None and after_write() is False:
+        return
 
     threads = review.threads(reviews.current_rows(), cafe_id)
     if not threads:
@@ -2275,6 +2337,38 @@ iframe[src*="kakao_map"] {{
 .dlink-url {{ color:#6B7672; font-size:.9rem; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
 .dlink-go {{ color:{MINT_DEEP}; font-size:1.4rem; line-height:1; flex:0 0 auto; }}
 .dlink.broken {{ background:#FFF4EA; }}
+/* 블로그 후기 카드: 제목(굵게) · 요약 2줄 · 블로거 · 날짜, 누르면 새 탭 */
+.dblog {{ display:block; background:{GRAY_SOFT}; border-radius:14px; padding:12px 16px; margin-bottom:8px;
+          text-decoration:none !important; color:#26302D !important; transition:background .15s; }}
+.dblog:hover {{ background:{MINT_SOFT}; }}
+.dblog-t {{ font-weight:800; font-size:.95rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.dblog-d {{ color:#6B7672; font-size:.82rem; line-height:1.45; margin-top:3px; display:-webkit-box; -webkit-line-clamp:2;
+            -webkit-box-orient:vertical; overflow:hidden; }}
+.dblog-m {{ color:#9AA5A1; font-size:.76rem; margin-top:4px; display:flex; align-items:center; gap:3px; }}
+.dsec-src {{ font-size:.72rem; font-weight:600; color:#9AA5A1; margin-left:6px; }}
+/* 리뷰 탭 안 '리뷰 후기 / 블로그 후기' (11/18 요청) */
+.st-key-rv_subtabs {{ gap:0 !important; margin:14px 0 12px; border-bottom:1.5px solid #E3E8E6; }}
+.st-key-rv_subtabs > div {{ flex:1 1 0 !important; }}
+.st-key-rv_subtabs button {{ width:100% !important; background:#F6F8F7 !important; border:0 !important; border-radius:0 !important;
+  box-shadow:none !important; padding:12px 0 10px !important; border-bottom:3px solid transparent !important; margin-bottom:-1.5px; }}
+.st-key-rv_subtabs button p {{ font-size:1rem !important; font-weight:700 !important; color:#9AA5A1 !important; }}
+.st-key-rv_subtabs [class*="st-key-rvsub_on_"] button {{ background:#fff !important; border-bottom-color:#26302D !important; }}
+.st-key-rv_subtabs [class*="st-key-rvsub_on_"] button p {{ color:#26302D !important; font-weight:800 !important; }}
+.blog-note {{ border:0; border-radius:12px; padding:11px 14px; text-align:center; font-size:.88rem; font-weight:600;
+  color:#fff; background:{MINT}; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px; }}
+.blog-note .mi {{ color:#fff; }}
+.blog-empty {{ color:#8A9592; font-size:.88rem; text-align:center; padding:28px 0; }}
+.bcard {{ display:flex; gap:16px; align-items:stretch; border:1.5px solid #E3E8E6; border-radius:14px; padding:16px 18px;
+  background:#fff; margin-bottom:10px; text-decoration:none !important; color:#26302D !important;
+  transition:border-color .15s, box-shadow .15s; }}
+.bcard:hover {{ border-color:{MINT}; box-shadow:0 4px 14px rgba(20,184,166,.12); }}
+.bcard-txt {{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:6px; }}
+.bcard-t {{ font-weight:800; font-size:1.02rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.bcard-d {{ color:#5F6B67; font-size:.84rem; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2;
+  -webkit-box-orient:vertical; overflow:hidden; }}
+.bcard-m {{ margin-top:auto; display:flex; justify-content:space-between; color:#8A9592; font-size:.76rem; }}
+.bcard-img {{ width:96px; height:96px; flex:0 0 96px; object-fit:cover; border-radius:10px; background:#F4F6F5; }}
+@media (max-width: 640px) {{ .bcard-img {{ width:72px; height:72px; flex-basis:72px; }} .bcard {{ padding:12px; gap:10px; }} }}
 .dlink-warn {{ display:inline-flex; align-items:center; gap:2px; font-size:.75rem; font-weight:800; color:#C2560C;
   background:#fff; border:1px solid #F5C9A6; border-radius:999px; padding:1px 8px; margin-left:6px; vertical-align:2px; }}
 .dlink-warn .mi {{ font-size:.9rem; }}
@@ -2857,6 +2951,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .ntf-item.has-pst::before { display: none; }
 .ntf-item .ntf-pst { width: 42px; height: 56px; flex: 0 0 42px; object-fit: cover; border-radius: 6px; }
 .ntf-body { min-width: 0; flex: 1 1 auto; }
+.ntf-body .ntf-cafe { color: #6B7672; font-size: .82rem; }
 .ntf-item.has-pst .ntf-body { padding-right: 52px; }
 .ntf-item.has-pst .ntf-st { position: absolute; top: 10px; right: 12px; float: none; }
 .ntf-item.has-pst .ntf-body > b:first-of-type::before { content: ""; display: inline-block; width: 7px; height: 7px;
@@ -3317,6 +3412,8 @@ def _notice_history(days_back: int = 2) -> list[tuple[date, str, str, dict]]:
         if str(r.get("entry_id")) not in mine:
             continue
         s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+        if e_ and e_ < TODAY:
+            continue                         # 끝난 팝업의 알림 내역은 보이지 않게 (11/18 요청)
         for kind, base in (("open", s_), ("end", e_)):
             if not base or not rules[kind]["enabled"]:
                 continue
@@ -3353,7 +3450,7 @@ def render_my_calendar_view() -> None:
         if tab not in ("fav", "visited", "recent"):
             tab = "fav"
         with st.container(horizontal=True, key="box_tabs"):
-            for t, label in (("fav", "찜"), ("visited", "다녀온"), ("recent", "최근 본")):
+            for t, label in (("fav", "북마크"), ("visited", "다녀온 팝업"), ("recent", "최근 본 팝업")):
                 st.button(label, key=f"boxtab_{'on_' if tab == t else ''}{t}", on_click=_box_tab, args=(t,))
         render_box_view(tab)
 
@@ -3386,8 +3483,11 @@ def _render_notice_history() -> None:
             last_day = day
         eid = str(r.get("entry_id"))
         name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
-        text = f"<b>{label}</b> · {name}" + _why_html(kind)      # 종 알림(_notices)과 같은 글
-        nid = _ntf_id(f"m{TODAY}{eid}{text}") if day == TODAY else _ntf_id(f"h{day}{eid}{label}")
+        bell = f"<b>{label}</b> · {name}" + _why_html(kind)      # 종 알림(_notices)과 같은 글 → 같은 번호(읽음 공유)
+        nid = _ntf_id(f"m{TODAY}{eid}{bell}") if day == TODAY else _ntf_id(f"h{day}{eid}{label}")
+        # 화면에는 종류 / 작품 / 매장을 줄바꿈으로 (11/18 요청)
+        text = (f"<b>{label}</b><br>{escape(str(r.get('work') or ''))}<br>"
+                f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>" + _why_html(kind))
         _ntf_cell(nid, text, eid, poster=_poster_url(r.get("images")), kp="h", past=day != TODAY)
     _render_near_picks()
 
@@ -3434,13 +3534,10 @@ def _render_near_picks() -> None:
         return
     for _, _, km, r, avg, n in cand[:3]:
         eid = str(r.get("entry_id"))
-        s_ = mycal._day(r.get("start_date"))
         dist = f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km"
-        state = "진행 중" if s_ <= TODAY else ("오늘 오픈" if s_ == TODAY else f"오픈 D-{(s_ - TODAY).days}")
-        star = f"별점 {avg:.1f} · 후기 {n}개" if n else "아직 후기 없음"
-        name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
-        text = (f"<b>내 주변 {dist}</b> · {name}"
-                f'<div class="ntf-why">{_mi("star")} {escape(star)} · {escape(state)} (별점 높은 순 → 후기 많은 순)</div>')
+        # 거리 / 작품 / 매장 줄바꿈 (별점·상태 줄은 뺐다, 기준은 제목 옆 ? 에) — 11/18 요청
+        text = (f"<b>내 주변 {dist}</b><br>{escape(str(r.get('work') or ''))}<br>"
+                f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>")
         _ntf_cell(_ntf_id(f"r{TODAY}{eid}"), text, eid, poster=_poster_url(r.get("images")), kp="h")
 
 
@@ -3538,16 +3635,19 @@ def _box_grid(items: list[tuple[dict, str]], key: str) -> None:
 
 def render_box_view(tab: str) -> None:
     """내 캘린더 오른쪽 칸의 찜 · 다녀온 · 최근 본."""
-    latest = {str(r.get("entry_id")): r for r in mycal.latest_rows(store.all_rows())}
+    # 끝난 팝업은 어디에도 보이지 않게 (11/18 요청): 북마크·다녀온·최근 본 모두 종료일이 오늘 이후인 것만
+    latest = {str(r.get("entry_id")): r for r in mycal.latest_rows(store.all_rows())
+              if r.get("status") != "deleted" or r.get("source") == "기간 종료"}
+    latest = {k: r for k, r in latest.items() if (mycal._day(r.get("end_date")) or TODAY) >= TODAY}
 
     if tab == "fav":
-        st.markdown(f'<div class="bx-tip">{_mi("notifications")} 찜한 팝업은 오픈·종료 3일 전부터 알림으로 알려 드려요.</div>',
+        st.markdown(f'<div class="bx-tip">{_mi("notifications")} 북마크한 팝업은 오픈·종료 3일 전부터 알림으로 알려 드려요.</div>',
                     unsafe_allow_html=True)
         _, mine, _ = _fav_state()
         rows = sorted((latest[i] for i in mine if i in latest),
                       key=lambda r: (str(r.get("end_date") or "") < TODAY.isoformat(), str(r.get("start_date") or "")))
         if not rows:
-            _box_empty("아직 찜한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.", "bookmark_add")
+            _box_empty("아직 북마크한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.", "bookmark_add")
             return
         _box_grid([(r, "") for r in rows], "fav")
 
@@ -4792,6 +4892,7 @@ def render_calendar(compact: bool = False) -> None:
     _, mine, _ = _fav_state()
     # 기간이 끝나 지도에서 내려간 팔로우도 지난 달력에 남도록, 내린 기록까지 포함한 최신 행에서 고른다
     events = mycal.fav_events(mycal.latest_rows(store.all_rows()), mine, TODAY)
+    events = [e for e in events if e.end >= TODAY]          # 끝난 팝업은 달력에서도 뺀다 (11/18 요청)
 
     year, month = st.session_state.get("cal_month") or (TODAY.year, TODAY.month)
     # 머리글 한 줄: '2026년 10월'  ‹  ›  [오늘]
@@ -4826,6 +4927,10 @@ AUTH_CSS = """
 .auth-or { display: flex; align-items: center; gap: .6rem; max-width: 380px; color: #9AA5A1; font-size: .8rem;
   margin: 1rem 0 .3rem; }
 .me-av { margin-bottom: 8px; }
+.auth-card.me-card { display: flex; align-items: center; gap: 16px; }
+.me-card .me-av { margin: 0; flex: 0 0 auto; }
+.me-card .me-info { min-width: 0; text-align: left; }
+.me-card .me-info b { font-size: 1.05rem; }
 .consent-box { background: #F4F8F6; border-radius: 12px; padding: 10px 12px; margin: 6px 0 8px; font-size: .82rem; color: #3A4542; }
 .consent-box table { width: 100%; border-collapse: collapse; margin: 6px 0; }
 .consent-box th { width: 44px; text-align: left; color: #2E9C82; font-weight: 800; padding: 3px 6px 3px 0; vertical-align: top; border: 0; }
@@ -4847,7 +4952,8 @@ AUTH_CSS = """
 .st-key-auth_tabs { align-items: center !important; }
 .st-key-auth_wrap .auth-sub, .st-key-auth_wrap .auth-note { word-break: keep-all; }
 .st-key-auth_wrap [data-testid="stPageLink"] { display: flex; justify-content: center; }
-.auth-card { border: 1.5px solid #9EDDCC; border-radius: 14px; padding: 1rem 1.1rem; max-width: 460px; background: #fff; }
+.auth-card { border: 1.5px solid #9EDDCC; border-radius: 14px; padding: 1rem 1.1rem; max-width: 460px; background: #fff;
+  margin-bottom: 14px; }   /* 아래 '프로필 사진 바꾸기' 칸과 붙지 않게 (11/18) */
 </style>
 """
 
@@ -5071,16 +5177,17 @@ def _avatar_saved(msg: str) -> None:
 
 def _my_account(row: dict) -> None:
     prov = auth.PROVIDER_LABEL.get(str(row.get("provider")), "")
-    st.markdown(f'<div class="auth-title">내 계정</div><div class="auth-card">'
-                f'<div class="me-av">{_avatar_img(row.get("avatar"), 72, "me-avimg")}</div>'
+    # 프로필 사진 옆에 닉네임 · 로그인 수단 · 가입일 · 회원 번호 (11/18 요청)
+    st.markdown(f'<div class="auth-title">내 계정</div><div class="auth-card me-card">'
+                f'<div class="me-av">{_avatar_img(row.get("avatar"), 72, "me-avimg")}</div><div class="me-info">'
                 f'<b>{escape(_nick_only(auth.display_name(row)))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
                 f'가입 {escape(str(row.get("agreed_at", ""))[:10])}<br>회원 번호 <code>{escape(str(row["entry_id"]))}</code>'
-                f'{" · 관리자" if _is_admin() else ""}</span></div>', unsafe_allow_html=True)
+                f'{" · 관리자" if _is_admin() else ""}</span></div></div>', unsafe_allow_html=True)
     with st.expander("프로필 사진 바꾸기"):
         st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
         n = st.session_state.get("_av_n", 0)
         up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n}")
-        ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 그림으로'를 누르면 바로 지워요",
+        ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 사진 설정'을 누르면 바로 지워요",
                                key=f"av_agree_{n}")
         c1, c2 = st.columns(2)
         if c1.button("이 사진으로 저장", type="primary", width="stretch", disabled=up is None or not ok_photo, key="av_save"):
@@ -5090,14 +5197,14 @@ def _my_account(row: dict) -> None:
             else:
                 auth.set_avatar(members, row, images.save(up.name, data))
                 _avatar_saved("프로필 사진을 바꿨어요.")
-        if c2.button("기본 그림으로", width="stretch", key="av_default"):
+        if c2.button("기본 사진 설정", width="stretch", key="av_default"):
             auth.set_avatar(members, row, "none")
-            _avatar_saved("기본 그림으로 바꿨어요.")
+            _avatar_saved("기본 사진으로 바꿨어요.")
         if row.get("provider") in ("kakao", "naver"):
             st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.')
     with st.form("rename", border=False):
         nick = st.text_input("닉네임 바꾸기", value=row.get("nickname", ""), max_chars=auth.MAX_NICK)
-        if st.form_submit_button("저장", icon=":material/check:"):
+        if st.form_submit_button("저장", icon=":material/check:", type="primary", width="stretch"):   # 길게 · 포인트 색 (11/18)
             try:
                 auth.rename(members, row, nick)
                 st.session_state.pop("_member_cache", None)
@@ -5915,7 +6022,7 @@ def _ask_panel_send(question: str) -> None:
             chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체",
                          "guide": res.query.intent == "unknown"})
         else:
-            limit = 5
+            limit = min(len(res.hits), ask.RANK_MAX) if res.query.intent in ("blog_rank", "review_rank", "rating_rank") else 5
             used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:limit]]
             rows = {str(h.row.get("entry_id")): h.row for h in res.hits}
             cards = [_ask_card(i, rows[i], res.distances.get(i)) for i in used[:limit] if i in rows]
@@ -5927,7 +6034,8 @@ def _ask_panel_send(question: str) -> None:
     del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
 
 
-_ASK_HEADS = {"near": "내 위치에서 가까운 순", "recommend": "추천 (별점 → 리뷰 많은 순)", "ending": "곧 끝나는 순",
+_ASK_HEADS = {"blog_rank": "블로그 후기 수 순", "review_rank": "리뷰 수 순", "rating_rank": "별점 순",
+              "near": "내 위치에서 가까운 순", "recommend": "추천 (별점 → 리뷰 많은 순)", "ending": "곧 끝나는 순",
               "upcoming": "곧 열리는 순", "popular": "북마크 많은 순", "reviewed": "후기 많은 순"}
 _ASK_LOG = Path(__file__).resolve().parent / "logs" / "ask_questions.jsonl"
 ASK_DEFAULT_CHIPS = ["내 주변 가까운 팝업", "팝업 추천해줘", "지금 진행 중인 서울 팝업", "곧 끝나는 팝업", "이번 주말 성수 팝업"]
@@ -5945,7 +6053,30 @@ def _ask_ctx() -> dict:
             if 1 <= n <= 5:
                 agg.setdefault(str(r.get("cafe_id")), []).append(n)
     ratings = {k: (sum(v) / len(v), len(v)) for k, v in agg.items()}
-    return {"loc": _my_loc(), "ratings": ratings, "favs": favorite.counts(favs.current_rows())}
+    return {"loc": _my_loc(), "ratings": ratings, "favs": favorite.counts(favs.current_rows()),
+            "review_counts": review.counts(reviews.current_rows()),      # 리뷰 많은·적은 순 (11/18)
+            "blog_totals": _blog_totals_for}                              # 블로그 후기 많은·적은 순 (부를 때만 셈)
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _blog_totals(keys: tuple) -> dict:
+    """팝업별 네이버 블로그 글 수 (하루 동안 기억). keys = ((entry_id, work, cafe_name, address), …). 한도 안에서만 부른다."""
+    from concurrent.futures import ThreadPoolExecutor
+    def one(k):
+        return k[0], blog.total({"work": k[1], "cafe_name": k[2], "address": k[3]}, usage=api_usage)
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        return {eid: n for eid, n in ex.map(one, keys) if n is not None}
+
+
+def _blog_totals_for(rows: list[dict]) -> dict:
+    if not blog.enabled():
+        return {}
+    keys = tuple(sorted((str(r.get("entry_id")), str(r.get("work") or ""), str(r.get("cafe_name") or ""),
+                         str(r.get("address") or "")) for r in rows))
+    try:
+        return _blog_totals(keys)
+    except Exception:
+        return {}
 
 
 def _ask_log(question: str) -> None:
