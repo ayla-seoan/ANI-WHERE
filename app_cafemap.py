@@ -28,7 +28,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
-from common import (ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
+from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
                     kakao_postcode, mycal, notice, notion_sync, review, share, stats)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
 from common.schema import CafeEntry
@@ -324,6 +324,9 @@ store = Storage(worksheet="cafes")
 reviews = Storage(worksheet="reviews", headers=review.HEADERS)
 favs = Storage(worksheet="favorites", headers=favorite.HEADERS)
 members = Storage(worksheet="members", headers=auth.HEADERS)
+del_requests = Storage(worksheet="del_requests", headers=admin.REQ_HEADERS)      # 일반 회원의 삭제 요청
+notices_store = Storage(worksheet="notices", headers=admin.NOTICE_HEADERS)       # 회원에게 가는 알림·공지
+visits = Storage(worksheet="visits", headers=admin.VISIT_HEADERS)                # 회원이 접속한 날
 # 실행 번호: 찜 정보를 한 번 그릴 때 한 번만 읽고, 다음 실행에서는 새로 읽게 한다
 st.session_state["_run"] = st.session_state.get("_run", 0) + 1
 
@@ -510,6 +513,12 @@ def _member() -> dict | None:
         st.session_state["member_key"] = key
     row = auth.find(members, key) if key else None
     st.session_state["_member_cache"] = (run, row)
+    if row and st.session_state.get("_visit_logged") != (key, TODAY.isoformat()):
+        st.session_state["_visit_logged"] = (key, TODAY.isoformat())
+        try:
+            admin.log_visit(visits, str(key), TODAY)      # 일별 접속 회원 수 (관리자 '이용 지표')
+        except Exception:                                   # 기록이 실패해도 화면은 그대로
+            pass
     return row
 
 
@@ -831,6 +840,27 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
 KIND_COLORS = {"다녀온 후기": "green", "기대평": "blue", "기타": "gray"}
 
 
+@st.dialog("삭제 요청")
+def delete_request_dialog(target_type: str, target_id: str, title: str) -> None:
+    """일반 회원이 게시글 삭제를 요청한다. 관리자가 '관리자 > 삭제 요청'에서 승인/거부하고 결과는 알림으로 간다."""
+    st.markdown(f"**{escape(admin.TARGET_LABEL.get(target_type, '게시글'))}** · {escape(title[:60])}")
+    reason = st.text_area("삭제를 요청하는 이유", key=f"dr_reason_{target_id}", max_chars=admin.MAX_REASON,
+                          placeholder="예: 잘못된 정보예요 / 광고·도배 글이에요 / 이미 끝난 행사예요")
+    if st.button("요청 보내기", type="primary", width="stretch", key=f"dr_send_{target_id}"):
+        me = _member()
+        errors = admin.validate_reason(reason)
+        if not me:
+            errors = ["로그인한 회원만 삭제를 요청할 수 있어요."]
+        elif admin.pending_for(del_requests.current_rows(), target_id, str(me["entry_id"])):
+            errors = ["이 글에 보낸 요청이 아직 처리 중이에요."]
+        if errors:
+            st.warning(errors[0], icon=":material/error:")
+            return
+        admin.request_delete(del_requests, target_type, target_id, title, reason, str(me["entry_id"]), _me())
+        st.session_state["flash"] = ("삭제 요청을 보냈어요. 처리 결과는 알림으로 알려 드려요.", ":material/check_circle:")
+        st.rerun()
+
+
 @st.dialog("리뷰 삭제")
 def confirm_review_delete(entry_id: str, replies: int) -> None:
     st.write("이 글을 삭제할까요? 삭제하면 다시 볼 수 없어요."
@@ -861,8 +891,9 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
         when += " :gray[(수정됨)]"
     # 내가 쓴 글(접속 IP 로 정해진 닉네임이 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
     mine = bool(_member()) and review.can_delete(r, _me())
-    admin = _is_admin()
-    if mine or admin:
+    is_admin = _is_admin()
+    member = bool(_member())
+    if mine or is_admin or member:
         # 수정은 쓴 사람(회원)만, 삭제는 관리자만 (11/18 권한)
         t, b = st.columns([6, 1], vertical_alignment="center")
         t.markdown(head + when)
@@ -870,8 +901,10 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
             if mine and st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
                 st.session_state["rv_editing"] = eid
                 st.rerun()
-            if admin and st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch"):
+            if is_admin and st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch"):
                 confirm_review_delete(eid, replies)
+            if member and not is_admin and st.button("삭제 요청", key=f"rv_req_{eid}", width="stretch"):
+                delete_request_dialog("review", eid, str(r.get("body") or r.get("kind") or "리뷰")[:40])
     else:
         st.markdown(head + when)
     # 다녀온 후기 별점: 머리 줄 다음 줄에, 내용보다 위에 크게
@@ -1284,6 +1317,8 @@ def render_edit(current: dict) -> None:
                               disabled=bad or bool(img_errors) or bad_links)
         if _is_admin() and st.button("지도에서 내리기 (관리자)", width="stretch", key=f"delete_{k}"):
             confirm_delete(entry_id)
+        if not _is_admin() and st.button("삭제 요청", width="stretch", key=f"dreq_{k}"):
+            delete_request_dialog("cafe", entry_id, f'{current.get("work") or ""} · {current.get("cafe_name") or ""}')
 
     if submitted:
         entry = CafeEntry(
@@ -2720,6 +2755,9 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
         if st.button("ANI:WHERE", key="home_brand", type="tertiary"):
             st.session_state["selected"] = None
             st.session_state["scroll_top"] = True
+            if not on_map:                     # 로그인·내 계정·등록하기 등에서 로고 → 리스트 보기 (11/18)
+                st.session_state.update(list_only=True, cal_view=False, box_view=False)
+                go("map")
             st.rerun()
         with st.container(horizontal=True, key="gnb_tabs"):
             cal = bool(st.session_state.get("cal_view"))
@@ -2745,13 +2783,19 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
             st.button(str(n_on) if n_on and not opened else "", icon=":material/close:" if opened else ":material/search:",
                       key=f"gnb_search_{'on' if opened else 'off'}", on_click=_toggle_search)
             marks, near = _notices() if _member() else ([], [])
-            n_ntf = len(marks) + len(near)
+            inbox = admin.notices_for(notices_store.current_rows(), str(_member()["entry_id"]), days=14) if _member() else []
+            n_ntf = len(marks) + len(near) + len(inbox)
             if n_ntf:
                 st.markdown(f'<style>html body .st-key-gnb_right [data-testid="stPopover"] button::after {{ content: "{n_ntf}"; '
                             'position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; '
                             'background: #FF6B6B; color: #fff; font: 800 10px/16px "NanumSquareRound", sans-serif; text-align: center; }}'
                             '</style>', unsafe_allow_html=True)
             with (st.popover("", icon=":material/notifications:") if _member() else st.container(key="bell_guest")):
+                if inbox:
+                    st.markdown("**받은 알림**")
+                    for r in inbox[:5]:
+                        st.markdown(f'<div class="ntf-item"><b>{escape(str(r.get("title") or ""))}</b><br>'
+                                    f'{escape(str(r.get("body") or ""))}</div>', unsafe_allow_html=True)
                 st.markdown("**북마크한 팝업**")
                 if not marks:
                     st.markdown('<div class="ntf-empty">오픈 3일 전부터 당일까지, 그리고 끝나기 3일 전부터 알려 드려요. '
@@ -2870,6 +2914,14 @@ def render_my_calendar_view() -> None:
 
 
 def _render_notice_history() -> None:
+    me = _member()
+    inbox = admin.notices_for(notices_store.current_rows(), str(me["entry_id"])) if me else []
+    for r in inbox[:20]:                    # 공지 · 삭제 요청 처리 결과 (관리자가 보냄)
+        tag = "end" if r.get("kind") == "삭제 거부" else ""
+        st.markdown(f'<div class="nh-item" style="display:block"><span class="nh-tag {tag}">{escape(str(r.get("kind") or "알림"))}</span>'
+                    f'<div class="nh-name">{escape(str(r.get("title") or ""))}</div>'
+                    f'<div class="nh-cafe">{escape(str(r.get("body") or ""))}</div>'
+                    f'<div class="nh-cafe">{escape(_when(str(r.get("updated_at", ""))))}</div></div>', unsafe_allow_html=True)
     st.markdown('<div class="mc-sub">북마크한 팝업의 오픈 · 종료 3일 전부터 당일까지 알림 (최근 30일)</div>',
                 unsafe_allow_html=True)
     hist = _notice_history()
@@ -4541,8 +4593,10 @@ def _auth_body() -> None:
 
 
 # ------------------------------------------------------------ 2차: 데이터 보기 (/data)
-DATA_TABLES = {"cafes": "팝업", "reviews": "리뷰", "favorites": "북마크", "members": "회원"}
-DATA_HIDE = {"members": [], "favorites": ["user"], "reviews": [], "cafes": []}
+DATA_TABLES = {"cafes": "팝업", "reviews": "리뷰", "favorites": "북마크", "members": "회원",
+               "del_requests": "삭제 요청", "notices": "알림", "visits": "접속"}
+DATA_HIDE = {"members": [], "favorites": ["user"], "reviews": [], "cafes": [], "del_requests": [], "notices": [],
+             "visits": []}
 
 
 DEFAULT_ADMIN = "f37119a9dd2d4c0b"        # 관리자 회원 번호 (공개돼도 되는 값: 로그인해야 그 회원이 된다)
@@ -4556,17 +4610,303 @@ def _is_admin() -> bool:
     return bool(row) and str(row["entry_id"]) in keys
 
 
+# ------------------------------------------------------------ 관리자 대시보드 (/data)
+ADMIN_CSS = """
+<style>
+.adm-eyebrow { font-size: .72rem; letter-spacing: .14em; color: #8A9592; font-weight: 700; margin-top: 6px; }
+.adm-title { font-family: "Jua", sans-serif; font-size: 2rem; color: #26302D; line-height: 1.15; margin: 2px 0 2px; }
+.adm-sub { color: #6B7672; font-size: .88rem; margin-bottom: 12px; }
+/* 큰 보기 탭 */
+.st-key-adm_tabs { gap: 0 !important; border-bottom: 2px solid #DDE5E2; margin: 6px 0 14px; flex-wrap: wrap; }
+.st-key-adm_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  padding: 10px 18px 9px !important; border-bottom: 3px solid transparent !important; margin-bottom: -2px; }
+.st-key-adm_tabs button p { font-size: 1rem !important; font-weight: 700 !important; color: #8A9592 !important; }
+.st-key-adm_tabs [class*="st-key-admtab_on_"] button { border-bottom-color: #14B8A6 !important; }
+.st-key-adm_tabs [class*="st-key-admtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
+/* 숫자 카드 */
+.adm-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.adm-kpi { background: #fff; border: 1px solid #DDE5E2; border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.adm-kpi b { font-size: 1.6rem; font-weight: 800; color: #26302D; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.adm-kpi span { font-size: .78rem; color: #6B7672; }
+.adm-kpi small { font-size: .72rem; color: #9AA5A1; }
+.adm-kpi.alert b { color: #E05555; }
+@media (max-width: 900px) { .adm-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 칸반 */
+.adm-col { background: #F6F9F8; border: 1px solid #DDE5E2; border-radius: 12px; padding: 10px; min-height: 120px; }
+.adm-colhead { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: .95rem;
+  padding: 2px 4px 8px; border-bottom: 3px solid var(--c); margin-bottom: 8px; color: #26302D; }
+.adm-colhead small { font-size: .8rem; color: #6B7672; font-weight: 700; }
+.adm-card { background: #fff; border: 1px solid #E3E8E6; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; display: grid; gap: 1px; }
+.adm-card b { font-size: .86rem; color: #26302D; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-card span { font-size: .76rem; color: #6B7672; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-card em { font-style: normal; font-size: .74rem; color: #2E9C82; font-weight: 700; }
+.adm-empty { color: #9AA5A1; font-size: .82rem; padding: 10px 4px; }
+/* 패널 · 요청 줄 */
+.adm-panel-h { font-weight: 800; font-size: 1rem; color: #26302D; margin: 4px 0 6px; }
+.adm-req { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 10px; border: 1px solid #DDE5E2; border-radius: 12px;
+  padding: 10px 12px; background: #fff; margin-bottom: 4px; }
+.adm-req .rail { border-radius: 2px; background: var(--st); }
+.adm-req .t { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .9rem; font-weight: 700; }
+.adm-req .d { font-size: .8rem; color: #6B7672; margin-top: 2px; }
+.adm-pill { display: inline-block; font-size: .7rem; font-weight: 800; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--st); color: var(--st); }
+.adm-info { background: #F4F8F6; border-radius: 12px; padding: 12px 14px; font-size: .86rem; line-height: 1.7; color: #3A4542; }
+.adm-info b { color: #2E9C82; }
+</style>
+"""
+ADMIN_TABS = [("board", "팝업 현황"), ("usage", "이용 지표"), ("requests", "삭제 요청"), ("notices", "알림 관리"),
+              ("members", "회원 정보"), ("raw", "원본 데이터")]
+ST_COLOR = {"pending": "#D9821B", "approved": "#23866A", "rejected": "#C8352A"}
+ST_LABEL = {"pending": "대기", "approved": "승인", "rejected": "거부"}
+
+
+def _adm_tab(t: str) -> None:
+    st.session_state["adm_tab"] = t
+
+
+def _adm_week(delta: int) -> None:
+    st.session_state["adm_week"] = st.session_state.get("adm_week", 0) + delta
+
+
+def _week_nav(key: str) -> date:
+    off = st.session_state.get("adm_week", 0)
+    mon, sun = admin.week_of(TODAY + timedelta(weeks=off))
+    with st.container(horizontal=True, vertical_alignment="center", key=f"admwk_{key}"):
+        st.button("‹", key=f"admwk_prev_{key}", type="tertiary", on_click=_adm_week, args=(-1,))
+        st.markdown(f"**{mon.month}/{mon.day}(월) ~ {sun.month}/{sun.day}(일)**" + (" · 이번 주" if off == 0 else ""))
+        st.button("›", key=f"admwk_next_{key}", type="tertiary", on_click=_adm_week, args=(1,))
+        if off:
+            st.button("이번 주", key=f"admwk_now_{key}", on_click=lambda: st.session_state.update(adm_week=0))
+    return mon
+
+
+def _admin_board() -> None:
+    mon = _week_nav("board")
+    board = admin.popup_board(store.all_rows(), mon)
+    colors = {"새로 생성": "#14B8A6", "예정": "#3672BD", "진행": "#23866A", "종료": "#8A9592"}
+    cols = st.columns(4, gap="small")
+    for col, (name, rows) in zip(cols, board.items()):
+        with col:
+            cards = "".join(
+                f'<div class="adm-card"><b>{escape(str(r.get("work") or ""))}</b>'
+                f'<span>{escape(str(r.get("cafe_name") or ""))}</span>'
+                f'<em>{escape(str(r.get("start_date") or "")[5:])} ~ {escape(str(r.get("end_date") or "")[5:])}</em></div>'
+                for r in rows[:40]) or '<div class="adm-empty">없어요</div>'
+            st.markdown(f'<div class="adm-col" style="--c:{colors[name]}"><div class="adm-colhead">{name}'
+                        f'<small>{len(rows)}곳</small></div>{cards}</div>', unsafe_allow_html=True)
+    st.caption("새로 생성 = 그 주에 처음 등록 · 예정 = 그 주가 끝난 뒤 4주 안에 시작 · 진행 = 그 주에 열려 있고 다음 주에도 이어짐 · 종료 = 그 주에 끝남")
+
+
+def _admin_usage() -> None:
+    ev = admin.member_events(members.all_rows())
+    left, right = st.columns(2, gap="medium")
+    with left:
+        st.markdown('<div class="adm-panel-h">신규 이용자 수 (주별, 최근 8주)</div>', unsafe_allow_html=True)
+        st.bar_chart(admin.weekly_counts(ev, "가입", TODAY), x="주", y="명", color=MINT, sort=False, height=240,
+                     x_label="", y_label="")
+    with right:
+        st.markdown('<div class="adm-panel-h">탈퇴한 회원 수 (주별, 최근 8주)</div>', unsafe_allow_html=True)
+        wd = admin.weekly_counts(ev, "탈퇴", TODAY)
+        if wd["명"].sum() == 0:
+            st.markdown('<div class="adm-empty">최근 8주 동안 탈퇴한 회원이 없어요.</div>', unsafe_allow_html=True)
+        else:
+            st.bar_chart(wd, x="주", y="명", color="#C8352A", sort=False, height=240, x_label="", y_label="")
+    st.markdown('<div class="adm-panel-h">일별 접속 회원 (고른 주)</div>', unsafe_allow_html=True)
+    mon = _week_nav("usage")
+    st.bar_chart(admin.daily_active(visits.all_rows(), mon), x="날", y="접속 회원", color=MINT, sort=False, height=240,
+                 x_label="", y_label="")
+    st.caption("접속 회원 = 그날 로그인한 상태로 한 번 이상 들어온 회원 수 (같은 날 여러 번 와도 1명). 손님은 세지 않아요.")
+
+
+def _admin_decide(req: dict, approve: bool) -> None:
+    reason = st.session_state.get(f"adm_rj_{req['entry_id']}", "")
+    if not approve and len(" ".join(reason.split())) < 2:
+        st.session_state["flash"] = ("거부 사유를 적어 주세요.", ":material/error:")
+        return
+    if approve:                             # 승인 → 게시글 삭제 (지우지 않고 '삭제됨' 행)
+        target = reviews if req.get("target_type") == "review" else store
+        extra = {} if req.get("target_type") == "review" else {"source": "삭제 요청 승인", "editor": _me()}
+        try:
+            target.soft_delete(str(req.get("target_id")), extra=extra or None)
+        except Exception:                   # 이미 지워진 글이어도 요청 처리는 끝낸다
+            pass
+    admin.decide(del_requests, notices_store, req, approve, reason)
+    st.session_state["flash"] = (("승인했어요. 게시글을 삭제하고 요청자에게 알렸어요." if approve
+                                  else "거부했어요. 요청자에게 사유를 알렸어요."), ":material/check_circle:")
+
+
+def _admin_requests() -> None:
+    rows = sorted(del_requests.current_rows(), key=lambda r: str(r.get("updated_at", "")), reverse=True)
+    pending = [r for r in rows if r.get("decision") == "pending"]
+    done = [r for r in rows if r.get("decision") != "pending"]
+    st.markdown(f'<div class="adm-panel-h">처리 대기 {len(pending)}건</div>', unsafe_allow_html=True)
+    if not pending:
+        st.markdown('<div class="adm-empty">처리할 삭제 요청이 없어요.</div>', unsafe_allow_html=True)
+    for r in pending:
+        eid = str(r["entry_id"])
+        st.markdown(
+            f'<div class="adm-req" style="--st:{ST_COLOR["pending"]}"><div class="rail"></div><div>'
+            f'<div class="t"><span class="adm-pill">대기</span>{escape(admin.TARGET_LABEL.get(r.get("target_type"), "글"))} · '
+            f'{escape(str(r.get("target_title") or ""))}</div>'
+            f'<div class="d">요청 {escape(str(r.get("requester_nick") or ""))} · {escape(_when(str(r.get("updated_at", ""))))}</div>'
+            f'<div class="d">사유: {escape(str(r.get("reason") or ""))}</div></div></div>', unsafe_allow_html=True)
+        c1, c2, c3 = st.columns([1, 3, 1], vertical_alignment="bottom")
+        c1.button("승인 (삭제)", key=f"adm_ok_{eid}", type="primary", width="stretch", on_click=_admin_decide, args=(r, True))
+        c2.text_input("거부 사유", key=f"adm_rj_{eid}", placeholder="거부할 때 요청자에게 보낼 사유", label_visibility="collapsed",
+                      max_chars=admin.MAX_REASON)
+        c3.button("거부", key=f"adm_no_{eid}", width="stretch", on_click=_admin_decide, args=(r, False))
+    with st.expander(f"처리한 요청 {len(done)}건"):
+        for r in done[:50]:
+            d = r.get("decision")
+            st.markdown(
+                f'<div class="adm-req" style="--st:{ST_COLOR.get(d, "#8A9592")}"><div class="rail"></div><div>'
+                f'<div class="t"><span class="adm-pill">{ST_LABEL.get(d, d)}</span>'
+                f'{escape(str(r.get("target_title") or ""))}</div>'
+                f'<div class="d">요청 {escape(str(r.get("requester_nick") or ""))} · 사유 {escape(str(r.get("reason") or ""))}</div>'
+                + (f'<div class="d">거부 사유: {escape(str(r.get("admin_reason") or ""))}</div>' if d == "rejected" else "")
+                + '</div></div>', unsafe_allow_html=True)
+
+
+def _admin_notice_save(entry_id: str | None) -> None:
+    k = entry_id or "new"
+    title = " ".join(str(st.session_state.get(f"adm_nt_t_{k}", "")).split())
+    body = str(st.session_state.get(f"adm_nt_b_{k}", "")).strip()
+    if len(title) < 2 or not body:
+        st.session_state["flash"] = ("제목(2자 이상)과 내용을 적어 주세요.", ":material/error:")
+        return
+    if guard.scan(f"{title} {body}"):
+        st.session_state["flash"] = ("알림에 전화번호·이메일 같은 개인정보는 넣을 수 없어요.", ":material/error:")
+        return
+    admin.send(notices_store, "all", "공지", title, body, entry_id=entry_id)
+    st.session_state.pop("adm_nt_edit", None)
+    for key in (f"adm_nt_t_{k}", f"adm_nt_b_{k}"):      # 저장했으면 입력칸을 비운다
+        st.session_state.pop(key, None)
+    st.session_state["flash"] = ("알림을 저장했어요. 모든 회원의 알림에 보여요.", ":material/check_circle:")
+
+
+def _admin_notice_delete(row: dict) -> None:
+    notices_store.soft_delete(str(row["entry_id"]))
+    st.session_state["flash"] = ("알림을 삭제했어요.", ":material/check_circle:")
+
+
+def _admin_notices() -> None:
+    rows = sorted([r for r in notices_store.current_rows() if r.get("target") == "all"],
+                  key=lambda r: str(r.get("updated_at", "")), reverse=True)
+    left, right = st.columns([1.4, 1], gap="medium")
+    with right:
+        editing = st.session_state.get("adm_nt_edit")
+        cur = next((r for r in rows if str(r["entry_id"]) == editing), None) if editing else None
+        k = str(cur["entry_id"]) if cur else "new"
+        st.markdown(f'<div class="adm-panel-h">{"알림 수정" if cur else "새 알림 추가"}</div>', unsafe_allow_html=True)
+        st.text_input("제목", key=f"adm_nt_t_{k}", value=str(cur.get("title", "")) if cur else "", max_chars=60)
+        st.text_area("내용", key=f"adm_nt_b_{k}", value=str(cur.get("body", "")) if cur else "", max_chars=500, height=120)
+        c1, c2 = st.columns(2)
+        c1.button("저장", key=f"adm_nt_save_{k}", type="primary", width="stretch", on_click=_admin_notice_save,
+                  args=(str(cur["entry_id"]) if cur else None,))
+        if cur:
+            c2.button("취소", key="adm_nt_cancel", width="stretch", on_click=lambda: st.session_state.pop("adm_nt_edit", None))
+        st.caption("저장하면 모든 회원의 종 알림과 '내 캘린더 > 알림 받은 내역'에 보여요.")
+    with left:
+        st.markdown(f'<div class="adm-panel-h">공지 알림 {len(rows)}개</div>', unsafe_allow_html=True)
+        if not rows:
+            st.markdown('<div class="adm-empty">아직 보낸 공지 알림이 없어요. 오른쪽에서 추가해 보세요.</div>', unsafe_allow_html=True)
+        for r in rows:
+            eid = str(r["entry_id"])
+            st.markdown(
+                f'<div class="adm-req" style="--st:#14B8A6"><div class="rail"></div><div>'
+                f'<div class="t">{escape(str(r.get("title") or ""))}</div>'
+                f'<div class="d">{escape(str(r.get("body") or ""))}</div>'
+                f'<div class="d">{escape(_when(str(r.get("updated_at", ""))))} · 수정 {int(r.get("revision") or 1) - 1}회</div>'
+                '</div></div>', unsafe_allow_html=True)
+            c1, c2, _ = st.columns([1, 1, 3])
+            c1.button("수정", key=f"adm_nt_ed_{eid}", width="stretch",
+                      on_click=lambda e=eid: st.session_state.update(adm_nt_edit=e))
+            c2.button("삭제", key=f"adm_nt_del_{eid}", width="stretch", on_click=_admin_notice_delete, args=(r,))
+
+
+def _admin_members() -> None:
+    st.markdown(
+        '<div class="adm-info"><b>수집하는 정보</b> — 닉네임 · 로그인 수단(카카오/네이버/아이디) · 회원 번호(계정 고유 번호를 '
+        '알아볼 수 없게 바꾼 값) · 약관 동의 시각 · 아이디 가입이면 아이디와 <b>암호화한</b> 비밀번호 · 접속한 날(일별 접속 수)<br>'
+        '<b>수집하지 않는 정보</b> — 이메일 · 전화번호 · 실명 · 생일 · 카카오/네이버 고유 번호 원래 값</div>',
+        unsafe_allow_html=True)
+    rows = members.all_rows()
+    latest = mycal.latest_rows(rows)
+    first = {}
+    for r in rows:
+        if int(r.get("revision") or 0) == 1:
+            d = admin._day(r.get("updated_at"))          # 한국 시간 기준 가입일
+            first[str(r["entry_id"])] = d.isoformat() if d else ""
+    last = admin.last_visit(visits.all_rows())
+    keys = {k.strip() for k in (os.getenv("ADMIN_MEMBER_KEYS") or DEFAULT_ADMIN).split(",") if k.strip()}
+    table = pd.DataFrame([{
+        "회원 번호": str(r["entry_id"]), "닉네임": r.get("nickname") or "(탈퇴)",
+        "로그인 수단": auth.PROVIDER_LABEL.get(str(r.get("provider")), "-"),
+        "가입일": first.get(str(r["entry_id"]), ""), "약관 동의": str(r.get("agreed_at") or "")[:16].replace("T", " "),
+        "최근 접속": last.get(str(r["entry_id"]), "-"),
+        "상태": "탈퇴" if r.get("status") == "deleted" else "활동",
+        "권한": "관리자" if str(r["entry_id"]) in keys else "일반 회원",
+    } for r in latest])
+    st.markdown(f'<div class="adm-panel-h" style="margin-top:12px">회원 {len(table)}명</div>', unsafe_allow_html=True)
+    if table.empty:
+        st.markdown('<div class="adm-empty">아직 가입한 회원이 없어요.</div>', unsafe_allow_html=True)
+    else:
+        st.dataframe(table.sort_values("가입일", ascending=False), hide_index=True, width="stretch")
+
+
 def page_data() -> None:
-    """저장소에 실제로 쌓인 기록을 본다 (append-only 라서 수정·삭제도 행으로 보인다). 관리자만."""
-    st.markdown(GLOBAL_CSS + STATS_CSS, unsafe_allow_html=True)
+    """관리자 대시보드. 관리자(지정한 회원 번호)만."""
+    st.markdown(GLOBAL_CSS + STATS_CSS + ADMIN_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
         _gnb(None, on_map=False)      # 메인과 같은 메뉴바
+    flash = st.session_state.pop("flash", None)
+    if flash:
+        if isinstance(flash, tuple):
+            _toast(*flash)
+        else:
+            _toast(flash)
     if not _is_admin():
         st.markdown('<div class="stats-title">관리자 전용</div><div class="stats-sub">이 화면은 관리자만 볼 수 있어요. '
                     '관리자 계정으로 로그인해 주세요.</div>', unsafe_allow_html=True)
         st.page_link(PAGES["login"], label="로그인하기", icon=":material/login:")
         return
+    rows = stats.popups(store.all_rows())
+    status = stats.status_counts(rows, TODAY)
+    mon, sun = admin.week_of(TODAY)
+    new_week = len(admin.popup_board(store.all_rows(), mon)["새로 생성"])
+    pend = sum(1 for r in del_requests.current_rows() if r.get("decision") == "pending")
+    n_members = sum(1 for r in members.current_rows())
+    st.markdown(f'<div class="adm-eyebrow">ANI:WHERE ADMIN · {TODAY:%Y.%m.%d}</div>'
+                '<div class="adm-title">관리자 대시보드</div>'
+                f'<div class="adm-sub">저장소: {escape(store.mode)} · 모든 기록은 지우지 않고 쌓여요 (append-only)</div>'
+                '<div class="adm-kpis">'
+                f'<div class="adm-kpi"><span>이번 주 새로 등록</span><b>{new_week}</b><small>곳</small></div>'
+                f'<div class="adm-kpi"><span>진행 중</span><b>{status["진행 중"]}</b><small>곳</small></div>'
+                f'<div class="adm-kpi"><span>예정</span><b>{status["예정"]}</b><small>곳</small></div>'
+                f'<div class="adm-kpi"><span>회원</span><b>{n_members}</b><small>명 (활동)</small></div>'
+                f'<div class="adm-kpi{" alert" if pend else ""}"><span>삭제 요청 대기</span><b>{pend}</b><small>건</small></div>'
+                '</div>', unsafe_allow_html=True)
+    tab = st.session_state.get("adm_tab", "board")
+    with st.container(horizontal=True, key="adm_tabs"):
+        for t, label in ADMIN_TABS:
+            lab = f"{label} {pend}" if t == "requests" and pend else label
+            st.button(lab, key=f"admtab_{'on_' if tab == t else ''}{t}", on_click=_adm_tab, args=(t,))
+    if tab == "board":
+        _admin_board()
+    elif tab == "usage":
+        _admin_usage()
+    elif tab == "requests":
+        _admin_requests()
+    elif tab == "notices":
+        _admin_notices()
+    elif tab == "members":
+        _admin_members()
+    else:
+        _admin_raw()
+
+
+def _admin_raw() -> None:
+    """원본 데이터: 저장소에 실제로 쌓인 기록 (append-only 라서 수정·삭제도 행으로 보인다)."""
     where = {"local": "내 컴퓨터의 data/*.json 파일", "sheets": "Google Sheets",
              "supabase": "Supabase 클라우드 (PostgreSQL)"}.get(store.mode, store.mode)
     st.markdown(f'<div class="stats-title">데이터 보기</div><div class="stats-sub">지금 저장소: <b>{where}</b> '
@@ -4576,7 +4916,8 @@ def page_data() -> None:
                    icon=":material/cloud_off:")
     if store.mode == "local":
         st.caption("Supabase 로 옮기면 같은 표가 Supabase 대시보드 → Table Editor 에도 보여요 (db.md 6절).")
-    stores = {"cafes": store, "reviews": reviews, "favorites": favs, "members": members}
+    stores = {"cafes": store, "reviews": reviews, "favorites": favs, "members": members,
+              "del_requests": del_requests, "notices": notices_store, "visits": visits}
     cols = st.columns(len(stores))
     for col, (name, s_) in zip(cols, stores.items()):
         col.metric(f"{DATA_TABLES[name]} ({name})", f"{len(s_.all_rows())}행",
