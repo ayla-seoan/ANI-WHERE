@@ -24,6 +24,26 @@ def open_list(page: Page, url: str) -> int:
     return page.locator(CARD).count()
 
 
+def sign_up(page: Page, url: str) -> None:
+    """아이디로 새로 가입해 로그인한다 (북마크·리뷰는 회원만, 11/18). 임시 데이터에만 쌓인다."""
+    import uuid
+    page.goto(url + "/login")
+    wait_idle(page)
+    page.get_by_text("회원가입", exact=True).first.click()
+    wait_idle(page)
+    f = page.locator('[data-testid="stForm"]').first
+    f.get_by_label("아이디 (필수)").fill("qa_" + uuid.uuid4().hex[:8])
+    f.get_by_label("비밀번호 (필수)").fill("qatest1234")
+    f.get_by_label("비밀번호 확인 (필수)").fill("qatest1234")
+    f.get_by_label("닉네임 (필수)").fill("테스트봇")
+    f.locator('[data-testid="stCheckbox"] label').first.click()
+    f.get_by_role("button", name="가입하기").click()
+    # 가입하면 메인으로 가고, 메뉴바의 '로그인' 자리에 닉네임이 보인다
+    expect(page).to_have_url(re.compile(r"/$"), timeout=LONG)          # 메인으로 옮겨졌는지 먼저
+    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
+    wait_idle(page)
+    expect(page.locator(".st-key-login_btn button").last).to_contain_text("테스트봇", timeout=LONG)
+
 def wait_idle(page: Page) -> None:
     """Streamlit 이 다시 그리기를 마칠 때까지 (오른쪽 위 '실행 중' 표시가 사라질 때까지)."""
     page.wait_for_timeout(300)
@@ -107,6 +127,7 @@ def test_3_카드를_누르면_상세가_열리고_탭으로_돌아올_수_있�
 
 # ------------------------------------------------------------------ 4. 북마크 → 캘린더
 def test_4_북마크하면_내_캘린더에_보인다(page: Page, app_url, data_dir):
+    sign_up(page, app_url)
     open_list(page, app_url)
     # 아직 북마크하지 않은 카드 하나
     target = next((r for r in current_cafes(data_dir)
@@ -140,6 +161,7 @@ def test_4_북마크하면_내_캘린더에_보인다(page: Page, app_url, data_
 
 # ------------------------------------------------------------------ 5. 안정성 (민감정보 차단)
 def test_5_리뷰에_전화번호를_넣으면_막힌다(page: Page, app_url, data_dir):
+    sign_up(page, app_url)
     before = (data_dir / "reviews.json").read_text(encoding="utf-8")
     open_list(page, app_url)
     target = pick_cafe(data_dir)
@@ -170,3 +192,24 @@ def test_6_모바일_390px에서_가로_스크롤이_없다(mobile_page: Page, a
     # 첫 카드가 화면 폭 안에 들어와야 한다
     box = mobile_page.locator(CARD).first.bounding_box()
     assert box and box["x"] >= 0 and box["x"] + box["width"] <= cw + 1
+
+
+# ------------------------------------------------------------------ 7. 손님은 북마크 대신 로그인 화면으로
+def test_7_손님이_북마크를_누르면_로그인_화면으로(page: Page, app_url, data_dir):
+    open_list(page, app_url)
+    page.locator('[class*="st-key-fav_off_w_"] button').first.click()
+    expect(page.get_by_text("다시 오셨네요")).to_be_visible(timeout=LONG)
+    assert page.url.rstrip("/").endswith("/login")
+
+
+# ------------------------------------------------------------------ 8. 등록하기: 손님에겐 + 가 없고, 회원은 들어간다
+def test_8_등록은_회원만(page: Page, app_url, data_dir):
+    open_list(page, app_url)
+    assert page.locator(".st-key-add_btn").count() == 0, "손님에게 등록(+) 버튼이 보입니다"
+    page.goto(app_url + "/add")
+    expect(page.get_by_text("다시 오셨네요")).to_be_visible(timeout=LONG)   # 로그인 화면으로
+    sign_up(page, app_url)
+    open_list(page, app_url)
+    expect(page.locator(".st-key-add_btn button")).to_be_visible(timeout=LONG)
+    page.locator(".st-key-add_btn button").click()
+    expect(page.get_by_text("팝업 카페 등록하기")).to_be_visible(timeout=LONG)

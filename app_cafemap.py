@@ -355,7 +355,24 @@ def _heart(cafe_id: str, where: str, label_count: bool = False) -> None:
               on_click=_toggle_fav, args=(str(cafe_id), me, not on))
 
 
+def _need_login(msg: str) -> None:
+    """로그인이 필요한 일을 손님이 눌렀을 때: 다음 그리기에서 로그인 화면으로 옮긴다 (콜백 안에서는 페이지를 못 옮긴다)."""
+    st.session_state["_need_login"] = msg
+
+
+def _login_gate(msg: str, key: str) -> bool:
+    """손님이면 안내 + '로그인하기' 버튼을 그리고 True. 회원이면 False (그대로 진행)."""
+    if _member():
+        return False
+    st.markdown(f'<div class="ntf-empty" style="padding:10px 2px">{escape(msg)}</div>', unsafe_allow_html=True)
+    st.button("로그인하고 계속하기", icon=":material/login:", key=key, on_click=_need_login, args=(msg,))
+    return True
+
+
 def _toggle_fav(cafe_id: str, me: str, on: bool) -> None:
+    if not _member():                       # 북마크는 회원만 (11/18 요청) → 로그인 화면으로
+        _need_login("북마크는 로그인하면 쓸 수 있어요.")
+        return
     try:
         favorite.toggle(favs, cafe_id, me, on)
     except StorageWriteError:      # 콜백 안의 오류는 페이지의 try 로 잡히지 않아서 여기서 따로 받는다
@@ -729,6 +746,8 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
 
     입력이 끝나면 칸을 비워야 해서, 저장할 때마다 키 번호(n)를 올려 새 입력칸을 그린다.
     """
+    if _login_gate("리뷰는 로그인하면 쓸 수 있어요.", f"lg_rv_{cafe_id}_{parent_id}"):
+        return
     slot = f"rv_{cafe_id}_{parent_id or 'top'}"
     n = st.session_state.get(f"{slot}_n", 0)
     kind = ""
@@ -822,11 +841,11 @@ def confirm_review_delete(entry_id: str, replies: int) -> None:
     if c2.button("삭제", type="primary", width="stretch", key=f"rv_del_ok_{entry_id}"):
         # 버튼이 보였더라도 지우는 순간 한 번 더 확인한다 (내 닉네임과 같은 글만)
         row = next((r for r in reviews.current_rows() if str(r["entry_id"]) == entry_id), None)
-        if row and review.can_delete(row, _me()):
+        if row and _is_admin():
             reviews.soft_delete(entry_id)       # 저장소는 지우지 않고 '삭제됨' 행을 쌓는다
             st.session_state["flash"] = "삭제했습니다."
         else:
-            st.session_state["flash"] = "내가 쓴 글만 삭제할 수 있어요."
+            st.session_state["flash"] = "게시글 삭제는 관리자만 할 수 있어요."
         st.rerun()
 
 
@@ -841,15 +860,17 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     if int(r.get("revision") or 1) > 1:
         when += " :gray[(수정됨)]"
     # 내가 쓴 글(접속 IP 로 정해진 닉네임이 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
-    mine = review.can_delete(r, _me())
-    if mine:
+    mine = bool(_member()) and review.can_delete(r, _me())
+    admin = _is_admin()
+    if mine or admin:
+        # 수정은 쓴 사람(회원)만, 삭제는 관리자만 (11/18 권한)
         t, b = st.columns([6, 1], vertical_alignment="center")
         t.markdown(head + when)
         with b.popover("⋯", key=f"rv_more_{eid}", type="tertiary"):
-            if st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
+            if mine and st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
                 st.session_state["rv_editing"] = eid
                 st.rerun()
-            if st.button("삭제", key=f"rv_del_{eid}", width="stretch"):
+            if admin and st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch"):
                 confirm_review_delete(eid, replies)
     else:
         st.markdown(head + when)
@@ -1050,7 +1071,7 @@ def confirm_delete(entry_id: str) -> None:
         if st.button("취소", width="stretch", key=f"delete_cancel_{entry_id}"):
             st.rerun()
     with c2:
-        if st.button("삭제", type="primary", width="stretch", key=f"delete_ok_{entry_id}"):
+        if st.button("삭제", type="primary", width="stretch", key=f"delete_ok_{entry_id}") and _is_admin():
             store.soft_delete(entry_id, extra={"source": "지도에서 내림", "editor": _me()})
             st.session_state["selected"] = None
             st.session_state["flash"] = "지도에서 내렸습니다. 이력은 남아 있습니다."
@@ -1213,6 +1234,8 @@ def _keep_notion(note: str, current: dict) -> str:
 
 def render_edit(current: dict) -> None:
     entry_id = str(current["entry_id"])
+    if _login_gate("팝업 정보 수정은 로그인하면 할 수 있어요.", f"lg_ed_{entry_id}"):
+        return
     st.caption("누구나 수정할 수 있습니다. 기존 기록은 남기고 새 줄로 쌓여서 언제든 되돌릴 수 있습니다.")
 
     # revision 을 키에 넣어야 되돌리기 후 입력칸이 새 값으로 다시 채워진다
@@ -1259,7 +1282,7 @@ def render_edit(current: dict) -> None:
     with st.container(horizontal=True, key=f"edit_btns_{k}"):
         submitted = st.button("수정 저장", type="primary", width="stretch", key=f"save_{k}",
                               disabled=bad or bool(img_errors) or bad_links)
-        if st.button("지도에서 내리기", width="stretch", key=f"delete_{k}"):
+        if _is_admin() and st.button("지도에서 내리기 (관리자)", width="stretch", key=f"delete_{k}"):
             confirm_delete(entry_id)
 
     if submitted:
@@ -1586,7 +1609,8 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
             st.session_state["m_filters"] = not m_open
             st.rerun()
         _view_switch(wide)
-        st.button("", icon=":material/calendar_month:", key="m_cal_btn", on_click=_gnb_go, args=("cal",))
+        if _member():
+            st.button("", icon=":material/calendar_month:", key="m_cal_btn", on_click=_gnb_go, args=("cal",))
 
 
 def _view_switch(wide: bool) -> None:
@@ -2472,6 +2496,11 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .st-key-gnb_right [data-testid="stPopover"] button p { margin-left: -6px !important; font-size: .85rem !important; }
 .st-key-gnb_right [class*="st-key-gnb_search_"] button p, .st-key-gnb_right [data-testid="stPopover"] button p {
   font-family: "NanumSquareRound", "Jua", sans-serif !important; color: #2E9C82 !important; font-weight: 800 !important; }
+.st-key-gnb_right .st-key-admin_btn button { background: #fff !important; border: 1.5px solid #9EDDCC !important;
+  border-radius: 999px !important; padding: 2px 12px !important; min-height: 0 !important; }
+.st-key-gnb_right .st-key-admin_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 800 !important;
+  color: #2E9C82 !important; font-size: .88rem !important; }
+.st-key-gnb_right .st-key-admin_btn button span { color: #2E9C82 !important; font-size: 1.1rem !important; }
 .st-key-gnb_right .st-key-login_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 700 !important;
   color: #4B5260 !important; font-size: 1.02rem !important; letter-spacing: -.01em; }
 .st-key-gnb_tabs button p { font-family: "NanumSquareRound", sans-serif !important; }
@@ -2518,6 +2547,18 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
     padding: 0 9px !important; border: 1.5px solid var(--accent) !important; border-radius: 10px !important;
     background: #fff !important; box-shadow: none; }
   html body .st-key-view_tools .st-key-map_icon button p { display: none !important; }
+  /* 세 아이콘(지도/리스트 · 캘린더 · 필터) 같은 크기 40×34, 같은 간격, 필터는 맨 오른쪽 */
+  html body .st-key-view_tools { gap: 8px !important; }
+  html body .st-key-view_tools > * { margin: 0 !important; }
+  html body .st-key-view_tools .st-key-map_icon button, html body .st-key-view_tools .st-key-m_cal_btn button,
+  html body .st-key-view_tools .st-key-m_filter_btn button { width: 40px !important; min-width: 40px !important;
+    height: 34px !important; padding: 0 !important; justify-content: center !important; }
+  html body .st-key-view_tools .st-key-map_icon .stButton, html body .st-key-view_tools .st-key-map_icon,
+  html body .st-key-view_tools .st-key-m_cal_btn, html body .st-key-view_tools .st-key-m_filter_btn {
+    width: 40px !important; min-width: 40px !important; flex: 0 0 40px !important; }
+  html body .st-key-view_tools > .st-key-map_icon, html body .st-key-view_tools > *:has(.st-key-map_icon) { order: 1; }
+  html body .st-key-view_tools > .st-key-m_cal_btn, html body .st-key-view_tools > *:has(.st-key-m_cal_btn) { order: 2; }
+  html body .st-key-view_tools > .st-key-m_filter_btn, html body .st-key-view_tools > *:has(.st-key-m_filter_btn) { order: 3; }
   html body .st-key-view_tools .st-key-m_box_btn { display: block !important; width: auto !important; }
   html body .st-key-view_tools .st-key-m_box_btn button { height: 32px !important; min-width: 32px; padding: 0 9px !important;
     border: 1.5px solid var(--accent) !important; border-radius: 10px !important; background: #fff !important; min-height: 0 !important; }
@@ -2565,6 +2606,7 @@ def _gnb_go(view: str) -> None:
     if view == "ask":
         st.session_state["_gnb_ask"] = True
         return
+    st.session_state["_gnb_to_map"] = True
     st.session_state["cal_view"] = view == "cal"
     st.session_state["box_view"] = view == "box"
     if view not in ("cal", "box"):
@@ -2655,11 +2697,19 @@ def _gnb_open(cafe_id: str) -> None:
     st.session_state["scroll_top"] = True
 
 
-def _gnb(current: dict | None) -> None:
-    """상단 메뉴바: [로고] … [지도로 보기 · 리스트로 보기] (가운데) … [검색] [알림] [로그인]
-    물어보기는 리스트 옆 대화창으로 (탭에서는 뺐다)."""
+def _gnb(current: dict | None, on_map: bool = True) -> None:
+    if st.session_state.get("_cookie_pending"):     # 방금 로그인했으면 쿠키를 심는다 (메인으로 옮긴 뒤에도)
+        _set_cookie(st.session_state.pop("_cookie_pending"), auth.SESSION_DAYS)
+    msg = st.session_state.pop("_need_login", None)
+    if msg:                                  # 손님이 북마크·리뷰·수정을 누름 → 로그인 화면으로
+        st.session_state["flash"] = (msg, ":material/login:")
+        go("login")
+    # 상단 메뉴바: [로고] … [지도로 보기 · 리스트로 보기] (가운데) … [검색] [알림] [로그인]
+    # 물어보기는 리스트 옆 대화창으로 (탭에서는 뺐다).
     if st.session_state.pop("_gnb_ask", False):
         go("ask")
+    if st.session_state.pop("_gnb_to_map", False) and not on_map:
+        go("map")                            # 다른 화면에서 지도·리스트·내 캘린더 탭을 누름 (메인이면 표시만 지운다)
     st.markdown(GNB_CSS, unsafe_allow_html=True)
     wide = bool(st.session_state.get("list_only"))
     with st.container(horizontal=True, key="gnb"):
@@ -2674,13 +2724,19 @@ def _gnb(current: dict | None) -> None:
         with st.container(horizontal=True, key="gnb_tabs"):
             cal = bool(st.session_state.get("cal_view"))
             box = bool(st.session_state.get("box_view"))
-            on_map = not wide and not current and not cal and not box
+            if not on_map:
+                current = {"_": "다른 화면"}       # 탭 밑줄을 모두 끈다
+            tab_map = not wide and not current and not cal and not box      # (on_map 과 이름을 나눔 — 겹쳐서 +·물어보기 버튼이 사라졌다)
             on_list = wide and not current and not cal and not box
             on_cal = cal and not current
             on_box = box and not current
-            st.button("지도로 보기", key=f"gnbtab_{'on_' if on_map else ''}map", on_click=_gnb_go, args=("map",))
+            st.button("지도로 보기", key=f"gnbtab_{'on_' if tab_map else ''}map", on_click=_gnb_go, args=("map",))
             st.button("리스트로 보기", key=f"gnbtab_{'on_' if on_list else ''}list", on_click=_gnb_go, args=("list",))
-            st.button("내 캘린더", key=f"gnbtab_{'on_' if on_cal else ''}cal", on_click=_gnb_go, args=("cal",))
+            if _member():                       # 내 캘린더(알림·찜·다녀온)는 로그인한 사람만
+                st.button("내 캘린더", key=f"gnbtab_{'on_' if on_cal else ''}cal", on_click=_gnb_go, args=("cal",))
+        if not _member():   # 알림은 로그인한 사람만: 손님이면 알림 칸(과 그것을 감싼 칸)을 숨긴다
+            st.markdown("<style>.st-key-bell_guest, .st-key-gnb_right > *:has(.st-key-bell_guest) "
+                        "{ display: none !important; }</style>", unsafe_allow_html=True)
         with st.container(horizontal=True, key="gnb_right"):
             # 검색 아이콘: 누르면 아래 검색 필터 줄(검색·작품·캐릭터·진행여부·날짜)을 펼치고 접는다.
             # 걸어 둔 조건이 있으면 아이콘 옆에 그 수. 모바일에서는 필터 시트를 연다
@@ -2688,14 +2744,14 @@ def _gnb(current: dict | None) -> None:
             opened = bool(st.session_state.get("pc_filters"))
             st.button(str(n_on) if n_on and not opened else "", icon=":material/close:" if opened else ":material/search:",
                       key=f"gnb_search_{'on' if opened else 'off'}", on_click=_toggle_search)
-            marks, near = _notices()
+            marks, near = _notices() if _member() else ([], [])
             n_ntf = len(marks) + len(near)
             if n_ntf:
                 st.markdown(f'<style>html body .st-key-gnb_right [data-testid="stPopover"] button::after {{ content: "{n_ntf}"; '
                             'position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; '
                             'background: #FF6B6B; color: #fff; font: 800 10px/16px "NanumSquareRound", sans-serif; text-align: center; }}'
                             '</style>', unsafe_allow_html=True)
-            with st.popover("", icon=":material/notifications:"):
+            with (st.popover("", icon=":material/notifications:") if _member() else st.container(key="bell_guest")):
                 st.markdown("**북마크한 팝업**")
                 if not marks:
                     st.markdown('<div class="ntf-empty">오픈 3일 전부터 당일까지, 그리고 끝나기 3일 전부터 알려 드려요. '
@@ -2712,6 +2768,8 @@ def _gnb(current: dict | None) -> None:
                 for n, (text, eid) in enumerate(near):
                     st.markdown(f'<div class="ntf-item">{text}</div>', unsafe_allow_html=True)
                     st.button("보기", key=f"ntf_n{n}_{eid}", type="tertiary", on_click=_gnb_open, args=(eid,))
+            if _is_admin() and st.button("관리자", icon=":material/admin_panel_settings:", key="admin_btn"):
+                go("data")
             who = _member()
             if st.button(who["nickname"] if who else "로그인", key="login_btn"):
                 go("login")
@@ -2719,11 +2777,14 @@ def _gnb(current: dict | None) -> None:
         my_place.my_location(key="gnb_loc")
     # 상세에서 돌아가기는 위 '리스트로 보기 / 지도로 보기' 탭이나 로고로 (별도 '리스트로 돌아가기' 버튼은 뺐다, 11/18 요청)
     # 모바일: 등록 + 위에 물어보기 플로팅 버튼 → 팝업 대화창 (PC 는 리스트 옆 대화창이 있어 숨긴다)
+    if not on_map:
+        return
     st.markdown(ASK_FAB_CSS, unsafe_allow_html=True)
     if st.button("", icon=":material/forum:", key="ask_fab"):
         ask_dialog()
     # 오른쪽 아래 코랄색 + (등록) — 화면에 떠 있다 (CSS .st-key-add_btn)
-    if not current and st.button("", icon=":material/add:", key="add_btn", type="primary"):
+    # 등록(+)은 로그인한 사람에게만 보인다 (11/18)
+    if not current and _member() and st.button("", icon=":material/add:", key="add_btn", type="primary"):
         st.session_state.pop("wiz", None)     # 늘 1단계부터 시작
         go("add")
 
@@ -2733,7 +2794,7 @@ MYCAL_CSS = """
 <style>
 .mc-title { font-family: "Jua", sans-serif; font-size: 1.35rem; color: #26302D; margin: 4px 0 2px; }
 .mc-sub { color: #8A9592; font-size: .82rem; margin-bottom: 10px; }
-.st-key-mycal_box, .st-key-ntf_box { border: 1.5px solid #E3E8E6; border-radius: 16px; padding: 14px 16px !important;
+.st-key-mycal_box, .st-key-ntf_box, .st-key-keep_box { border: 1.5px solid #E3E8E6; border-radius: 16px; padding: 14px 16px !important;
   background: #fff; }
 .nh-day { color: #8A9592; font-size: .78rem; font-weight: 700; margin: 12px 0 4px; }
 .nh-item { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; background: #F4F8F6; }
@@ -2790,18 +2851,22 @@ def render_my_calendar_view() -> None:
         st.button("", icon=":material/map:", key="mycal_to_map", on_click=_gnb_go, args=("map",))
     st.markdown("<style>@media (min-width: 641px) { .st-key-mycal_mnav { display: none !important; } }</style>",
                 unsafe_allow_html=True)
-    left, right = st.columns([1.6, 1], gap="large")
-    with left, st.container(key="mycal_box"):
-        render_calendar()
-    with right, st.container(key="ntf_box"):
-        tab = st.session_state.get("box_tab", "ntf")
+    # 지도 보기와 같은 비율: 왼쪽 = 알림(데일리 팝업 노트 폭) · 가운데 = 찜·다녀온·최근 본(지도 폭)
+    # · 오른쪽 = 내 캘린더(물어보기 폭) (11/18 요청)
+    left, mid, right = st.columns([0.9, 3.4, 1.55], gap="medium")
+    with left, st.container(key="ntf_box"):
+        st.markdown('<div class="mc-title">알림 받은 내역</div>', unsafe_allow_html=True)
+        _render_notice_history()
+    with right, st.container(key="mycal_box"):
+        render_calendar(compact=True)
+    with mid, st.container(key="keep_box"):
+        tab = st.session_state.get("box_tab", "fav")
+        if tab not in ("fav", "visited", "recent"):
+            tab = "fav"
         with st.container(horizontal=True, key="box_tabs"):
-            for t, label in (("ntf", "알림"), ("fav", "찜"), ("visited", "다녀온"), ("recent", "최근 본")):
+            for t, label in (("fav", "찜"), ("visited", "다녀온"), ("recent", "최근 본")):
                 st.button(label, key=f"boxtab_{'on_' if tab == t else ''}{t}", on_click=_box_tab, args=(t,))
-        if tab == "ntf":
-            _render_notice_history()
-        else:
-            render_box_view(tab)
+        render_box_view(tab)
 
 
 def _render_notice_history() -> None:
@@ -3004,6 +3069,8 @@ def page_map() -> None:
 
     if current:
         _remember_recent(str(current["entry_id"]))
+    if st.session_state.get("cal_view") and not _member():
+        st.session_state["cal_view"] = False
     if st.session_state.get("cal_view") and not current:
         render_my_calendar_view()
         return
@@ -3923,6 +3990,9 @@ def _stepper_html(step: int) -> str:
 
 
 def page_add() -> None:
+    if not _member():               # 팝업 등록은 로그인한 사람만 (주소로 바로 들어와도 로그인 화면으로)
+        st.session_state["flash"] = ("팝업 등록은 로그인하면 할 수 있어요.", ":material/login:")
+        go("login")
     w = _wiz()
     step = w["step"]
     title, icon = STEPS[step]
@@ -3934,9 +4004,7 @@ def page_add() -> None:
     _clear_buttons()    # 입력칸 오른쪽 × 로 한 번에 지우기
     # 메인과 같은 상단(제목·문구)이 스크롤해도 떠 있고, 문구 줄 오른쪽에 홈으로
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True, logo=ADD_LOGO):   # 등록 화면은 등록 화면 전용 로고로 고정
-            st.session_state.pop("wiz", None)
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바 ('홈으로 돌아가기' 는 뺐다 — 로고·탭으로 돌아간다)
 
     back, head, _ = st.columns([1.2, 6, 1.2], vertical_alignment="center")
     with back:
@@ -4223,13 +4291,15 @@ def page_login() -> None:
     st.markdown(GLOBAL_CSS + AUTH_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
     if st.session_state.get("_cookie_pending"):          # 방금 로그인했으면 쿠키를 심는다
         _set_cookie(st.session_state.pop("_cookie_pending"), auth.SESSION_DAYS)
     flash = st.session_state.pop("flash", None)
     if flash:
-        _toast(*flash) if isinstance(flash, tuple) else _toast(flash)
+        if isinstance(flash, tuple):
+            _toast(*flash)
+        else:
+            _toast(flash)
     with st.container(key="auth_wrap"):         # 로그인·회원가입은 화면 가운데 좁은 칸에
         _login_body()
 
@@ -4305,7 +4375,7 @@ def _password_login_form() -> None:
         return
     ss.pop("_pw_fails", None)
     _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
-    st.rerun()
+    go("map")                                # 로그인하면 메인으로 (11/18)
 
 
 def _password_signup_form() -> None:
@@ -4332,7 +4402,7 @@ def _password_signup_form() -> None:
         return
     moved = _move_guest_favs(row)
     _login_done(row, "가입했어요!" + (f" 북마크 {moved}개도 옮겼어요." if moved else ""))
-    st.rerun()
+    go("map")
 
 
 def _move_guest_favs(row: dict) -> int:
@@ -4411,8 +4481,7 @@ def page_auth() -> None:
     st.markdown(GLOBAL_CSS + AUTH_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
     with st.container(key="auth_wrap"):
         _auth_body()
 
@@ -4436,7 +4505,7 @@ def _auth_body() -> None:
         row = auth.find(members, ident.member_key)
         if row:
             _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
-            go("login")
+            go("map")
             return
         st.session_state["_pending_ident"] = ident
     ident = st.session_state.get("_pending_ident")
@@ -4468,7 +4537,7 @@ def _auth_body() -> None:
             favorite.toggle(favs, cid, f"m:{row['entry_id']}", True)
         st.session_state.pop("_pending_ident", None)
         _login_done(row, "가입했어요!" + (f" 북마크 {len(moved)}개도 옮겼어요." if moved else ""))
-        go("login")
+        go("map")
 
 
 # ------------------------------------------------------------ 2차: 데이터 보기 (/data)
@@ -4476,13 +4545,15 @@ DATA_TABLES = {"cafes": "팝업", "reviews": "리뷰", "favorites": "북마크",
 DATA_HIDE = {"members": [], "favorites": ["user"], "reviews": [], "cafes": []}
 
 
+DEFAULT_ADMIN = "f37119a9dd2d4c0b"        # 관리자 회원 번호 (공개돼도 되는 값: 로그인해야 그 회원이 된다)
+
+
 def _is_admin() -> bool:
-    """관리자: ADMIN_MEMBER_KEYS(쉼표로 구분한 회원 번호)에 든 회원, 또는 내 컴퓨터에서 직접 연 경우."""
+    """관리자: ADMIN_MEMBER_KEYS(쉼표로 구분한 회원 번호)에 든 회원만. 비워 두면 기본 관리자 한 명 (11/18 지정).
+    나머지 가입자는 모두 일반 회원이다."""
     row = _member()
-    keys = {k.strip() for k in os.getenv("ADMIN_MEMBER_KEYS", "").split(",") if k.strip()}
-    if row and str(row["entry_id"]) in keys:
-        return True
-    return st.context.ip_address in (None, "127.0.0.1", "::1")     # 로컬 실행(개발자 본인)
+    keys = {k.strip() for k in (os.getenv("ADMIN_MEMBER_KEYS") or DEFAULT_ADMIN).split(",") if k.strip()}
+    return bool(row) and str(row["entry_id"]) in keys
 
 
 def page_data() -> None:
@@ -4490,8 +4561,7 @@ def page_data() -> None:
     st.markdown(GLOBAL_CSS + STATS_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
     if not _is_admin():
         st.markdown('<div class="stats-title">관리자 전용</div><div class="stats-sub">이 화면은 관리자만 볼 수 있어요. '
                     '관리자 계정으로 로그인해 주세요.</div>', unsafe_allow_html=True)
@@ -4789,8 +4859,7 @@ def page_ask() -> None:
     st.markdown(GLOBAL_CSS + ASK_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
     st.markdown('<div class="ask-q">팝업에게 물어보기</div><div class="ask-sub">앱에 모인 팝업 정보 안에서만 찾아 답해요. '
                 '작품·지역·날짜를 함께 적으면 더 정확해요.</div>', unsafe_allow_html=True)
     with st.container(horizontal=True):
@@ -4852,8 +4921,7 @@ def page_stats() -> None:
     st.markdown(GLOBAL_CSS + STATS_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        if _brand(home=True, fixed=True):
-            go("map")
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
     all_rows = store.all_rows()
     rows = stats.popups(all_rows)
     st.markdown('<div class="stats-title">ANI:WHERE 지표</div>'
