@@ -5128,12 +5128,12 @@ def _admin_notice_save(entry_id: str | None) -> None:
     st.session_state.pop("adm_nt_edit", None)
     for key in (f"adm_nt_t_{k}", f"adm_nt_b_{k}"):      # 저장했으면 입력칸을 비운다
         st.session_state.pop(key, None)
-    st.session_state["flash"] = ("알림을 저장했어요. 모든 회원의 알림에 보여요.", ":material/check_circle:")
+    st.session_state["flash"] = ("공지를 저장했어요. 모든 회원의 알림에 보여요.", ":material/check_circle:")
 
 
 def _admin_notice_delete(row: dict) -> None:
     notices_store.soft_delete(str(row["entry_id"]))
-    st.session_state["flash"] = ("알림을 삭제했어요.", ":material/check_circle:")
+    st.session_state["flash"] = ("공지를 삭제했어요.", ":material/check_circle:")
 
 
 def _admin_rule_save(key: str, enabled: bool) -> None:
@@ -5199,7 +5199,7 @@ def _admin_notices() -> None:
         editing = st.session_state.get("adm_nt_edit")
         cur = next((r for r in rows if str(r["entry_id"]) == editing), None) if editing else None
         k = str(cur["entry_id"]) if cur else "new"
-        st.markdown(f'<div class="adm-panel-h">{"알림 수정" if cur else "새 알림 추가"}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="adm-panel-h">{"공지 수정" if cur else "새 공지 추가"}</div>', unsafe_allow_html=True)
         st.text_input("제목", key=f"adm_nt_t_{k}", value=str(cur.get("title", "")) if cur else "", max_chars=60)
         st.text_area("내용", key=f"adm_nt_b_{k}", value=str(cur.get("body", "")) if cur else "", max_chars=500, height=120)
         c1, c2 = st.columns(2)
