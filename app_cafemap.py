@@ -593,6 +593,7 @@ def _member() -> dict | None:
         key = sess["k"] if sess else ""
         if key and st.session_state.get("member_key") == "":
             _clear_user_state()           # 손님일 때 기억한 북마크·알림 등을 비우고 회원 것으로
+            st.session_state["_bridge_login"] = st.session_state.get("_run", 0)   # 이번 실행에서 막 로그인됨 (page_login 이 홈으로)
         st.session_state["member_key"] = key
     row = auth.find(members, key) if key else None
     st.session_state["_member_cache"] = (run, row)
@@ -4581,6 +4582,15 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
             if _is_admin() and st.button("관리자", icon=":material/admin_panel_settings:", key="admin_btn"):
                 go("data")
             who = _member()
+            if who:
+                # 회원: 닉네임 글자 대신 프로필 사진 동그라미 (11/18 요청). 글자는 화면에서만 숨겨 읽기 프로그램 · 테스트는 그대로 읽는다
+                av = _avatar_url(who.get("avatar")).replace('"', "%22")
+                st.markdown(f'<style>.st-key-gnb_right .st-key-login_btn button {{ width: 36px !important; height: 36px !important;'
+                            f' min-height: 0 !important; padding: 0 !important; border-radius: 50% !important;'
+                            f' border: 2px solid #9EDDCC !important; background: #DDF3EC url("{av}") center / cover no-repeat !important; }}'
+                            f' .st-key-gnb_right .st-key-login_btn button p {{ font-size: 0 !important; line-height: 0 !important; }}'
+                            f' .st-key-gnb_right .st-key-login_btn button:hover {{ border-color: var(--accent) !important; }}</style>',
+                            unsafe_allow_html=True)
             if st.button(who["nickname"] if who else "로그인", key="login_btn"):
                 go("login")
     with st.container(key="gnb_loc_box"):
@@ -6333,7 +6343,7 @@ try{window.top.close();}catch(e){}
 setTimeout(function(){var d=document;if(!d.body||d.getElementById('aw-done'))return;var o=d.createElement('div');o.id='aw-done';
 o.style.cssText='position:fixed;inset:0;z-index:999999;background:rgba(255,255,255,.97);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font:700 18px/1.6 sans-serif;color:#0d9488';
 o.textContent='로그인됐어요. 이 창은 닫고 원래 창으로 돌아가 주세요.';d.body.appendChild(o);},900);
-},700);"""
+},150);"""
 
 # 원래 창: 간편 로그인 작은 창에서 로그인이 끝났다는 신호를 받으면 작은 창을 닫고 새로고침(로그인 화면이면 홈으로).
 # 앱 창에 직접 붙여서(parent.eval) Streamlit 이 화면을 다시 그려도 남는다 (부품 iframe 은 다시 그리면 사라짐)
@@ -6341,6 +6351,7 @@ LOGIN_WATCH_JS = r"""if(!window.__awWatch){window.__awWatch=1;
 var ck=function(){return (document.cookie.match(/(?:^|; )__COOKIE__=([^;]*)/)||[])[1]||'';};
 var first=ck(),done=false;
 var go=function(){if(done)return;done=true;try{window.__awPop&&window.__awPop.close();}catch(_){}
+if(document.querySelector('iframe[src*="cookie_bridge"]')){return;}
 var p=location.pathname;if(/\/(login|auth)\/?$/.test(p)){location.replace(p.replace(/\/(login|auth)\/?$/,'/')+location.search);}
 else{location.reload();}};
 window.addEventListener('storage',function(e){if(e.key==='aw_login_done'&&e.newValue)go();});
@@ -6602,6 +6613,10 @@ def page_login() -> None:
     _no_translate()
     with st.container(key="topbar"):
         _gnb(None, on_map=False)      # 메인과 같은 메뉴바
+    if _member() and st.session_state.pop("_bridge_login", None) == st.session_state.get("_run", 0):
+        # 작은 창에서 간편 로그인이 끝나 이 창도 로그인됨 → 새로고침 없이 바로 메인으로 (11/18 요청: 더 빠르게)
+        st.session_state["flash"] = (f"{_member()['nickname']}님, 환영합니다!", ":material/waving_hand:")
+        go("map")
     if st.session_state.get("_cookie_pending"):          # 방금 로그인했으면 쿠키를 심는다
         _set_cookie(st.session_state.pop("_cookie_pending"), auth.SESSION_DAYS)
     flash = st.session_state.pop("flash", None)
@@ -6669,15 +6684,7 @@ def _login_body() -> None:
         f"w.eval({json.dumps(LOGIN_WATCH_JS)});"
         "})();</script>",
         height=0)
-    # 새 탭에서 간편 로그인이 끝나면(로그인 쿠키가 생기면) 이 탭도 메인으로 옮긴다 (11/18: 원래 탭이 로그인 화면에 남던 문제)
-    components.html(
-        "<script>(function(){const w=window.parent;const val=()=>((w.document.cookie.match(/(?:^|; )" + auth.COOKIE
-        + "=([^;]*)/)||[])[1]||'');const first=val();"
-        # 처음 값과 달라진 '빈 값이 아닌' 로그인 쿠키가 생기면 (예전 쿠키가 남아 있어도 새 로그인을 알아챈다)
-        "const iv=setInterval(()=>{const v=val();if(v&&v!==first){clearInterval(iv);"
-        # 부품 iframe 은 바깥 화면을 직접 옮길 권한이 없어서, 바깥 화면 쪽에서 실행되도록 parent.eval 로 넘긴다
-        r"w.eval(`location.replace(location.pathname.replace(/\\/(login|auth)\\/?$/,'/')+location.search)`);}},1500);"
-        "setTimeout(()=>clearInterval(iv),600000);})();</script>", height=0)
+    # (예전: 쿠키가 바뀌면 이 창을 통째로 새로고침하던 스크립트 → 11/18 cookie_bridge 가 화면만 다시 그려 로그인시켜 뺐다. 더 빠름)
     # 안내는 맨 아래에 작게 한 묶음으로 (11/18 요청)
     st.markdown('<style>html.aw-top .auth-newtab { display: none; }</style>', unsafe_allow_html=True)
     st.markdown('<div class="auth-foot"><span class="auth-newtab">카카오·네이버 로그인은 <b>작은 새 창</b>에서 열려요. 로그인을 마치면 그 창은 저절로 닫히고 '
@@ -8515,7 +8522,8 @@ PAGES = {
     "design": st.Page(page_design, title="디자인 시스템 · ANI:WHERE", icon=":material/palette:", url_path="design"),
 }
 # 손님이면(방금 로그아웃한 경우는 빼고) 브라우저의 로그인 쿠키를 읽어 서버로 넘겨주는 부품을 둔다 (11/18 배포 로그인 유지)
-if not st.session_state.get("member_key") and not st.session_state.get("_logged_out"):
+# 서버가 이미 쿠키로 로그인을 확인했으면(로컬 등) 두지 않는다 — 괜히 화면을 한 번 더 그리지 않게
+if not st.session_state.get("_logged_out") and not _member():
     cookie_bridge.mount(auth.COOKIE)
 try:
     st.navigation(list(PAGES.values()), position="hidden").run()
