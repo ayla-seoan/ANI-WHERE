@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import os
 import re
 from datetime import date
 
@@ -17,8 +19,12 @@ LONG = 30_000                               # 첫 화면은 지도·포스터를
 
 # ------------------------------------------------------------------ 도움 함수
 def open_list(page: Page, url: str) -> int:
-    """첫 화면(리스트)을 열고 카드가 다 그려질 때까지 기다린 뒤 카드 수를 돌려준다."""
+    """첫 화면(홈)을 열고 '리스트로 보기' 탭으로 가서, 카드가 다 그려질 때까지 기다린 뒤 카드 수를 돌려준다.
+    (11/18: 새로 열면 첫 화면은 늘 홈)"""
     page.goto(url + "/")
+    expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
+    wait_idle(page)
+    page.locator('[class*="st-key-gnbtab_"][class*="list"] button').click()
     expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
     wait_idle(page)
     return page.locator(CARD).count()
@@ -42,7 +48,7 @@ def sign_up(page: Page, url: str) -> None:
     f.get_by_role("button", name="가입하기").click()
     # 가입하면 메인으로 가고, 메뉴바의 '로그인' 자리에 닉네임이 보인다
     expect(page).to_have_url(re.compile(r"/$"), timeout=LONG)          # 메인으로 옮겨졌는지 먼저
-    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
+    expect(page.locator(f"{CARD}, .st-key-home").first).to_be_visible(timeout=LONG)   # 첫 화면은 홈 (11/18)
     wait_idle(page)
     expect(page.locator(".st-key-login_btn button").last).to_contain_text("테스트봇", timeout=LONG)
 
@@ -70,8 +76,23 @@ def pick_cafe(data_dir, with_links: bool = False) -> dict:
     return rows[0]
 
 
+def reveal(page: Page, eid: str) -> None:
+    """리스트는 처음 24장만 그린다 (11/18 속도). 그 카드가 보일 때까지 '더 보기' 를 누른다."""
+    for _ in range(20):
+        if page.locator(f".st-key-card_w_{eid}").count():
+            return
+        more = page.locator(".st-key-list_more_btn button")
+        if not more.count():
+            return
+        before = page.locator(CARD).count()
+        more.click()
+        expect(page.locator(CARD)).not_to_have_count(before, timeout=LONG)
+        wait_idle(page)
+
+
 def open_detail(page: Page, eid: str) -> None:
     """카드 전체를 덮는 '자세히 보기' 버튼을 눌러 상세를 연다."""
+    reveal(page, eid)
     page.locator(f".st-key-open_{eid} button").click(force=True)
     expect(page.locator(".dtitle")).to_be_visible(timeout=LONG)
     wait_idle(page)
@@ -81,8 +102,12 @@ def open_detail(page: Page, eid: str) -> None:
 def test_1_목록이_뜬다(page: Page, app_url):
     n = open_list(page, app_url)
     assert n > 0, "팝업 카드가 하나도 없습니다"
-    # 머리글 '팝업 카페 N곳' 의 숫자와 실제 카드 수가 같아야 한다
-    expect(page.get_by_text(re.compile(rf"팝업 카페\s*{n}\s*곳"))).to_be_visible()
+    # 머리글 '팝업 카페 N곳' 의 N 은 전체 수, 카드는 처음 24장까지만 그리고 나머지는 '더 보기' (11/18 속도)
+    total = int(re.search(r"팝업 카페\s*(\d+)\s*곳", page.locator(".st-key-listbar").inner_text()).group(1))
+    assert n == min(total, 24), f"처음 카드 수 {n} (전체 {total})"
+    if total > 24:
+        page.locator(".st-key-list_more_btn button").click()
+        expect(page.locator(CARD)).to_have_count(min(total, 48), timeout=LONG)
 
 
 # ------------------------------------------------------------------ 2. 검색/필터
@@ -98,6 +123,8 @@ def test_2_검색으로_좁혀지고_없으면_안내가_뜬다(page: Page, app_
     box.press("Enter")
     wait_idle(page)
     expect(page.locator(f".st-key-card_w_{target['entry_id']}")).to_be_visible(timeout=LONG)
+    # 다시 그리는 동안 예전 카드가 잠깐 같이 남아 있을 수 있다 → 수가 처음 장수 이하로 내려올 때까지 기다린다
+    page.wait_for_function(f"document.querySelectorAll('{CARD}').length <= {total}", timeout=LONG)
     found = page.locator(CARD).count()
     assert 0 < found <= total
     assert found < total or total == 1, f"검색해도 카드 수가 그대로입니다 ({found}/{total})"
@@ -154,9 +181,12 @@ def test_4_북마크하면_내_캘린더에_보인다(page: Page, app_url, data_
         # 곧 있는 팝업 목록(또는 달력 막대)에 이 팝업이 들어 있어야 한다
         expect(page.locator(".up-name", has_text=work).first).to_be_attached(timeout=LONG)
         expect(page.locator(".cal-bar", has_text=work).first).to_be_attached()
+        # 계절 배경은 내 캘린더에서만 (11/18 요청). 동작 줄이기 설정이 아닌 브라우저 기준
+        expect(page.locator("#aw-season")).to_be_attached(timeout=LONG)
     finally:
         # 상태 되돌리기: 북마크 해제
         open_list(page, app_url)
+        expect(page.locator("#aw-season")).to_have_count(0)        # 리스트에서는 떨어지는 그림이 없다
         page.locator(f".st-key-fav_on_w_{eid} button").click()
         expect(page.locator(f".st-key-fav_off_w_{eid}")).to_be_visible(timeout=LONG)
         wait_idle(page)
@@ -175,14 +205,24 @@ def test_5_리뷰에_전화번호를_넣으면_막힌다(page: Page, app_url, da
     target = pick_cafe(data_dir)
     open_detail(page, target["entry_id"])
 
-    body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
-    body.scroll_into_view_if_needed()
-    body.fill("대기 줄 길어요. 문의는 010-1234-5678 로 주세요")
-    body.press("Tab")                  # 칸을 벗어나야 값이 서버로 넘어간다
-    wait_idle(page)
-
-    expect(page.get_by_text(re.compile(r"민감한 개인정보\(.*전화번호.*\)는 입력할 수 없습니다"))).to_be_visible(timeout=LONG)
+    warn = page.get_by_text(re.compile(r"민감한 개인정보\(.*전화번호.*\)는 입력할 수 없습니다"))
+    # 상세가 막 열린 직후엔 입력칸이 다시 그려지며 넣은 글이 사라질 때가 있다 → 경고가 뜰 때까지 몇 번 다시 넣는다
+    for _ in range(3):
+        wait_idle(page)
+        body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
+        body.scroll_into_view_if_needed()
+        body.fill("대기 줄 길어요. 문의는 010-1234-5678 로 주세요")
+        body.press("Tab")                  # 칸을 벗어나야 값이 서버로 넘어간다
+        wait_idle(page)
+        try:
+            expect(warn).to_be_visible(timeout=8000)
+            break
+        except AssertionError:
+            continue
+    expect(warn).to_be_visible(timeout=LONG)
     send = page.get_by_role("button", name="리뷰 등록")
+    # 다시 그리는 동안 예전 탭의 버튼이 잠깐 같이 남아 있을 수 있다 → 하나만 남을 때까지 기다린다
+    expect(send).to_have_count(1, timeout=LONG)
     expect(send).to_be_disabled()
     send.click(force=True)             # 눌러도 저장되지 않아야 한다
     wait_idle(page)
@@ -250,3 +290,124 @@ def test_10_새로_가입하면_북마크가_비어_있다(page: Page, app_url, 
     sign_up(page, app_url)
     open_list(page, app_url)
     expect(page.locator('[class*="st-key-fav_on_w_"]')).to_have_count(0)
+
+
+# ------------------------------------------------------------------ 11. 스토리 줄 · 팝업 북마크 추가 (11/18)
+def go_home(page: Page, url: str) -> None:
+    """로고를 눌러 홈으로 ('내가 관심있는 작품' 줄은 홈에만, 11/18)."""
+    open_list(page, url)
+    page.locator(".st-key-home_brand button").click()
+    expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
+    wait_idle(page)
+
+
+def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_온다(page: Page, app_url, data_dir):
+    go_home(page, app_url)
+    expect(page.locator(".st-key-stories .story.add")).to_be_visible(timeout=LONG)
+    # 손님은 북마크가 없어 작품 없이 안내만
+    expect(page.locator(".st-key-stories .story.mark")).to_have_count(0)
+    # 손님이 '최애 추가하기' 를 누르면 로그인 화면으로
+    page.locator(".st-key-open_story_add button").click()
+    expect(page).to_have_url(re.compile(r"/login"), timeout=LONG)
+
+    sign_up(page, app_url)
+    go_home(page, app_url)
+    expect(page.locator(".st-key-stories .story-empty")).to_be_visible(timeout=LONG)     # 새 회원도 아직 없음
+    page.locator(".st-key-open_story_add button").click()
+    dlg = page.locator('[role="dialog"]')
+    expect(dlg.get_by_text("놓치고 싶지 않은 팝업을 골라 주세요")).to_be_visible(timeout=LONG)
+    # 팝업 하나 (마지막 카드)
+    cards = dlg.locator('[class*="st-key-card_fw_"]')
+    names = dlg.locator(".fwn").all_inner_texts()
+    idx = len(names) - 1
+    pick = names[idx]
+    eid = next(c.split("st-key-card_fw_")[1].split()[0] for c in [cards.nth(idx).get_attribute("class")])
+    dlg.locator(f".st-key-open_fw_{eid} button").click()
+    expect(dlg.locator(".fw-count b")).to_have_text("1", timeout=LONG)
+    if os.getenv("E2E_SHOTS"):
+        page.screenshot(path=os.path.join(os.getenv("E2E_SHOTS"), "fw_dialog.png"))
+    dlg.get_by_role("button", name="저장하기").click()
+    expect(dlg).to_have_count(0, timeout=LONG)
+    wait_idle(page)
+    expect(page.locator(".st-key-stories .story.mark .nm")).to_have_text([pick], timeout=LONG)   # 북마크한 팝업 하나 = 동그라미 하나
+    if os.getenv("E2E_SHOTS"):
+        page.locator(".st-key-stories").screenshot(path=os.path.join(os.getenv("E2E_SHOTS"), "stories.png"))
+    # 동그라미를 누르면 그 팝업 상세로 (11/18), 상세의 북마크 버튼이 '켜짐'
+    page.locator(".st-key-open_story_0 button").click()
+    expect(page.locator(".dtitle")).to_have_text(pick, timeout=LONG)
+    expect(page.locator(f".st-key-fav_on_d_{eid}")).to_be_attached(timeout=LONG)
+
+
+# ------------------------------------------------------------------ 12. 홈 (11/18)
+def test_12_로고를_누르면_홈이_열리고_랭킹_카드로_상세에_간다(page: Page, app_url):
+    open_list(page, app_url)
+    page.locator(".st-key-home_brand button").click()
+    expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
+    expect(page.locator(".story-head")).to_have_text("북마크 팝업")
+    expect(page.locator(".hbtitle").first).to_contain_text("실시간 인기 급상승 랭킹")   # 배너 안 왼쪽 위
+    for title in ("따끈따끈 신규 등록 팝업", "이번 주에 끝나는 팝업", "사전예약 팝업", "꿀팁 가득! 실시간 후기 모음"):
+        expect(page.locator(".home-h", has_text=title)).to_be_visible(timeout=LONG)
+    expect(page.locator(".st-key-gnbtab_on_home")).to_be_visible()
+    rank = page.locator(".hls-wrap .hl")
+    expect(rank.first).to_be_visible(timeout=LONG)
+    assert rank.count() <= 5
+    if rank.count() > 1:
+        # 목록 2위를 누르면 배너가 2위 장으로 (상세로 가지 않음)
+        rank.nth(1).click()
+        page.wait_for_function("(() => { const b = document.querySelector('.st-key-home_banner');"
+                               " return Math.round(b.scrollLeft / b.clientWidth) === 1; })()", timeout=LONG)
+        expect(page.locator(".aw-dots button.on")).to_have_count(1)
+        expect(page.locator(".st-key-home")).to_be_visible()
+    # 배너를 누르면 그 팝업 상세
+    page.locator('[class*="st-key-card_hb_"]').nth(1 if rank.count() > 1 else 0).click(position={"x": 120, "y": 120})
+    expect(page.locator(".dtitle")).to_be_visible(timeout=LONG)
+    # 리스트로 보기 탭으로 가면 홈이 아니다
+    page.locator('[class*="st-key-gnbtab_"][class*="list"] button').click()
+    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
+    expect(page.locator(".st-key-home")).to_have_count(0)
+
+
+# ------------------------------------------------------------------ 13. 내 리뷰: 고칠 때 사진 추가 · 내가 삭제 (11/18)
+def test_13_내_리뷰는_고칠때_사진을_붙이고_직접_지울_수_있다(page: Page, app_url, data_dir):
+    sign_up(page, app_url)
+    open_list(page, app_url)
+    target = pick_cafe(data_dir)
+    open_detail(page, target["entry_id"])
+    text = "e2e 사진 추가 확인용 리뷰"
+    send = page.get_by_role("button", name="리뷰 등록")
+    # 상세가 막 열린 직후엔 입력칸이 다시 그려지며 넣은 글이 사라질 때가 있다 → 등록 버튼이 켜질 때까지 다시 넣는다
+    for _ in range(3):
+        wait_idle(page)
+        body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
+        body.fill(text)
+        body.press("Tab")
+        wait_idle(page)
+        try:
+            expect(send).to_have_count(1, timeout=8000)      # 다시 그리는 동안 예전 탭이 잠깐 남는다
+            expect(send).to_be_enabled(timeout=8000)
+            break
+        except AssertionError:
+            continue
+    send.click()
+    expect(page.get_by_text(text).first).to_be_visible(timeout=LONG)
+    wait_idle(page)
+
+    card = page.locator('[class*="st-key-rv_more_"]').first
+    card.locator("button").first.click()
+    page.get_by_role("button", name="수정").first.click()
+    wait_idle(page)
+    page.locator('[class*="st-key-rv_edit_img_"] input[type="file"]').set_input_files(
+        str(Path(__file__).resolve().parents[2] / "static" / "default_poster.png"))
+    wait_idle(page)
+    page.get_by_role("button", name="저장").first.click()
+    expect(page.locator(".rv-pics img").first).to_be_visible(timeout=LONG)
+    wait_idle(page)
+
+    # 내가 쓴 글은 내가 지울 수 있다 (관리자가 아니어도)
+    page.locator('[class*="st-key-rv_more_"]').first.locator("button").first.click()
+    page.get_by_role("button", name="삭제", exact=True).first.click()
+    dlg = page.get_by_test_id("stDialog")           # ('⋯' 칸도 role=dialog 라서 확인 창만 집는다)
+    expect(dlg).to_be_visible(timeout=LONG)
+    dlg.get_by_role("button", name="삭제", exact=True).click()
+    wait_idle(page)
+    expect(page.get_by_text(text)).to_have_count(0, timeout=LONG)

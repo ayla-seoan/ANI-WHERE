@@ -1,0 +1,106 @@
+/* 사용자 튜토리얼 (/guide) 꾸밈 — 11/18. 내용은 docs/guide.md */
+.st-key-privacy_wrap { max-width: 980px !important; }
+.st-key-privacy_wrap img { max-width: 100%; }
+.g-hero { margin: 8px 0 26px; padding: 30px 30px 26px; border-radius: 22px; color: #fff;
+  background: linear-gradient(135deg, #14b8a6 0%, #0f8f82 60%, #0b6f66 100%); box-shadow: 0 10px 30px rgba(20,184,166,.25); }
+.g-hero-t { font-size: 2rem; font-weight: 900; letter-spacing: -.5px; }
+.g-hero-s { margin-top: 10px; font-size: 1.02rem; line-height: 1.7; opacity: .95; }
+.g-h2 { font-size: 1.45rem; font-weight: 900; margin: 6px 0 6px; display: flex; align-items: center; gap: 8px; }
+.g-h2 .mi { color: var(--accent); font-size: 1.6rem; }
+.g-h3 { font-size: 1.08rem; font-weight: 800; margin: 4px 0 8px; }
+.g-sub { color: #6B7672; font-size: .9rem; line-height: 1.7; margin: 4px 0 12px; }
+.g-lead { font-size: 1.02rem; line-height: 1.8; margin: 2px 0 14px; color: #2E3835; }
+.g-sec { margin: 34px 0 10px; padding-top: 26px; border-top: 1px solid #E6ECEA; }
+.g-img { width: 100%; border-radius: 16px; border: 1px solid #E3E9E7; box-shadow: 0 6px 22px rgba(0,0,0,.07); margin: 6px 0 16px; }
+.g-img.g-narrow { max-width: 620px; display: block; }
+/* 처음 3단계: 옆으로 넘기는 배너 */
+.g-slides { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 4px 2px 14px; margin-bottom: 26px; }
+.g-slide { flex: 0 0 78%; scroll-snap-align: start; background: #F6F8F7; border-radius: 18px; padding: 14px; box-sizing: border-box; }
+.g-slide img { width: 100%; height: 260px; object-fit: contain; object-position: center; background: #fff; border-radius: 12px; border: 1px solid #E3E9E7; }
+.g-slide-t { margin-top: 12px; font-size: 1.1rem; font-weight: 900; display: flex; align-items: center; gap: 8px; }
+.g-slide-t b { display: inline-flex; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff;
+  align-items: center; justify-content: center; font-size: .95rem; }
+.g-slide-s { margin-top: 6px; color: #4B5653; line-height: 1.7; font-size: .93rem; }
+/* 바로가기 */
+.g-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 8px 0 10px; }
+.g-nav a { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 14px; background: #fff; border: 1px solid #E3E9E7;
+  color: #26302D !important; text-decoration: none !important; font-weight: 700; font-size: .92rem; transition: all .15s ease; }
+.g-nav a:hover { border-color: var(--accent); background: #F0FBF9; }
+.g-nav a .mi { color: var(--accent-deep); font-size: 1.3rem; }
+/* 그림 + 글 나란히 */
+.g-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 22px; align-items: center; margin: 14px 0; }
+.g-row img { width: 100%; border-radius: 14px; border: 1px solid #E3E9E7; box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+.g-row img.g-small { max-width: 300px; justify-self: center; }
+.g-row p { line-height: 1.8; margin: 0 0 8px; }
+.g-steps { margin: 0; padding-left: 0 !important; list-style: none; counter-reset: s; }
+.g-steps li { counter-increment: s; position: relative; padding: 6px 0 6px 38px; line-height: 1.7; list-style: none; }
+.g-steps li::before { content: counter(s); position: absolute; left: 0; top: 6px; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent-deep); font-weight: 900; display: flex; align-items: center; justify-content: center; font-size: .85rem; }
+/* 알림 상자: 글이 칸으로 쪼개지지 않게 아이콘만 왼쪽에 띄우고, 글씨는 작게 (11/18 요청) */
+.g-tip { display: block; position: relative; background: #FFF8E6; border: 1px solid #F6E2A8; border-radius: 14px;
+  padding: 10px 14px 10px 40px; line-height: 1.7; font-size: .82rem; margin: 10px 0; color: #4B4636; }
+.g-tip .mi { position: absolute; left: 13px; top: 10px; color: #E2A100; font-size: 1.1rem; }
+.g-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 8px 0 12px; }
+.g-card { background: #F6F8F7; border-radius: 14px; padding: 14px; }
+.g-card .mi { color: var(--accent); font-size: 1.5rem; display: block; margin-bottom: 4px; }
+.g-card b { display: block; font-size: .95rem; }
+.g-card p { margin: 6px 0 0; font-size: .88rem; line-height: 1.6; color: #4B5653; }
+table.g-table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid #E3E9E7; border-radius: 14px; overflow: hidden;
+  margin: 8px 0 14px; font-size: .92rem; }
+table.g-table th { background: #EAF8F5; color: var(--accent-deep); text-align: left; padding: 10px 14px; font-weight: 800; }
+table.g-table td { padding: 10px 14px; border-top: 1px solid #EEF2F1; line-height: 1.6; vertical-align: top; }
+.g-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 800; font-size: .8rem; white-space: nowrap; }
+.g-badge.green { color: var(--accent-deep); background: var(--accent-soft); }
+.g-badge.blue { color: #2C5BC5; background: #EAF0FC; }
+.g-badge.red { color: #D93A4A; background: #FDECEE; }
+.g-badge.purple { color: #fff; background: #6C5CE7; }
+/* 알림 시점 그래프 */
+.g-timeline { background: #F6F8F7; border-radius: 14px; padding: 14px 16px; margin: 4px 0 8px; }
+.g-tl-row { display: flex; align-items: center; gap: 12px; margin: 6px 0; }
+.g-tl-lab { width: 76px; font-weight: 800; font-size: .88rem; }
+.g-tl-bar { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.g-tl-bar span { text-align: center; padding: 8px 0; border-radius: 10px; background: #D8F1EC; color: var(--accent-deep); font-weight: 800; font-size: .85rem; }
+.g-tl-bar span.hit { background: var(--accent); color: #fff; }
+.g-tl-bar span.hit.end { background: #D93A4A; }
+/* 등록 7단계 */
+.g-stepper { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 0 0 10px; }
+.g-stepper div { text-align: center; font-size: .78rem; color: #4B5653; font-weight: 700; background: #F6F8F7; border-radius: 12px; padding: 10px 4px; }
+.g-stepper b { display: flex; margin: 0 auto 6px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff;
+  align-items: center; justify-content: center; }
+/* 삭제 요청 흐름 */
+.g-flow { display: flex; align-items: center; gap: 8px; }
+.g-flow div { flex: 1; background: #F6F8F7; border-radius: 14px; padding: 14px; font-size: .9rem; line-height: 1.6; text-align: center; }
+.g-flow div .mi { display: block; color: var(--accent); font-size: 1.6rem; margin-bottom: 4px; }
+.g-flow > i.mi { color: #B3BCB9; font-style: normal; font-size: 1.4rem; }
+.g-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.g-chips span { background: #fff; border: 1px solid #DDE5E3; border-radius: 999px; padding: 4px 12px; font-size: .85rem; }
+.g-phones { display: flex; gap: 22px; justify-content: center; flex-wrap: wrap; }
+.g-phones figure { margin: 0; width: 260px; text-align: center; }
+.g-phones img { width: 100%; border-radius: 26px; border: 6px solid #26302D; box-shadow: 0 10px 26px rgba(0,0,0,.15); }
+.g-phones figcaption { margin-top: 10px; font-size: .88rem; line-height: 1.6; color: #4B5653; }
+.g-end { margin: 36px 0 10px; text-align: center; font-size: 1.05rem; padding: 18px; border-radius: 16px; background: #EAF8F5; }
+@media (max-width: 640px) {
+  .g-hero { padding: 22px 18px; }
+  .g-hero-t { font-size: 1.45rem; }
+  .g-slide { flex-basis: 88%; }
+  .g-slide img { height: 180px; }
+  .g-nav { grid-template-columns: repeat(2, 1fr); }
+  .g-row { grid-template-columns: 1fr; }
+  .g-cols { grid-template-columns: 1fr; }
+  .g-stepper { grid-template-columns: repeat(4, 1fr); }
+  .g-flow { flex-direction: column; }
+  .g-flow > i.mi { transform: rotate(90deg); }
+  .g-tl-lab { width: 60px; font-size: .8rem; }
+}
+
+/* 3단계 배너 ‹ › (_DRAG_JS 가 붙인다): 사진 가운데 높이 */
+.g-slides-wrap { position: relative; }
+.g-slides { cursor: grab; scroll-behavior: smooth; scrollbar-width: none; }
+.g-slides::-webkit-scrollbar { display: none; }
+.aw-dragging { cursor: grabbing !important; scroll-behavior: auto !important; user-select: none; }
+.aw-arrow { position: absolute; z-index: 8; width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDE5E3;
+  background: rgba(255,255,255,.95); box-shadow: 0 2px 8px rgba(0,0,0,.12); color: #26302D; font-size: 22px; line-height: 32px;
+  text-align: center; cursor: pointer; padding: 0; display: none; }
+.aw-arrow:hover { border-color: var(--accent); color: var(--accent-deep); }
+.aw-arrow.l { left: -8px; } .aw-arrow.r { right: -8px; }
+.aw-arrow.show { display: block; }

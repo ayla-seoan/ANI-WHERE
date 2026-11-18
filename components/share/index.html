@@ -18,10 +18,12 @@
   .main.open { border-color: #56C2A7; background: #E6F6F0; }
   #panel { display: none; gap: 8px; }
   #panel.open { display: flex; }
-  .msg { font-size: 12.5px; color: #2E9C82; min-height: 0; margin-top: 4px; text-align: right; }
+  .msg { font-size: 11px; line-height: 1.35; color: #2E9C82; min-height: 0; margin-top: 4px; text-align: right; }
   .msg:empty { display: none; }
-  /* 모바일에서 작품 이름 위에 겹쳐 펼칠 때: 뒤의 글자가 비치지 않게 흰 바탕 */
-  body.overlay .row { background: #fff; border-radius: 10px; }
+  /* 모바일: 작품 이름을 가리지 않게, 펼친 아이콘은 공유 버튼 아래 줄 오른쪽에 작은 흰 상자로 (11/18) */
+  body.overlay .row { flex-wrap: wrap; }
+  body.overlay #panel { order: 2; flex-basis: 100%; justify-content: flex-end; margin-top: 6px; }
+  body.overlay .msg { background: #fff; padding: 2px 4px; border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -72,12 +74,13 @@ function widenColumn(open) {
       col.style.setProperty("position", "relative", "important");
       col.style.setProperty("overflow", "visible", "important");
       const set = (k, v) => v ? f.style.setProperty(k, v, "important") : f.style.removeProperty(k);
-      // 자리는 그대로(34px) 두고 왼쪽으로만 넓힌다 — 줄 높이·위치가 흔들리지 않게
+      // 자리는 그대로(34px) 두고, 펼친 아이콘 줄은 아래로 겹쳐 띄운다 — 줄 높이·위치가 흔들리지 않게
       set("position", open ? "relative" : "");
       set("width", open ? "160px" : "");
       set("margin-left", open ? "-126px" : "");
       set("z-index", open ? "20" : "");
       document.body.classList.toggle("overlay", open);
+      overlayFit();
       return;
     }
     const w = open ? "160px" : "34px";      // 버튼 4개(34px) + 간격 3개(8px)
@@ -105,9 +108,27 @@ function link() {
   return u.href;
 }
 // 안내 문구를 띄우고, 길면 줄이 늘어난 만큼 칸 높이도 늘린다 (잘리지 않게)
+// 3초 보였다가 사라진다 (11/18 요청). 사라지면 칸 높이도 원래대로
+let sayTimer = null;
+function overlayFit() {
+  // 모바일 겹침: 칸 높이는 34 그대로(아래 내용이 밀리지 않게), iframe 만 내용 높이까지 아래로 늘린다
+  try {
+    const f = window.frameElement; if (!f) return;
+    const on = document.body.classList.contains("overlay");
+    const h = Math.max(34, document.body.scrollHeight);
+    if (on) { f.style.setProperty("height", h + "px", "important"); f.style.setProperty("margin-bottom", (34 - h) + "px", "important"); }
+    else { f.style.removeProperty("height"); f.style.removeProperty("margin-bottom"); }
+  } catch (e) {}
+}
+function fit() {
+  if (document.body.classList.contains("overlay")) { overlayFit(); return; }
+  send("streamlit:setFrameHeight", { height: Math.max(34, document.body.scrollHeight) });
+}
 function say(t) {
   document.getElementById("msg").textContent = t;
-  send("streamlit:setFrameHeight", { height: Math.max(34, document.body.scrollHeight) });
+  fit();
+  clearTimeout(sayTimer);
+  sayTimer = setTimeout(() => { document.getElementById("msg").textContent = ""; fit(); }, 3000);
 }
 
 async function copy(okText) {

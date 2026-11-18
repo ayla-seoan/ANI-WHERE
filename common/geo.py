@@ -127,6 +127,27 @@ def _kakao_key() -> str | None:
     return os.getenv("KAKAO_REST_API_KEY") or None
 
 
+def region_of(lat: float, lng: float, timeout: float = 4.0) -> str:
+    """좌표 → '서울 마포구 서교동' (카카오 로컬 좌표→행정구역). 키가 없거나 실패하면 빈 문자열 (11/18 물어보기 '내 위치')."""
+    key = _kakao_key()
+    if not key:
+        return ""
+    try:
+        import requests
+        res = requests.get("https://dapi.kakao.com/v2/local/geo/coord2regioncode.json",
+                           headers={"Authorization": f"KakaoAK {key}"}, params={"x": lng, "y": lat}, timeout=timeout)
+        docs = res.json().get("documents") or []
+    except Exception:
+        return ""
+    doc = next((d for d in docs if d.get("region_type") == "H"), docs[0] if docs else None)
+    if not doc:
+        return ""
+    city = str(doc.get("region_1depth_name") or "")
+    city = {"서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구", "인천광역시": "인천", "광주광역시": "광주",
+            "대전광역시": "대전", "울산광역시": "울산", "세종특별자치시": "세종"}.get(city, city)
+    return " ".join(x for x in (city, doc.get("region_2depth_name"), doc.get("region_3depth_name")) if x)
+
+
 def _kakao(address: str, key: str) -> GeoResult:
     address = guard.mask(address)
     try:

@@ -239,7 +239,17 @@ RULES = {
     "notice": {"name": "관리자 공지", "when": "관리자가 공지를 추가·수정했을 때 ({days}일간 종에 보임)", "who": "모든 회원",
                "where": "종 알림 · 내 캘린더 알림 내역", "days": 14, "max_items": 5, "why": "ANI:WHERE 운영 공지예요"},
 }
-KIND_RULE = {"공지": "notice", "삭제 승인": "del_ok", "삭제 거부": "del_no"}
+RULES["rv_del"] = {"name": "리뷰 삭제 (관리자)", "when": "관리자가 내 리뷰를 사유를 적어 삭제했을 때 (사유 포함)", "who": "리뷰를 쓴 회원",
+                   "where": "종 알림 · 내 캘린더 알림 내역", "days": None, "max_items": None,
+                   "why": "내가 쓴 리뷰를 관리자가 삭제했어요"}       # 11/18 요청
+KIND_RULE = {"공지": "notice", "삭제 승인": "del_ok", "삭제 거부": "del_no", "리뷰 삭제": "rv_del"}
+
+
+def review_removed(notice_store, member_key: str, preview: str, reason: str) -> dict:
+    """관리자가 리뷰를 지웠을 때 쓴 회원에게 알림 (사유 포함, 11/18 요청)."""
+    reason = " ".join(str(reason or "").split())
+    return send(notice_store, member_key, "리뷰 삭제", "작성하신 리뷰가 삭제되었어요",
+                f"리뷰 '{preview}' 이(가) 관리자에 의해 삭제되었어요. 사유: {reason or '(사유 없음)'}")
 
 
 def rule_settings(rule_rows: list[dict]) -> dict[str, dict]:
