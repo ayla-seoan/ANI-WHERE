@@ -133,7 +133,7 @@ def test_2_검색으로_좁혀지고_없으면_안내가_뜬다(page: Page, app_
     box.press("Enter")
     wait_idle(page)
     expect(page.get_by_text("이 조건엔 행사가 없어요")).to_be_visible(timeout=LONG)
-    assert page.locator(CARD).count() == 0
+    expect(page.locator(CARD)).to_have_count(0, timeout=LONG)    # 예전 카드가 잠깐 남아 있을 수 있어 사라질 때까지 기다림
     # 빈 표(dataframe)가 아니라 안내 문구여야 한다
     assert page.locator('[data-testid="stDataFrame"], [data-testid="stTable"]').count() == 0
     # 조건 완화 버튼: '검색어 지우기 (N곳)' 을 누르면 다시 카드가 보인다 (11/18 안정성)
@@ -407,7 +407,8 @@ def test_13_내_리뷰는_고칠때_사진을_붙이고_직접_지울_수_있다
     page.get_by_role("button", name="삭제", exact=True).first.click()
     dlg = page.get_by_test_id("stDialog")           # ('⋯' 칸도 role=dialog 라서 확인 창만 집는다)
     expect(dlg).to_be_visible(timeout=LONG)
-    dlg.get_by_role("button", name="삭제", exact=True).click()
+    page.wait_for_timeout(800)                       # 창이 뜨는 동안의 움직임(애니메이션)이 끝난 뒤 누른다 (부하가 크면 누름이 빗나갔음)
+    dlg.get_by_role("button", name="삭제", exact=True).click(timeout=LONG)
     wait_idle(page)
     expect(page.get_by_text(text)).to_have_count(0, timeout=LONG)
 
