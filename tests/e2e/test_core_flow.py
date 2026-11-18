@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import date
 
@@ -272,3 +273,40 @@ def test_10_새로_가입하면_북마크가_비어_있다(page: Page, app_url, 
     sign_up(page, app_url)
     open_list(page, app_url)
     expect(page.locator('[class*="st-key-fav_on_w_"]')).to_have_count(0)
+
+
+# ------------------------------------------------------------------ 11. 스토리 줄 · 최애 추가 (11/18)
+def test_11_최애를_고르면_스토리_맨_앞에_온다(page: Page, app_url, data_dir):
+    open_list(page, app_url)
+    expect(page.locator(".st-key-stories .story").first).to_be_visible(timeout=LONG)
+    # 손님이 '최애 추가' 를 누르면 로그인 화면으로
+    page.locator(".st-key-open_story_add button").click()
+    expect(page).to_have_url(re.compile(r"/login"), timeout=LONG)
+
+    sign_up(page, app_url)
+    open_list(page, app_url)
+    first_before = page.locator(".st-key-stories .story .nm").first.inner_text()
+    page.locator(".st-key-open_story_add button").click()
+    dlg = page.locator('[role="dialog"]')
+    expect(dlg.get_by_text("놓치고 싶지 않은 작품을 골라 주세요")).to_be_visible(timeout=LONG)
+    # 맨 앞이 아닌 작품 하나를 고른다 (마지막 카드)
+    names = dlg.locator(".fwn").all_inner_texts()
+    pick = next(n for n in reversed(names) if n != first_before)
+    idx = names.index(pick)
+    dlg.locator(f".st-key-open_fw_{idx} button").click()
+    expect(dlg.locator(".fw-count b")).to_have_text("1", timeout=LONG)
+    if os.getenv("E2E_SHOTS"):
+        page.screenshot(path=os.path.join(os.getenv("E2E_SHOTS"), "fw_dialog.png"))
+    dlg.get_by_role("button", name="저장하기").click()
+    expect(dlg).to_have_count(0, timeout=LONG)
+    wait_idle(page)
+    expect(page.locator(".st-key-stories .story.fav .nm").first).to_have_text(pick, timeout=LONG)
+    if os.getenv("E2E_SHOTS"):
+        page.locator(".st-key-stories").screenshot(path=os.path.join(os.getenv("E2E_SHOTS"), "stories.png"))
+    # 스토리를 누르면 그 작품 팝업만 보인다
+    page.locator(".st-key-open_story_0 button").click()
+    expect(page.locator(".st-key-stories .story.on .nm")).to_have_text(pick, timeout=LONG)
+    wait_idle(page)
+    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
+    works = page.locator(f"{CARD} .pcard .t").all_inner_texts()
+    assert works and all(pick in w or w in pick for w in works), works

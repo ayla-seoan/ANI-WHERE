@@ -34,6 +34,7 @@ from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo,
                     kakao_postcode, mycal, notice, notion_sync, review, share, stats)
 from common import blog     # 블로그 후기 (네이버 블로그 검색 · API HUB)
 from common import season   # 계절 배경 그림 (내 캘린더, 11/18)
+from common import favwork  # 내 최애 작품 (스토리 줄, 11/18)
 from common import links as links_check   # 참고 웹사이트 확인 (11/18 안정성)
 from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
@@ -378,6 +379,7 @@ alert_rules = Storage(worksheet="alert_rules", headers=admin.RULE_HEADERS)      
 api_usage = Storage(worksheet="api_usage", headers=blog.USAGE_HEADERS)            # 블로그 검색 호출 수 (한 달 한도)
 notices_store = Storage(worksheet="notices", headers=admin.NOTICE_HEADERS)       # 회원에게 가는 알림·공지
 visits = Storage(worksheet="visits", headers=admin.VISIT_HEADERS)                # 회원이 접속한 날
+fav_works = Storage(worksheet="fav_works", headers=favwork.HEADERS)              # 내 최애 작품 (011, 11/18)
 # 실행 번호: 찜 정보를 한 번 그릴 때 한 번만 읽고, 다음 실행에서는 새로 읽게 한다
 st.session_state["_run"] = st.session_state.get("_run", 0) + 1
 
@@ -959,7 +961,7 @@ def _detail_head_html(current: dict) -> tuple[str, str, str]:
 
 
 
-SIMILAR_MAX = 6
+SIMILAR_MAX = 8
 
 
 def _work_key(text) -> str:
@@ -993,29 +995,84 @@ def similar_popups(current: dict, df: pd.DataFrame, limit: int = SIMILAR_MAX) ->
     return [t[3] for t in out[:limit]]
 
 
-def render_similar(current: dict, df: pd.DataFrame) -> None:
-    """상세 아래 '비슷한 팝업' 포스터 줄. 없으면 칸을 그리지 않는다."""
-    rows = similar_popups(current, df)
-    if not rows:
+def popular_popups(current: dict, df: pd.DataFrame, limit: int = 8) -> list:
+    """다른 사람들이 많이 본 팝업: 북마크 수 × 2 + 리뷰·답글 수 ('인기순' 정렬과 같은 바탕, 화면 조회 수는 따로 세지 않음).
+    끝난 팝업 · 지금 팝업은 빼고, 점수가 0 인 곳도 뺀다."""
+    me = str(current["entry_id"])
+    favc = favorite.counts(favs.current_rows())
+    act = review.counts(reviews.current_rows())
+    out = []
+    for _, r in df.iterrows():
+        eid = str(r["entry_id"])
+        if eid == me or _status(r)[2] == 2:
+            continue
+        score = favc.get(eid, 0) * 2 + act.get(eid, 0)
+        if score:
+            out.append((-score, str(r.get("start_date") or ""), r))
+    out.sort(key=lambda t: t[:2])
+    return [t[2] for t in out[:limit]]
+
+
+def nearby_popups(current: dict, df: pd.DataFrame, limit: int = 8, max_km: float = 30.0) -> list[tuple]:
+    """이 근처 다른 팝업: 지금 팝업 자리에서 가까운 순 (30km 안, 끝난 것 빼고). [(행, km)]."""
+    try:
+        here = (float(current.get("lat")), float(current.get("lng")))
+    except (TypeError, ValueError):
+        return []
+    if any(pd.isna(x) for x in here):
+        return []
+    me = str(current["entry_id"])
+    out = []
+    for _, r in df.dropna(subset=["lat", "lng"]).iterrows():
+        if str(r["entry_id"]) == me or _status(r)[2] == 2:
+            continue
+        km = my_place._km(here, (float(r["lat"]), float(r["lng"])))
+        if km <= max_km:
+            out.append((km, r))
+    out.sort(key=lambda t: t[0])
+    return [(r, km) for km, r in out[:limit]]
+
+
+def _km_text(km: float) -> str:
+    if km < 0.05:
+        return "같은 건물"            # 좌표가 같은 곳은 '거리 0m' 대신
+    return "거리 " + (f"{round(km * 1000)}m" if km < 1 else f"{km:.1f}km")
+
+
+def _poster_row(sec: str, title: str, icon: str, items: list[tuple]) -> None:
+    """상세 아래 포스터 줄 하나. items = [(행, 제목, 둘째 줄)]. 옆으로 넘겨 본다."""
+    if not items:
         return
-    with st.container(key="similar"):
-        st.markdown('<div class="sim-head">비슷한 팝업</div>', unsafe_allow_html=True)
-        with st.container(horizontal=True, key="sim_grid"):
-            for r in rows:
+    with st.container(key=f"simsec_{sec}"):
+        st.markdown(f'<div class="sim-head">{_mi(icon)}{escape(title)}</div>', unsafe_allow_html=True)
+        with st.container(horizontal=True, key=f"sim_row_{sec}"):
+            for r, name, meta in items:
                 eid = str(r["entry_id"])
                 label, color, _ = _status(r)
-                area = geo.area_name(str(r.get("address") or ""))
-                meta = " · ".join(x for x in (area, _period(r, lambda d: f"{d:%m.%d}", show_raw=False)) if x)
-                with st.container(key=f"card_sim_{eid}"):
+                with st.container(key=f"card_sim_{sec}_{eid}"):
                     st.markdown(
                         f'<div class="simc"><div class="simp" style="background-image:url(\'{_poster_url(r.get("images"))}\'),'
-                        f' url(\'{images.DEFAULT_POSTER_URL}\')"><span class="sims {color}">{escape(label)}</span></div>'
-                        f'<div class="simt">{escape(str(r.get("cafe_name") or r.get("work") or ""))}</div>'
-                        f'<div class="simm">{escape(meta)}</div></div>', unsafe_allow_html=True)
-                    if st.button("자세히 보기", key=f"open_sim_{eid}", width="stretch"):
+                        f' url(\'{images.DEFAULT_POSTER_URL}\')"><span class="sims {color}">{escape(label)}</span>'
+                        f'<span class="simr">{_area_badge(r.get("address"), "area")}</span></div>'
+                        f'<div class="simt">{escape(name)}</div>'
+                        f'<div class="simm">{escape(_period(r, lambda d: f"{d:%m.%d}", show_raw=False))}</div>'
+                        + (f'<div class="simm">{escape(meta)}</div>' if meta else "") + '</div>', unsafe_allow_html=True)
+                    if st.button("자세히 보기", key=f"open_sim_{sec}_{eid}", width="stretch"):
                         st.session_state["selected"] = eid
                         st.session_state["scroll_top"] = True
                         st.rerun()
+
+
+def render_similar(current: dict, df: pd.DataFrame) -> None:
+    """상세 아래 추천 세 줄 (11/18 요청): 비슷한 팝업 · 다른 사람들이 많이 본 팝업 · 이 근처 다른 팝업. 비어 있는 줄은 그리지 않는다."""
+    with st.container(key="similar"):
+        _poster_row("same", "비슷한 팝업", "auto_awesome",
+                    [(r, str(r.get("cafe_name") or r.get("work") or ""), "") for r in similar_popups(current, df)])
+        _poster_row("pop", "다른 사람들이 많이 본 팝업", "local_fire_department",
+                    [(r, str(r.get("work") or ""), str(r.get("cafe_name") or "")) for r in popular_popups(current, df)])
+        _poster_row("near", "이 근처 다른 팝업", "location_on",
+                    [(r, str(r.get("work") or ""), f'{r.get("cafe_name") or ""} · {_km_text(km)}'.strip(" ·"))
+                     for r, km in nearby_popups(current, df)])
 
 
 def render_detail_tabs(current: dict) -> None:
@@ -2010,6 +2067,199 @@ def _view_switch(wide: bool) -> None:
 LIST_PAGE = 24         # 리스트 보기에서 처음 보여 줄 카드 수 (4열 × 6줄). '더 보기' 로 24장씩 더
 
 
+# ================================================================ 스토리 줄 (11/18 요청)
+def _my_fav_works() -> list[str]:
+    if not _member():
+        return []
+    try:
+        return favwork.mine(fav_works.current_rows(), _fav_user())
+    except Exception:
+        return []
+
+
+def _live_rows(df: pd.DataFrame) -> list[dict]:
+    """진행 중·오픈 예정 팝업만 (끝난 건 뺌)."""
+    return [r for r in df.to_dict("records") if _status(r)[2] < 2]
+
+
+def _work_posters(rows: list[dict]) -> dict[str, str]:
+    """작품별 대표 포스터: 진행 중인 팝업의 포스터가 먼저, 없으면 예정 팝업 것."""
+    out: dict[str, str] = {}
+    for r in sorted(rows, key=lambda r: _status(r)[2]):
+        w = str(r.get("work") or "").strip()
+        if w and w not in out and images.poster(r.get("images")):
+            out[w] = _poster_url(r.get("images"))
+    return out
+
+
+def _story_pick(work: str) -> None:
+    """스토리를 누르면 그 작품만 보이게 (작품 필터). 같은 걸 다시 누르면 풀린다."""
+    ss = st.session_state
+    ss["f_work"] = "전체" if ss.get("f_work") == work else work
+    ss["selected"] = None
+
+
+def _story_add() -> None:
+    if not _member():
+        _need_login("최애 작품은 로그인하면 고를 수 있어요.")
+        return
+    st.session_state["_fw_open"] = True
+
+
+def render_stories(df: pd.DataFrame) -> None:
+    """리스트 보기 맨 위: 인스타 스토리처럼 동그란 작품 포스터 줄. 내 최애가 맨 앞, 그다음 팝업 많은 작품.
+    숫자는 지금 진행 중·예정인 팝업 수. 맨 앞 '최애 추가' 를 누르면 작품 고르기 창이 열린다."""
+    rows = _live_rows(df)
+    favs = _my_fav_works()
+    items = favwork.story_works(rows, favs)
+    if not items:
+        return
+    posters = _work_posters(rows)
+    picked = st.session_state.get("f_work", "전체")
+    with st.container(key="stories"):
+        st.markdown('<div class="story-head">요즘 일정 많은 작품</div>', unsafe_allow_html=True)
+        with st.container(horizontal=True, key="story_row"):
+            # 맨 앞에 두어 줄이 길어도 늘 보이게 (인스타 '내 스토리' 자리)
+            with st.container(key="card_story_add"):
+                st.markdown(f'<div class="story add"><div class="ring">{_mi("add")}</div><div class="nm">최애 추가</div></div>',
+                            unsafe_allow_html=True)
+                st.button("최애 추가", key="open_story_add", on_click=_story_add)
+            for i, (w, n, fav) in enumerate(items):
+                cls = "story" + (" fav" if fav else "") + (" on" if picked == w else "")
+                with st.container(key=f"card_story_{i}"):
+                    st.markdown(
+                        f'<div class="{cls}"><div class="ring"><div class="pic" style="background-image:url(\'{posters.get(w, images.DEFAULT_POSTER_URL)}\')"></div>'
+                        + (f'<span class="cnt">{n}</span>' if n else "")
+                        + (f'<span class="star">{_mi("favorite")}</span>' if fav else "")
+                        + f'</div><div class="nm">{escape(w)}</div></div>', unsafe_allow_html=True)
+                    st.button("보기", key=f"open_story_{i}", on_click=_story_pick, args=(w,))
+    if st.session_state.pop("_fw_open", False):
+        fav_works_dialog(df)
+
+
+@st.dialog("내 최애 고르기", width="large")
+def fav_works_dialog(df: pd.DataFrame) -> None:
+    """dueple 온보딩처럼: 검색칸 + 포스터 격자에서 작품을 눌러 고르고, 저장하면 스토리 줄 맨 앞에 온다."""
+    ss = st.session_state
+    before = _my_fav_works()
+    if "_fw_pick" not in ss:
+        ss["_fw_pick"] = list(before)
+    pick: list[str] = ss["_fw_pick"]
+    rows = _live_rows(df)
+    posters = _work_posters(rows)
+    count: dict[str, int] = {}
+    for r in rows:
+        w = str(r.get("work") or "").strip()
+        if w:
+            count[w] = count.get(w, 0) + 1
+    st.markdown('<div class="fw-title">놓치고 싶지 않은 작품을 골라 주세요</div>'
+                '<div class="fw-sub">고른 작품은 리스트 맨 앞 스토리에 보여요.</div>'
+                f'<div class="fw-count"><b>{len(pick)}</b>/{favwork.MAX} 선택</div>', unsafe_allow_html=True)
+    q = st.text_input("작품 검색", key="fw_q", placeholder="좋아하는 작품 이름 검색", label_visibility="collapsed",
+                      icon=":material/search:")
+    key = _work_key(q)
+    works = sorted(count, key=lambda w: (w not in pick, -count[w], w))
+    if key:
+        works = [w for w in works if key in _work_key(w)]
+    if not works:
+        st.markdown('<div class="ntf-empty" style="padding:18px 2px">찾는 작품의 팝업이 아직 없어요. 다른 이름으로 검색해 보세요.</div>',
+                    unsafe_allow_html=True)
+
+    def toggle(w: str) -> None:
+        cur = ss["_fw_pick"]
+        if w in cur:
+            cur.remove(w)
+        elif len(cur) < favwork.MAX:
+            cur.append(w)
+        else:
+            ss["_fw_full"] = True
+
+    if ss.pop("_fw_full", False):
+        st.caption(f":red[최애는 {favwork.MAX}개까지 고를 수 있어요. 하나를 빼고 골라 주세요.]")
+    with st.container(horizontal=True, key="fw_grid"):
+        for i, w in enumerate(works[:60]):
+            on = w in pick
+            with st.container(key=f"card_fw_{i}"):
+                st.markdown(
+                    f'<div class="fwc{" on" if on else ""}"><div class="fwp" style="background-image:url(\'{posters.get(w, images.DEFAULT_POSTER_URL)}\')">'
+                    + (f'<span class="fwchk">{_mi("check")}</span>' if on else "")
+                    + f'</div><div class="fwn">{escape(w)}</div><div class="fwm">팝업 {count[w]}곳</div></div>',
+                    unsafe_allow_html=True)
+                st.button("고르기", key=f"open_fw_{i}", on_click=toggle, args=(w,))
+    with st.container(horizontal=True, key="fw_foot"):
+        if st.button("다음에 할게요", key="fw_skip", type="tertiary"):
+            ss.pop("_fw_pick", None)
+            st.rerun()
+        if st.button("저장하기", key="fw_save", type="primary", icon=":material/check_circle:"):
+            try:
+                favwork.save(fav_works, _fav_user(), before, pick)
+            except StorageWriteError:
+                st.error("저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.", icon=":material/error:")
+                return
+            ss.pop("_fw_pick", None)
+            ss["flash"] = (f"최애 {len(pick)}개를 저장했어요." if pick else "최애를 모두 뺐어요.", ":material/favorite:")
+            st.rerun()
+
+
+STORY_CSS = """
+<style>
+.st-key-stories { margin: 2px 0 14px; }
+.story-head { font-size: 1.1rem; font-weight: 800; margin-bottom: 2px; }
+.st-key-story_row { flex-wrap: nowrap !important; overflow-x: auto; gap: 14px !important; padding: 6px 2px 8px;
+  scrollbar-width: none; }
+.st-key-story_row::-webkit-scrollbar { display: none; }
+.st-key-story_row > div { flex: 0 0 84px !important; width: 84px !important; min-width: 84px !important; }
+.story { display: flex; flex-direction: column; align-items: center; padding-bottom: 16px; }
+.story .ring { position: relative; width: 76px; height: 76px; border-radius: 50%; padding: 3px; box-sizing: border-box;
+  background: conic-gradient(from 210deg, #14b8a6, #7FE0CF, #FFD66B, #14b8a6); transition: transform .18s ease; }
+.story.fav .ring { background: conic-gradient(from 210deg, #FF7A8A, #FFB86B, #FFD66B, #FF7A8A); }
+.story .pic { width: 100%; height: 100%; border-radius: 50%; border: 3px solid #fff; box-sizing: border-box;
+  background-size: cover; background-position: center; background-color: #EEF3F1; }
+.story .cnt { position: absolute; right: -2px; bottom: -2px; min-width: 24px; height: 24px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 999px; background: var(--accent-deep); color: #fff; font-size: .78rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
+.story .star { position: absolute; left: -2px; top: -2px; width: 22px; height: 22px; border-radius: 50%; background: #fff;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+.story .star .mi { font-size: 14px; color: #FF6B7D; font-variation-settings: 'FILL' 1; }
+.story .nm { margin-top: 6px; width: 84px; text-align: center; font-size: .8rem; font-weight: 700; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.story.on .nm { color: var(--accent-deep); }
+.story.on .ring { box-shadow: 0 0 0 3px var(--accent-soft); }
+[class*="st-key-card_story_"]:hover .ring { transform: scale(.95); }
+.story.add .ring { background: none; border: 2.5px dashed #D3DAD8; display: flex; align-items: center; justify-content: center; }
+.story.add .ring .mi { font-size: 34px; color: var(--accent-deep); }
+/* 최애 고르기 창 */
+.fw-title { font-size: 1.25rem; font-weight: 800; text-align: center; }
+.fw-sub { text-align: center; color: #7B8784; font-size: .88rem; margin-top: 4px; }
+.fw-count { margin: 10px auto 2px; width: fit-content; padding: 4px 14px; border: 1px solid #DDE5E3; border-radius: 10px;
+  font-size: .85rem; color: #7B8784; }
+.fw-count b { color: var(--accent-deep); font-size: 1rem; margin-right: 2px; }
+.st-key-fw_grid { flex-wrap: wrap !important; gap: 12px !important; max-height: 52vh; overflow-y: auto; padding: 2px; }
+.st-key-fw_grid > div { flex: 0 0 calc((100% - 48px) / 5) !important; width: calc((100% - 48px) / 5) !important; min-width: 0 !important; }
+.fwc { padding-bottom: 16px; }
+.fwc .fwp { position: relative; aspect-ratio: 3/4; border-radius: 10px; background-size: cover; background-position: center;
+  background-color: #EEF3F1; border: 3px solid transparent; box-sizing: border-box; }
+.fwc.on .fwp { border-color: var(--accent); }
+.fwc.on .fwp::after { content: ""; position: absolute; inset: 0; background: rgba(20,184,166,.18); border-radius: 7px; }
+.fwc .fwchk { position: absolute; right: 6px; top: 6px; z-index: 1; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); display: flex; align-items: center; justify-content: center; }
+.fwc .fwchk .mi { color: #fff; font-size: 17px; }
+.fwc .fwn { margin-top: 6px; font-size: .85rem; font-weight: 800; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden; }
+.fwc .fwm { font-size: .74rem; color: #7B8784; margin-top: 2px; }
+.st-key-fw_foot { justify-content: space-between !important; margin-top: 6px; }
+.st-key-fw_foot button[kind="primary"] { padding: 0 22px; }
+@media (max-width: 640px) {
+  .st-key-story_row { gap: 10px !important; }
+  .st-key-story_row > div { flex-basis: 70px !important; width: 70px !important; min-width: 70px !important; }
+  .story .ring { width: 64px; height: 64px; }
+  .story .nm { width: 70px; font-size: .74rem; }
+  .st-key-fw_grid > div { flex-basis: calc((100% - 24px) / 3) !important; width: calc((100% - 24px) / 3) !important; }
+}
+</style>
+"""
+
+
 def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | None = None,
                 fcond: dict | None = None) -> None:
     """카페 카드 목록. wide 면 지도 없이 화면 전체에 4열로 깐다."""
@@ -2115,24 +2365,29 @@ LIST_CSS = f"""
 [class*="st-key-card_w_"] [class*="st-key-fav_"] {{ top:auto; bottom:16px; right:20px; }}
 [class*="st-key-card_w_"] .pcard .info {{ padding-right:52px; }}
 [class*="st-key-card_s_"] [class*="st-key-fav_"] {{ top:12px; right:12px; }}
-/* 상세 아래 '비슷한 팝업' (11/18): PC 6칸 한 줄, 모바일 3칸 */
+/* 상세 아래 추천 줄 (11/18): 비슷한 팝업 · 많이 본 팝업 · 이 근처. 옆으로 넘겨 본다 */
 .st-key-similar {{ margin-top:28px; border-top:1px solid #E6ECEA; padding-top:20px; }}
-.sim-head {{ font-size:1.25rem; font-weight:800; margin-bottom:4px; }}
-.st-key-sim_grid {{ flex-wrap:wrap !important; gap:14px !important; align-items:flex-start !important; }}
-.st-key-sim_grid > div {{ flex:0 0 calc((100% - 70px) / 6) !important; width:calc((100% - 70px) / 6) !important; min-width:0 !important; }}
-.simc {{ padding-bottom:18px; }}   /* 마크다운 칸의 아래 음수 여백(-1rem)에 날짜 줄이 잘리지 않게 */
+[class*="st-key-simsec_"] {{ margin-bottom:10px; }}
+.sim-head {{ font-size:1.2rem; font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:6px; }}
+.sim-head .mi {{ color:var(--accent); font-size:1.35rem; }}
+[class*="st-key-sim_row_"] {{ flex-wrap:nowrap !important; overflow-x:auto; gap:14px !important; align-items:flex-start !important;
+  padding-bottom:4px; scrollbar-width:thin; }}
+[class*="st-key-sim_row_"] > div {{ flex:0 0 200px !important; width:200px !important; min-width:200px !important; }}
+.simc {{ padding-bottom:18px; }}   /* 마크다운 칸의 아래 음수 여백(-1rem)에 글 줄이 잘리지 않게 */
 .simc .simp {{ position:relative; aspect-ratio:3/4; border-radius:12px; background-size:cover; background-position:center;
   background-color:#EEF3F1; transition:transform .18s ease; }}
 [class*="st-key-card_sim_"]:hover .simp {{ transform:scale(.965); }}
 .simc .sims {{ position:absolute; top:8px; left:8px; font-size:.72rem; font-weight:800; padding:2px 8px; border-radius:999px;
   background:#fff; color:var(--accent-deep); }}
+.simc .simr {{ position:absolute; top:8px; right:8px; }}   /* 오른쪽 위 지역 배지 (11/18 요청) */
+.simc .simr .area {{ display:inline-block; font-size:.72rem; font-weight:800; padding:2px 8px; border-radius:999px; }}
 .simc .sims.blue {{ color:#2C5BC5; }} .simc .sims.red {{ color:#D93A4A; }}
-.simc .simt {{ margin-top:8px; font-weight:800; font-size:.95rem; line-height:1.3; display:-webkit-box;
-  -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }}
-.simc .simm {{ margin-top:3px; font-size:.8rem; color:#7B8784; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+.simc .simt {{ margin-top:8px; font-weight:800; font-size:.95rem; line-height:1.3; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis; }}
+.simc .simm {{ margin-top:2px; font-size:.8rem; color:#7B8784; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
 @media (max-width: 640px) {{
-  .st-key-sim_grid {{ gap:10px !important; }}
-  .st-key-sim_grid > div {{ flex:0 0 calc((100% - 20px) / 3) !important; width:calc((100% - 20px) / 3) !important; }}
+  [class*="st-key-sim_row_"] {{ gap:10px !important; }}
+  [class*="st-key-sim_row_"] > div {{ flex-basis:140px !important; width:140px !important; min-width:140px !important; }}
   .simc .simt {{ font-size:.85rem; }} .simc .simm {{ font-size:.72rem; }}
 }}
 /* 카드 작품 이름 오른쪽의 진행 상태 배지 */
@@ -4058,7 +4313,7 @@ def render_box_view(tab: str) -> None:
 
 
 def page_map() -> None:
-    st.markdown(GLOBAL_CSS + LIST_CSS, unsafe_allow_html=True)
+    st.markdown(GLOBAL_CSS + LIST_CSS + STORY_CSS, unsafe_allow_html=True)
     ss = st.session_state
     _no_translate(season_on=bool(ss.get("cal_view") and not ss.get("selected") and _member()))   # 계절 배경은 내 캘린더에서만
     _history_guard(on_main=True)
@@ -4267,6 +4522,7 @@ def page_map() -> None:
         # 리스트 전체보기: 왼쪽 목록 + 오른쪽 '팝업에게 물어보기' 대화창 (PC). 모바일은 대화창을 숨기고 위 '물어보기' 버튼으로
         lst, chat = st.columns([3.3, 1.165], gap="medium")   # 물어보기 폭 = 지도보기와 같게 (11/18 요청)
         with lst:
+            render_stories(df)      # '요즘 일정 많은 작품' 스토리 줄 + 최애 추가 (11/18 요청)
             render_list(view, wide=True, df_all=df, fcond=fcond)
         with chat, st.container(key="ask_panel"):
             render_ask_panel()
