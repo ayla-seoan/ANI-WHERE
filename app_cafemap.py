@@ -1848,7 +1848,7 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
     (누르면 검색 필터 판이 열린다. 걸린 조건 수가 있으면 아이콘 옆에 숫자). 둘이 함께 화면 위에 붙는다 (_pin_view_icon)."""
     if not wide:
         # 모바일 지도보기: 필터 버튼을 리스트로 보기와 같은 높이에 두고, 비는 자리에 '마지막 업데이트' 줄을 왼쪽에 붙인다 (11/18 요청)
-        st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: var(--aw-map-fgap, 44px) !important; }"
+        st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: var(--aw-map-fgap, 21px) !important; }"
                     " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }</style>",
                     unsafe_allow_html=True)
     tools = st.container(horizontal=True, key="view_tools")
