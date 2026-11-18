@@ -1673,15 +1673,18 @@ def _poster_url(value) -> str:
 
 
 def _chips(r, full: bool = False) -> str:
-    """이벤트 정보는 민트로 채운 칩, 굿즈는 민트 테두리 칩. full 이 아니면 몇 개만 보이고 나머지는 +N 으로 줄인다."""
+    """이벤트 정보는 민트로 채운 칩, 굿즈는 민트 테두리 칩. full 이 아니면 몇 개만 보이고 나머지는 +N 으로 줄인다.
+    카드(full 아님)에서는 칩 글자가 12자를 넘으면 '…' 로 줄인다 — 카드 밖으로 잘려 보였다 (11/18)."""
+    cut = (lambda t: t if full or len(t) <= 12 else t[:11].rstrip() + "…")
     all_tags, goods = _split(r.get("tags") or ""), _split(r.get("goods") or "")
     flags = [t for t in all_tags if t in (pdates.TAG_ALWAYS, pdates.TAG_CHECK)]
     all_tags = [t for t in all_tags if t not in flags]
     tags = [f'<span class="chip {"warn" if t == pdates.TAG_CHECK else "tag"}">{escape(t)}</span>' for t in flags] if full else []
-    tags += [f'<span class="chip tag">{escape(t)}</span>' for t in (all_tags if full else all_tags[:2])]
-    shown = [f'<span class="chip">{escape(g)}</span>' for g in (goods if full else goods[:3])]
-    more = [f'<span class="chip">+{len(goods) - 3}</span>'] if not full and len(goods) > 3 else []
-    return "".join(tags + shown + more)
+    tags += [f'<span class="chip tag">{escape(cut(t))}</span>' for t in (all_tags if full else all_tags[:2])]
+    shown = [f'<span class="chip">{escape(cut(g))}</span>' for g in (goods if full else goods[:3])]
+    if not full:               # 카드 위에는 첫 번째 칩 하나만 (11/18 요청). 전부는 커서 올림·상세에서
+        return "".join((tags + shown)[:1])
+    return "".join(tags + shown)
 
 
 def _card_more(r) -> str:
@@ -2094,7 +2097,10 @@ iframe[src*="kakao_map"] {{
   .st-key-wide_grid .pcard .more ul {{ padding-left: .9em; }}
   .st-key-wide_grid .pcard .more .chip {{ font-size: 9.5px; padding: 1px 6px; }}
   .st-key-wide_grid .pcard .d-short {{ display: inline; }}
-  .st-key-wide_grid .pcard .chips {{ display: none; }}
+  /* 모바일도 이벤트·굿즈 칩을 한 줄로 작게 (11/18 요청: PC 처럼 보이게) */
+  .st-key-wide_grid .pcard .chips {{ display: flex; height: 19px; gap: 3px; margin: 3px 0 0; }}
+  .st-key-wide_grid .pcard .chips .chip {{ font-size: 9.5px; padding: 1px 6px; line-height: 1.5; }}
+  .st-key-wide_grid .pcard .info {{ height: 108px; }}
   .st-key-wide_grid .pcard .area {{ top: 6px; left: 6px; font-size: 10.5px; padding: 2px 6px; }}
   .st-key-wide_grid .pcard .state {{ top: 6px; right: 6px; font-size: 10.5px; padding: 2px 7px; }}
   .st-key-wide_grid [class*="st-key-fav_"] {{ top: auto !important; bottom: -6px !important; right: 10px !important; }}   /* 기간 줄과 같은 높이로 (11/18) */
@@ -2220,6 +2226,8 @@ iframe[src*="kakao_map"] {{
           border-radius:.5rem; margin-right:.2rem; vertical-align:middle; }}
 .chips {{ display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 4px; }}
 /* 칩: 이벤트 정보는 민트로 채우고, 굿즈는 민트 테두리 + 진한 민트 글자 */
+.chips .chip {{ max-width:100%; min-width:0; flex-shrink:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.chips .chip.tag, .chips .chip.warn {{ flex-shrink:0; }}   /* 이벤트 칩(짧음)은 그대로, 긴 굿즈 칩만 줄어든다 */
 .chip {{ font-size:12.5px; font-weight:600; padding:3px 10px; border-radius:999px; background:{MINT_SOFT};
         color:{MINT_DEEP}; border:1px solid {MINT}; white-space:nowrap; }}
 .chip.tag {{ background:{MINT}; color:#fff; border-color:{MINT}; }}
@@ -3450,7 +3458,12 @@ def render_my_calendar_view() -> None:
     # 캘린더는 지도 보기 오른쪽 캘린더와 같은 크기, 알림은 데일리 팝업 노트와 같은 폭·모양
     left, mid, right = st.columns([1.55, 2.3, 1.5], gap="medium")      # 찜 줄이고 알림 내역 키움 (11/18)
     with right, st.container(key="ntf_box"):
-        st.markdown('<div class="mc-title">알림 받은 내역</div>', unsafe_allow_html=True)
+        # 긴 설명은 제목 옆 ? 에 (11/18 요청: 문구가 길어 줄이 어색했음)
+        r_ = _rules()
+        st.markdown('<div class="mc-title">알림 받은 내역 <span class="nh-help" tabindex="0">?<span class="nh-tip">'
+                    f'북마크한 팝업의 <b>오픈 {r_["open"]["days"]}일 전</b>, <b>종료 {r_["end"]["days"]}일 전</b>부터 당일까지 '
+                    '알려 드려요. 최근 3일 알림만 보여요.<br>관리자 공지와 삭제 요청 결과도 여기에 와요.</span></span></div>',
+                    unsafe_allow_html=True)
         _render_notice_history()
     with left, st.container(key="mycal_box"):
         render_calendar()
@@ -3478,8 +3491,6 @@ def _render_notice_history() -> None:
         _ntf_cell(_ntf_id("i" + str(r.get("row_id"))),
                   f'<b>{escape(str(r.get("title") or ""))}</b><br>{escape(str(r.get("body") or ""))}'
                   + _why_html(admin.KIND_RULE.get(str(r.get("kind")), "notice")), None, kp="h")
-    st.markdown(f'<div class="mc-sub">북마크한 팝업의 오픈 {rules["open"]["days"]}일 전 · 종료 {rules["end"]["days"]}일 전부터 '
-                '당일까지 알림 (최근 3일)</div>', unsafe_allow_html=True)
     hist = _notice_history()
     if not hist:
         st.markdown('<div class="ntf-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
@@ -3554,7 +3565,7 @@ def _render_near_picks() -> None:
 BOX_CSS = """
 <style>
 .bx-title { font-family: "Jua", sans-serif; font-size: 1.7rem; color: #26302D; margin: 6px 0 4px; }
-.st-key-box_tabs { gap: 0 !important; border-bottom: 1.5px solid #E3E8E6; margin-bottom: 14px; }
+.st-key-box_tabs { gap: 0 !important; border-bottom: 1.5px solid #E3E8E6; margin-bottom: 0; }   /* 아래 안내와 간격 반으로 (11/18) */
 .st-key-box_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
   padding: 8px 16px 9px !important; border-bottom: 3px solid transparent !important; margin-bottom: -1.5px; }
 .st-key-box_tabs button p { font-size: 1.1rem !important; font-weight: 700 !important; color: #9AA5A1 !important; }
