@@ -293,7 +293,7 @@ def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_
     expect(page.locator(".st-key-stories .story.add")).to_be_visible(timeout=LONG)
     # 손님은 북마크가 없어 작품 없이 안내만
     expect(page.locator(".st-key-stories .story.mark")).to_have_count(0)
-    # 손님이 '팝업 북마크 추가' 를 누르면 로그인 화면으로
+    # 손님이 '북마크 추가' 를 누르면 로그인 화면으로
     page.locator(".st-key-open_story_add button").click()
     expect(page).to_have_url(re.compile(r"/login"), timeout=LONG)
 

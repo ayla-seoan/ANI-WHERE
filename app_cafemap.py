@@ -2104,7 +2104,7 @@ def _home_card(sec: str, r: dict, rank: int | None = None, badge: str = "") -> N
     with st.container(key=f"card_h{sec}_{eid}"):
         st.markdown(
             f'<div class="hc"><div class="hcp" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')">'
-            + (f'<span class="hcbadge">{escape(badge)}</span>' if badge else "")
+            + (f'<span class="hcbadge{" res" if badge.startswith("사전예약") else ""}">{escape(badge)}</span>' if badge else "")
             + (f'<span class="hcrank">{rank}</span>' if rank else "")
             + f'</div><div class="hct">{escape(str(r.get("work") or ""))}</div>'
             f'<div class="hcd">{escape(_period(r, lambda d: f"{d:%m.%d}", show_raw=False))}</div>'
@@ -2182,8 +2182,7 @@ def render_home(df: pd.DataFrame) -> None:
 
         # 실시간 인기 급상승 랭킹 (5위까지, 11/18 요청): 왼쪽 큰 배너(‹ › 로 넘김 · 5초마다 넘어감) + 오른쪽 1~5위 목록
         _home_head("실시간 인기 급상승 랭킹", "trending_up", key="rank")
-        a = _home_area_pills("rank", areas)
-        top = by_area(_home_rank(live), a)[:5]
+        top = _home_rank(live)[:5]          # (지역 고르기 버튼은 11/18 요청으로 뺐다)
         if top:
             ban, lst = st.columns([2.3, 1], gap="medium")
             with ban, st.container(horizontal=True, key="home_banner"):
@@ -2283,6 +2282,7 @@ HOME_CSS = """
   font-style: italic; text-shadow: 0 2px 10px rgba(0,0,0,.35); letter-spacing: -2px; }
 .hc .hcbadge { position: absolute; left: 0; top: 0; padding: 4px 10px; border-radius: 12px 0 12px 0; background: #F2A33A;
   color: #fff; font-size: .74rem; font-weight: 800; }
+.hc .hcbadge.res { background: #6C5CE7; }       /* 사전예약은 보라 (종료 임박 주황과 다르게, 11/18 요청) */
 .hc .hct { margin-top: 10px; font-weight: 800; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hc .hcd { margin-top: 2px; font-size: .8rem; color: #5B6663; }
 .hc .hcchips { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
@@ -2339,7 +2339,7 @@ def _story_add() -> None:
 def render_stories(df: pd.DataFrame) -> None:
     """'내가 관심있는 작품' (11/18 요청): 인스타 스토리처럼 동그란 작품 포스터 줄.
     내가 북마크한 (진행 중·예정) 팝업의 작품만. 숫자는 그 작품에서 북마크한 팝업 수.
-    맨 앞 '팝업 북마크 추가' 를 누르면 팝업을 골라 북마크하는 창이 열린다."""
+    맨 앞 '북마크 추가' 를 누르면 팝업을 골라 북마크하는 창이 열린다."""
     rows = _live_rows(df)
     _, mine, _ = _fav_state()
     # 내가 북마크한 팝업의 작품만 (11/18 요청). 숫자는 그 작품에서 내가 북마크한 팝업 수
@@ -2352,9 +2352,9 @@ def render_stories(df: pd.DataFrame) -> None:
         with st.container(horizontal=True, key="story_row"):
             # 맨 앞에 두어 줄이 길어도 늘 보이게 (인스타 '내 스토리' 자리)
             with st.container(key="card_story_add"):
-                st.markdown(f'<div class="story add"><div class="ring">{_mi("add")}</div><div class="nm">팝업 북마크 추가</div></div>',
+                st.markdown(f'<div class="story add"><div class="ring">{_mi("add")}</div><div class="nm">북마크 추가</div></div>',
                             unsafe_allow_html=True)
-                st.button("팝업 북마크 추가", key="open_story_add", on_click=_story_add)
+                st.button("북마크 추가", key="open_story_add", on_click=_story_add)
             if not items:
                 st.markdown('<div class="story-empty">팝업을 북마크하면 그 작품이 여기에 모여요.</div>', unsafe_allow_html=True)
             for i, (w, n) in enumerate(items):
@@ -2368,7 +2368,7 @@ def render_stories(df: pd.DataFrame) -> None:
         bookmark_pick_dialog(df)
 
 
-@st.dialog("팝업 북마크 추가", width="large")
+@st.dialog("북마크 추가", width="large")
 def bookmark_pick_dialog(df: pd.DataFrame) -> None:
     """dueple 온보딩처럼: 검색칸 + 포스터 격자에서 팝업을 눌러 고르고, 저장하면 북마크된다 (내 캘린더 · 알림 · 스토리 줄에 반영)."""
     ss = st.session_state
@@ -2430,7 +2430,7 @@ def bookmark_pick_dialog(df: pd.DataFrame) -> None:
 STORY_CSS = """
 <style>
 .st-key-stories { margin: 0 0 8px; }
-.story-head { font-size: 1.2rem; font-weight: 800; margin-bottom: 2px; }
+.story-head { font-size: .95rem; font-weight: 800; margin-bottom: 2px; color: var(--accent-deep); }
 .st-key-story_row { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; gap: 8px !important; padding: 4px 2px 2px;
   scrollbar-width: none; }
 .st-key-story_row::-webkit-scrollbar { display: none; }
