@@ -37,14 +37,15 @@ def sign_up(page: Page, url: str) -> None:
     wait_idle(page)
     page.get_by_text("회원가입", exact=True).first.click()
     wait_idle(page)
-    f = page.locator('[data-testid="stForm"]').first
+    f = page.locator(".st-key-pw_signup")      # 폼이 아니라 칸 묶음 ('약관 전체 동의' 가 아래 항목을 바로 바꾸게, 11/18)
     f.get_by_label("아이디 (필수)").fill("qa_" + uuid.uuid4().hex[:8])
     f.get_by_label("비밀번호 (필수)").fill("qatest1234")
     f.get_by_label("비밀번호 확인 (필수)").fill("qatest1234")
     f.get_by_role("textbox", name="닉네임 (선택)").fill("테스트봇" + uuid.uuid4().hex[:4])   # 중복 금지 · 칸 옆 ? 가 있어 역할로 찾음
-    # 필수 동의 3개 (만 14세 이상 · 이용약관 · 개인정보 수집·이용) — 11/18 개인정보 설계
-    for i in range(3):
-        f.locator('[data-testid="stCheckbox"] label').nth(i).click()
+    # '약관 전체 동의' 하나로 필수 3개(만 14세 이상 · 이용약관 · 개인정보 수집·이용)가 모두 켜진다 (11/18)
+    f.locator(".st-key-pwc_allbox label").click()
+    for i in range(1, 4):
+        expect(f.locator('[data-testid="stCheckbox"] input').nth(i)).to_be_checked(timeout=LONG)
     f.get_by_role("button", name="가입하기").click()
     # 가입하면 메인으로 가고, 메뉴바의 '로그인' 자리에 닉네임이 보인다
     expect(page).to_have_url(re.compile(r"/$"), timeout=LONG)          # 메인으로 옮겨졌는지 먼저

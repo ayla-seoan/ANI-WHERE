@@ -6703,19 +6703,20 @@ def _consent_error(c: dict) -> str:
 
 
 def _password_signup_form() -> None:
-    """일반 회원가입: 필수 정보(아이디·비밀번호·닉네임·동의)만 받는다."""
-    with st.form("pw_signup", border=False):
+    """일반 회원가입: 필수 정보(아이디·비밀번호·닉네임·동의)만 받는다.
+    폼으로 묶지 않는다: '약관 전체 동의' 가 아래 항목을 바로 바꿔야 해서 (간편 가입과 같게, 11/18 요청)."""
+    with st.container(key="pw_signup"):
         lid = st.text_input("아이디 (필수)", max_chars=20, placeholder="영어 소문자·숫자·_ 4~20자",
                             autocomplete="username")
         pw = st.text_input("비밀번호 (필수)", type="password", max_chars=auth.PW_MAX,
                            placeholder="영문+숫자 8자 이상", autocomplete="new-password")
         pw2 = st.text_input("비밀번호 확인 (필수)", type="password", max_chars=auth.PW_MAX, autocomplete="new-password")
         nick = st.text_input("닉네임 (선택)", max_chars=auth.MAX_NICK, placeholder=_suggest_nick(), help=NICK_HELP)
-        consent = _consent_boxes("local", "pwc")
+        consent = _consent_boxes("local", "pwc", all_toggle=True)
         st.markdown('<div class="auth-sub auth-guide">이메일·전화번호를 받지 않아서 <b>비밀번호를 잊으면 찾을 수 없어요.</b> '
                     '꼭 기억해 두세요. 프로필 사진(선택)은 가입한 뒤 마이페이지에서 올릴 수 있어요.</div>',
                     unsafe_allow_html=True)
-        done = st.form_submit_button("가입하기", type="primary", icon=":material/person_add:", width="stretch")
+        done = st.button("가입하기", type="primary", icon=":material/person_add:", width="stretch", key="pw_join")
     if not done:
         return
     err = _consent_error(consent)
