@@ -89,6 +89,10 @@ def call_structured(
     run_id = uuid.uuid4().hex[:8]
     started = time.monotonic()
     last_error: str | None = None
+    # 속도 (11/18): 키가 없으면 부르지 않고 바로 규칙 기반으로 (예전엔 실패 → 1.5초 쉬고 다시 시도해 질문마다 1.5초 늦었다)
+    if not (os.getenv("OPENAI_API_KEY") or "").strip():
+        max_attempts = 0
+        last_error = "RuntimeError: OPENAI_API_KEY 없음"
 
     for attempt in range(1, max_attempts + 1):
         try:
@@ -114,6 +118,9 @@ def call_structured(
                 time.sleep(1.5 * attempt)
         except Exception as exc:  # 네트워크·인증·할당량 등
             last_error = f"{type(exc).__name__}: {exc}"
+            # 인증·할당량 오류는 다시 해도 같아서 기다리지 않고 바로 규칙 기반으로
+            if any(w in type(exc).__name__ for w in ("Authentication", "PermissionDenied", "RateLimit", "NotFound")):
+                break
             if attempt < max_attempts:
                 time.sleep(1.5 * attempt)
 

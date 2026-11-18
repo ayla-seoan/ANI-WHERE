@@ -1,0 +1,257 @@
+{
+  "name": "ANI:WHERE 사용자 테스트 ② 1차·2차 요약 메일",
+  "nodes": [
+    {
+      "id": "d1864b31-9b4b-5292-a61d-b54039a396d9",
+      "name": "매일 21시",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 21 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5268b42f-32e7-5026-937e-2083816db46f",
+      "name": "지금 실행",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e3d716c3-bcb5-5ea7-ada5-4ecaff614f3c",
+      "name": "정리 시트 읽기",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        100
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "정리"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6426e2c5-e07b-587a-86e5-d0bda4b3865f",
+      "name": "1차·2차 숫자 세기",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// n8n Code 노드 ②: '정리' 시트 전체 → 1차 · 2차 비교 숫자 + 메일 본문(규칙으로 만든 요약)\n// 모드: Run Once for All Items. 입력 = Google Sheets 'Get Rows' 의 items (참가자·버전·과업·성공·소요초·막힌 지점·메모)\n// 숫자는 여기서 센다 (AI 는 문장만 다듬는다 — 앱의 물어보기와 같은 원칙: 건수는 규칙, 설명은 AI)\n\nconst rows = $input.all().map((i) => i.json).filter((r) => r.참가자 && r.과업);\nconst TARGET = { success: 80, t1: 60 };            // PRD 사용자 지표: 과업 성공률 80% 이상, T1 평균 60초 이하\n\nfunction stat(ver) {\n  const rs = rows.filter((r) => r.버전 === ver);\n  const people = new Set(rs.map((r) => r.참가자)).size;\n  const okRate = rs.length ? Math.round((rs.filter((r) => r.성공 === 'Y').length / rs.length) * 1000) / 10 : null;\n  const byTask = {};\n  for (const t of ['T1', 'T2', 'T3', 'T4']) {\n    const ts = rs.filter((r) => r.과업 === t);\n    const secs = ts.filter((r) => r.성공 === 'Y' && r.소요초 !== '' && r.소요초 != null).map((r) => Number(r.소요초));\n    byTask[t] = {\n      성공률: ts.length ? Math.round((ts.filter((r) => r.성공 === 'Y').length / ts.length) * 1000) / 10 : null,\n      평균초: secs.length ? Math.round(secs.reduce((a, b) => a + b, 0) / secs.length) : null,\n      명: ts.length,\n    };\n  }\n  const blocks = {};\n  for (const r of rs) {\n    const b = String(r['막힌 지점'] || '').trim();\n    if (b) blocks[b] = (blocks[b] || 0) + 1;\n  }\n  const top = Object.entries(blocks).sort((a, b) => b[1] - a[1]).slice(0, 3);\n  return { 버전: ver, 참가자: people, 과업수: rs.length, 성공률: okRate, 과업별: byTask, 막힌곳: top };\n}\n\nconst v1 = stat('1차');\nconst v2 = stat('2차');\nconst fmt = (v) => (v === null || v === undefined ? '-' : v);\nconst diff = (a, b, unit) => (a === null || b === null ? '' : ` (${b - a >= 0 ? '+' : ''}${Math.round((b - a) * 10) / 10}${unit})`);\nconst pass = (v) => (v.성공률 === null ? '아직 없음' : v.성공률 >= TARGET.success ? '목표 달성' : '목표 미달');\nconst passT1 = (v) => (v.과업별.T1.평균초 === null ? '아직 없음' : v.과업별.T1.평균초 <= TARGET.t1 ? '목표 달성' : '목표 미달');\n\nconst lines = [\n  `ANI:WHERE 사용자 테스트 요약 (${new Date().toISOString().slice(0, 10)})`,\n  '',\n  `참가자: 1차 ${v1.참가자}명 · 2차 ${v2.참가자}명`,\n  `과업 성공률: 1차 ${fmt(v1.성공률)}% → 2차 ${fmt(v2.성공률)}%${diff(v1.성공률, v2.성공률, '%p')}  [목표 80% 이상: 2차 ${pass(v2)}]`,\n  `T1(이번 주말 서울 팝업 찾기) 평균: 1차 ${fmt(v1.과업별.T1.평균초)}초 → 2차 ${fmt(v2.과업별.T1.평균초)}초${diff(v1.과업별.T1.평균초, v2.과업별.T1.평균초, '초')}  [목표 60초 이하: 2차 ${passT1(v2)}]`,\n  '',\n  '과업별 (성공률 · 성공한 사람 평균 시간)',\n  ...['T1', 'T2', 'T3', 'T4'].map((t) =>\n    `- ${t}: 1차 ${fmt(v1.과업별[t].성공률)}% · ${fmt(v1.과업별[t].평균초)}초 → 2차 ${fmt(v2.과업별[t].성공률)}% · ${fmt(v2.과업별[t].평균초)}초`),\n  '',\n  '자주 막힌 곳',\n  ...(v2.막힌곳.length ? v2.막힌곳.map(([b, n]) => `- (2차) ${b} — ${n}번`) : ['- (2차) 아직 없음']),\n  ...(v1.막힌곳.length ? v1.막힌곳.map(([b, n]) => `- (1차) ${b} — ${n}번`) : []),\n];\n\nreturn [{ json: { 숫자: { 일차: v1, 이차: v2, 목표: TARGET }, 요약: lines.join('\\n'), 행수: rows.length } }];\n"
+      }
+    },
+    {
+      "id": "af032e22-e01a-5bb6-b4cc-1a784544494a",
+      "name": "프롬프트 읽기 (GitHub)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        100
+      ],
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/common/prompts/survey_summary.v1.txt",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "prompt"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "49fd0d76-0aa3-5d67-b0f8-c157afc958d5",
+      "name": "AI 에이전트 요약",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        960,
+        100
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ '[규칙으로 센 요약]\\n' + $('1차·2차 숫자 세기').item.json.요약 + '\\n\\n[숫자 JSON]\\n' + JSON.stringify($('1차·2차 숫자 세기').item.json.숫자) }}",
+        "options": {
+          "systemMessage": "={{ $json.prompt }}"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "6b3d8ea3-43af-598d-a718-06c16decac81",
+      "name": "OpenAI (gpt-4o-mini)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0
+        }
+      }
+    },
+    {
+      "id": "799a6ef7-11a5-573c-879b-fd850cfd6d07",
+      "name": "메일 본문 만들기",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// n8n Code 노드 ③: 메일 제목·본문. AI 에이전트가 실패해도(키 없음·오류) 규칙으로 센 요약은 늘 보낸다\n// 결과에 'AI 산출' 인지 '규칙 기반 대체' 인지 표시한다 (CLAUDE.md 예외 처리 원칙과 같게)\n\nconst base = $('1차·2차 숫자 세기').item.json;\nconst ai = String(($json && ($json.output || $json.text)) || '').trim();\nconst ok = ai.length > 0 && !$json.error;\nconst date = new Date().toISOString().slice(0, 10);\nconst 본문 = [\n  base.요약,\n  '',\n  '────────',\n  ok ? `[AI 산출] 해석 · 다음에 고칠 것\\n${ai}` : '[규칙 기반 대체] AI 요약을 만들지 못해 숫자만 보냅니다.',\n  '',\n  `(정리 시트 ${base.행수}줄 기준 · 참가자는 P 번호로만 기록 · 이름·연락처는 받지 않음)`,\n].join('\\n');\nreturn [{ json: { 제목: `[ANI:WHERE] 사용자 테스트 요약 ${date}`, 본문 } }];\n"
+      }
+    },
+    {
+      "id": "dd90a17f-f775-52e0-b638-a9b5b48fb4d1",
+      "name": "메일 보내기",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1440,
+        100
+      ],
+      "parameters": {
+        "sendTo": "받는 주소를 여기에 넣으세요",
+        "subject": "={{ $json.제목 }}",
+        "emailType": "text",
+        "message": "={{ $json.본문 }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "매일 21시": {
+      "main": [
+        [
+          {
+            "node": "정리 시트 읽기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "정리 시트 읽기": {
+      "main": [
+        [
+          {
+            "node": "1차·2차 숫자 세기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1차·2차 숫자 세기": {
+      "main": [
+        [
+          {
+            "node": "프롬프트 읽기 (GitHub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "프롬프트 읽기 (GitHub)": {
+      "main": [
+        [
+          {
+            "node": "AI 에이전트 요약",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI 에이전트 요약": {
+      "main": [
+        [
+          {
+            "node": "메일 본문 만들기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "메일 본문 만들기": {
+      "main": [
+        [
+          {
+            "node": "메일 보내기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "지금 실행": {
+      "main": [
+        [
+          {
+            "node": "정리 시트 읽기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI (gpt-4o-mini)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI 에이전트 요약",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Seoul",
+    "executionOrder": "v1"
+  },
+  "active": false
+}
