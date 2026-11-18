@@ -209,13 +209,12 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .st-key-list_more {{ width: 100% !important; justify-content: center !important; justify-items: center !important;
   grid-template-columns: 1fr !important; margin-top: 18px !important; }}
 [data-testid="stLayoutWrapper"]:has(> .st-key-list_more) {{ width: 100% !important; flex: 1 1 100% !important; }}
-.st-key-list_more button {{ border-radius: 999px !important; }}
-@media (max-width: 640px) {{
-  .st-key-list_more button {{ width: 44px !important; min-width: 44px !important; height: 44px !important; padding: 0 !important;
-    justify-content: center !important; border: 1.5px solid var(--accent) !important; background: #fff !important; }}
-  .st-key-list_more button p, .st-key-list_more button [data-testid="stMarkdownContainer"] {{ display: none !important; }}
-  .st-key-list_more button span {{ margin: 0 !important; font-size: 1.6rem !important; color: var(--accent-deep) !important; }}
-}}
+/* 회색 바탕 + 아래 화살표 + 'N건 더보기' (PC·모바일 같게, 11/18 요청) */
+.st-key-list_more button {{ border-radius: 999px !important; background: #F2F4F3 !important; border: 1px solid #E3E8E6 !important;
+  padding: 4px 18px !important; min-height: 0 !important; }}
+.st-key-list_more button p {{ color: #5F6B67 !important; font-size: .88rem !important; font-weight: 700 !important; }}
+.st-key-list_more button span {{ color: #5F6B67 !important; }}
+.st-key-list_more button:hover {{ background: #E8ECEA !important; }}
 .st-key-view_tools {{ justify-content: flex-end !important; align-items: center; gap: 6px !important; flex-wrap: nowrap !important; }}
 .st-key-view_tools > div {{ width: auto !important; flex: 0 0 auto !important; }}
 .st-key-view_tools.pinned button {{ box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }}
@@ -1723,6 +1722,8 @@ def _status(row) -> tuple[str, str, int]:
         return "종료", "gray", 2
     if start > TODAY:
         return f"D-{(start - TODAY).days}", "blue", 1
+    if (end - TODAY).days <= 3:                 # 끝나는 날까지 3일 이하: '마감임박' 빨간 글씨 (11/18 요청)
+        return "마감임박", "red", 0
     return "진행 중", "green", 0
 
 
@@ -1822,11 +1823,11 @@ def _home_area(mapped: pd.DataFrame) -> dict | None:
     return _busiest_area(mapped)
 
 
-def _poster_card(r, label: str) -> str:
+def _poster_card(r, label: str, color: str = "green") -> str:
     return f"""
 <div class="pcard" style="background-image:url('{_poster_url(r.get("images"))}'), url('{images.DEFAULT_POSTER_URL}')">
   {_area_badge(r.get("address"), cls="area")}
-  <span class="state">{escape(label)}</span>
+  <span class="state {color}">{escape(label)}</span>
   <div class="info">
     <div class="t">{escape(str(r['work']))}</div>
     <div class="s">{_mi("local_cafe")}{escape(str(r['cafe_name']))}</div>
@@ -1955,12 +1956,12 @@ def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | N
             grid = st.columns(4, gap="small")
             for i, (_, r) in enumerate(view.head(n_show).iterrows()):
                 with grid[i % 4], st.container(key=f"card_w_{r['entry_id']}"):
-                    st.markdown(_poster_card(r, _status(r)[0]), unsafe_allow_html=True)
+                    st.markdown(_poster_card(r, *_status(r)[:2]), unsafe_allow_html=True)
                     open_button(r)
                     _heart(r["entry_id"], "w")
             if len(view) > n_show:
                 with st.container(horizontal=True, horizontal_alignment="center", key="list_more"):
-                    st.button(f"더 보기 ({len(view) - n_show}곳 더)", icon=":material/expand_more:", key="list_more_btn",
+                    st.button(f"{len(view) - n_show}건 더보기", icon=":material/expand_more:", key="list_more_btn",
                               on_click=lambda: st.session_state.update(list_n=n_show + LIST_PAGE))
         return
 
@@ -2025,7 +2026,7 @@ LIST_CSS = f"""
 .cstate {{ display:inline-block; vertical-align:middle; margin-left:6px; font-size:.78rem; font-weight:700;
           line-height:1.4; padding:.1rem .45rem; border-radius:.5rem; white-space:nowrap; }}
 .cstate.green {{ background:#E3F6EA; color:#1F7A44; }}
-.cstate.blue {{ background:#E5EEFC; color:#2C5BC5; }}
+.cstate.blue {{ background:#E5EEFC; color:#2C5BC5; }} .cstate.red {{ background:#FDE8EC; color:#D93A4A; }}
 .cstate.gray {{ background:#EEF0EF; color:#6B7672; }}
 /* 카드·상세의 팔로우 버튼도 '팔로우한 곳만' 과 같은 스위치: 꺼지면 회색 바탕 + 왼쪽 흰 동그라미 '팔로우',
    켜지면 포인트 색 바탕 + 오른쪽 동그라미 '팔로잉' */
@@ -2067,7 +2068,10 @@ LIST_CSS = f"""
 [class*="st-key-card_w_"]:active .pcard {{ transform:scale(.95); }}
 /* 커서를 올리면 글자 칸이 카드 전체로 펼쳐지며 숨어 있던 정보를 모두 보여 준다 */
 .pcard .more {{ display:none; }}
-.pcard .area, .pcard .state {{ z-index:2; }}   /* 펼친 막 위에서도 지역·상태 배지가 보이게 */
+.pcard .area, .pcard .state {{ z-index:2; }}
+/* 상태 배지 글자색: 예정(D-n) 파랑, 마감임박 빨강 (11/18 요청) */
+.pcard .state.blue {{ color:#2C5BC5 !important; }}
+.pcard .state.red {{ color:#D93A4A !important; }}   /* 펼친 막 위에서도 지역·상태 배지가 보이게 */
 .pcard .info {{ transition:height .25s ease, background-color .25s ease; }}
 /* 펼친 막: 위는 검정에 가까운 아주 어두운 초록, 아래로 갈수록 밝은 민트가 되는 그라데이션.
    색 90%(포스터는 10% 만 비친다)로 덮어 흰 글자가 잘 읽히게 한다 */
