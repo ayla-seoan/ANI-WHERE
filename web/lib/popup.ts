@@ -481,6 +481,10 @@ export type Item = {
   created: string;
   reserve: boolean;
   text: string;
+  /** 물어보기(lib/ask.ts)용: 캐릭터 · (특전 · 굿즈 · 이벤트 태그) · 공개 별점 집계 */
+  characters: string;
+  extra: string;
+  rating: { avg: number; n: number } | null;
 };
 
 const FLAG_TAGS = new Set(["상시", "기간 확인 필요"]);
@@ -507,6 +511,9 @@ export function toItem(p: Popup): Item {
     created: p.createdAt,
     reserve: isReserve(p),
     text: searchText(p),
+    characters: p.characters,
+    extra: [...p.perks, ...p.goods, ...p.tags].join(" "),
+    rating: p.rating,
   };
 }
 

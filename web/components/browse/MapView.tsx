@@ -9,6 +9,8 @@ import FilterBar from "./FilterBar";
 import DailyNote from "./DailyNote";
 import MapCanvas, { type Bounds } from "./MapCanvas";
 import NoResult from "./NoResult";
+import AskPanel from "../ask/AskPanel";
+import AskFab from "../ask/AskFab";
 import { activeCount, applyCond, sortItems, useAreas, useCond, useFilterToggle } from "./filters";
 
 /** 지도 처음 화면: 팝업이 가장 많은 시의 점들을 감싸는 범위 (앱 _busiest_area). 너무 확대되지 않게 최소 폭 */
@@ -77,68 +79,79 @@ export default function MapView({ items, today }: { items: Item[]; today: string
           {act ? <span>{act}</span> : null}
         </button>
       </div>
+      {/* 앱 지도로 보기와 같은 칸: 왼쪽 큰 칸(데일리 팝업 노트 · 지도, 그 아래 팝업 목록) | 오른쪽 물어보기 */}
       <div className="map-layout">
-        <div className="daily-col">
-          <DailyNote items={view} today={today} onPick={pick} />
-        </div>
-        <div className="map-col">
-          {mapped.length || view.length ? (
-            <MapCanvas points={mapped} home={home} focus={focus} />
-          ) : (
-            <NoResult items={items} cond={cond} set={set} reset={reset} today={today} />
-          )}
-        </div>
-        <aside className="maplist" aria-label="팝업 목록">
-          <div className="maplist-head">
-            팝업 카페 <b>{view.length}</b>곳
-            {view.length > mapped.length && <small> · 지도에 표시 {mapped.length}곳</small>}
+        <div className="map-left">
+          <div className="map-row">
+            <div className="daily-col">
+              <DailyNote items={view} today={today} onPick={pick} />
+            </div>
+            <div className="map-col">
+              {mapped.length || view.length ? (
+                <MapCanvas points={mapped} home={home} focus={focus} />
+              ) : (
+                <NoResult items={items} cond={cond} set={set} reset={reset} today={today} />
+              )}
+            </div>
           </div>
-          <div className="maplist-body">
-            {view.slice(0, n).map((p) => {
-              const s = stateOf(p, today);
-              return (
-                <div key={p.id} className="scard">
-                  <Link href={`/popup/${p.id}`} className="scard-link" prefetch={false}>
-                    <span className="thumb" style={posterBg(p.poster)} />
-                    <span className="scard-info">
-                      <AreaBadge area={p.area} city={p.city} />
-                      <span className="ctitle">
-                        <strong>{p.work}</strong> <span className={`cstate ${s.color}`}>{s.label}</span>
+          <section className="maplist" aria-label="팝업 목록">
+            <div className="maplist-head">
+              팝업 카페 <b>{view.length}</b>곳
+              {view.length > mapped.length && <small> · 지도에 표시 {mapped.length}곳</small>}
+            </div>
+            <div className="maplist-body">
+              {view.slice(0, n).map((p) => {
+                const s = stateOf(p, today);
+                return (
+                  <div key={p.id} className="scard">
+                    <Link href={`/popup/${p.id}`} className="scard-link" prefetch={false}>
+                      <span className="thumb" style={posterBg(p.poster)} />
+                      <span className="scard-info">
+                        <AreaBadge area={p.area} city={p.city} />
+                        <span className="ctitle">
+                          <strong>{p.work}</strong> <span className={`cstate ${s.color}`}>{s.label}</span>
+                        </span>
+                        <span className="ccafe">
+                          <StoreIcon />
+                          {p.name}
+                        </span>
+                        <span className="cmeta">
+                          <CalendarIcon />
+                          {periodDot(p)}
+                        </span>
                       </span>
-                      <span className="ccafe">
-                        <StoreIcon />
-                        {p.name}
-                      </span>
-                      <span className="cmeta">
-                        <CalendarIcon />
-                        {periodDot(p)}
-                      </span>
-                    </span>
-                  </Link>
-                  {p.lat !== null && (
-                    <button
-                      type="button"
-                      className="scard-pin"
-                      aria-label={`${p.work} 지도에서 보기`}
-                      onClick={() => pick(p.id)}
-                    >
-                      <PinIcon />
-                    </button>
-                  )}
+                    </Link>
+                    {p.lat !== null && (
+                      <button
+                        type="button"
+                        className="scard-pin"
+                        aria-label={`${p.work} 지도에서 보기`}
+                        onClick={() => pick(p.id)}
+                      >
+                        <PinIcon />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {view.length > n && (
+                <div className="list-more">
+                  <button type="button" onClick={() => setN((k) => k + 24)}>
+                    <ExpandMore />
+                    {view.length - n}건 더보기
+                  </button>
                 </div>
-              );
-            })}
-            {view.length > n && (
-              <div className="list-more">
-                <button type="button" onClick={() => setN((k) => k + 24)}>
-                  <ExpandMore />
-                  {view.length - n}건 더보기
-                </button>
-              </div>
-            )}
-            {!view.length && <div className="dn-empty">조건에 맞는 팝업이 없어요.</div>}
-          </div>
-        </aside>
+              )}
+              {!view.length && <div className="dn-empty">조건에 맞는 팝업이 없어요.</div>}
+            </div>
+          </section>
+        </div>
+        <div className="map-right pc-only">
+          <AskPanel items={items} today={today} />
+        </div>
+      </div>
+      <div className="m-only">
+        <AskFab items={items} today={today} />
       </div>
     </div>
   );

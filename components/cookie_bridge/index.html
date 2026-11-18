@@ -15,10 +15,9 @@ function send(type, data) {
 send("streamlit:componentReady", { apiVersion: 1 });
 send("streamlit:setFrameHeight", { height: 0 });
 
-let last = null;
-window.addEventListener("message", (event) => {
-  if (!event.data || event.data.type !== "streamlit:render") return;
-  const name = String((event.data.args || {}).name || "");
+let last = null, name = "";
+function check() {
+  if (!name) return;
   let v = "";
   try {
     const m = window.parent.document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
@@ -28,7 +27,17 @@ window.addEventListener("message", (event) => {
     last = v;
     send("streamlit:setComponentValue", { value: v, dataType: "json" });
   }
+}
+window.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "streamlit:render") return;
+  name = String((event.data.args || {}).name || "");
+  check();
 });
+// 간편 로그인 작은 창에서 로그인이 끝나면(신호 aw_login_done) 바로 쿠키를 다시 읽어 넘긴다 →
+// 원래 창은 페이지를 통째로 새로고침하지 않고 화면만 다시 그려 로그인된다 (11/18 요청: 간편 로그인이 너무 오래 걸림).
+// 신호를 못 받는 브라우저를 위해 1초마다도 확인한다 (손님일 때만 이 부품이 있다)
+window.addEventListener("storage", (e) => { if (e.key === "aw_login_done") check(); });
+setInterval(check, 1000);
 </script>
 </body>
 </html>

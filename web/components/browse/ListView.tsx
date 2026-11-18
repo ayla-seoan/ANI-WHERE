@@ -2,11 +2,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Item } from "@/lib/popup";
 import { PosterCard } from "../cards";
-import { ExpandMore, HelpIcon, TuneIcon } from "../Icons";
+import { ChatIcon, CloseIcon, ExpandMore, HelpIcon, TuneIcon } from "../Icons";
 import FilterBar from "./FilterBar";
-import AskPanel from "./AskPanel";
+import AskPanel from "../ask/AskPanel";
+import AskFab from "../ask/AskFab";
 import NoResult from "./NoResult";
-import { SORTS, activeCount, applyCond, sortItems, useAreas, useCond, useFilterToggle, type SortKey } from "./filters";
+import {
+  EMPTY,
+  SORTS,
+  activeCount,
+  applyCond,
+  sortItems,
+  useAreas,
+  useCond,
+  useFilterToggle,
+  type SortKey,
+} from "./filters";
 
 const LIST_PAGE = 24; // 앱 LIST_PAGE: 처음 24장(4열 × 6줄), '더보기' 마다 24장씩
 
@@ -37,6 +48,11 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
     setN((k) => k + LIST_PAGE);
   };
   const act = activeCount(cond);
+  // 물어보기 '+N건 더보기 · 리스트로 보기': 다른 조건은 풀고 그 답의 팝업만 (앱 _ask_show_all)
+  const showAll = (ids: string[], label: string) => {
+    set({ ...EMPTY, sort: cond.sort, ids, askLabel: label });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <>
@@ -51,6 +67,18 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
       />
       <div className="list-layout">
         <div className="list-main">
+          {cond.ids.length > 0 && (
+            <div className="ask-only-bar">
+              <div className="ask-only">
+                <ChatIcon />
+                물어보기 결과 · <b>{cond.askLabel || "질문"}</b> <span>{view.length}건</span>
+              </div>
+              <button type="button" className="ask-only-clear" onClick={() => set({ ids: [], askLabel: "" })}>
+                <CloseIcon />
+                전체 팝업 보기
+              </button>
+            </div>
+          )}
           <div className="listtools">
             <h1 className="listbar">
               팝업 카페 <b>{view.length}</b>곳
@@ -118,8 +146,11 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
           )}
         </div>
         <div className="list-side pc-only">
-          <AskPanel />
+          <AskPanel items={items} today={today} onShowAll={showAll} />
         </div>
+      </div>
+      <div className="m-only">
+        <AskFab items={items} today={today} onShowAll={showAll} />
       </div>
     </>
   );

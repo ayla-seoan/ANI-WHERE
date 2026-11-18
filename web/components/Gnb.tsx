@@ -6,7 +6,7 @@ import { APP_URL } from "@/lib/popup";
 import { CloseIcon, SearchIcon } from "./Icons";
 
 // 앱(Streamlit) 상단 메뉴바와 같은 모양: 연민트 바탕 + 아래 둥근 모서리, 왼쪽 로고, 가운데 탭 (홈 · 지도로 보기 · 리스트로 보기).
-// 로그인·알림·관리자는 이 공개 웹에 두지 않는다 (읽기 전용). 대신 오른쪽에 참여용 앱으로 가는 작은 글자 링크.
+// 알림·관리자는 이 공개 웹에 두지 않는다 (읽기 전용). '로그인' 은 앱(Streamlit)의 로그인 화면으로 가는 링크.
 // 지도·리스트 화면에서는 앱처럼 검색 아이콘이 보이고, 누르면 검색 필터 상자가 열린다 (window 이벤트 'aw:filters').
 const TABS = [
   { href: "/", label: "홈" },
@@ -64,9 +64,9 @@ export default function Gnb() {
               {filters ? <CloseIcon /> : <SearchIcon />}
             </button>
           )}
-          <a href={APP_URL} target="_blank" rel="noopener noreferrer" className="gnb-join">
-            <span className="join-long">참여하기(로그인·북마크·리뷰)</span>
-            <span className="join-short">참여하기</span>
+          {/* 앱 손님 메뉴바의 '로그인' 과 같은 자리·글꼴. 로그인은 Streamlit 앱에서 (이 웹은 읽기 전용, 인증 없음) */}
+          <a href={`${APP_URL}/login`} className="gnb-login">
+            로그인
           </a>
         </div>
       </div>
