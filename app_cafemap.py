@@ -2037,9 +2037,10 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
                      key="m_filter_btn"):
             st.session_state["m_filters"] = not m_open
             st.rerun()
-        _view_switch(wide)
-        if _member():
-            st.button("", icon=":material/calendar_month:", key="m_cal_btn", on_click=_gnb_go, args=("cal",))
+        if not wide:              # 모바일 리스트 보기에서는 지도·캘린더 아이콘을 뺐다 (11/18 요청, 메뉴바 탭으로)
+            _view_switch(wide)
+            if _member():
+                st.button("", icon=":material/calendar_month:", key="m_cal_btn", on_click=_gnb_go, args=("cal",))
 
 
 def _view_switch(wide: bool) -> None:
@@ -4528,22 +4529,7 @@ def _notice_history(days_back: int = 2) -> list[tuple[date, str, str, dict]]:
 
 def render_my_calendar_view() -> None:
     st.markdown(CAL_CSS + MYCAL_CSS + BOX_CSS, unsafe_allow_html=True)
-    # 모바일은 메뉴바 탭이 없어서 리스트·지도로 돌아가는 아이콘을 둔다
-    with st.container(horizontal=True, horizontal_alignment="right", key="mycal_mnav"):
-        st.button("", icon=":material/format_list_bulleted:", key="mycal_to_list", on_click=_gnb_go, args=("list",))
-        st.button("", icon=":material/map:", key="mycal_to_map", on_click=_gnb_go, args=("map",))
-    # 모바일도 리스트·지도 보기와 같은 형식 (11/18 요청): 맨 위에서는 메뉴바 글자 탭만, 스크롤하면 위에 붙는 아이콘 줄
-    st.markdown("<style>@media (min-width: 641px) { .st-key-mycal_mnav { display: none !important; } }"
-                "@media (max-width: 640px) {"
-                " html:not(.aw-scrolled) .st-key-mycal_mnav { display: none !important; }"
-                " html.aw-scrolled .st-key-mycal_mnav { position: fixed !important; top: 10px; right: 16px; left: auto;"
-                "   width: auto !important; z-index: 1002; gap: 8px !important; }"
-                " .st-key-mycal_mnav button { width: 40px !important; min-width: 40px !important; height: 34px !important;"
-                "   min-height: 0 !important; padding: 0 !important; border: 1.5px solid var(--accent) !important;"
-                "   border-radius: 10px !important; background: #fff !important; box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }"
-                " .st-key-mycal_mnav button span { color: var(--accent-deep) !important; font-size: 1.2rem !important; margin: 0 !important; }"
-                " .st-key-mycal_mnav button [data-testid='stMarkdownContainer'] { display: none !important; } }</style>",
-                unsafe_allow_html=True)
+    # (모바일 리스트·지도 아이콘 줄은 11/18 요청으로 뺐다 — 메뉴바 탭으로 옮긴다)
     # 순서 (11/18 요청): 왼쪽 = 내 캘린더(가장 넓게) · 가운데 = 찜·다녀온·최근 본(조금 작게) · 오른쪽 = 알림 받은 내역
     # 캘린더는 지도 보기 오른쪽 캘린더와 같은 크기, 알림은 데일리 팝업 노트와 같은 폭·모양
     left, mid, right = st.columns([1.55, 2.3, 1.5], gap="medium")      # 찜 줄이고 알림 내역 키움 (11/18)
