@@ -37,7 +37,7 @@ def collect() -> dict:
     nodes = [
         node("폼 응답 들어옴", "n8n-nodes-base.googleSheetsTrigger", 1, (0, 0),
              {"pollTimes": {"item": [{"mode": "everyMinute"}]}, "documentId": SHEET,
-              "sheetName": {"__rl": True, "mode": "name", "value": "설문지 응답 시트1"}, "event": "rowAdded", "options": {}}),
+              "sheetName": {"__rl": True, "mode": "name", "value": "2차 응답"}, "event": "rowAdded", "options": {}}),
         node("1차 폼 응답 들어옴", "n8n-nodes-base.googleSheetsTrigger", 1, (0, 200),       # 1차 폼 (같은 시트의 '1차 응답' 탭)
              {"pollTimes": {"item": [{"mode": "everyMinute"}]}, "documentId": SHEET,
               "sheetName": {"__rl": True, "mode": "name", "value": "1차 응답"}, "event": "rowAdded", "options": {}}),

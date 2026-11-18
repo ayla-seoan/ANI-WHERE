@@ -26,7 +26,7 @@
         "sheetName": {
           "__rl": true,
           "mode": "name",
-          "value": "설문지 응답 시트1"
+          "value": "2차 응답"
         },
         "event": "rowAdded",
         "options": {}

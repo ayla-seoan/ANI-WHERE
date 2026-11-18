@@ -6703,19 +6703,20 @@ def _consent_error(c: dict) -> str:
 
 
 def _password_signup_form() -> None:
-    """일반 회원가입: 필수 정보(아이디·비밀번호·닉네임·동의)만 받는다."""
-    with st.form("pw_signup", border=False):
+    """일반 회원가입: 필수 정보(아이디·비밀번호·닉네임·동의)만 받는다.
+    폼으로 묶지 않는다: '약관 전체 동의' 가 아래 항목을 바로 바꿔야 해서 (간편 가입과 같게, 11/18 요청)."""
+    with st.container(key="pw_signup"):
         lid = st.text_input("아이디 (필수)", max_chars=20, placeholder="영어 소문자·숫자·_ 4~20자",
                             autocomplete="username")
         pw = st.text_input("비밀번호 (필수)", type="password", max_chars=auth.PW_MAX,
                            placeholder="영문+숫자 8자 이상", autocomplete="new-password")
         pw2 = st.text_input("비밀번호 확인 (필수)", type="password", max_chars=auth.PW_MAX, autocomplete="new-password")
         nick = st.text_input("닉네임 (선택)", max_chars=auth.MAX_NICK, placeholder=_suggest_nick(), help=NICK_HELP)
-        consent = _consent_boxes("local", "pwc")
+        consent = _consent_boxes("local", "pwc", all_toggle=True)
         st.markdown('<div class="auth-sub auth-guide">이메일·전화번호를 받지 않아서 <b>비밀번호를 잊으면 찾을 수 없어요.</b> '
                     '꼭 기억해 두세요. 프로필 사진(선택)은 가입한 뒤 마이페이지에서 올릴 수 있어요.</div>',
                     unsafe_allow_html=True)
-        done = st.form_submit_button("가입하기", type="primary", icon=":material/person_add:", width="stretch")
+        done = st.button("가입하기", type="primary", icon=":material/person_add:", width="stretch", key="pw_join")
     if not done:
         return
     err = _consent_error(consent)
@@ -7269,6 +7270,26 @@ def _admin_survey() -> None:
 SV_COLORS = ["#A9B3B0", "#14B8A6"]     # 1차 회색 · 2차 포인트 민트
 
 
+SV_GROUP_CSS = """<style>
+[class*="st-key-svg_"] { background: #FAFDFC; }
+[class*="st-key-svg_"] .sv-gh { font-size: .82rem; font-weight: 800; color: var(--accent-deep); margin-bottom: -6px; }
+[class*="st-key-svg_"] [data-testid="stMetricValue"] { font-size: 1.55rem !important; }
+[class*="st-key-svg_"] [data-testid="stMetricLabel"] p { font-size: .8rem !important; color: #5F6B67 !important; }
+</style>"""
+
+
+def _sv_groups(groups: list[tuple[str, list[tuple]]], key: str) -> None:
+    """숫자 카드를 항목별 상자로 묶어 보여 준다 (11/18 요청: 한 줄에 다섯 개가 붙어 있어 보기 힘듦).
+    groups = [(상자 제목, [(이름, 값, 변화 또는 None, 'normal'|'inverse'), ...]), ...] — 상자 폭은 카드 수에 비례."""
+    st.markdown(SV_GROUP_CSS, unsafe_allow_html=True)
+    cols = st.columns([max(1, len(items)) for _, items in groups], gap="small")
+    for i, (col, (title, items)) in enumerate(zip(cols, groups)):
+        with col, st.container(border=True, key=f"svg_{key}_{i}"):
+            st.markdown(f'<div class="sv-gh">{escape(title)}</div>', unsafe_allow_html=True)
+            for c, (label, value, delta, color) in zip(st.columns(len(items)), items):
+                c.metric(label, value, delta, delta_color=color)
+
+
 def _sv_fmt(v, unit: str = "") -> str:
     return "-" if v is None else f"{v:g}{unit}"
 
@@ -7286,15 +7307,19 @@ def _survey_improve(rows: list[dict]) -> None:
         return None if x is None or y is None else f"{round(y - x, 1):+g}{unit}"
 
     # 1) 숫자 카드: 2차 값 + 1차 대비 변화
-    m = st.columns(5)
-    m[0].metric("응답자 (1차 · 2차)", f"{a['응답자']} · {b['응답자']}명")
-    m[1].metric("과제 성공률", _sv_fmt(b["성공률"], "%"), delta(a["성공률"], b["성공률"], "%p"))
-    m[2].metric("질문 1 평균 시간", _sv_fmt(b["질문1초"], "초"), delta(a["질문1초"], b["질문1초"], "초"), delta_color="inverse")
-    m[3].metric("만족도 (5점)", _sv_fmt(b["만족도"]), delta(a["만족도"], b["만족도"], "점"))
-    m[4].metric("다시 쓸 의향", _sv_fmt(b["다시쓸의향"], "%"), delta(a["다시쓸의향"], b["다시쓸의향"], "%p"))
+    _sv_groups([
+        ("참여", [("1차", f"{a['응답자']}명", None, "normal"), ("2차", f"{b['응답자']}명", None, "normal")]),
+        ("과제 성공률", [("1차", _sv_fmt(a["성공률"], "%"), None, "normal"),
+                      ("2차", _sv_fmt(b["성공률"], "%"), delta(a["성공률"], b["성공률"], "%p"), "normal")]),
+        ("질문 1 평균 시간", [("1차", _sv_fmt(a["질문1초"], "초"), None, "normal"),
+                         ("2차", _sv_fmt(b["질문1초"], "초"), delta(a["질문1초"], b["질문1초"], "초"), "inverse")]),
+        ("만족 · 의향 (2차, 1차 대비)", [("만족도 (5점)", _sv_fmt(b["만족도"]), delta(a["만족도"], b["만족도"], "점"), "normal"),
+                                   ("다시 쓸 의향", _sv_fmt(b["다시쓸의향"], "%"),
+                                    delta(a["다시쓸의향"], b["다시쓸의향"], "%p"), "normal")]),
+    ], key="improve")
     ok_s = b["성공률"] is not None and b["성공률"] >= tgt["success"]
     ok_t = b["질문1초"] is not None and b["질문1초"] <= tgt["q1"]
-    st.caption(f"큰 숫자 = 2차, 작은 숫자 = 1차 대비 변화. 2차 목표: 과제 성공률 {tgt['success']:g}% 이상 {'O' if ok_s else 'X'} · "
+    st.caption(f"초록 · 빨강 작은 숫자 = 1차 대비 변화. 2차 목표: 과제 성공률 {tgt['success']:g}% 이상 {'O' if ok_s else 'X'} · "
                f"질문 1 평균 {tgt['q1']:g}초 이하 {'O' if ok_t else 'X'}. 시간은 응답자가 고른 구간의 가운데 값(대략값)"
                + ("  ·  응답자가 적어 참고용이에요" if min(a["응답자"], b["응답자"]) < 10 else ""))
 
@@ -7375,13 +7400,17 @@ def _survey_detail(rows: list[dict]) -> None:
     fmt = _sv_fmt
 
     # 1) 숫자 카드 (A/B · 목표)
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("응답자", f"{s['응답자']}명")
-    m2.metric("팝업 하나 찾기 (평소 → ANI:WHERE)", f"{fmt(s['평소초'], '초')} → {fmt(s['질문1초'], '초')}",
-              None if s["평소초"] is None or s["질문1초"] is None else f"{s['질문1초'] - s['평소초']:+g}초", delta_color="inverse")
-    m3.metric("과제 성공률 (목표 80% 이상)", fmt(s["성공률"], "%"))
-    m4.metric("만족도 · 평소보다 편함 (5점)", f"{fmt(s['만족도'])} · {fmt(s['비교'])}")
-    m5.metric("다시 쓸 의향", fmt(s["다시쓸의향"], "%"))
+    _sv_groups([
+        ("참여", [("응답자", f"{s['응답자']}명", None, "normal")]),
+        ("팝업 하나 찾는 시간 (A/B)", [
+            ("A · 평소 방법", fmt(s["평소초"], "초"), None, "normal"),
+            ("B · ANI:WHERE", fmt(s["질문1초"], "초"),
+             None if s["평소초"] is None or s["질문1초"] is None else f"{round(s['질문1초'] - s['평소초'], 1):+g}초", "inverse")]),
+        ("과제", [("성공률 (목표 80% 이상)", fmt(s["성공률"], "%"), None, "normal")]),
+        ("만족 · 의향", [("만족도 (5점)", fmt(s["만족도"]), None, "normal"),
+                       ("평소보다 편함 (5점)", fmt(s["비교"]), None, "normal"),
+                       ("다시 쓸 의향", fmt(s["다시쓸의향"], "%"), None, "normal")]),
+    ], key="detail")
     ok_s = s["성공률"] is not None and s["성공률"] >= tgt["success"]
     ok_t = s["질문1초"] is not None and s["질문1초"] <= tgt["q1"]
     st.caption(f"목표 달성: 과제 성공률 {'O' if ok_s else 'X'} · 질문 1 평균 {tgt['q1']:g}초 이하 {'O' if ok_t else 'X'}"
