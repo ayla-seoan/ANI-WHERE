@@ -67,6 +67,35 @@ def strip_metadata(data: bytes, ext: str) -> bytes:
         raise ValueError("사진을 읽지 못했어요. 다른 사진으로 다시 올려 주세요.") from exc
 
 
+BUCKET = "uploads"     # supabase/migrations/011_storage.sql 의 공개 버킷 (공개 웹과 같은 곳)
+_MIME = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}
+
+
+def _store(filename: str, data: bytes) -> str:
+    """사진 한 장을 저장하고 저장소 칸에 넣을 값을 돌려준다 (11/19).
+    STORAGE_MODE=supabase 면 사진 저장소(Supabase Storage 공개 버킷)에 올려 https 주소를 돌려준다 —
+    Streamlit Cloud 서버의 static/uploads 는 다시 배포하면 사라지고(11/19 사진 5장 잃음) 공개 웹(Vercel)은 볼 수 없어서.
+    저장소에 못 올리면(011 미적용 · 연결 실패) 예전처럼 static/uploads 에 쓰고 파일 이름을 돌려준다."""
+    import os
+
+    url = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
+    key = (os.getenv("SUPABASE_KEY") or "").strip()
+    if (os.getenv("STORAGE_MODE") or "").strip() == "supabase" and url and key:
+        try:
+            import requests
+
+            headers = {"apikey": key, "Content-Type": _MIME.get(filename.rsplit(".", 1)[-1], "application/octet-stream"),
+                       "x-upsert": "false", **({"Authorization": f"Bearer {key}"} if key.startswith("eyJ") else {})}
+            res = requests.post(f"{url}/storage/v1/object/{BUCKET}/{filename}", data=data, headers=headers, timeout=20)
+            if res.status_code in (200, 201):
+                return f"{url}/storage/v1/object/public/{BUCKET}/{filename}"
+        except Exception:      # 저장소가 안 되면 아래 로컬 파일로 (사진 올리기 자체는 멈추지 않게)
+            pass
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    (IMAGE_DIR / filename).write_bytes(data)
+    return filename
+
+
 def save(name: str, data: bytes) -> str:
     """이미지를 저장하고 파일 이름을 돌려준다. 원래 이름은 쓰지 않는다 (경로 조작 방지).
     저장 전에 위치·기기 정보(EXIF)를 지운다 (strip_metadata)."""
@@ -74,10 +103,7 @@ def save(name: str, data: bytes) -> str:
     if ext not in TYPES:
         raise ValueError(f"지원하지 않는 이미지 형식입니다: {name}")
     data = strip_metadata(data, ext)
-    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4().hex[:12]}.{ext}"
-    (IMAGE_DIR / filename).write_bytes(data)
-    return filename
+    return _store(f"{uuid.uuid4().hex[:12]}.{ext}", data)
 
 
 AVATAR_PX = 256      # 프로필 사진은 화면에 72px 이하로만 보인다 → 256px 정사각형이면 레티나에서도 충분
@@ -100,10 +126,7 @@ def save_avatar(name: str, data: bytes) -> str:
         img.save(out, "WEBP", quality=85, method=4)
     except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise ValueError("사진을 읽지 못했어요. 다른 사진으로 다시 올려 주세요.") from exc
-    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4().hex[:12]}.webp"
-    (IMAGE_DIR / filename).write_bytes(out.getvalue())
-    return filename
+    return _store(f"{uuid.uuid4().hex[:12]}.webp", out.getvalue())
 
 
 def remove(names) -> int:
