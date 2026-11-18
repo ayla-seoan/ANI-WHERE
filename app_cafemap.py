@@ -2174,8 +2174,6 @@ def _home_week(df: pd.DataFrame) -> None:
                 st.markdown(f'<div class="wkh {cls}"><b>{WEEKDAYS[i]}{" · 오늘" if day == TODAY else ""}</b>'
                             f'<span class="wkd">{day.month}.{day.day}</span><span class="wkn">{len(ends)}</span></div>',
                             unsafe_allow_html=True)
-                if not ends:
-                    st.markdown('<div class="wk-empty">끝나는 팝업 없음</div>', unsafe_allow_html=True)
                 # 칸이 너무 길어지지 않게 요일마다 3곳까지, 나머지는 '+N건 더보기' 를 누르면 그 칸에서 펼친다 (11/18 요청)
                 opened = bool(st.session_state.get(f"wk_open_{i}"))
                 for r in ends if opened else ends[:WEEK_MAX]:
@@ -2380,7 +2378,7 @@ HOME_CSS = """
 [class*="st-key-wk_"] { padding: 12px 10px 4px; border-right: 1px solid #EEF2F1; gap: 10px !important; height: 100%; }
 .st-key-home_week > div:last-child [class*="st-key-wk_"] { border-right: 0; }
 [class*="st-key-wk_"]:has(.wkh.today) { background: #EAF8F5; }
-.wkh { display: flex; align-items: baseline; gap: 6px; font-size: 1rem; }
+.wkh { display: flex; align-items: baseline; gap: 6px; font-size: 1rem; margin-bottom: 18px; }   /* 머리와 첫 카드 사이 여백 (11/18 요청) */
 .wkh b { font-weight: 800; } .wkh .wkd { font-size: .75rem; color: #9AA5A1; }
 .wkh .wkn { margin-left: auto; font-weight: 800; color: #9AA5A1; font-size: .9rem; }
 .wkh.today b, .wkh.today .wkn { color: var(--accent-deep); }
@@ -2395,7 +2393,7 @@ HOME_CSS = """
 .hc.tall { padding-bottom: 12px; }
 .hc.tall .hct { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: .88rem; }
 /* 후기 모음 카드 */
-[class*="st-key-home_row_rv"] > div { flex: 0 0 340px !important; width: 340px !important; min-width: 340px !important; }
+[class*="st-key-home_row_rv"] > div { flex: 0 0 260px !important; width: 260px !important; min-width: 260px !important; }   /* 좁게 (11/18 요청) */
 .rvc { border: 1px solid #E6ECEA; border-radius: 16px; padding: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.04); margin-bottom: 18px;
   background: #fff; }
 .rvtop { display: flex; gap: 10px; align-items: center; }
@@ -2407,7 +2405,7 @@ HOME_CSS = """
 .rvchips span { font-size: .68rem; padding: 1px 7px; border-radius: 6px; background: #F1F4F3; color: #5B6663; font-weight: 600; }
 .rvchips span.st.green { color: var(--accent-deep); background: var(--accent-soft); }
 .rvchips span.st.blue { color: #2C5BC5; background: #EAF0FC; } .rvchips span.st.red { color: #D93A4A; background: #FDECEE; }
-.rvbox { margin-top: 12px; background: #F7F9F8; border-radius: 12px; padding: 12px; min-height: 150px; }
+.rvbox { margin-top: 12px; background: #F7F9F8; border-radius: 12px; padding: 12px; min-height: 120px; }
 .rvme { display: flex; gap: 8px; align-items: center; }
 .rvwho { min-width: 0; flex: 1; } .rvwho b { font-size: .85rem; }
 .rvs { color: #F4B63F; font-size: .8rem; letter-spacing: 1px; } .rvs .off { color: #DDE3E1; }
@@ -2425,7 +2423,7 @@ HOME_CSS = """
   [class*="st-key-home_row_"] > div { flex-basis: 150px !important; width: 150px !important; min-width: 150px !important; }
   .hc .hcrank { font-size: 2.6rem; }
   .st-key-home_week > div { min-width: 132px !important; }
-  [class*="st-key-home_row_rv"] > div { flex-basis: 280px !important; width: 280px !important; min-width: 280px !important; }
+  [class*="st-key-home_row_rv"] > div { flex-basis: 230px !important; width: 230px !important; min-width: 230px !important; }
   .hc .hct { font-size: .85rem; }
   .home-h { font-size: 1.05rem; }
 }
@@ -2561,7 +2559,7 @@ def bookmark_pick_dialog(df: pd.DataFrame) -> None:
 
 STORY_CSS = """
 <style>
-.st-key-stories { margin: 0 0 8px; }
+.st-key-stories { margin: 0 0 8px; gap: 6px !important; }   /* 제목과 동그라미 사이 반으로 (20px → 10px, 11/18 요청) */
 .story-head { font-size: .95rem; font-weight: 800; margin-bottom: 2px; color: var(--accent-deep); }
 .st-key-stories [data-testid="stMarkdown"]:has(.story-head) { width: fit-content !important; }
 .st-key-stories [data-testid="stMarkdown"]:has(.story-head) > div { justify-content: flex-start !important; gap: 6px;
