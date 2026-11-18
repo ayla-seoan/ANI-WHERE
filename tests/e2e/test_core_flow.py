@@ -293,7 +293,7 @@ def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_
     expect(page.locator(".st-key-stories .story.add")).to_be_visible(timeout=LONG)
     # 손님은 북마크가 없어 작품 없이 안내만
     expect(page.locator(".st-key-stories .story.mark")).to_have_count(0)
-    # 손님이 '북마크 추가' 를 누르면 로그인 화면으로
+    # 손님이 '최애 추가하기' 를 누르면 로그인 화면으로
     page.locator(".st-key-open_story_add button").click()
     expect(page).to_have_url(re.compile(r"/login"), timeout=LONG)
 
@@ -336,7 +336,8 @@ def test_12_로고를_누르면_홈이_열리고_랭킹_카드로_상세에_간�
     page.locator(".st-key-home_brand button").click()
     expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
     expect(page.locator(".story-head")).to_have_text("내 최애 팝업")
-    for title in ("실시간 인기 급상승 랭킹", "따끈따끈 신규 등록 팝업", "이번 주에 끝나는 팝업", "사전예약 팝업"):
+    expect(page.locator(".hbtitle").first).to_contain_text("실시간 인기 급상승 랭킹")   # 배너 안 왼쪽 위
+    for title in ("따끈따끈 신규 등록 팝업", "이번 주에 끝나는 팝업", "사전예약 팝업", "꿀팁 가득! 실시간 후기 모음"):
         expect(page.locator(".home-h", has_text=title)).to_be_visible(timeout=LONG)
     expect(page.locator(".st-key-gnbtab_on_home")).to_be_visible()
     rank = page.locator(".hls-wrap .hl")

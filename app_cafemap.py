@@ -2135,8 +2135,8 @@ def _home_slide(r: dict, rank: int, total: int) -> None:
         st.markdown(
             f'<div class="hb"><div class="hbbg" style="background-image:url(&quot;{url}&quot;)"></div>'
             f'<div class="hbpic" style="background-image:url(&quot;{url}&quot;), url(&quot;{images.DEFAULT_POSTER_URL}&quot;)"></div>'
+            f'<div class="hbtitle">{_mi("trending_up")}실시간 인기 급상승 랭킹</div>'
             f'<div class="hbtxt"><div class="hbrank">{rank}<small>위</small></div>'
-            '<div class="hbsub">실시간 인기 급상승</div>'
             f'<div class="hbt">{escape(str(r.get("work") or ""))}</div>'
             f'<div class="hbd">{escape(str(r.get("cafe_name") or ""))} · {escape(period)}</div>'
             f'<div class="hbchips">{chips}</div></div>'
@@ -2249,7 +2249,7 @@ def render_home(df: pd.DataFrame) -> None:
         render_stories(df)
 
         # 실시간 인기 급상승 랭킹 (5위까지, 11/18 요청): 왼쪽 큰 배너(‹ › 로 넘김 · 5초마다 넘어감) + 오른쪽 1~5위 목록
-        _home_head("실시간 인기 급상승 랭킹", "trending_up", key="rank")
+        # (제목은 배너 안 왼쪽 위에 크게, 11/18 요청)
         top = _home_rank(live)[:5]          # (지역 고르기 버튼은 11/18 요청으로 뺐다)
         if top:
             ban, lst = st.columns([2.3, 1], gap="medium")
@@ -2293,7 +2293,7 @@ HOME_CSS = """
 <style>
 .st-key-home { gap: 6px; }
 [class*="st-key-hh_"] { margin-top: 22px; margin-bottom: 6px; min-height: 34px; justify-content: space-between !important; }
-.st-key-hh_rank { margin-top: 8px; }     /* 내 최애 팝업 줄과 랭킹 제목 사이를 1/3 줄임 (11/18 요청) */
+
 .home-h { font-size: 1.2rem; font-weight: 800; display: flex; align-items: center; gap: 6px; }
 .home-h .mi { color: var(--accent); font-size: 1.35rem; }
 [class*="st-key-hmore_"] button p { color: #7B8784 !important; font-size: .85rem !important; }
@@ -2306,6 +2306,7 @@ HOME_CSS = """
 .st-key-home_banner { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; gap: 0 !important;
   scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none; border-radius: 18px; }
 .st-key-home_banner::-webkit-scrollbar { display: none; }
+.st-key-home [data-testid="stHorizontalBlock"]:has(.st-key-home_banner) { margin-top: 12px; }
 .st-key-home_banner > div { flex: 0 0 100% !important; width: 100% !important; min-width: 100% !important; scroll-snap-align: start; }
 .st-key-home_banner { height: 340px !important; min-height: 340px; }
 .st-key-home_banner [class*="st-key-card_hb_"] { height: 340px; }
@@ -2317,8 +2318,10 @@ HOME_CSS = """
 .hb .hbtxt { position: absolute; left: 56px; bottom: 32px; right: 300px; color: #fff; }
 .hb .hbrank { font-size: 4rem; font-weight: 900; font-style: italic; line-height: 1; letter-spacing: -2px; }
 .hb .hbrank small { font-size: 1.2rem; font-style: normal; margin-left: 4px; }
-.hb .hbsub { font-size: .85rem; font-weight: 700; opacity: .85; margin-top: 10px; }
-.hb .hbt { font-size: 1.9rem; font-weight: 900; line-height: 1.2; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2;
+.hb .hbtitle { position: absolute; left: 56px; top: 26px; color: #fff; font-size: 1.45rem; font-weight: 900;
+  display: flex; align-items: center; gap: 8px; text-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.hb .hbtitle .mi { color: #7FE0CF; font-size: 1.6rem; }
+.hb .hbt { font-size: 1.9rem; font-weight: 900; line-height: 1.2; margin-top: 12px; display: -webkit-box; -webkit-line-clamp: 2;
   -webkit-box-orient: vertical; overflow: hidden; }
 .hb .hbd { font-size: .9rem; opacity: .9; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hb .hbchips { display: flex; gap: 6px; margin-top: 12px; }
@@ -2378,7 +2381,7 @@ HOME_CSS = """
 [class*="st-key-wk_"] { padding: 12px 10px 4px; border-right: 1px solid #EEF2F1; gap: 10px !important; height: 100%; }
 .st-key-home_week > div:last-child [class*="st-key-wk_"] { border-right: 0; }
 [class*="st-key-wk_"]:has(.wkh.today) { background: #EAF8F5; }
-.wkh { display: flex; align-items: baseline; gap: 6px; font-size: 1rem; margin-bottom: 18px; }   /* 머리와 첫 카드 사이 여백 (11/18 요청) */
+.wkh { display: flex; align-items: center; gap: 6px; font-size: 1rem; margin-bottom: 18px; }   /* 머리와 첫 카드 사이 여백 (11/18 요청) */
 .wkh b { font-weight: 800; } .wkh .wkd { font-size: .75rem; color: #9AA5A1; }
 .wkh .wkn { margin-left: auto; font-weight: 800; color: #9AA5A1; font-size: .9rem; }
 .wkh.today b, .wkh.today .wkn { color: var(--accent-deep); }
@@ -2391,7 +2394,7 @@ HOME_CSS = """
 .hc.tall .hcbadge { border-radius: 12px 0 10px 0; background: #26302D; }
 .hc.tall .hcd, .hc.tall .hcchips { display: none; }
 .hc.tall { padding-bottom: 12px; }
-.hc.tall .hct { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: .88rem; }
+.hc.tall .hct { margin-top: 5px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: .88rem; }
 /* 후기 모음 카드 */
 [class*="st-key-home_row_rv"] > div { flex: 0 0 260px !important; width: 260px !important; min-width: 260px !important; }   /* 좁게 (11/18 요청) */
 .rvc { border: 1px solid #E6ECEA; border-radius: 16px; padding: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.04); margin-bottom: 18px;
@@ -2408,7 +2411,7 @@ HOME_CSS = """
 .rvbox { margin-top: 12px; background: #F7F9F8; border-radius: 12px; padding: 12px; min-height: 120px; }
 .rvme { display: flex; gap: 8px; align-items: center; }
 .rvwho { min-width: 0; flex: 1; } .rvwho b { font-size: .85rem; }
-.rvs { color: #F4B63F; font-size: .8rem; letter-spacing: 1px; } .rvs .off { color: #DDE3E1; }
+.rvs { color: #F4B63F; font-size: .72rem; letter-spacing: 0; white-space: nowrap; } .rvs .off { color: #DDE3E1; }
 .rvs b { color: #26302D; margin-left: 4px; letter-spacing: 0; } .rvs .of { color: #9AA5A1; letter-spacing: 0; }
 .rvdate { font-size: .72rem; color: #9AA5A1; align-self: flex-start; }
 .rvbody { margin-top: 10px; font-size: .85rem; line-height: 1.5; color: #3A4542; display: -webkit-box; -webkit-line-clamp: 3;
@@ -2417,12 +2420,22 @@ HOME_CSS = """
 .rvpics .rvp { flex: 1; aspect-ratio: 4/3; border-radius: 8px; background-size: cover; background-position: center; }
 @media (max-width: 640px) {
   .hb { height: 240px; } .hb .hbpic { right: 14px; top: 16px; bottom: 16px; }
-  .hb .hbtxt { left: 18px; right: 150px; bottom: 18px; } .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
+  .hb .hbtxt { left: 18px; right: 150px; bottom: 18px; }
+  .hb .hbtitle { left: 18px; top: 16px; font-size: 1.05rem; } .hb .hbtitle .mi { font-size: 1.2rem; } .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
   .st-key-home_ranklist { height: auto; }
   .st-key-home_banner, .st-key-home_banner [class*="st-key-card_hb_"] { height: 240px !important; min-height: 240px; }
   [class*="st-key-home_row_"] > div { flex-basis: 150px !important; width: 150px !important; min-width: 150px !important; }
   .hc .hcrank { font-size: 2.6rem; }
-  .st-key-home_week > div { min-width: 132px !important; }
+  /* 모바일 이번 주: 월~일을 위에서 아래로 한 줄씩, 카드는 작은 그림 + 옆 글자 (11/18 요청) */
+  .st-key-home_week { flex-direction: column !important; overflow-x: visible; border-top: 1px solid #E3E9E7; }
+  .st-key-home_week > div { flex: none !important; width: 100% !important; min-width: 0 !important; }
+  [class*="st-key-wk_"] { border-right: 0; border-bottom: 1px solid #EEF2F1; padding: 10px 8px 2px; gap: 8px !important; }
+  .wkh { margin-bottom: 6px; }
+  .hc.tall { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; }
+  .hc.tall .hcp { width: 64px; flex: none; aspect-ratio: 1/1; border-radius: 10px; }
+  .hc.tall .hcbadge { font-size: .58rem; padding: 2px 5px; border-radius: 10px 0 8px 0; }
+  .hc.tall .hct { margin-top: 0; font-size: .85rem; -webkit-line-clamp: 2; }
+  [class*="st-key-wk_"] [class*="st-key-fav_"] { display: none; }
   [class*="st-key-home_row_rv"] > div { flex-basis: 230px !important; width: 230px !important; min-width: 230px !important; }
   .hc .hct { font-size: .85rem; }
   .home-h { font-size: 1.05rem; }
@@ -2466,7 +2479,7 @@ def _story_add() -> None:
 def render_stories(df: pd.DataFrame) -> None:
     """'내가 관심있는 작품' (11/18 요청): 인스타 스토리처럼 동그란 작품 포스터 줄.
     내가 북마크한 (진행 중·예정) 팝업의 작품만. 숫자는 그 작품에서 북마크한 팝업 수.
-    맨 앞 '북마크 추가' 를 누르면 팝업을 골라 북마크하는 창이 열린다."""
+    맨 앞 '최애 추가하기' 를 누르면 팝업을 골라 북마크하는 창이 열린다."""
     rows = _live_rows(df)
     _, mine, _ = _fav_state()
     # 내가 북마크한 팝업의 작품만 (11/18 요청). 숫자는 그 작품에서 내가 북마크한 팝업 수
@@ -2482,9 +2495,9 @@ def render_stories(df: pd.DataFrame) -> None:
         with st.container(horizontal=True, key="story_row"):
             # 맨 앞에 두어 줄이 길어도 늘 보이게 (인스타 '내 스토리' 자리)
             with st.container(key="card_story_add"):
-                st.markdown(f'<div class="story add"><div class="ring">{_mi("add")}</div><div class="nm">북마크 추가</div></div>',
+                st.markdown(f'<div class="story add"><div class="ring">{_mi("add")}</div><div class="nm">최애 추가하기</div></div>',
                             unsafe_allow_html=True)
-                st.button("북마크 추가", key="open_story_add", on_click=_story_add)
+                st.button("최애 추가하기", key="open_story_add", on_click=_story_add)
             if not items:
                 st.markdown('<div class="story-empty">팝업을 북마크하면 그 작품이 여기에 모여요.</div>', unsafe_allow_html=True)
             for i, (w, n) in enumerate(items):
@@ -2498,7 +2511,7 @@ def render_stories(df: pd.DataFrame) -> None:
         bookmark_pick_dialog(df)
 
 
-@st.dialog("북마크 추가", width="large")
+@st.dialog("최애 추가하기", width="large")
 def bookmark_pick_dialog(df: pd.DataFrame) -> None:
     """dueple 온보딩처럼: 검색칸 + 포스터 격자에서 팝업을 눌러 고르고, 저장하면 북마크된다 (내 캘린더 · 알림 · 스토리 줄에 반영)."""
     ss = st.session_state
@@ -3062,6 +3075,10 @@ iframe[src*="kakao_map"] {{
 .chip.tag {{ background:{MINT}; color:#fff; border-color:{MINT}; }}
 .upd {{ color:#8A9592; font-size:.7rem; margin:-4px 0 6px; display:flex; align-items:center; gap:4px; }}
 .upd .mi {{ font-size:.95rem; }}
+.aw-foot {{ margin-top:48px; padding:22px 0 8px; border-top:1px solid #E6ECEA; color:#9AA5A1; font-size:.75rem; line-height:1.8; }}
+.aw-foot a {{ color:#7B8784 !important; text-decoration:none; }}
+.aw-foot a:hover {{ text-decoration:underline; }}
+.aw-foot-links {{ display:flex; gap:14px; margin-top:2px; }}
 @media (min-width: 641px) {{ .stMain:has(.upd) .st-key-map_row {{ margin-top:12px; }}
   [data-testid="stElementContainer"]:has(.upd) {{ margin-bottom:8px; }}
   .st-key-listtools {{ margin-bottom:10px; }} }}   /* 리스트 보기: 마지막 업데이트 · 팝업 카페 N곳 · 카드 사이 여백 (11/18 요청) */   /* 지도 보기: 마지막 업데이트와 지도 칸 사이 (11/18) */
@@ -4865,6 +4882,7 @@ def page_map() -> None:
     df["entry_id"] = df["entry_id"].astype(str)
     if st.session_state.get("home_view") and not current:
         render_home(df)
+        _footer()
         return
     # '스파이패밀리' 와 '스파이 패밀리' 가 따로 걸리지 않게 목록의 작품명으로 맞춘다
     df["work"] = df["work"].fillna("").astype(str).map(catalog.canonical_work)
@@ -5018,6 +5036,7 @@ def page_map() -> None:
     if wide:
         with chat, st.container(key="ask_panel"):
             render_ask_panel()
+        _footer()
         return
 
     def draw_map() -> None:
@@ -5071,6 +5090,8 @@ def page_map() -> None:
         with map_right, st.container(key="ask_panel"):   # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
             render_ask_panel()
 
+    if current:
+        _footer()          # 상세 맨 아래 (지도 보기는 화면 높이에 맞춘 화면이라 바닥글을 두지 않는다)
     # 지도에서 고른 게 이번 실행에서 바뀌었으면 왼쪽 패널·강조를 다시 그린다
     if st.session_state.get("selected") != selected:
         st.rerun()
@@ -6015,6 +6036,7 @@ def page_calendar() -> None:
     st.markdown(GLOBAL_CSS + CAL_CSS, unsafe_allow_html=True)
     _no_translate(season_on=True)      # 계절 배경 (내 캘린더에서만, 11/18)
     if _brand(home=True, fixed=True):
+        st.session_state.update(home_view=True, cal_view=False, box_view=False, selected=None)   # 로고 → 홈 (11/18)
         go("map")
     render_calendar()
 
@@ -6161,9 +6183,20 @@ def page_privacy() -> None:
             st.markdown(PRIVACY_FILE.read_text(encoding="utf-8"))
         except OSError:
             st.warning("개인정보처리방침을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.", icon=":material/error:")
+    _footer()
 
 
 GUIDE_FILE = Path(__file__).resolve().parent / "docs" / "guide.md"
+CONTACT_EMAIL = "tjtek888@gmail.com"      # docs/privacy-policy.md 10절 연락처와 같게
+
+
+def _footer() -> None:
+    """페이지 맨 아래 바닥글 (11/18 요청): © 연도 ANI:WHERE · 운영 · 개인정보 문의 + 개인정보처리방침 · 사용법 링크."""
+    st.markdown(
+        f'<div class="aw-foot"><div>© {TODAY.year} ANI:WHERE</div>'
+        f'<div>운영: ANI:WHERE · 개인정보 문의: <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a></div>'
+        '<div class="aw-foot-links"><a href="./privacy" target="_self">개인정보처리방침 · 이용약관</a>'
+        '<a href="./guide" target="_self">사용법 안내</a></div></div>', unsafe_allow_html=True)
 
 
 def page_guide() -> None:
@@ -6177,6 +6210,7 @@ def page_guide() -> None:
             st.markdown(GUIDE_FILE.read_text(encoding="utf-8"), unsafe_allow_html=True)
         except OSError:
             st.warning("사용법 안내를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.", icon=":material/error:")
+    _footer()
     # 주소 끝 #add 같은 칸으로 바로 내려간다 (화면이 다 그려진 뒤라 브라우저 기본 이동이 안 먹어서 몇 번 다시 시도)
     components.html("<script>(function(){const P=window.parent,id=decodeURIComponent((P.location.hash||'').slice(1));"
                     "if(!id)return;let n=0;const t=setInterval(()=>{const e=P.document.getElementById(id);"
