@@ -3403,3 +3403,24 @@ svg {
     transition: none !important;
   }
 }
+
+
+/* '더보기' 버튼은 모두 포인트 색 (11/19 요청: 회색 → 연한 민트 바탕 + 진한 민트 글자 · 화살표, 앱과 같게) */
+.wk-more,
+.list-more button,
+.adm-more button {
+  background: var(--accent-soft) !important;
+  border: 1px solid #9eddcc !important;
+  color: var(--accent-deep) !important;
+}
+.wk-more:hover,
+.list-more button:hover,
+.adm-more button:hover {
+  background: #d3f5ee !important;
+  border-color: var(--accent) !important;
+}
+.wk-more svg,
+.list-more button svg,
+.adm-more button svg {
+  color: var(--accent-deep) !important;
+}

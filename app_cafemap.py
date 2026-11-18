@@ -244,6 +244,14 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   padding: 4px 18px !important; min-height: 0 !important; }}
 .st-key-list_more button p {{ color: #5F6B67 !important; font-size: .88rem !important; font-weight: 700 !important; }}
 .st-key-list_more button span {{ color: #5F6B67 !important; }}
+/* '더보기' 버튼은 모두 포인트 색 (11/19 요청: 회색 → 연한 민트 바탕 + 진한 민트 글자 · 화살표) */
+html body .st-key-list_more button, html body [class*="st-key-adm_more_"] button, html body [class*="st-key-wk_more_"] button {{
+  background: var(--accent-soft) !important; border: 1px solid #9EDDCC !important; }}
+html body .st-key-list_more button:hover, html body [class*="st-key-adm_more_"] button:hover, html body [class*="st-key-wk_more_"] button:hover {{
+  background: #D3F5EE !important; border-color: var(--accent) !important; }}
+html body .st-key-list_more button p, html body .st-key-list_more button span,
+html body [class*="st-key-adm_more_"] button p, html body [class*="st-key-adm_more_"] button span,
+html body [class*="st-key-wk_more_"] button p, html body [class*="st-key-wk_more_"] button span {{ color: var(--accent-deep) !important; }}
 .st-key-list_more button:hover {{ background: #E8ECEA !important; }}
 .st-key-view_tools {{ justify-content: flex-end !important; align-items: center; gap: 6px !important; flex-wrap: nowrap !important; }}
 .st-key-view_tools > div {{ width: auto !important; flex: 0 0 auto !important; }}
