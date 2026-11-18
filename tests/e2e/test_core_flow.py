@@ -204,13 +204,21 @@ def test_5_리뷰에_전화번호를_넣으면_막힌다(page: Page, app_url, da
     target = pick_cafe(data_dir)
     open_detail(page, target["entry_id"])
 
-    body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
-    body.scroll_into_view_if_needed()
-    body.fill("대기 줄 길어요. 문의는 010-1234-5678 로 주세요")
-    body.press("Tab")                  # 칸을 벗어나야 값이 서버로 넘어간다
-    wait_idle(page)
-
-    expect(page.get_by_text(re.compile(r"민감한 개인정보\(.*전화번호.*\)는 입력할 수 없습니다"))).to_be_visible(timeout=LONG)
+    warn = page.get_by_text(re.compile(r"민감한 개인정보\(.*전화번호.*\)는 입력할 수 없습니다"))
+    # 상세가 막 열린 직후엔 입력칸이 다시 그려지며 넣은 글이 사라질 때가 있다 → 경고가 뜰 때까지 몇 번 다시 넣는다
+    for _ in range(3):
+        wait_idle(page)
+        body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
+        body.scroll_into_view_if_needed()
+        body.fill("대기 줄 길어요. 문의는 010-1234-5678 로 주세요")
+        body.press("Tab")                  # 칸을 벗어나야 값이 서버로 넘어간다
+        wait_idle(page)
+        try:
+            expect(warn).to_be_visible(timeout=8000)
+            break
+        except AssertionError:
+            continue
+    expect(warn).to_be_visible(timeout=LONG)
     send = page.get_by_role("button", name="리뷰 등록")
     # 다시 그리는 동안 예전 탭의 버튼이 잠깐 같이 남아 있을 수 있다 → 하나만 남을 때까지 기다린다
     expect(send).to_have_count(1, timeout=LONG)

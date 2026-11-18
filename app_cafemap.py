@@ -247,7 +247,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: -11px; }}
   /* 관심 작품 줄 아래 '마지막 업데이트' 가 지도 칸 위에 겹치지 않게 (11/18) */
   /* 모바일 지도 보기: 지도 칸을 탭 바로 아래로 올리고, 필터 아이콘은 지도 위에 겹쳐 띄운다 (11/18 요청) */
-  .stMain:has(.st-key-m_filter_btn) [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: -57px; }}
+  .stMain:has(.st-key-m_filter_btn) [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: -34px; }}
   .st-key-view_tools {{ position: relative; z-index: 20; }}
 }}
 .st-key-map_icon {{ display: flex !important; justify-content: flex-end; width: 100% !important; min-height: 32px; }}
@@ -2034,8 +2034,19 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
                     " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }</style>",
                     unsafe_allow_html=True)
     if wide:
-        # 모바일 리스트 보기: 필터 아이콘을 지도로 보기와 같은 높이로 ('팝업 카페 N곳' 줄 오른쪽, 11/18 요청)
-        st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: -53px !important; } }</style>",
+        # 모바일 리스트 보기: 필터 아이콘을 '팝업 카페 N곳' 줄 오른쪽 위에, 글자 높이만큼 작게 (11/18 요청)
+        st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: -70px !important; }"
+                    # '팝업 카페 N곳' ↔ 정렬 ↔ 카드 사이 여백 반으로 (11/18 요청)
+                    " .st-key-sort { margin-top: -31px !important; }"
+                    " [data-testid='stLayoutWrapper']:has(> .st-key-listtools) { margin-bottom: -13px !important; }"
+                    " html body .st-key-view_tools .st-key-m_filter_btn button { width: 30px !important; min-width: 30px !important;"
+                    "   height: 26px !important; border-radius: 8px !important; }"
+                    " html body .st-key-view_tools .st-key-m_filter_btn button span { font-size: 1rem !important; }"
+                    " html body .st-key-view_tools .st-key-m_filter_btn { width: 30px !important; min-width: 30px !important; flex: 0 0 30px !important; } }</style>",
+                    unsafe_allow_html=True)
+    else:
+        # 모바일 지도 보기: 필터 아이콘은 뺐다 (11/18 요청)
+        st.markdown("<style>@media (max-width: 640px) { html body .st-key-view_tools { display: none !important; } }</style>",
                     unsafe_allow_html=True)
     tools = st.container(horizontal=True, key="view_tools")
     with tools:
@@ -2326,7 +2337,7 @@ HOME_CSS = """
 .hb .hbrank { font-size: 4rem; font-weight: 900; font-style: italic; line-height: 1; letter-spacing: -2px; }
 .hb .hbrank small { font-size: 1.2rem; font-style: normal; margin-left: 4px; }
 /* 배너 제목 (11/18 요청): 왼쪽 위 작은 어두운 알약 (불꽃 아이콘 + 글씨) */
-.hb .hbtitle { position: absolute; left: 46px; top: 14px; display: flex; align-items: center; gap: 5px; padding: 5px 12px 5px 9px;
+.hb .hbtitle { position: absolute; left: 46px; top: 24px; display: flex; align-items: center; gap: 5px; padding: 5px 12px 5px 9px;
   border-radius: 10px; background: rgba(20,24,23,.62); color: #fff; font-size: .9rem; font-weight: 800; backdrop-filter: blur(4px); }
 .hb .hbtitle .mi { color: #8F7BFF; font-size: 1.1rem; font-variation-settings: 'FILL' 1; }
 .hb .hbt { font-size: 1.9rem; font-weight: 900; line-height: 1.2; margin-top: 12px; display: -webkit-box; -webkit-line-clamp: 2;
@@ -2429,7 +2440,7 @@ HOME_CSS = """
 @media (max-width: 640px) {
   .hb { height: 240px; } .hb .hbpic { right: 14px; top: 16px; bottom: 16px; }
   .hb .hbtxt { left: 18px; right: 150px; bottom: 18px; }
-  .hb .hbtitle { left: 18px; top: 10px; font-size: .78rem; padding: 4px 10px 4px 7px; }   /* 모바일: 아래 글자와 같은 시작점 (11/18) */ .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
+  .hb .hbtitle { left: 18px; top: 16px; font-size: .78rem; padding: 4px 10px 4px 7px; }   /* 모바일: 아래 글자와 같은 시작점 (11/18) */ .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
   .st-key-home_ranklist { height: auto; }
   .st-key-home_banner, .st-key-home_banner [class*="st-key-card_hb_"] { height: 240px !important; min-height: 240px; }
   [class*="st-key-home_row_"] > div { flex-basis: 150px !important; width: 150px !important; min-width: 150px !important; }
@@ -3088,10 +3099,11 @@ iframe[src*="kakao_map"] {{
 .chip.tag {{ background:{MINT}; color:#fff; border-color:{MINT}; }}
 .upd {{ color:#8A9592; font-size:.7rem; margin:-4px 0 6px; display:flex; align-items:center; gap:4px; }}
 .upd .mi {{ font-size:.95rem; }}
-.aw-foot {{ margin-top:48px; padding:22px 0 8px; border-top:1px solid #E6ECEA; color:#9AA5A1; font-size:.75rem; line-height:1.8; }}
+.aw-foot {{ margin-top:48px; padding:22px 0 8px; border-top:1px solid #E6ECEA; color:#9AA5A1; font-size:.75rem; line-height:1.8;
+  text-align:center; }}   /* PC·모바일 모두 가운데 (11/18 요청) */
 .aw-foot a {{ color:#7B8784 !important; text-decoration:none; }}
 .aw-foot a:hover {{ text-decoration:underline; }}
-.aw-foot-links {{ display:flex; gap:14px; margin-top:2px; }}
+.aw-foot-links {{ display:flex; gap:14px; margin-top:2px; justify-content:center; flex-wrap:wrap; }}
 @media (min-width: 641px) {{ .st-key-map_row {{ margin-top:5px; }}   /* 지도 칸 위 선 = 물어보기 창 위 선 */
   [data-testid="stElementContainer"]:has(.upd) {{ margin-bottom:8px; }}
   .st-key-listtools {{ margin-bottom:10px; }} }}   /* 리스트 보기: 마지막 업데이트 · 팝업 카페 N곳 · 카드 사이 여백 (11/18 요청) */   /* 지도 보기: 마지막 업데이트와 지도 칸 사이 (11/18) */
@@ -4365,6 +4377,10 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
         if not _member():   # 알림은 로그인한 사람만: 손님이면 알림 칸(과 그것을 감싼 칸)을 숨긴다
             st.markdown("<style>.st-key-bell_guest, .st-key-gnb_right > *:has(.st-key-bell_guest) "
                         "{ display: none !important; }</style>", unsafe_allow_html=True)
+        if on_map and not current and (st.session_state.get("home_view") or st.session_state.get("cal_view")):
+            # 모바일 홈·내 캘린더: 검색 아이콘을 숨긴다 (11/18 요청 — 걸러 볼 목록이 없는 화면)
+            st.markdown("<style>@media (max-width: 640px) { [class*='st-key-gnb_search_'] { display: none !important; } }</style>",
+                        unsafe_allow_html=True)
         with st.container(horizontal=True, key="gnb_right"):
             # 검색 아이콘: 누르면 아래 검색 필터 줄(검색·작품·캐릭터·진행여부·날짜)을 펼치고 접는다.
             # 걸어 둔 조건이 있으면 아이콘 옆에 그 수. 모바일에서는 필터 시트를 연다
@@ -6721,6 +6737,8 @@ a.adm-card.adm-link:hover { border-color: #14B8A6; }
 .gt-head .gt-wk, .gt-head .gt-today { display: none; }
 .gt-bar { position: absolute; top: 6px; height: 14px; border-radius: 4px; background: var(--c); }
 .gt-head .gt-track { height: 20px; }
+.gt-tick .gt-short { display: none; }
+@media (max-width: 640px) { .gt-tick .gt-full { display: none; } .gt-tick .gt-short { display: inline; } }
 .gt-tick { position: absolute; top: 0; font-size: .72rem; color: #6B7672; font-weight: 700; transform: translateX(-50%); white-space: nowrap; }
 .gt-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: #EEF1F0; }
 .gt-bar.cl { border-top-left-radius: 0; border-bottom-left-radius: 0; }
@@ -6795,8 +6813,10 @@ def _admin_gantt(mon: date) -> None:
     wd = "월화수목금토일"
     ticks = "".join(f'<div class="gt-tick{" now" if start + timedelta(days=i) == TODAY else ""}" '
                     f'style="left:{(i + .5) / span * 100:.2f}%">'
-                    f'{"오늘 " if start + timedelta(days=i) == TODAY else ""}'
-                    f'{(start + timedelta(days=i)).month}/{(start + timedelta(days=i)).day}({wd[i]})</div>'
+                    f'<span class="gt-full">{"오늘 " if start + timedelta(days=i) == TODAY else ""}'
+                    f'{(start + timedelta(days=i)).month}/{(start + timedelta(days=i)).day}({wd[i]})</span>'
+                    # 모바일은 칸이 좁아 날짜가 겹친다 → 요일 한 글자만 (오늘은 '오늘'), 11/18 요청
+                    f'<span class="gt-short">{"오늘" if start + timedelta(days=i) == TODAY else wd[i]}</span></div>'
                     for i in range(span))
     today = ""
     html = [f'<div class="gt"><div class="gt-row gt-head"><div class="gt-lab"><b>팝업 {len(rows)}곳</b></div>'
