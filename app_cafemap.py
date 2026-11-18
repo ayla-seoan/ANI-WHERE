@@ -4020,7 +4020,7 @@ def page_map() -> None:
     # '리스트 전체보기' 를 누르면 지도 없이 리스트만 크게 본다. '지도보기' 를 누르면 다시 반반으로
     if wide:
         # 리스트 전체보기: 왼쪽 목록 + 오른쪽 '팝업에게 물어보기' 대화창 (PC). 모바일은 대화창을 숨기고 위 '물어보기' 버튼으로
-        lst, chat = st.columns([3.3, 1.35], gap="medium")
+        lst, chat = st.columns([3.3, 1.165], gap="medium")   # 물어보기 폭 = 지도보기와 같게 (11/18 요청)
         with lst:
             render_list(view, wide=True, df_all=df, fcond=fcond)
         with chat, st.container(key="ask_panel"):
@@ -6191,9 +6191,15 @@ ASK_PANEL_CSS = """
 .st-key-apn_chips, .st-key-apd_chips { padding-top: 10px; border-top: 1px solid #EEF1F0; gap: 6px !important; flex-wrap: wrap; }
 .st-key-apn_chips button, .st-key-apd_chips button { border-radius: 999px !important; font-size: .78rem; min-height: 0; padding: 4px 12px; }
 /* 추천 질문 칩 글자를 한 단계 작게 (11/18 요청) — 버튼 안 p 가 자기 글자 크기를 따로 가져서 p 에 준다 */
-.st-key-apn_chips button p, .st-key-apd_chips button p { font-size: .78rem !important; line-height: 1.3; }
+.st-key-apn_chips button p, .st-key-apd_chips button p { font-size: .78rem !important; line-height: 1.3; display: block; }
+/* 글자를 담는 칸도 같은 글자 크기·줄 높이로 → 칩 안에서 위아래 가운데 */
+.st-key-apn_chips button [data-testid="stMarkdownContainer"], .st-key-apd_chips button [data-testid="stMarkdownContainer"] {
+  font-size: .78rem !important; line-height: 1.3 !important; }
 .st-key-apn_chips button, .st-key-apd_chips button { padding: 3px 10px !important; }
 .st-key-apn_form [data-testid="stForm"], .st-key-apd_form [data-testid="stForm"] { padding: 10px 0 14px; }
+/* 추천 칩 ↔ 입력칸 간격을 반으로 (28px → 14px, 11/18 요청) */
+.st-key-apn_form [data-testid="stForm"], .st-key-apd_form [data-testid="stForm"] { padding-top: 0 !important; }
+.st-key-apn_form, .st-key-apd_form { margin-top: -4px !important; }
 .st-key-apn_form [data-testid="stFormSubmitButton"] button, .st-key-apd_form [data-testid="stFormSubmitButton"] button { background: #E0895A !important; border-color: #E0895A !important;
   color: #fff !important; font-weight: 800; }
 @media (max-width: 640px) { .st-key-ask_panel { display: none !important; } }
