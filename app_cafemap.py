@@ -5173,6 +5173,14 @@ AUTH_CSS = """
 .st-key-soc_join .stButton { width: auto !important; }
 .st-key-soc_allbox { border-bottom: 1px solid #E3E8E6; padding-bottom: 6px; margin-bottom: 2px; }
 .st-key-soc_allbox label p { font-weight: 800 !important; }
+/* 마이페이지 저장 · 로그아웃: 모바일에서도 한 줄에 반반 */
+[data-testid="stForm"]:has(input[aria-label="닉네임 바꾸기"]) [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; }
+[data-testid="stForm"]:has(input[aria-label="닉네임 바꾸기"]) [data-testid="stColumn"] { flex: 1 1 0 !important; min-width: 0 !important; width: auto !important; }
+.st-key-withdraw_box { margin-top: 10px; }
+.st-key-withdraw_box button { border: 0 !important; background: transparent !important; box-shadow: none !important;
+  padding: 0 !important; min-height: 0 !important; width: auto !important; }
+.st-key-withdraw_box button p { font-size: .76rem !important; color: #9AA5A1 !important; text-decoration: underline; }
+.st-key-withdraw_box button [data-testid="stIconMaterial"], .st-key-withdraw_box button svg { display: none !important; }
 .consent-box { background: #F4F8F6; border-radius: 12px; padding: 10px 12px; margin: 6px 0 8px; font-size: .82rem; color: #3A4542; }
 .consent-box table { width: 100%; border-collapse: collapse; margin: 6px 0; }
 .consent-box th { width: 44px; text-align: left; color: #2E9C82; font-weight: 800; padding: 3px 6px 3px 0; vertical-align: top; border: 0; }
@@ -5490,7 +5498,14 @@ def _my_account(row: dict) -> None:
             st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.')
     with st.form("rename", border=False):
         nick = st.text_input("닉네임 바꾸기", value=row.get("nickname", ""), max_chars=auth.MAX_NICK)
-        if st.form_submit_button("저장", icon=":material/check:", type="primary", width="stretch"):   # 길게 · 포인트 색 (11/18)
+        # 저장 · 로그아웃을 한 줄에 반반 (11/18 요청). 폼 안에는 제출 버튼만 둘 수 있어서 로그아웃도 제출 버튼으로
+        b1, b2 = st.columns(2)
+        saved = b1.form_submit_button("저장", icon=":material/check:", type="primary", width="stretch")
+        if b2.form_submit_button("로그아웃", icon=":material/logout:", width="stretch"):
+            _logout()
+            st.session_state["flash"] = ("로그아웃했어요.", ":material/logout:")
+            st.rerun()
+        if saved:
             try:
                 auth.rename(members, row, nick)
                 st.session_state.pop("_member_cache", None)
@@ -5515,12 +5530,8 @@ def _my_account(row: dict) -> None:
                         st.warning(str(e), icon=":material/error:")
     st.markdown(f'<div class="consent-link"><a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a></div>',
                 unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    if c1.button("로그아웃", icon=":material/logout:", width="stretch"):
-        _logout()
-        st.session_state["flash"] = ("로그아웃했어요.", ":material/logout:")
-        st.rerun()
-    with c2.popover("탈퇴하기", icon=":material/person_remove:", width="stretch"):
+    # 탈퇴하기: 맨 아래 작은 회색 글씨(버튼이지만 글자처럼) — 11/18 요청
+    with st.container(key="withdraw_box"), st.popover("탈퇴하기"):
         st.write("닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 **지난 기록까지 바로 지워요**. "
                  "쓴 리뷰는 다른 이용자를 위해 '탈퇴한 회원'으로 남아요 (지우고 싶은 글은 먼저 삭제 요청해 주세요).")
         if local:
