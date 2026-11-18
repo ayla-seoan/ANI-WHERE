@@ -138,7 +138,7 @@
         100
       ],
       "parameters": {
-        "jsCode": "// n8n Code 노드 ③: 메일 제목·본문. AI 에이전트가 실패해도(키 없음·오류) 규칙으로 센 요약은 늘 보낸다\n// 결과에 'AI 산출' 인지 '규칙 기반 대체' 인지 표시한다 (CLAUDE.md 예외 처리 원칙과 같게)\n\nconst base = $('1차·2차 숫자 세기').item.json;\nconst ai = String(($json && ($json.output || $json.text)) || '').trim();\nconst ok = ai.length > 0 && !$json.error;\nconst date = new Date().toISOString().slice(0, 10);\nconst 본문 = [\n  base.요약,\n  '',\n  '────────',\n  ok ? `[AI 산출] 해석 · 다음에 고칠 것\\n${ai}` : '[규칙 기반 대체] AI 요약을 만들지 못해 숫자만 보냅니다.',\n  '',\n  `(정리 시트 ${base.행수}줄 기준 · 참가자는 P 번호로만 기록 · 이름·연락처는 받지 않음)`,\n].join('\\n');\nreturn [{ json: { 제목: `[ANI:WHERE] 사용자 테스트 요약 ${date}`, 본문 } }];\n"
+        "jsCode": "// n8n Code 노드 ③: 메일 제목·본문. AI 에이전트가 실패해도(키 없음·오류) 규칙으로 센 요약은 늘 보낸다\n// 결과에 'AI 산출' 인지 '규칙 기반 대체' 인지 표시한다 (CLAUDE.md 예외 처리 원칙과 같게)\n\nconst base = $('1차·2차 숫자 세기').item.json;\nconst ai = String(($json && ($json.output || $json.text)) || '').trim();\nconst ok = ai.length > 0 && !$json.error;\nconst date = new Date().toISOString().slice(0, 10);\nconst 본문 = [\n  base.요약,\n  '',\n  '────────',\n  ok ? `[AI 산출] 해석 · 다음에 고칠 것\\n${ai}` : '[규칙 기반 대체] AI 요약을 만들지 못해 숫자만 보냅니다.',\n  '',\n  `(정리 시트 ${base.행수}줄 기준 · 닉네임으로만 묶음 · 이름·연락처·이메일은 받지 않음)`,\n].join('\\n');\nreturn [{ json: { 제목: `[ANI:WHERE] 사용해 보기 설문 요약 ${date}`, 본문 } }];\n"
       }
     },
     {
