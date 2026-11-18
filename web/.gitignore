@@ -43,3 +43,4 @@ next-env.d.ts
 
 # npm run test:ask 가 만드는 임시 폴더
 /.ask-check/
+/.auth-check/

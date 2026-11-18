@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPopup, getPopupData } from "@/lib/data";
 import {
-  APP_URL,
   detailSpan,
   detailState,
   hostOf,
@@ -18,14 +17,16 @@ import {
 import Gallery from "@/components/detail/Gallery";
 import { SimCard } from "@/components/cards";
 import HScroll from "@/components/HScroll";
-import { BagIcon, ChatIcon, GiftIcon, PartyIcon, PinIcon, SparkleIcon, StarIcon } from "@/components/Icons";
+import { BagIcon, GiftIcon, PartyIcon, PinIcon, SparkleIcon } from "@/components/Icons";
+import Reviews from "@/components/detail/Reviews";
+import BookmarkButton from "@/components/member/BookmarkButton";
+import RememberRecent from "@/components/member/RememberRecent";
+import { displayName } from "@/lib/server/auth";
+import { threadsFor } from "@/lib/server/member";
+import { getMe } from "@/lib/server/session";
 
-export const revalidate = 600;
-// 빌드 때 미리 만들지 않고, 처음 열릴 때 만들어 10분 캐시한다 (ISR)
-export const dynamicParams = true;
-export async function generateStaticParams() {
-  return [];
-}
+// 회원 리뷰·북마크가 있어 요청마다 그린다 (팝업 데이터는 lib/data.ts 가 10분 캐시)
+export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -137,12 +138,19 @@ export default async function PopupPage({ params }: Props) {
     ["굿즈", <BagIcon key="b" />, p.goods],
     ["이벤트", <PartyIcon key="p" />, p.tags.filter((t) => t !== "상시" && t !== "기간 확인 필요")],
   ];
+  const me = await getMe();
+  let threads: Awaited<ReturnType<typeof threadsFor>> = [];
+  try {
+    threads = await threadsFor(p.id, me ? displayName(me.row) : "");
+  } catch (e) {
+    console.error("[detail] 리뷰를 읽지 못함", e instanceof Error ? e.message : e);
+  }
   const sims = similar(p, popups, today);
   const near = nearby(p, popups, today);
-  const appLink = `${APP_URL}/?cafe=${encodeURIComponent(p.id)}`;
 
   return (
     <article className="detail">
+      <RememberRecent id={p.id} />
       <div className="detail-cols">
         <div className="detail-left">
           <Gallery images={p.images} alt={`${p.work} 포스터`} />
@@ -158,7 +166,10 @@ export default async function PopupPage({ params }: Props) {
             </span>
             <span className={`dstate${state === "종료" ? " ended" : ""}`}>{state}</span>
           </div>
-          <h1 className="dtitle">{p.work}</h1>
+          <div className="dtitle-row">
+            <h1 className="dtitle">{p.work}</h1>
+            <BookmarkButton cafeId={p.id} variant="detail" />
+          </div>
           {p.characters && (
             <div className="dsub">
               <span className="dchars">{p.characters}</span>
@@ -234,40 +245,11 @@ export default async function PopupPage({ params }: Props) {
           )}
         </div>
 
-        <aside className="detail-side" aria-label="리뷰·북마크 안내">
-          <div className="side-tabs">
-            <span className="on">
-              <ChatIcon />
-              리뷰 {p.rating?.n ?? 0}
-            </span>
-          </div>
-          <div className="side-box">
-            {p.rating ? (
-              <div className="rv-avg">
-                <span className="rv-avg-num">{p.rating.avg.toFixed(1)}</span>
-                <span className="rv-avg-stars" aria-label={`별점 ${p.rating.avg.toFixed(1)}점`}>
-                  <span className="rv-avg-bg">
-                    {[0, 1, 2, 3, 4].map((k) => (
-                      <StarIcon key={k} />
-                    ))}
-                  </span>
-                  <span className="rv-avg-fg" style={{ width: `${(p.rating.avg / 5) * 100}%` }}>
-                    {[0, 1, 2, 3, 4].map((k) => (
-                      <StarIcon key={k} />
-                    ))}
-                  </span>
-                </span>
-                <span className="rv-avg-cnt">다녀온 후기 {p.rating.n}개</span>
-              </div>
-            ) : (
-              <p className="side-note">아직 별점이 없어요. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</p>
-            )}
-            <p className="side-note">리뷰 쓰기 · 북마크 · 정보 수정은 ANI:WHERE 앱에서 할 수 있어요.</p>
-            <a className="side-cta" href={appLink} target="_blank" rel="noopener noreferrer">
-              리뷰·북마크는 ANI:WHERE 앱에서
-            </a>
-          </div>
-        </aside>
+        <Reviews
+          cafeId={p.id}
+          threads={threads}
+          me={me ? { nick: String(me.row.nickname || ""), avatar: String(me.row.avatar || "") } : null}
+        />
       </div>
 
       {(sims.length > 0 || near.length > 0) && (

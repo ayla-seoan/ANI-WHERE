@@ -1,11 +1,18 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./member.css";
 import { getPopupData } from "@/lib/data";
 import Gnb from "@/components/Gnb";
 import Footer from "@/components/Footer";
 import InstallHint from "@/components/InstallHint";
 import SWRegister from "@/components/SWRegister";
 import ScrollTop from "@/components/ScrollTop";
+import Toast from "@/components/member/Toast";
+import { MemberProvider, type MeLite } from "@/components/member/MemberContext";
+import type { BellData } from "@/components/member/Bell";
+import { bookmarkMarks, inbox, ruleSettings } from "@/lib/server/member";
+import { getMe, getMyFavs } from "@/lib/server/session";
+import { APP_URL, todayKST } from "@/lib/popup";
 
 const siteUrl =
   process.env.SITE_URL ||
@@ -33,6 +40,26 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const data = await getPopupData();
+  // 로그인한 회원 (쿠키 aw_session). 회원이면 북마크 · 종 알림도 서버에서 읽어 넘긴다
+  const me = await getMe();
+  const favIds = await getMyFavs();
+  let bell: BellData | null = null;
+  if (me) {
+    const today = todayKST();
+    const rules = await ruleSettings();
+    bell = {
+      inbox: (await inbox(me.key, rules, today)).slice(0, 10),
+      marks: bookmarkMarks(data.popups, new Set(favIds), rules, today),
+    };
+  }
+  const meLite: MeLite = me
+    ? {
+        nick: String(me.row.nickname || ""),
+        avatar: String(me.row.avatar || ""),
+        admin: me.admin,
+        key4: `m${me.key.slice(0, 4)}`,
+      }
+    : null;
   return (
     <html lang="ko">
       <head>
@@ -51,12 +78,29 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           rel="stylesheet"
         />
       </head>
-      <body>
-        <div className="page">
-          <Gnb />
-          <main className="main">{children}</main>
-          <Footer sourceLabel={data.sourceLabel} note={data.note} />
-        </div>
+      <body className={me ? "member" : undefined}>
+        <MemberProvider me={meLite} favIds={favIds}>
+          <div className="page">
+            <Gnb bell={bell} />
+            <main className="main">{children}</main>
+            <Footer sourceLabel={data.sourceLabel} note={data.note} />
+          </div>
+          {me && (
+            // 오른쪽 아래 코랄색 + (등록): 등록하기는 사진 올리기가 있어 앱(Streamlit)에서 (회원에게만 보인다, 앱과 같게)
+            <a
+              className="add-fab"
+              href={`${APP_URL}/add`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="새 팝업 등록 (ANI:WHERE 앱에서)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </a>
+          )}
+          <Toast />
+        </MemberProvider>
         <ScrollTop />
         <InstallHint />
         <SWRegister />
