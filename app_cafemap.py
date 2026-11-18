@@ -2571,7 +2571,17 @@ _PIN_ICON_JS = """
 (function () {
   if (window.__aniPinIcon) return;
   window.__aniPinIcon = true;
+  // PC 물어보기 창: 지도처럼 화면 아래에서 19px 위까지 늘린다. 리스트에서 스크롤해 창이 위에 붙어도 같은 선 (11/18 요청)
+  const fitAsk = () => {
+    const pn = document.querySelector('.st-key-ask_panel');
+    if (!pn || window.innerWidth <= 640) return;
+    const t = pn.getBoundingClientRect().top;
+    if (!pn.offsetParent) return;
+    const h = Math.max(520, Math.round(window.innerHeight - t - 19)) + 'px';
+    if (pn.style.height !== h) pn.style.setProperty('height', h, 'important');
+  };
   const update = () => {
+    fitAsk();
     const btn = document.querySelector('.st-key-view_tools');      // 필터·보기 전환 아이콘 묶음
     const box = btn && btn.parentElement;                          // 원래 자리 (높이를 남겨 둔다)
     if (!btn || !box) return;
@@ -4056,7 +4066,10 @@ def page_map() -> None:
             draw_map()
         # PC 지도: 화면 높이에 맞춰 늘린다 (메뉴바·여백만 빼고, 페이지 스크롤이 생기지 않을 만큼, 11/18 요청)
         st.markdown("<style>@media (min-width: 641px) { .st-key-map_frame iframe { height: calc(100vh - 140px) !important;"
-                    " min-height: 520px; } }</style>", unsafe_allow_html=True)
+                    " min-height: 520px; }"
+                    # 옆 물어보기 창도 지도와 같은 위·아래 선으로 (11/18 요청)
+                    " .st-key-ask_panel { height: calc(100vh - 140px) !important; min-height: 520px; max-height: none !important; } }</style>",
+                    unsafe_allow_html=True)
         with col_cal, st.container(key="ask_panel"):     # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
             render_ask_panel()
 
