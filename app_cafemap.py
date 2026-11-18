@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import hashlib
 import json
@@ -244,6 +245,8 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   /* 모바일 지도보기: 위(상단 묶음)·아래(데일리 팝업 노트·지도 줄)와 16px */
   .stMain:has(.st-key-map_row) [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ margin-top: -9px; }}
   [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: -11px; }}
+  /* 관심 작품 줄 아래 '마지막 업데이트' 가 지도 칸 위에 겹치지 않게 (11/18) */
+  .stMain:has(.st-key-stories) [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: 4px; }}
 }}
 .st-key-map_icon {{ display: flex !important; justify-content: flex-end; width: 100% !important; min-height: 32px; }}
 .st-key-map_icon .stButton {{ width: 100% !important; display: flex !important; justify-content: flex-end !important; }}
@@ -994,24 +997,6 @@ def similar_popups(current: dict, df: pd.DataFrame, limit: int = SIMILAR_MAX) ->
     return [t[3] for t in out[:limit]]
 
 
-def popular_popups(current: dict, df: pd.DataFrame, limit: int = 8) -> list:
-    """다른 사람들이 많이 본 팝업: 북마크 수 × 2 + 리뷰·답글 수 ('인기순' 정렬과 같은 바탕, 화면 조회 수는 따로 세지 않음).
-    끝난 팝업 · 지금 팝업은 빼고, 점수가 0 인 곳도 뺀다."""
-    me = str(current["entry_id"])
-    favc = favorite.counts(favs.current_rows())
-    act = review.counts(reviews.current_rows())
-    out = []
-    for _, r in df.iterrows():
-        eid = str(r["entry_id"])
-        if eid == me or _status(r)[2] == 2:
-            continue
-        score = favc.get(eid, 0) * 2 + act.get(eid, 0)
-        if score:
-            out.append((-score, str(r.get("start_date") or ""), r))
-    out.sort(key=lambda t: t[:2])
-    return [t[2] for t in out[:limit]]
-
-
 def nearby_popups(current: dict, df: pd.DataFrame, limit: int = 8, max_km: float = 30.0) -> list[tuple]:
     """이 근처 다른 팝업: 지금 팝업 자리에서 가까운 순 (30km 안, 끝난 것 빼고). [(행, km)]."""
     try:
@@ -1038,12 +1023,13 @@ def _km_text(km: float) -> str:
     return "거리 " + (f"{round(km * 1000)}m" if km < 1 else f"{km:.1f}km")
 
 
-def _poster_row(sec: str, title: str, icon: str, items: list[tuple]) -> None:
+def _poster_row(sec: str, title: str, icon: str, items: list[tuple], tip: str = "") -> None:
     """상세 아래 포스터 줄 하나. items = [(행, 제목, 둘째 줄)]. 옆으로 넘겨 본다."""
     if not items:
         return
     with st.container(key=f"simsec_{sec}"):
-        st.markdown(f'<div class="sim-head">{_mi(icon)}{escape(title)}</div>', unsafe_allow_html=True)
+        # 제목 옆 ? 에 커서를 올리면 어떤 팝업을 모았는지 보인다 (11/18 요청)
+        st.markdown(f'<div class="sim-head">{_mi(icon)}{escape(title)}</div>', unsafe_allow_html=True, help=tip or None)
         with st.container(horizontal=True, key=f"sim_row_{sec}"):
             for r, name, meta in items:
                 eid = str(r["entry_id"])
@@ -1063,15 +1049,17 @@ def _poster_row(sec: str, title: str, icon: str, items: list[tuple]) -> None:
 
 
 def render_similar(current: dict, df: pd.DataFrame) -> None:
-    """상세 아래 추천 세 줄 (11/18 요청): 비슷한 팝업 · 다른 사람들이 많이 본 팝업 · 이 근처 다른 팝업. 비어 있는 줄은 그리지 않는다."""
+    """상세 아래 추천 줄 (11/18 요청): 비슷한 팝업 · 이 근처 다른 팝업. 비어 있는 줄은 그리지 않는다.
+    ('다른 사람들이 많이 본 팝업' 줄은 같은 날 요청으로 뺐다)"""
     with st.container(key="similar"):
         _poster_row("same", "비슷한 팝업", "auto_awesome",
-                    [(r, str(r.get("cafe_name") or r.get("work") or ""), "") for r in similar_popups(current, df)])
-        _poster_row("pop", "다른 사람들이 많이 본 팝업", "local_fire_department",
-                    [(r, str(r.get("work") or ""), str(r.get("cafe_name") or "")) for r in popular_popups(current, df)])
+                    [(r, str(r.get("cafe_name") or r.get("work") or ""), "") for r in similar_popups(current, df)],
+                    tip="이 팝업과 같은 작품의 다른 팝업이에요. 같은 행사의 다른 지역 지점이 먼저 오고, "
+                        "그다음 같은 작품의 다른 행사예요. 끝난 팝업은 빼고, 진행 중 → 오픈 예정 순이에요.")
         _poster_row("near", "이 근처 다른 팝업", "location_on",
                     [(r, str(r.get("work") or ""), f'{r.get("cafe_name") or ""} · {_km_text(km)}'.strip(" ·"))
-                     for r, km in nearby_popups(current, df)])
+                     for r, km in nearby_popups(current, df)],
+                    tip="이 팝업 자리에서 30km 안에 있는 다른 팝업을 가까운 순으로 모았어요. 끝난 팝업은 빼요.")
 
 
 def render_detail_tabs(current: dict) -> None:
@@ -2361,6 +2349,9 @@ LIST_CSS = f"""
 /* 상세 아래 추천 줄 (11/18): 비슷한 팝업 · 많이 본 팝업 · 이 근처. 옆으로 넘겨 본다 */
 .st-key-similar {{ margin-top:28px; border-top:1px solid #E6ECEA; padding-top:20px; }}
 [class*="st-key-simsec_"] {{ margin-bottom:10px; }}
+/* 제목 옆 ? 를 제목 바로 오른쪽에 (줄 끝으로 밀리지 않게) */
+[class*="st-key-simsec_"] [data-testid="stMarkdown"]:has(.sim-head) {{ width:fit-content !important; }}
+[class*="st-key-simsec_"] [data-testid="stMarkdown"]:has(.sim-head) > div {{ justify-content:flex-start !important; gap:6px; }}
 .sim-head {{ font-size:1.05rem; font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:6px; }}
 .sim-head .mi {{ color:var(--accent); font-size:1.35rem; }}
 [class*="st-key-sim_row_"] {{ flex-wrap:nowrap !important; overflow-x:auto; gap:12px !important; align-items:flex-start !important;
@@ -2679,6 +2670,7 @@ iframe[src*="kakao_map"] {{
 .chip.tag {{ background:{MINT}; color:#fff; border-color:{MINT}; }}
 .upd {{ color:#8A9592; font-size:.78rem; margin:-4px 0 6px; display:flex; align-items:center; gap:4px; }}
 .upd .mi {{ font-size:.95rem; }}
+@media (min-width: 641px) {{ .stMain:has(.st-key-stories) .st-key-map_row {{ margin-top:12px; }} }}   /* 지도 보기: 마지막 업데이트와 지도 칸 사이 (11/18) */
 .upd.warn {{ color:#C2560C; background:#FFF4EA; border-radius:10px; padding:6px 10px; margin:0 0 8px; }}
 @media (max-width: 640px) {{ .upd {{ font-size:.7rem; margin:-8px 0 0; }}
   [data-testid="stMarkdownContainer"]:has(.upd) {{ margin-bottom:0 !important; }}
@@ -4553,35 +4545,44 @@ def page_map() -> None:
     note = (f"조건에 맞는 카페 {len(view)}곳 · 지도에 표시 가능 {len(mapped)}곳"
             + (f" · 좌표 없음 {len(view) - len(mapped)}곳" if len(view) > len(mapped) else "")
             + " · 카드나 지도의 점을 누르면 상세를 보고 리뷰를 남기거나 수정할 수 있습니다.")
+    # 리스트로 보기 (PC): 왼쪽 칸에 마지막 업데이트 · 관심 작품 · 도구 줄 · 목록, 오른쪽 물어보기는 마지막 업데이트 줄부터 길게
+    # (11/18 요청: 북마크·지역·정렬 줄은 물어보기 창 앞까지만). 모바일은 물어보기 칸을 숨기고 위 '물어보기' 버튼으로
     if wide:
-        _update_note()      # 리스트로 보기: '마지막 업데이트' 를 '팝업 카페 N곳' 위로 (11/18 요청)
-        render_stories(df)  # '내가 관심있는 작품' 스토리 줄: 마지막 업데이트 바로 아래 (11/18 요청)
-    # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
-    with st.container(key="listtools"):
-        # 정렬 칸 위에 보기 전환 아이콘이 있어서, 팔로우·지역 고르기는 아래(정렬과 같은 줄)에 맞춘다
-        head, fav_only, region, sort = st.columns([3.2, 0.9, 2, 1.3], vertical_alignment="bottom")
-    with head, st.container(key="listbar"):
-        _list_bar(len(view), wide, note)
-    with fav_only:
-        _follow_switch("folsw")
-    with region:
-        # 지금 등록된 카페가 있는 지역만, 카드 배지와 같은 이름으로. 여러 곳을 함께 고를 수 있다
-        st.multiselect("지역", areas, key="regions", label_visibility="collapsed",
-                       placeholder="지역 고르기 (여러 곳 가능)", select_all=False)   # 기본이 전체라 '전체 선택' 은 뺌 (11/18)
-    with sort:
-        _view_icon_button(wide, active, m_open)
-        st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
+        lst, chat = st.columns([3.3, 1.165], gap="medium")   # 물어보기 폭 = 지도보기와 같게
+        left = lst
+    elif not current:
+        # 지도로 보기도 같게 (11/18 요청): 왼쪽 큰 칸(마지막 업데이트 · 관심 작품 · 데일리 노트 · 지도), 오른쪽 물어보기
+        map_left, map_right = st.columns([0.9 + 3.4, 1.55], gap="medium")
+        left = map_left
+    else:
+        left = contextlib.nullcontext()
+    with left:
+        if wide:
+            render_stories(df)  # '내가 관심있는 작품' (11/18 요청)
+            _update_note()      # '마지막 업데이트' 는 관심 작품 아래, '팝업 카페 N곳' 위 (11/18 요청)
+        # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
+        with st.container(key="listtools"):
+            # 정렬 칸 위에 보기 전환 아이콘이 있어서, 팔로우·지역 고르기는 아래(정렬과 같은 줄)에 맞춘다
+            head, fav_only, region, sort = st.columns([3.2, 0.9, 2, 1.3], vertical_alignment="bottom")
+        with head, st.container(key="listbar"):
+            _list_bar(len(view), wide, note)
+        with fav_only:
+            _follow_switch("folsw")
+        with region:
+            # 지금 등록된 카페가 있는 지역만, 카드 배지와 같은 이름으로. 여러 곳을 함께 고를 수 있다
+            st.multiselect("지역", areas, key="regions", label_visibility="collapsed",
+                           placeholder="지역 고르기 (여러 곳 가능)", select_all=False)   # 기본이 전체라 '전체 선택' 은 뺌 (11/18)
+        with sort:
+            _view_icon_button(wide, active, m_open)
+            st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
 
-    if not wide:
-        _update_note()
-        if not current:
-            render_stories(df)   # 지도로 보기에도 같은 자리에 (11/18 요청)
-    # '리스트 전체보기' 를 누르면 지도 없이 리스트만 크게 본다. '지도보기' 를 누르면 다시 반반으로
-    if wide:
-        # 리스트 전체보기: 왼쪽 목록 + 오른쪽 '팝업에게 물어보기' 대화창 (PC). 모바일은 대화창을 숨기고 위 '물어보기' 버튼으로
-        lst, chat = st.columns([3.3, 1.165], gap="medium")   # 물어보기 폭 = 지도보기와 같게 (11/18 요청)
-        with lst:
+        if not wide:
+            if not current:
+                render_stories(df)   # 지도로 보기에도 같은 자리에 (11/18 요청)
+            _update_note()           # 마지막 업데이트는 관심 작품 아래 (11/18 요청)
+        else:
             render_list(view, wide=True, df_all=df, fcond=fcond)
+    if wide:
         with chat, st.container(key="ask_panel"):
             render_ask_panel()
         return
@@ -4618,8 +4619,8 @@ def page_map() -> None:
     else:
         # 지도보기: 왼쪽 데일리 팝업 노트, 가운데 지도, 오른쪽 내 캘린더 (팝업 리스트는 두지 않는다)
         st.markdown(CAL_CSS, unsafe_allow_html=True)
-        with st.container(key="map_row"):
-            col_day, col_map, col_cal = st.columns([0.9, 3.4, 1.55], gap="medium")
+        with map_left, st.container(key="map_row"):
+            col_day, col_map = st.columns([0.9, 3.4], gap="medium")
         with col_day, st.container(key="map_daily"):
             render_daily(df)
         with col_map, st.container(key="map_frame"):
@@ -4628,12 +4629,12 @@ def page_map() -> None:
         st.markdown("<style>@media (min-width: 641px) { .st-key-map_frame iframe { height: calc(100vh - 140px) !important;"
                     " min-height: 520px; }"
                     # 옆 물어보기 창도 지도와 같은 위·아래 선으로 (11/18 요청)
-                    " .st-key-ask_panel { height: calc(100vh - 140px) !important; min-height: 520px; max-height: none !important; }"
-                    # 위에 '내가 관심있는 작품' 줄이 있으면 그만큼 줄여 페이지 스크롤이 생기지 않게 (11/18)
-                    " body:has(.st-key-stories) .st-key-map_frame iframe { height: calc(100vh - 319px) !important; min-height: 440px; }"
-                    " body:has(.st-key-stories) .st-key-ask_panel { min-height: 440px; } }</style>",
+                    # 옆 물어보기 창은 '마지막 업데이트' 줄부터 화면 아래까지 길게 (11/18 요청, 리스트 보기와 같게)
+                    " .st-key-ask_panel { height: calc(100vh - 115px) !important; min-height: 520px; max-height: none !important; }"
+                    # 위에 '내가 관심있는 작품' 줄이 있으면 지도는 그만큼 줄여 물어보기 창과 아래 선을 맞춘다 (11/18)
+                    " body:has(.st-key-stories) .st-key-map_frame iframe { height: calc(100vh - 248px) !important; min-height: 440px; } }</style>",
                     unsafe_allow_html=True)
-        with col_cal, st.container(key="ask_panel"):     # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
+        with map_right, st.container(key="ask_panel"):   # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
             render_ask_panel()
 
     # 지도에서 고른 게 이번 실행에서 바뀌었으면 왼쪽 패널·강조를 다시 그린다
