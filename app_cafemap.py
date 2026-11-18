@@ -182,6 +182,8 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .st-key-listtools [data-testid="stColumn"]:has([class*="st-key-folsw_"]) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
 /* 보기 전환·필터 아이콘 묶음: 정렬 칸 위 오른쪽 끝. 떠 있어도 원래 자리 높이는 남긴다 */
 [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ min-height: 32px; }}
+/* PC 에서는 이 아이콘 묶음이 비어 있다(필터·보기 전환은 모바일 전용) → 자리도 없애서 '팝업 카페 N곳' 줄이 위로 붙게 (11/18 요청) */
+@media (min-width: 641px) {{ [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools), .st-key-view_tools {{ display: none !important; }} }}
 .st-key-view_tools {{ justify-content: flex-end !important; align-items: center; gap: 6px !important; flex-wrap: nowrap !important; }}
 .st-key-view_tools > div {{ width: auto !important; flex: 0 0 auto !important; }}
 .st-key-view_tools.pinned button {{ box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }}
@@ -1849,9 +1851,7 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
     if not wide:
         # 모바일 지도보기: 필터 버튼을 리스트로 보기와 같은 높이에 두고, 비는 자리에 '마지막 업데이트' 줄을 왼쪽에 붙인다 (11/18 요청)
         st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: var(--aw-map-fgap, 21px) !important; }"
-                    " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }"
-                    # PC 지도보기: '마지막 업데이트' 줄을 메뉴바와 지도 사이 위아래 가운데로 (지도 자리는 그대로, 11/18 요청)
-                    "@media (min-width: 641px) { [data-testid=\"stElementContainer\"]:has(.upd) { transform: translateY(-11px); } }</style>",
+                    " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }</style>",
                     unsafe_allow_html=True)
     tools = st.container(horizontal=True, key="view_tools")
     with tools:
@@ -4004,6 +4004,8 @@ def page_map() -> None:
     note = (f"조건에 맞는 카페 {len(view)}곳 · 지도에 표시 가능 {len(mapped)}곳"
             + (f" · 좌표 없음 {len(view) - len(mapped)}곳" if len(view) > len(mapped) else "")
             + " · 카드나 지도의 점을 누르면 상세를 보고 리뷰를 남기거나 수정할 수 있습니다.")
+    if wide:
+        _update_note()      # 리스트로 보기: '마지막 업데이트' 를 '팝업 카페 N곳' 위로 (11/18 요청)
     # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
     with st.container(key="listtools"):
         # 정렬 칸 위에 보기 전환 아이콘이 있어서, 팔로우·지역 고르기는 아래(정렬과 같은 줄)에 맞춘다
@@ -4020,7 +4022,8 @@ def page_map() -> None:
         _view_icon_button(wide, active, m_open)
         st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
 
-    _update_note()
+    if not wide:
+        _update_note()
     # '리스트 전체보기' 를 누르면 지도 없이 리스트만 크게 본다. '지도보기' 를 누르면 다시 반반으로
     if wide:
         # 리스트 전체보기: 왼쪽 목록 + 오른쪽 '팝업에게 물어보기' 대화창 (PC). 모바일은 대화창을 숨기고 위 '물어보기' 버튼으로
