@@ -23,9 +23,22 @@ export type Cond = {
   work: string; // 홈 '요즘 일정 많은 작품' 에서 넘어온 작품 ('' = 전체)
   reserve: boolean; // 홈 '사전예약 팝업' 더보기
   sort: SortKey;
+  /** 물어보기 '더보기 · 리스트로 보기': 그 답에서 찾은 팝업만 (다른 조건 대신, 앱 ask_only) */
+  ids: string[];
+  askLabel: string;
 };
 
-export const EMPTY: Cond = { q: "", area: "", span: "진행중 + 예정", day: "", work: "", reserve: false, sort: "new" };
+export const EMPTY: Cond = {
+  q: "",
+  area: "",
+  span: "진행중 + 예정",
+  day: "",
+  work: "",
+  reserve: false,
+  sort: "new",
+  ids: [],
+  askLabel: "",
+};
 
 function fromURL(): Cond {
   const sp = new URLSearchParams(window.location.search);
@@ -40,6 +53,11 @@ function fromURL(): Cond {
     work: (sp.get("work") || "").slice(0, 80),
     reserve: sp.get("reserve") === "1",
     sort: SORTS.some((s) => s.key === sort) ? (sort as SortKey) : EMPTY.sort,
+    ids: (sp.get("ids") || "")
+      .split(",")
+      .filter((x) => /^[\w-]{1,64}$/.test(x))
+      .slice(0, 400),
+    askLabel: (sp.get("ask") || "").slice(0, 40),
   };
 }
 
@@ -52,6 +70,10 @@ function toQuery(c: Cond): string {
   if (c.work) sp.set("work", c.work);
   if (c.reserve) sp.set("reserve", "1");
   if (c.sort !== EMPTY.sort) sp.set("sort", c.sort);
+  if (c.ids.length) {
+    sp.set("ids", c.ids.join(","));
+    if (c.askLabel) sp.set("ask", c.askLabel);
+  }
   const s = sp.toString();
   return s ? `?${s}` : "";
 }
@@ -71,7 +93,12 @@ export function useCond() {
     if (!ready) return;
     window.history.replaceState(window.history.state, "", window.location.pathname + toQuery(cond));
   }, [cond, ready]);
-  const set = (patch: Partial<Cond>) => setCond((c) => ({ ...c, ...patch }));
+  // 검색 조건을 바꾸면 물어보기 결과 보기(ids)는 풀린다 (정렬만 바꿀 때는 그대로)
+  const set = (patch: Partial<Cond>) =>
+    setCond((c) => {
+      const filterChange = Object.keys(patch).some((k) => k !== "sort" && k !== "ids" && k !== "askLabel");
+      return { ...c, ...(filterChange ? { ids: [], askLabel: "" } : {}), ...patch };
+    });
   const reset = () => setCond((c) => ({ ...EMPTY, sort: c.sort }));
   return { cond, set, reset, ready };
 }
@@ -83,6 +110,11 @@ export function activeCount(c: Cond): number {
 
 /** 앱 _filter_view 와 같은 규칙 */
 export function applyCond(items: Item[], c: Cond, today: string, opts: { area?: boolean } = {}): Item[] {
+  if (c.ids.length) {
+    // 물어보기 결과: 그 답의 팝업 전부 (검색 조건 대신)
+    const keep = new Set(c.ids);
+    return items.filter((p) => keep.has(p.id));
+  }
   return items.filter((p) => {
     if (!p.start || !p.end) return false;
     if (c.span === "진행중 + 예정" && p.end < today) return false;
