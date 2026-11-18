@@ -71,6 +71,7 @@ class Answer:
     distances: dict = field(default_factory=dict)    # near 의도: cafe_id → km
     summary: str = ""                                 # by_region 의도: '서울 41곳 · 부산 7곳 …'
     total: int = 0                                    # 조건에 모두 맞는 팝업 수 (카드는 일부만 보여 줌)
+    links: list = field(default_factory=list)         # 답 아래 바로가기 [(글자, 주소)] — 사용법 안내 등 (11/18)
 
 
 # ------------------------------------------------------------- 입력 검사
@@ -408,8 +409,38 @@ def answer(question: str, rows: list[dict], today: date, version: str | None = N
 # ================================================================== 자주 묻는 질문 규칙 (의도)
 # 검색어 해석(retrieve)보다 먼저 본다. 모두 규칙이라 AI 없이도 늘 같은 답을 낸다.
 # 지역·작품·날짜 조건은 parse() 로 같이 읽어서 거른다 (예: '부산 팝업 추천', '주말에 가까운 팝업').
+# 사용법 안내 페이지(/guide)의 칸 이름. 앱이 링크를 만들 때 쓴다 (예: ./guide#add)
+GUIDE_SECTIONS = {"map": "지도로 보기", "list": "리스트로 보기", "cal": "내 캘린더 · 알림", "add": "팝업 등록하기",
+                  "edit": "정보 수정하기", "delete": "삭제 요청하기", "bookmark": "북마크", "login": "로그인 · 회원가입",
+                  "ask": "물어보기"}
+
 INTENTS = [
-    ("help", re.compile(r"^(안녕|하이|hi|hello|도움|도와|사용법|뭐\s*할\s*수|뭘\s*물어|어떻게\s*써)", re.I)),
+    # 나에 대한 질문 · 사용법 · 잡담 (11/18 추가) — 팝업 검색보다 먼저 본다
+    ("me_nick", re.compile(r"(내|제|나의)\s*(닉네임|닉|별명|이름)|나\s*(는\s*)?(누구|이름)")),
+    ("me_loc", re.compile(r"(내|제|나의|지금|현재)\s*(위치|있는\s*곳|동네)\s*(가|는|이|은)?\s*(어디|뭐|알려|확인)"
+                          r"|나\s*(지금\s*)?어디|여기\s*(가\s*)?어디|현재\s*위치")),
+    ("guide_add", re.compile(r"등록\s*(은|는|하는|하려면|하고\s*싶|방법|어떻게|할\s*수)|어떻게\s*등록"
+                             r"|(팝업|카페)\s*(올리|추가)\s*(하|는|방법)")),
+    ("guide_edit", re.compile(r"수정\s*(은|는|하는|하려면|방법|어떻게|할\s*수)|어떻게\s*(수정|고쳐|고치)"
+                              r"|(정보|날짜|주소)\s*(가|이)?\s*(틀|잘못|달라)")),
+    ("guide_delete", re.compile(r"삭제\s*(는|은|하는|하려면|방법|어떻게|요청|할\s*수)|어떻게\s*(삭제|지워|지우)"
+                                r"|지우는\s*(법|방법)|내\s*(글|리뷰)\s*지우")),
+    ("guide_bookmark", re.compile(r"북마크\s*(는|은|하는|하려면|방법|어떻게|가\s*뭐)|찜\s*(하는|어떻게|은|는)|어떻게\s*(북마크|찜)")),
+    ("guide_login", re.compile(r"(로그인|로그아웃|회원\s*가입|가입|탈퇴)\s*(은|는|하는|하려면|방법|어떻게|안\s*(돼|되)|할\s*수)"
+                               r"|어떻게\s*(로그인|가입|탈퇴)")),
+    ("guide_cal", re.compile(r"캘린더\s*(는|은|가|뭐|어떻게|사용|보는)|알림\s*(은|는|이|언제|어떻게|왜|안\s*(와|오))")),
+    ("guide_map", re.compile(r"지도\s*(보기)?\s*(는|은|어떻게|사용|보는\s*법)")),
+    ("guide_list", re.compile(r"리스트\s*(보기)?\s*(는|은|어떻게|사용|보는\s*법)")),
+    ("usage", re.compile(r"사용법|사용\s*방법|이용\s*방법|쓰는\s*(법|방법)|어떻게\s*(써|쓰|사용|이용)|가이드|도움말|매뉴얼"
+                         r"|기능\s*(이|은|뭐|알려|소개)|뭐\s*할\s*수|뭘\s*할\s*수|뭘\s*물어|뭐\s*물어")),
+    ("my_favs", re.compile(r"(내|제|나의)\s*(북마크|찜)")),
+    ("today", re.compile(r"오늘\s*(이\s*)?(몇\s*월|며칠|몇\s*일|날짜|무슨\s*요일|요일)")),
+    ("contact", re.compile(r"문의|연락처|고객\s*센터|신고|관리자\s*(에게|한테|연락|누구)|운영자")),
+    ("who", re.compile(r"(너|넌|당신)\s*(는|은)?\s*(누구|뭐|무엇|뭘)|(너|넌)\s*(이름|정체)|자기\s*소개")),
+    ("thanks", re.compile(r"^(고마워|고맙|감사|땡큐|thanks?|thx|잘\s*했)", re.I)),
+    ("count_all", re.compile(r"(팝업|카페)\s*(이|가|은|는)?\s*(몇\s*(개|곳|군데)|총|전체\s*몇)|몇\s*(개|곳)\s*(있|등록|열려)"
+                             r"|등록된\s*팝업\s*(수|몇)")),
+    ("help", re.compile(r"^(안녕|하이|hi|hello|반가|도움|도와)", re.I)),
     # 순위 질문 (11/18): 블로그 후기 수 · 리뷰 수 · 별점 — 가장/제일 많은·적은·높은·낮은
     ("blog_rank", re.compile(r"블로그.*(많|적|높|낮|순위|랭킹)|(많|적).*블로그")),
     ("rating_rank", re.compile(r"(별점|평점)\s*(이|가)?\s*(가장|제일|젤|높|낮|좋|나쁜|순|랭킹)|(높|낮|좋|나쁜)\S*\s*(별점|평점)")),
@@ -516,6 +547,10 @@ def intent_answer(question: str, rows: list[dict], today: date, ctx: dict) -> "A
         return _done(query, [], "작품·지역·날짜로 물어보세요. 예: '내 주변 가까운 팝업', '팝업 추천해줘', '지금 진행 중인 부산 팝업', "
                                 "'곧 끝나는 팝업', '이번 주말 성수 팝업'.", intent)
 
+    if intent in _ME_INTENTS:
+        # 나·사용법·잡담. 작품·장소가 붙은 '몇 개'·'내 북마크' 질문은 None → 아래 팝업 검색으로
+        return _me_answer(intent, query, rows, today, ctx)
+
     if intent == "near":
         if query.places:
             # '홍대 근처 팝업' 처럼 지역을 말했으면 '그 지역 주변' 이라는 뜻 → 내 위치가 아니라 지역 검색으로
@@ -592,6 +627,101 @@ def intent_answer(question: str, rows: list[dict], today: date, ctx: dict) -> "A
         if not live:
             return _done(query, [], f"{cond_txt}아직 다녀온 후기가 달린 진행 중 팝업이 없어요.", intent)
         return _done(query, live, f"{cond_txt}다녀온 후기가 많은 진행 중 팝업이에요.", intent)
+    return None
+
+
+_ME_INTENTS = {"me_nick", "me_loc", "usage", "my_favs", "today", "contact", "who", "thanks", "count_all"} | \
+    {f"guide_{k}" for k in ("add", "edit", "delete", "bookmark", "login", "cal", "map", "list")}
+_WEEK_KO = "월화수목금토일"
+
+# 기능별 짧은 안내 (자세한 건 /guide 의 같은 칸)
+_GUIDE_TEXT = {
+    "add": "팝업 등록은 회원만 할 수 있어요. 화면 오른쪽 아래 코랄색 + 버튼 → 작품·카페·기간·주소를 넣고 저장하면 바로 지도와 리스트에 올라가요.",
+    "edit": "팝업 상세 화면 오른쪽의 '수정하기' 탭에서 고칠 수 있어요 (회원만). 고친 기록은 모두 남아서 예전 내용으로 되돌릴 수도 있어요.",
+    "delete": "글은 바로 지워지지 않고 '삭제 요청'으로 받아요. 상세 화면에서 삭제 요청(사유 적기)을 보내면 관리자가 확인하고, 결과는 종 알림으로 알려 드려요.",
+    "bookmark": "카드나 상세 화면의 북마크 버튼을 누르면 돼요 (회원만). 북마크한 팝업은 내 캘린더에 날짜 막대로 보이고, 오픈·종료 3일 전부터 알림이 와요.",
+    "login": "메뉴바 오른쪽 '로그인'에서 카카오·네이버 간편 로그인이나 아이디로 가입할 수 있어요. 로그아웃·탈퇴는 내 닉네임을 누르면 나오는 마이페이지에 있어요.",
+    "cal": "내 캘린더(회원)는 북마크한 팝업을 날짜 막대로 보여 주고, 오른쪽에 최근 3일 알림과 내 주변 추천이 있어요. 알림은 북마크한 팝업의 오픈·종료 3일 전부터 와요.",
+    "map": "지도로 보기는 왼쪽 데일리 팝업 노트(날짜·지역별 목록)와 가운데 지도를 함께 봐요. 핀에 마우스를 올리면 카드, 누르면 그 팝업 목록이 열려요.",
+    "list": "리스트로 보기는 포스터 카드로 모아 봐요. 위에서 북마크만 보기·지역·정렬을 고르고, 아래 'N건 더보기'로 더 불러와요. 오른쪽에서 저에게 물어볼 수도 있어요.",
+}
+
+
+def _guide_link(key: str) -> list:
+    return [(f"사용법 안내 · {GUIDE_SECTIONS[key]} 보기", f"./guide#{key}")]
+
+
+def _me_answer(intent: str, query: Query, rows: list[dict], today: date, ctx: dict) -> "Answer | None":
+    """나·사용법·잡담 질문의 답 (모두 규칙). 조건이 붙은 '몇 개'·'내 북마크' 질문은 None (검색으로 넘김)."""
+    def say(text: str, links: list | None = None, hit_rows: list[dict] | None = None) -> Answer:
+        res = _done(query, hit_rows or [], text, intent)
+        res.links = links or []
+        return res
+
+    if intent == "me_nick":
+        nick = str(ctx.get("nick") or "").strip()
+        if not nick:
+            return say("아직 로그인하지 않았어요. 로그인하면 닉네임을 알려 드릴게요.", _guide_link("login"))
+        return say(f"{nick}님이에요! 닉네임은 마이페이지(메뉴바의 내 닉네임)에서 언제든 바꿀 수 있어요.")
+    if intent == "me_loc":
+        loc = ctx.get("loc")
+        if not (isinstance(loc, dict) and "lat" in loc):
+            return say("내 위치를 아직 몰라요. 브라우저 주소창의 위치 권한을 허용하거나 지도 보기를 한 번 열어 주세요.")
+        lat, lng = float(loc["lat"]), float(loc["lng"])
+        region = ""
+        finder = ctx.get("region_of")
+        if callable(finder):
+            try:
+                region = str(finder(lat, lng) or "")
+            except Exception:
+                region = ""
+        if not region:                       # 지역 이름을 못 받으면 가장 가까운 팝업의 지역으로 어림
+            best = None
+            for r in rows:
+                try:
+                    km = _km((lat, lng), (float(r.get("lat")), float(r.get("lng"))))
+                except (TypeError, ValueError):
+                    continue
+                if best is None or km < best[0]:
+                    best = (km, r)
+            if best:
+                addr = str(best[1].get("address") or "")
+                region = geo.area_name(addr) or geo.city_name(addr)
+        if not region:
+            return say("위치는 받았는데 지역 이름을 찾지 못했어요. 지도 보기에서 내 위치를 확인해 주세요.")
+        return say(f"현재 위치는 {region} 근처예요. '내 주변 가까운 팝업'이라고 물어보면 가까운 순으로 찾아 드려요.")
+    if intent == "usage":
+        return say("지도로 보기 · 리스트로 보기 · 내 캘린더 · 등록하기 · 수정하기 · 삭제 요청 방법을 한 페이지에 정리해 뒀어요. "
+                   "아래 링크를 눌러 보세요.", [("사용법 안내 페이지 열기", "./guide")])
+    if intent.startswith("guide_"):
+        key = intent.removeprefix("guide_")
+        return say(_GUIDE_TEXT[key], _guide_link(key))
+    if intent == "today":
+        return say(f"오늘은 {today.year}년 {today.month}월 {today.day}일 {_WEEK_KO[today.weekday()]}요일이에요.")
+    if intent == "who":
+        return say("저는 ANI:WHERE 팝업 도우미예요. 등록된 애니 팝업·카페·굿즈 행사에서 작품·지역·날짜로 찾아 드려요.",
+                   [("사용법 안내 페이지 열기", "./guide")])
+    if intent == "thanks":
+        return say("천만에요! 더 궁금한 팝업이 있으면 언제든 물어봐 주세요.")
+    if intent == "contact":
+        return say("문의·신고는 개인정보처리방침의 연락처(10번)로 보내 주세요. 잘못된 글은 상세 화면의 '삭제 요청'으로 관리자에게 바로 알릴 수 있어요.",
+                   [("개인정보처리방침 · 연락처 보기", "./privacy")])
+    if query.works or query.places or query.window:
+        return None                          # '주술회전 팝업 몇 개', '내 북마크 중 홍대' 등 → 검색으로
+    if intent == "count_all":
+        live = sum(1 for r in rows if _ongoing(r, today))
+        soon = sum(1 for r in rows if (mycal._day(r.get("start_date")) or today) > today)
+        return say(f"지금 진행 중인 팝업은 {live}곳, 오픈 예정은 {soon}곳이에요 (모두 {live + soon}곳).")
+    if intent == "my_favs":
+        mine = ctx.get("my_favs")
+        if mine is None:
+            return say("북마크는 회원만 쓸 수 있어요. 로그인하면 북마크한 팝업을 보여 드릴게요.", _guide_link("login"))
+        ids = set(mine)
+        keep = [r for r in rows if str(r.get("entry_id")) in ids
+                and not ((mycal._day(r.get("end_date")) or today) < today)]
+        if not keep:
+            return say("아직 북마크한 팝업이 없어요. 카드의 북마크 버튼을 눌러 보세요.", _guide_link("bookmark"))
+        return say(f"북마크한 팝업 {len(keep)}곳이에요.", hit_rows=keep)
     return None
 
 

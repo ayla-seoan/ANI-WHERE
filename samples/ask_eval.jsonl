@@ -41,3 +41,13 @@
 {"q": "리뷰 가장 적은 팝업 뭐야?", "intent": "review_rank"}
 {"q": "별점 가장 높은 팝업 3개 보여줘", "intent": "rating_rank", "empty": true}
 {"q": "블로그 리뷰 가장 많은 팝업 뭐야?", "intent": "blog_rank", "empty": true}
+{"q": "내 닉네임 뭐야?", "intent": "me_nick", "empty": true}
+{"q": "지금 내 위치 어디야?", "intent": "me_loc", "empty": true}
+{"q": "사용법 알려줘", "intent": "usage", "empty": true}
+{"q": "팝업 등록 어떻게 해?", "intent": "guide_add", "empty": true}
+{"q": "정보가 틀렸어 수정하는 방법", "intent": "guide_edit", "empty": true}
+{"q": "삭제 요청은 어떻게 해?", "intent": "guide_delete", "empty": true}
+{"q": "로그인 어떻게 해?", "intent": "guide_login", "empty": true}
+{"q": "팝업 몇 개 있어?", "intent": "count_all", "empty": true}
+{"q": "오늘 며칠이야?", "intent": "today", "empty": true}
+{"q": "너 누구야?", "intent": "who", "empty": true}

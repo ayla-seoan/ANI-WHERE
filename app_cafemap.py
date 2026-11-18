@@ -824,7 +824,40 @@ def _blog_posts(entry_id: str, work: str, cafe_name: str, start_date: str, addre
     return [{**p.__dict__, "thumb": th} for p, th in blog.with_thumbs(posts)], err
 
 
-_BLOG_COUNT: dict[str, int] = {}     # 이 서버에서 한 번 검색한 팝업의 블로그 글 수 (탭 이름에 쓰려고)
+_BLOG_COUNT: dict[str, int] = {}     # 팝업별 블로그 글 수 (탭 이름 '블로그 후기 (N)' 에 씀)
+_BLOG_WARM = {"day": None}            # 미리 세기를 한 날 (서버마다 하루 한 번)
+
+
+def _row_key(r: dict) -> tuple:
+    return (str(r.get("entry_id")), str(r.get("work") or ""), str(r.get("cafe_name") or ""),
+            str(r.get("start_date") or "")[:10], str(r.get("address") or ""))
+
+
+def _warm_blog_counts(rows: list[dict]) -> None:
+    """속도 (11/18): 상세를 열 때 블로그 검색을 기다리지 않게, 지금 열린·예정 팝업의 블로그 글 수를 뒤에서 미리 센다.
+    팝업마다 검색 1번(대표 사진은 탭을 열 때). 하루 한 번, 한 달 호출 한도(blog.MONTHLY_LIMIT) 안에서만."""
+    import threading
+
+    if not blog.enabled() or _BLOG_WARM["day"] == TODAY:
+        return
+    _BLOG_WARM["day"] = TODAY
+    todo = [_row_key(r) for r in rows if str(r.get("end_date") or "")[:10] >= TODAY.isoformat()]
+
+    def run() -> None:
+        for eid, work, cafe_name, start, addr in todo:
+            if eid in _BLOG_COUNT:
+                continue
+            try:
+                posts, err = blog.search({"work": work, "cafe_name": cafe_name, "start_date": start, "address": addr},
+                                         limit=15, usage=api_usage)
+            except Exception:
+                continue
+            if err == "limit":
+                break
+            if not err:
+                _BLOG_COUNT[eid] = len(posts)
+
+    threading.Thread(target=run, daemon=True, name="blog-warm").start()
 
 
 def _blog_list(current: dict) -> list[dict]:
@@ -935,15 +968,15 @@ def render_detail_tabs(current: dict) -> None:
                                    on_change="rerun")
     with tab_review:
         sub = st.session_state.get(f"rvsub_{entry_id}", "review")
-        # 속도 (11/18): 블로그 검색(네이버, 0.5초 넘게)은 '블로그 후기' 탭을 열 때만. 그 전엔 아는 개수만 탭 이름에
-        posts = _blog_list(current) if sub == "blog" else None
+        # 블로그 글 목록(대표 사진 포함)은 '블로그 후기' 탭을 열 때만. 건수는 미리 센 값(_warm_blog_counts)을 쓰고,
+        # 아직 못 셌으면 그 자리에서 검색해서라도 늘 보여 준다 (11/18 요청: 건수가 안 보임)
+        posts = _blog_list(current) if sub == "blog" or entry_id not in _BLOG_COUNT else None
         n_blog = len(posts) if posts is not None else _BLOG_COUNT.get(entry_id)
 
         def subtabs() -> bool:
             # 리뷰 쓰기 칸 아래에 '리뷰 후기 / 블로그 후기' (11/18 요청)
             with st.container(horizontal=True, key="rv_subtabs"):
-                for k, label in (("review", f"리뷰 후기 ({n})"),
-                                 ("blog", "블로그 후기" + (f" ({n_blog})" if n_blog is not None else ""))):
+                for k, label in (("review", f"리뷰 후기 ({n})"), ("blog", f"블로그 후기 ({n_blog or 0})")):
                     st.button(label, key=f"rvsub_{'on_' if sub == k else ''}{k}_{entry_id}",
                               on_click=lambda k=k: st.session_state.update({f"rvsub_{entry_id}": k}))
             if sub == "blog":
@@ -3915,6 +3948,10 @@ def page_map() -> None:
     _clear_buttons()    # 상단 검색칸 오른쪽 × 로 검색어 한 번에 지우기
     _keep_scroll()
     _pin_view_icon()
+    try:
+        _warm_blog_counts(stats.popups(store.all_rows()))     # 블로그 후기 건수 미리 세기 (서버마다 하루 한 번, 뒤에서)
+    except Exception:
+        pass
     _live_send()
     # 처음 들어오면 기본은 리스트 전체보기 (지도보기는 버튼으로)
     st.session_state.setdefault("list_only", True)
@@ -5191,6 +5228,7 @@ AUTH_CSS = """
 /* 가입 화면의 전문 보기·만 14세 안내: 가운데 정렬 + 얇은 테두리 상자 (11/18 요청) */
 .consent-note { text-align: center; border: 1px solid #E3E8E6; border-radius: 10px; padding: 8px 12px; margin: 6px 0 10px; line-height: 1.6; }
 .st-key-privacy_wrap { max-width: 860px; margin: 0 auto; }
+.st-key-privacy_wrap a[id] { display: block; scroll-margin-top: 96px; }   /* 사용법 안내 #칸 바로가기: 메뉴바 밑으로 */
 .st-key-privacy_wrap table { font-size: .88rem; }
 .me-avimg { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #DDF3EC; background: #DDF3EC; }
 .auth-av { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: .86rem; color: #6B7672; }
@@ -5253,6 +5291,27 @@ def page_privacy() -> None:
             st.markdown(PRIVACY_FILE.read_text(encoding="utf-8"))
         except OSError:
             st.warning("개인정보처리방침을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.", icon=":material/error:")
+
+
+GUIDE_FILE = Path(__file__).resolve().parent / "docs" / "guide.md"
+
+
+def page_guide() -> None:
+    """사용법 안내 (/guide). 물어보기에서 '사용법 알려줘' 하면 이 페이지로 안내한다 (11/18). 칸마다 #map #list … 바로가기."""
+    st.markdown(GLOBAL_CSS + AUTH_CSS, unsafe_allow_html=True)
+    _no_translate()
+    with st.container(key="topbar"):
+        _gnb(None, on_map=False)
+    with st.container(key="privacy_wrap"):
+        try:
+            st.markdown(GUIDE_FILE.read_text(encoding="utf-8"), unsafe_allow_html=True)
+        except OSError:
+            st.warning("사용법 안내를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.", icon=":material/error:")
+    # 주소 끝 #add 같은 칸으로 바로 내려간다 (화면이 다 그려진 뒤라 브라우저 기본 이동이 안 먹어서 몇 번 다시 시도)
+    components.html("<script>(function(){const P=window.parent,id=decodeURIComponent((P.location.hash||'').slice(1));"
+                    "if(!id)return;let n=0;const t=setInterval(()=>{const e=P.document.getElementById(id);"
+                    "if(e){e.scrollIntoView({block:'start'});clearInterval(t);}if(++n>40)clearInterval(t);},150);})();</script>",
+                    height=0)
 
 
 def page_login() -> None:
@@ -6270,6 +6329,11 @@ ASK_PANEL_CSS = """
   flex: 0 0 auto !important; }   /* Streamlit 기본 flex:1 1 0% 이면 높이가 무시돼 대화창이 내용만큼 줄어든다 */
 .st-key-ask_panel > * { flex: 0 0 auto; }
 .apn-num { color: var(--accent); font-weight: 800; }
+.apn-links { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.apn-link { display: inline-flex; align-items: center; gap: 4px; width: fit-content; font-size: .8rem; font-weight: 700;
+  color: var(--accent-deep) !important; background: #fff; border: 1px solid var(--accent); border-radius: 999px;
+  padding: 2px 10px; text-decoration: none !important; }
+.apn-link .mi { font-size: .95rem; color: var(--accent-deep); }
 /* 답변 속 굵은 글자(작품·지역·날짜, 닉네임, 건수 등)는 모두 포인트 민트로 (11/18 요청) */
 .apn-bot b, .apn-bot strong { color: var(--accent); font-weight: 800; }
 /* 페이지 맨 아래까지 내려도 물어보기 창이 같은 자리에 붙어 있게: 창이 든 줄이 페이지 끝까지 닿도록 아래 기본 여백(96px)을 줄인다 (11/18 요청) */
@@ -6376,7 +6440,7 @@ def _ask_panel_send(question: str) -> None:
             text = res.text or ("조건에 맞는 팝업을 찾지 못했어요. 작품 이름을 줄이거나(예: 주술회전) 날짜·지역 조건을 하나 빼 보세요. "
                                 "없는 팝업이면 오른쪽 아래 + 로 직접 등록할 수 있어요.")
             chat.append({"role": "bot", "text": text, "ids": [], "badge": "규칙 기반 대체",
-                         "guide": res.query.intent == "unknown"})
+                         "guide": res.query.intent == "unknown", "links": list(res.links)})
         else:
             limit = min(len(res.hits), ask.RANK_MAX) if res.query.intent in ("blog_rank", "review_rank", "rating_rank") else 5
             used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:limit]]
@@ -6384,7 +6448,7 @@ def _ask_panel_send(question: str) -> None:
             cards = [_ask_card(i, rows[i], res.distances.get(i)) for i in used[:limit] if i in rows]
             # 검색 질문은 '네, N건 있어요' 를 말풍선으로 (규칙(의도) 질문은 그 안내 문장)
             say = res.summary if not res.query.intent else (res.text or "")
-            chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards, "say": say,
+            chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards, "say": say, "links": list(res.links),
                          "head": "" if not res.query.intent else (res.summary or _ASK_HEADS.get(res.query.intent, ""))
                          # 내 주변: '· 내 위치에서 가까운 순 N건 팝업이에요' 처럼 몇 건인지 붙인다 (11/18 요청)
                          + (f" {len(res.hits)}건 팝업이에요" if res.query.intent == "near" and not res.summary else "")})
@@ -6399,6 +6463,12 @@ _ASK_LOG = Path(__file__).resolve().parent / "logs" / "ask_questions.jsonl"
 ASK_DEFAULT_CHIPS = ["내 주변 가까운 팝업", "팝업 추천해줘", "지금 진행 중인 서울 팝업", "곧 끝나는 팝업", "이번 주말 성수 팝업"]
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _region_of(lat: float, lng: float) -> str:
+    """좌표 → '서울 마포구 서교동' (카카오 로컬). 못 받으면 빈 문자열 → 물어보기 규칙이 가까운 팝업 지역으로 어림."""
+    return geo.region_of(round(lat, 4), round(lng, 4))
+
+
 def _ask_ctx() -> dict:
     """물어보기 규칙에 넘길 값: 내 위치, 팝업별 (평균 별점, 다녀온 후기 수), 팝업별 북마크 수."""
     agg: dict[str, list[int]] = {}
@@ -6411,7 +6481,12 @@ def _ask_ctx() -> dict:
             if 1 <= n <= 5:
                 agg.setdefault(str(r.get("cafe_id")), []).append(n)
     ratings = {k: (sum(v) / len(v), len(v)) for k, v in agg.items()}
+    me = _member()
     return {"loc": _my_loc(), "ratings": ratings, "favs": favorite.counts(favs.current_rows()),
+            # 나에 대한 질문 (11/18): '내 닉네임 뭐야?' · '내 북마크' · '지금 내 위치 어디야?'
+            "nick": _nick_only(auth.display_name(me)) if me else "",
+            "my_favs": sorted(favorite.mine(favs.current_rows(), _fav_user())) if me else None,
+            "region_of": _region_of,
             "review_counts": review.counts(reviews.current_rows()),      # 리뷰 많은·적은 순 (11/18)
             "blog_totals": _blog_totals_for}                              # 블로그 후기 많은·적은 순 (부를 때만 셈)
 
@@ -6502,6 +6577,13 @@ def _ask_nums(html: str) -> str:
                    for part in _ASK_SPLIT.split(html))
 
 
+def _ask_links(links) -> str:
+    """답 아래 바로가기 (사용법 안내 페이지 등). 새 탭으로 열어 대화는 그대로 둔다."""
+    out = "".join(f'<a class="apn-link" href="{escape(str(u))}" target="_blank">{_mi("open_in_new")}{escape(str(t))}</a>'
+                  for t, u in (links or []))
+    return f'<div class="apn-links">{out}</div>' if out else ""
+
+
 def _guide_head() -> str:
     """못 알아들음 안내: '작품 이름 · 장소 · 날짜' 를 굵은 포인트 색으로 (11/18 요청, .apn-bot b)."""
     key = "작품 이름 · 장소 · 날짜"
@@ -6541,7 +6623,8 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                     st.markdown(_ask_bot(f'{_guide_head()}<div class="apn-exbox"><b>이렇게 물어보세요</b>{ex}</div>'),
                                 unsafe_allow_html=True)
                 else:
-                    st.markdown(_ask_bot(escape(m["text"]).replace(chr(10), "<br>")), unsafe_allow_html=True)
+                    st.markdown(_ask_bot(escape(m["text"]).replace(chr(10), "<br>") + _ask_links(m.get("links"))),
+                                unsafe_allow_html=True)
             for card in m.get("ids", []):
                 if not isinstance(card, dict):          # 예전 모양 (id, 이름) 기록
                     card = {"id": card[0], "work": card[1], "cafe": "", "address": "", "dates": "",
@@ -6793,6 +6876,7 @@ PAGES = {
     "auth": st.Page(page_auth, title="가입 · ANI:WHERE", icon=":material/person_add:", url_path="auth"),
     "data": st.Page(page_data, title="데이터 보기 · ANI:WHERE", icon=":material/database:", url_path="data"),
     "privacy": st.Page(page_privacy, title="개인정보처리방침 · ANI:WHERE", icon=":material/policy:", url_path="privacy"),
+    "guide": st.Page(page_guide, title="사용법 안내 · ANI:WHERE", icon=":material/help:", url_path="guide"),
 }
 try:
     st.navigation(list(PAGES.values()), position="hidden").run()
