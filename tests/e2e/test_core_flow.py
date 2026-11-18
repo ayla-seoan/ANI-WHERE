@@ -234,3 +234,19 @@ def test_9_로그아웃하면_새로고침해도_로그인되지_않는다(page:
     assert not any(c["name"] == "aw_session" and c["value"] for c in page.context.cookies()), "로그인 쿠키가 남아 있어요"
     open_list(page, app_url)                       # 새로 연 화면(=새로고침)
     expect(page.locator(".st-key-login_btn button").last).not_to_contain_text("테스트봇", timeout=LONG)
+
+
+# ------------------------------------------------------------------ 10. 새 계정은 남의 북마크를 물려받지 않는다 (11/18 버그)
+def test_10_새로_가입하면_북마크가_비어_있다(page: Page, app_url, data_dir):
+    # 같은 컴퓨터(같은 IP)의 손님 북마크가 있어도 새 계정에 옮겨지지 않아야 한다
+    from common import favorite
+    import json
+    guest = favorite.user_key(None)
+    rows = json.loads((data_dir / "favorites.json").read_text(encoding="utf-8"))
+    cafe = current_cafes(data_dir)[0]["entry_id"]
+    rows.append({"row_id": "e2eguest01", "entry_id": f"{guest}:{cafe}", "revision": 1, "status": "active",
+                 "updated_at": "2026-11-18T00:00:00+00:00", "cafe_id": cafe, "user": guest})
+    (data_dir / "favorites.json").write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+    sign_up(page, app_url)
+    open_list(page, app_url)
+    expect(page.locator('[class*="st-key-fav_on_w_"]')).to_have_count(0)

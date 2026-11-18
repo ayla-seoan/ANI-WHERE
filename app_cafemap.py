@@ -3301,10 +3301,16 @@ def _ntf_id(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
 
 
+def _ntf_cookie() -> str:
+    """읽은 알림 쿠키 이름: 회원마다 따로 (11/18 — 한 브라우저에서 계정을 바꾸면 읽음 표시가 섞이던 문제)."""
+    key = str(st.session_state.get("member_key") or "guest")
+    return f"{NTF_COOKIE}_{hashlib.sha1(key.encode()).hexdigest()[:8]}"
+
+
 def _ntf_read() -> set[str]:
-    """읽은 알림 번호들 (브라우저 쿠키에 남겨 다시 열어도 읽음으로 보인다)."""
+    """읽은 알림 번호들 (브라우저 쿠키에 남겨 다시 열어도 읽음으로 보인다). 회원마다 따로."""
     if "_ntf_read" not in st.session_state:
-        raw = str(st.context.cookies.get(NTF_COOKIE) or "")
+        raw = str(st.context.cookies.get(_ntf_cookie()) or "")
         st.session_state["_ntf_read"] = {x for x in raw.split(".") if len(x) == 8}
     return st.session_state["_ntf_read"]
 
@@ -3402,7 +3408,7 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
             all_items = items_inbox + items_marks + items_near
             unread = [nid for nid, _, _ in all_items if nid not in _ntf_read()]
             if st.session_state.pop("_ntf_cookie", False):
-                js = (f"window.parent.document.cookie = {json.dumps(NTF_COOKIE + '=' + '.'.join(sorted(_ntf_read())[-200:]))}"
+                js = (f"window.parent.document.cookie = {json.dumps(_ntf_cookie() + '=' + '.'.join(sorted(_ntf_read())[-200:]))}"
                       " + '; path=/; max-age=5184000; SameSite=Lax';")
                 components.html(f"<script>{js}</script>", height=0)
             if unread:
@@ -5129,7 +5135,17 @@ def _set_cookie(value: str, days: int) -> None:
     components.html(f"<script>{js}</script>", height=0)
 
 
+_USER_STATE = ("_ntf_read", "_ntf_cookie", "recent_seen", "box_tab", "_fav_cache", "_member_cache", "_avatar_cache")
+
+
+def _clear_user_state() -> None:
+    """계정이 바뀌면 이전 사람의 알림 읽음·최근 본·북마크 기억을 버린다 (11/18: 네이버 → 카카오로 바꿨더니 섞임)."""
+    for k in _USER_STATE:
+        st.session_state.pop(k, None)
+
+
 def _login_done(row: dict, msg: str) -> None:
+    _clear_user_state()
     st.session_state["member_key"] = str(row["entry_id"])
     st.session_state.pop("_logged_out", None)
     st.session_state.pop("_member_cache", None)
@@ -5344,18 +5360,10 @@ def _password_signup_form() -> None:
     except auth.AuthError as e:
         st.warning(str(e), icon=":material/error:")
         return
-    moved = _move_guest_favs(row)
-    _login_done(row, "가입했어요!" + (f" 북마크 {moved}개도 옮겼어요." if moved else ""))
+    # 손님 북마크는 옮기지 않는다: 손님 북마크는 IP 로 묶여 있어 같은 와이파이·같은 컴퓨터의 다른 사람 것까지
+    # 새 계정에 들어갔다 (11/18). 북마크는 이제 회원만 할 수 있다
+    _login_done(row, "가입했어요!")
     go("map")
-
-
-def _move_guest_favs(row: dict) -> int:
-    """손님일 때 해 둔 북마크를 회원 계정으로 옮긴다 (지우지 않고 회원 쪽에 새로 쌓음)."""
-    guest = favorite.user_key(st.context.ip_address)
-    moved = sorted(favorite.mine(favs.current_rows(), guest))
-    for cid in moved:
-        favorite.toggle(favs, cid, f"m:{row['entry_id']}", True)
-    return len(moved)
 
 
 def _logout() -> None:
@@ -5363,6 +5371,7 @@ def _logout() -> None:
     # 새로고침하면 남은 쿠키로 다시 로그인됐다 (11/18). 다시 그린 화면의 메뉴바(_gnb)에서 지운다
     st.session_state["_cookie_clear"] = True
     st.session_state.pop("_cookie_pending", None)
+    _clear_user_state()
     st.session_state.update({"member_key": "", "_logged_out": True})
     st.session_state.pop("_member_cache", None)
     st.session_state.pop("_fav_cache", None)
@@ -5531,13 +5540,8 @@ def _auth_body() -> None:
         except auth.AuthError as e:
             st.warning(str(e), icon=":material/error:")
             return
-        # 손님일 때 해 둔 북마크를 회원 계정으로 옮긴다 (지우지 않고 회원 쪽에 새로 쌓음)
-        guest = favorite.user_key(st.context.ip_address)
-        moved = sorted(favorite.mine(favs.current_rows(), guest))
-        for cid in moved:
-            favorite.toggle(favs, cid, f"m:{row['entry_id']}", True)
         st.session_state.pop("_pending_ident", None)
-        _login_done(row, "가입했어요!" + (f" 북마크 {len(moved)}개도 옮겼어요." if moved else ""))
+        _login_done(row, "가입했어요!")         # 손님 북마크는 옮기지 않는다 (위 아이디 가입과 같은 이유)
         go("map")
 
 
@@ -6410,8 +6414,13 @@ def _ask_bot(html: str) -> str:
 def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> None:
     """대화 기록 · 예시 칩 · 입력칸. PC 옆 대화창(apn)과 모바일 팝업(apd)이 같은 기록(ask_chat)을 쓴다."""
     with st.container(height=log_height, border=False, key=f"{prefix}_log"):
-        st.markdown(_ask_bot('안녕하세요. 지금 등록된 팝업에서 찾아 드릴게요. <b>작품 · 지역 · 날짜</b>로 물어보면 더 정확해요.'),
-                    unsafe_allow_html=True)
+        # 첫 인사: 회원이면 닉네임을 불러 준다 (손님은 이름 없이, 11/18 요청)
+        me = _member()
+        # 닉네임 속 숫자는 '답변 숫자 민트' 에 걸리지 않게 글자 참조(&#57;)로 바꿔 둔다
+        nick = "".join(f"&#{ord(c)};" if c.isdigit() else c for c in escape(str((me or {}).get("nickname") or "")))
+        who = f' <b>{nick}</b>님' if nick else ""
+        st.markdown(_ask_bot(f'안녕하세요{who} 궁금하신 팝업에서 찾아 드릴게요 ! <b>작품 · 지역 · 날짜</b>로 물어보면 '
+                             '더 정확하게 찾을 수 있어요!'), unsafe_allow_html=True)
         for n, m in enumerate(st.session_state.get("ask_chat", [])):
             if m["role"] == "me":
                 st.markdown(f'<div class="apn-me"><span>{escape(m["text"])}</span></div>', unsafe_allow_html=True)
