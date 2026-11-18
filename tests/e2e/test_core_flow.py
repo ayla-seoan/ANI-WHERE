@@ -133,7 +133,7 @@ def test_2_검색으로_좁혀지고_없으면_안내가_뜬다(page: Page, app_
     box.press("Enter")
     wait_idle(page)
     expect(page.get_by_text("이 조건엔 행사가 없어요")).to_be_visible(timeout=LONG)
-    assert page.locator(CARD).count() == 0
+    expect(page.locator(CARD)).to_have_count(0, timeout=LONG)    # 예전 카드가 잠깐 남아 있을 수 있어 사라질 때까지 기다림
     # 빈 표(dataframe)가 아니라 안내 문구여야 한다
     assert page.locator('[data-testid="stDataFrame"], [data-testid="stTable"]').count() == 0
     # 조건 완화 버튼: '검색어 지우기 (N곳)' 을 누르면 다시 카드가 보인다 (11/18 안정성)
@@ -303,12 +303,10 @@ def go_home(page: Page, url: str) -> None:
 
 def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_온다(page: Page, app_url, data_dir):
     go_home(page, app_url)
-    expect(page.locator(".st-key-stories .story.add")).to_be_visible(timeout=LONG)
-    # 손님은 북마크가 없어 작품 없이 안내만
+    # 로그인 전에는 '요즘 일정 많은 작품' 만 (최애 추가하기 · 북마크 동그라미 없음, 11/18)
+    expect(page.locator(".st-key-stories .story.hot").first).to_be_visible(timeout=LONG)
+    expect(page.locator(".st-key-stories .story.add")).to_have_count(0)
     expect(page.locator(".st-key-stories .story.mark")).to_have_count(0)
-    # 손님이 '최애 추가하기' 를 누르면 로그인 화면으로
-    page.locator(".st-key-open_story_add button").click()
-    expect(page).to_have_url(re.compile(r"/login"), timeout=LONG)
 
     sign_up(page, app_url)
     go_home(page, app_url)
@@ -343,7 +341,8 @@ def test_12_로고를_누르면_홈이_열리고_랭킹_카드로_상세에_간�
     open_list(page, app_url)
     page.locator(".st-key-home_brand button").click()
     expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
-    expect(page.locator(".story-head")).to_have_text("북마크 팝업")
+    expect(page.locator(".story-head")).to_have_text("요즘 일정 많은 작품")   # 로그인 전 (11/18)
+    expect(page.locator(".story.hot").first).to_be_visible()
     expect(page.locator(".hbtitle").first).to_contain_text("실시간 인기 급상승 랭킹")   # 배너 안 왼쪽 위
     for title in ("따끈따끈 신규 등록 팝업", "이번 주에 끝나는 팝업", "사전예약 팝업", "꿀팁 가득! 실시간 후기 모음"):
         expect(page.locator(".home-h", has_text=title)).to_be_visible(timeout=LONG)
@@ -408,7 +407,8 @@ def test_13_내_리뷰는_고칠때_사진을_붙이고_직접_지울_수_있다
     page.get_by_role("button", name="삭제", exact=True).first.click()
     dlg = page.get_by_test_id("stDialog")           # ('⋯' 칸도 role=dialog 라서 확인 창만 집는다)
     expect(dlg).to_be_visible(timeout=LONG)
-    dlg.get_by_role("button", name="삭제", exact=True).click()
+    page.wait_for_timeout(800)                       # 창이 뜨는 동안의 움직임(애니메이션)이 끝난 뒤 누른다 (부하가 크면 누름이 빗나갔음)
+    dlg.get_by_role("button", name="삭제", exact=True).click(timeout=LONG)
     wait_idle(page)
     expect(page.get_by_text(text)).to_have_count(0, timeout=LONG)
 
