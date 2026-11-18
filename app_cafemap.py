@@ -958,6 +958,65 @@ def _detail_head_html(current: dict) -> tuple[str, str, str]:
 
 
 
+SIMILAR_MAX = 6
+
+
+def _work_key(text) -> str:
+    """작품 이름 비교용: 띄어쓰기·기호·대소문자를 빼고 본다 ('주술회전' = '주술 회전')."""
+    return re.sub(r"[^0-9a-z가-힣ぁ-んァ-ン一-龥]", "", str(text or "").lower())
+
+
+def similar_popups(current: dict, df: pd.DataFrame, limit: int = SIMILAR_MAX) -> list:
+    """비슷한 팝업 (11/18 요청): 같은 작품의 다른 팝업 — 같은 행사의 다른 지역 지점이 먼저, 그다음 같은 작품의 다른 행사.
+    끝난 팝업은 빼고, 진행 중 → 오픈 예정 순, 그 안에서는 빨리 여는 순."""
+    key = _work_key(current.get("work"))
+    if len(key) < 2 or df.empty:
+        return []
+    me = str(current["entry_id"])
+    my_area = geo.area_name(str(current.get("address") or ""))
+    my_cafe = _work_key(current.get("cafe_name"))
+    out = []
+    for _, r in df.iterrows():
+        if str(r["entry_id"]) == me:
+            continue
+        k = _work_key(r.get("work"))
+        if not k or not (k == key or (min(len(k), len(key)) >= 3 and (k in key or key in k))):
+            continue
+        label, _, rank = _status(r)
+        if rank == 2:
+            continue
+        # 같은 행사(카페 이름이 같음)의 다른 지역 지점이 먼저
+        other_branch = _work_key(r.get("cafe_name")) == my_cafe and geo.area_name(str(r.get("address") or "")) != my_area
+        out.append((0 if other_branch else 1, rank, str(r.get("start_date") or ""), r))
+    out.sort(key=lambda t: t[:3])
+    return [t[3] for t in out[:limit]]
+
+
+def render_similar(current: dict, df: pd.DataFrame) -> None:
+    """상세 아래 '비슷한 팝업' 포스터 줄. 없으면 칸을 그리지 않는다."""
+    rows = similar_popups(current, df)
+    if not rows:
+        return
+    with st.container(key="similar"):
+        st.markdown('<div class="sim-head">비슷한 팝업</div>', unsafe_allow_html=True)
+        with st.container(horizontal=True, key="sim_grid"):
+            for r in rows:
+                eid = str(r["entry_id"])
+                label, color, _ = _status(r)
+                area = geo.area_name(str(r.get("address") or ""))
+                meta = " · ".join(x for x in (area, _period(r, lambda d: f"{d:%m.%d}", show_raw=False)) if x)
+                with st.container(key=f"card_sim_{eid}"):
+                    st.markdown(
+                        f'<div class="simc"><div class="simp" style="background-image:url(\'{_poster_url(r.get("images"))}\'),'
+                        f' url(\'{images.DEFAULT_POSTER_URL}\')"><span class="sims {color}">{escape(label)}</span></div>'
+                        f'<div class="simt">{escape(str(r.get("cafe_name") or r.get("work") or ""))}</div>'
+                        f'<div class="simm">{escape(meta)}</div></div>', unsafe_allow_html=True)
+                    if st.button("자세히 보기", key=f"open_sim_{eid}", width="stretch"):
+                        st.session_state["selected"] = eid
+                        st.session_state["scroll_top"] = True
+                        st.rerun()
+
+
 def render_detail_tabs(current: dict) -> None:
     """상세 화면 오른쪽: 리뷰 / 수정하기 탭."""
     entry_id = str(current["entry_id"])
@@ -2055,6 +2114,26 @@ LIST_CSS = f"""
 [class*="st-key-card_w_"] [class*="st-key-fav_"] {{ top:auto; bottom:16px; right:20px; }}
 [class*="st-key-card_w_"] .pcard .info {{ padding-right:52px; }}
 [class*="st-key-card_s_"] [class*="st-key-fav_"] {{ top:12px; right:12px; }}
+/* 상세 아래 '비슷한 팝업' (11/18): PC 6칸 한 줄, 모바일 3칸 */
+.st-key-similar {{ margin-top:28px; border-top:1px solid #E6ECEA; padding-top:20px; }}
+.sim-head {{ font-size:1.25rem; font-weight:800; margin-bottom:4px; }}
+.st-key-sim_grid {{ flex-wrap:wrap !important; gap:14px !important; align-items:flex-start !important; }}
+.st-key-sim_grid > div {{ flex:0 0 calc((100% - 70px) / 6) !important; width:calc((100% - 70px) / 6) !important; min-width:0 !important; }}
+.simc {{ padding-bottom:18px; }}   /* 마크다운 칸의 아래 음수 여백(-1rem)에 날짜 줄이 잘리지 않게 */
+.simc .simp {{ position:relative; aspect-ratio:3/4; border-radius:12px; background-size:cover; background-position:center;
+  background-color:#EEF3F1; transition:transform .18s ease; }}
+[class*="st-key-card_sim_"]:hover .simp {{ transform:scale(.965); }}
+.simc .sims {{ position:absolute; top:8px; left:8px; font-size:.72rem; font-weight:800; padding:2px 8px; border-radius:999px;
+  background:#fff; color:var(--accent-deep); }}
+.simc .sims.blue {{ color:#2C5BC5; }} .simc .sims.red {{ color:#D93A4A; }}
+.simc .simt {{ margin-top:8px; font-weight:800; font-size:.95rem; line-height:1.3; display:-webkit-box;
+  -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }}
+.simc .simm {{ margin-top:3px; font-size:.8rem; color:#7B8784; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+@media (max-width: 640px) {{
+  .st-key-sim_grid {{ gap:10px !important; }}
+  .st-key-sim_grid > div {{ flex:0 0 calc((100% - 20px) / 3) !important; width:calc((100% - 20px) / 3) !important; }}
+  .simc .simt {{ font-size:.85rem; }} .simc .simm {{ font-size:.72rem; }}
+}}
 /* 카드 작품 이름 오른쪽의 진행 상태 배지 */
 .cstate {{ display:inline-block; vertical-align:middle; margin-left:6px; font-size:.78rem; font-weight:700;
           line-height:1.4; padding:.1rem .45rem; border-radius:.5rem; white-space:nowrap; }}
@@ -4183,6 +4262,7 @@ def page_map() -> None:
             render_detail(current)
         with col_tabs:
             render_detail_tabs(current)
+        render_similar(current, df)      # 같은 작품의 다른 지역·다른 팝업 (11/18 요청)
     else:
         # 지도보기: 왼쪽 데일리 팝업 노트, 가운데 지도, 오른쪽 내 캘린더 (팝업 리스트는 두지 않는다)
         st.markdown(CAL_CSS, unsafe_allow_html=True)
