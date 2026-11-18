@@ -2650,13 +2650,68 @@ def _scroll_top() -> None:
     )
 
 
+def _season(month: int) -> str:
+    """3~5월 봄 · 6~8월 여름 · 9~11월 가을 · 12~2월 겨울."""
+    return {3: "spring", 4: "spring", 5: "spring", 6: "summer", 7: "summer", 8: "summer",
+            9: "autumn", 10: "autumn", 11: "autumn"}.get(month, "winter")
+
+
+# 계절 배경 (11/18 요청): 봄 꽃잎 · 여름 잎사귀 · 가을 단풍 · 겨울 눈이 화면 위에서 천천히 떨어진다.
+# 그림은 직접 그린 작은 SVG. 클릭을 막지 않고(pointer-events:none), '동작 줄이기' 설정이면 멈춘다
+_SEASON_SVG = {
+    "spring": ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M10 1C14 5 15 11 10 19C5 11 6 5 10 1Z" fill="#F7B6C8"/><path d="M10 4V16" stroke="#EE93AE" stroke-width=".8"/></svg>',
+               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M10 2C15 4 16 10 10 18C4 10 5 4 10 2Z" fill="#FBD3DE"/><path d="M8 2L10 5L12 2" fill="#fff"/></svg>'],
+    "summer": ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M3 17C3 8 9 3 18 2C17 11 12 17 3 17Z" fill="#7CCB8C"/><path d="M3 17L14 6" stroke="#4FA766" stroke-width="1"/></svg>',
+               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M3 17C3 8 9 3 18 2C17 11 12 17 3 17Z" fill="#A6DDA0"/><path d="M3 17L14 6" stroke="#6CBF6F" stroke-width="1"/></svg>'],
+    "autumn": ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M10 1L12 6L16 4L15 9L19 10L15 12L16 16L11 14L10 19L9 14L4 16L5 12L1 10L5 9L4 4L8 6Z" fill="#E0674A"/></svg>',
+               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M10 1L12 6L16 4L15 9L19 10L15 12L16 16L11 14L10 19L9 14L4 16L5 12L1 10L5 9L4 4L8 6Z" fill="#F2A541"/></svg>',
+               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M3 17C3 8 9 3 18 2C17 11 12 17 3 17Z" fill="#E9C46A"/><path d="M3 17L14 6" stroke="#C99A3A" stroke-width="1"/></svg>'],
+    "winter": ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="#CFE3F2"/></svg>',
+               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><g stroke="#B9D6EC" stroke-width="1.6" stroke-linecap="round"><path d="M10 2V18M3 6L17 14M3 14L17 6"/></g></svg>'],
+}
+
+
+def _season_fx() -> str:
+    """계절 배경 스크립트 (한 번만 붙고, 다시 그려도 새로 만들지 않음. 계절이 바뀌면 새 것으로)."""
+    import base64
+    import json as _json
+
+    season = _season(TODAY.month)
+    urls = ["data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode() for svg in _SEASON_SVG[season]]
+    return (
+        "<script>(function(){const d = window.parent.document, w = window.parent;"
+        f"const season = '{season}', urls = {_json.dumps(urls)};"
+        "const old = d.getElementById('aw-season'); if (old && old.dataset.s === season) return; if (old) old.remove();"
+        "if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) return;"
+        "if (!d.getElementById('aw-season-css')) { const st = d.createElement('style'); st.id = 'aw-season-css';"
+        " st.textContent = '#aw-season{position:fixed;inset:0;pointer-events:none;z-index:999;overflow:hidden}'"
+        " + '#aw-season i{position:absolute;top:-40px;display:block;background-size:contain;background-repeat:no-repeat;"
+        "animation-name:awFall,awSway;animation-timing-function:linear,ease-in-out;animation-iteration-count:infinite,infinite;"
+        "animation-direction:normal,alternate}'"
+        " + '@keyframes awFall{from{transform:translateY(0) rotate(0deg)}to{transform:translateY(calc(100vh + 80px)) rotate(var(--r))}}'"
+        " + '@keyframes awSway{from{margin-left:-24px}to{margin-left:24px}}'; d.head.appendChild(st); }"
+        "const box = d.createElement('div'); box.id = 'aw-season'; box.dataset.s = season; box.setAttribute('aria-hidden', 'true');"
+        "const n = w.innerWidth <= 640 ? 7 : 14;"
+        "for (let k = 0; k < n; k++) { const e = d.createElement('i');"
+        " const size = (season === 'winter' ? 9 : 22) + Math.random() * (season === 'winter' ? 9 : 14);"
+        " const fall = 12 + Math.random() * 12;"
+        " e.style.cssText = 'left:' + (Math.random() * 100) + '%;width:' + size + 'px;height:' + size + 'px;'"
+        "  + 'background-image:url(' + urls[k % urls.length] + ');opacity:' + (.55 + Math.random() * .35) + ';'"
+        "  + 'animation-duration:' + fall + 's,' + (3 + Math.random() * 3) + 's;'"
+        "  + 'animation-delay:-' + (Math.random() * fall) + 's,0s;--r:' + (Math.random() > .5 ? '' : '-') + (180 + Math.random() * 360) + 'deg';"
+        " box.appendChild(e); }"
+        "d.body.appendChild(box); })();</script>"
+    )
+
+
 def _no_translate() -> None:
-    """페이지를 한국어로 표시해 크롬 자동 번역이 'ANI:WHERE' 를 '아니:어디에' 로 바꾸지 않게 한다."""
+    """페이지를 한국어로 표시해 크롬 자동 번역이 'ANI:WHERE' 를 '아니:어디에' 로 바꾸지 않게 한다.
+    모든 화면이 부르는 곳이라 계절 배경(_season_fx)도 여기서 붙인다."""
     components.html(
         "<script>const d = window.parent.document;"
         "d.documentElement.lang = 'ko'; d.documentElement.setAttribute('translate', 'no');"
         "if (!d.querySelector('meta[name=google]')) { const m = d.createElement('meta');"
-        "m.name = 'google'; m.content = 'notranslate'; d.head.appendChild(m); }</script>",
+        "m.name = 'google'; m.content = 'notranslate'; d.head.appendChild(m); }</script>" + _season_fx(),
         height=0,
     )
 
