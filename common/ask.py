@@ -534,7 +534,7 @@ def intent_answer(question: str, rows: list[dict], today: date, ctx: dict) -> "A
         cand.sort(key=lambda t: t[0])
         if not cand:
             return _done(query, [], f"{cond_txt}지금 열려 있는 팝업 중 위치를 아는 곳이 없어요.", intent)
-        res = _done(query, [r for _, r in cand], f"{cond_txt}내 위치에서 가까운 진행 중 팝업이에요.", intent)
+        res = _done(query, [r for _, r in cand], f"{cond_txt}내 위치에서 가까운 진행 중인 팝업이에요.", intent)
         res.distances = {eid(r): km for km, r in cand[:5]}
         return res
 

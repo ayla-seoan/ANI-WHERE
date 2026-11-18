@@ -28,6 +28,7 @@ import json
 import os
 import sys
 import secrets
+import threading
 import time
 from dataclasses import dataclass
 from urllib.parse import urlencode
@@ -178,9 +179,31 @@ def member_key(provider: str, uid: str) -> str:
     return hashlib.sha256(f"{salt}:member:{provider}:{uid}".encode()).hexdigest()[:16]
 
 
+_EXCHANGED: dict[str, tuple[float, Identity]] = {}     # code 해시 → (시각, 결과). 같은 code 를 두 번 내지 않게
+_EX_LOCK = threading.Lock()
+
+
 def exchange(code: str, state: str, timeout: float = 10.0) -> Identity:
-    """돌아온 code 로 토큰을 받고 프로필에서 고유 번호·별명만 읽는다."""
+    """돌아온 code 로 토큰을 받는다. code 는 한 번만 쓸 수 있는데, 돌아온 화면이 두 번 그려지면(새로고침·다시 연결)
+    두 번째에 카카오가 KOE320 으로 거절했다 (11/18). 같은 code 면 10분 동안 첫 결과를 그대로 돌려준다."""
     provider = check_state(state)
+    ck = hashlib.sha256(code.encode()).hexdigest()
+    with _EX_LOCK:
+        now = time.time()
+        for k in [k for k, (t, _) in _EXCHANGED.items() if now - t > STATE_MAX_AGE]:
+            _EXCHANGED.pop(k, None)
+        hit = _EXCHANGED.get(ck)
+        if hit:
+            print(f"[auth] {provider} code {ck[:8]} 다시 옴 → 첫 결과 사용", file=sys.stderr)
+            return hit[1]
+        ident = _exchange(provider, code, state, timeout)
+        _EXCHANGED[ck] = (now, ident)
+        print(f"[auth] {provider} code {ck[:8]} 로그인 확인 성공", file=sys.stderr)
+        return ident
+
+
+def _exchange(provider: str, code: str, state: str, timeout: float) -> Identity:
+    """돌아온 code 로 토큰을 받고 프로필에서 고유 번호·별명만 읽는다."""
     p = PROVIDERS[provider]
     data = {"grant_type": "authorization_code", "client_id": os.getenv(p["id_env"], ""),
             "redirect_uri": redirect_uri(), "code": code}

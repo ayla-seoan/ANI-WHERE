@@ -2573,12 +2573,14 @@ _PIN_ICON_JS = """
 (function () {
   if (window.__aniPinIcon) return;
   window.__aniPinIcon = true;
-  // PC 물어보기 창: 지도처럼 화면 아래에서 19px 위까지 늘린다. 리스트에서 스크롤해 창이 위에 붙어도 같은 선 (11/18 요청)
+  // PC 물어보기 창: 지도·리스트 보기 똑같은 규칙 — 메뉴바 아래에 붙어 따라오고, 아래는 화면 아래에서 19px 위까지 (11/18 요청)
   const fitAsk = () => {
     const pn = document.querySelector('.st-key-ask_panel');
     if (!pn || window.innerWidth <= 640) return;
-    const t = pn.getBoundingClientRect().top;
     if (!pn.offsetParent) return;
+    // 붙는 선(메뉴바 아래)보다 위로 밀려 올라가도 높이는 그대로 (위로 밀릴수록 커지던 문제)
+    const stick = parseFloat(getComputedStyle(pn.closest('[data-testid="stColumn"]') || pn).top) || 96;
+    const t = Math.max(pn.getBoundingClientRect().top, stick);
     const h = Math.max(520, Math.round(window.innerHeight - t - 19)) + 'px';
     if (pn.style.height !== h) pn.style.setProperty('height', h, 'important');
   };
@@ -5083,6 +5085,12 @@ AUTH_CSS = """
 .me-card .me-av { margin: 0; flex: 0 0 auto; }
 .me-card .me-info { min-width: 0; text-align: left; }
 .me-card .me-info b { font-size: 1.05rem; }
+/* 약관 전체 동의: 굵게, 아래 항목들과 얇은 선으로 나눈다 */
+/* 간편 가입 버튼: 가운데 (11/18 요청) */
+.st-key-soc_join { display: flex !important; justify-content: center !important; width: 100% !important; }
+.st-key-soc_join .stButton { width: auto !important; }
+.st-key-soc_allbox { border-bottom: 1px solid #E3E8E6; padding-bottom: 6px; margin-bottom: 2px; }
+.st-key-soc_allbox label p { font-weight: 800 !important; }
 .consent-box { background: #F4F8F6; border-radius: 12px; padding: 10px 12px; margin: 6px 0 8px; font-size: .82rem; color: #3A4542; }
 .consent-box table { width: 100%; border-collapse: collapse; margin: 6px 0; }
 .consent-box th { width: 44px; text-align: left; color: #2E9C82; font-weight: 800; padding: 3px 6px 3px 0; vertical-align: top; border: 0; }
@@ -5090,6 +5098,8 @@ AUTH_CSS = """
 .consent-box span { color: #7A8582; font-size: .76rem; }
 .consent-link { font-size: .76rem; color: #8A9592; margin: 2px 0 8px; }
 .consent-link a { color: #2E9C82 !important; font-weight: 700; }
+/* 가입 화면의 전문 보기·만 14세 안내: 가운데 정렬 + 얇은 테두리 상자 (11/18 요청) */
+.consent-note { text-align: center; border: 1px solid #E3E8E6; border-radius: 10px; padding: 8px 12px; margin: 6px 0 10px; line-height: 1.6; }
 .st-key-privacy_wrap { max-width: 860px; margin: 0 auto; }
 .st-key-privacy_wrap table { font-size: .88rem; }
 .me-avimg { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #DDF3EC; background: #DDF3EC; }
@@ -5254,7 +5264,23 @@ PRIVACY_TABLE = {
 }
 
 
-def _consent_boxes(kind: str, key: str, photo_label: str | None = None) -> dict:
+def _consent_keys(key: str, photo: bool) -> list[str]:
+    return [f"{key}_age", f"{key}_terms", f"{key}_priv"] + ([f"{key}_photo"] if photo else [])
+
+
+def _consent_all(key: str, photo: bool) -> None:
+    """'약관 전체 동의' 를 누르면 아래 항목(선택 포함)을 모두 같은 값으로."""
+    on = bool(st.session_state.get(f"{key}_all"))
+    for k in _consent_keys(key, photo):
+        st.session_state[k] = on
+
+
+def _consent_sync(key: str, photo: bool) -> None:
+    """항목을 하나씩 바꾸면 '전체 동의' 표시도 맞춘다 (모두 켜졌을 때만 켜짐)."""
+    st.session_state[f"{key}_all"] = all(st.session_state.get(k) for k in _consent_keys(key, photo))
+
+
+def _consent_boxes(kind: str, key: str, photo_label: str | None = None, all_toggle: bool = False) -> dict:
     """가입 동의: 필수(만 14세 이상 · 이용약관 · 개인정보 수집·이용)와 선택(프로필 사진)을 따로 받는다.
     무엇을·왜·얼마나 보관하는지 바로 보이게 표로 고지한다 (11/18 개인정보 설계)."""
     st.markdown(
@@ -5264,13 +5290,21 @@ def _consent_boxes(kind: str, key: str, photo_label: str | None = None) -> dict:
         '<tr><th>보관</th><td><b>탈퇴할 때까지</b> (탈퇴하면 지난 기록까지 바로 지워요)</td></tr></table>'
         '<span>이메일·전화번호·실명은 받지 않아요. 동의하지 않으면 가입할 수 없지만, 로그인 없이도 둘러볼 수 있어요.</span></div>',
         unsafe_allow_html=True)
+    # 폼 밖에서만(all_toggle) '약관 전체 동의' — 폼 안의 칸은 서로를 바꿀 수 없다 (11/18 요청: 안내 상자 바로 아래)
+    kw = {}
+    if all_toggle:
+        args = (key, bool(photo_label))
+        with st.container(key=f"{key}_allbox"):
+            st.checkbox("약관 전체 동의" + (" (선택 항목 포함)" if photo_label else ""), key=f"{key}_all",
+                        on_change=_consent_all, args=args)
+        kw = {"on_change": _consent_sync, "args": args}
     out = {
-        "age": st.checkbox("[필수] 만 14세 이상이에요", key=f"{key}_age"),
-        "terms": st.checkbox("[필수] 이용약관에 동의해요", key=f"{key}_terms"),
-        "privacy": st.checkbox("[필수] 위 개인정보 수집·이용에 동의해요", key=f"{key}_priv"),
-        "photo": st.checkbox(photo_label, key=f"{key}_photo") if photo_label else False,
+        "age": st.checkbox("[필수] 만 14세 이상이에요", key=f"{key}_age", **kw),
+        "terms": st.checkbox("[필수] 이용약관에 동의해요", key=f"{key}_terms", **kw),
+        "privacy": st.checkbox("[필수] 위 개인정보 수집·이용에 동의해요", key=f"{key}_priv", **kw),
+        "photo": st.checkbox(photo_label, key=f"{key}_photo", **kw) if photo_label else False,
     }
-    st.markdown(f'<div class="consent-link">전문 보기: <a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
+    st.markdown(f'<div class="consent-link consent-note">전문 보기: <a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
                 ' · 만 14세 미만은 가입할 수 없어요 (법정대리인 동의 절차를 갖추지 않았어요)</div>', unsafe_allow_html=True)
     return out
 
@@ -5476,12 +5510,13 @@ def _auth_body() -> None:
     st.markdown(f'<div class="auth-av">{_avatar_img(ident.avatar, 48, "")}'
                 + (f"{label} 프로필 사진이 있어요. 아래 [선택] 항목에 동의하면 리뷰 옆에 보여요." if ident.avatar
                    else "프로필 사진은 선택이에요. 마이페이지에서 언제든 올릴 수 있어요.") + '</div>', unsafe_allow_html=True)
-    with st.form("signup", border=False):
+    # 폼으로 묶지 않는다: '약관 전체 동의' 가 아래 항목을 바로 바꿔야 해서 (11/18)
+    with st.container(key="soc_signup"):
         nick = st.text_input("닉네임 (선택)", value=ident.nickname, max_chars=auth.MAX_NICK,
-                             placeholder=_suggest_nick(), help=NICK_HELP)
+                             placeholder=_suggest_nick(), help=NICK_HELP, key="soc_nick")
         consent = _consent_boxes("social", "soc", f"[선택] {label} 프로필 사진을 불러와 리뷰 옆에 보여 줘요 (사진 주소 저장, "
-                                 "마이페이지에서 언제든 지울 수 있어요)" if ident.avatar else None)
-        done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")
+                                 "마이페이지에서 언제든 지울 수 있어요)" if ident.avatar else None, all_toggle=True)
+        done = st.button("가입하고 시작하기", type="primary", icon=":material/check_circle:", key="soc_join")
     if done:
         err = _consent_error(consent)
         if err:
@@ -6134,6 +6169,9 @@ ASK_PANEL_CSS = """
   height: calc(100vh - var(--apn-top, 172px) - 112px) !important; max-height: calc(100vh - var(--apn-top, 172px) - 16px);
   flex: 0 0 auto !important; }   /* Streamlit 기본 flex:1 1 0% 이면 높이가 무시돼 대화창이 내용만큼 줄어든다 */
 .st-key-ask_panel > * { flex: 0 0 auto; }
+.apn-num { color: var(--accent); font-weight: 800; }
+/* 페이지 맨 아래까지 내려도 물어보기 창이 같은 자리에 붙어 있게: 창이 든 줄이 페이지 끝까지 닿도록 아래 기본 여백(96px)을 줄인다 (11/18 요청) */
+@media (min-width: 641px) { [data-testid="stMainBlockContainer"]:has(.st-key-ask_panel) { padding-bottom: 19px !important; } }
 .st-key-ask_panel > *:has(.st-key-apn_log), .st-key-ask_panel > .st-key-apn_log {
   flex: 1 1 auto !important; min-height: 0 !important; display: flex; flex-direction: column; }
 /* 대화창을 따로 다시 그리는 칸(fragment)으로 바꾸며 감싸는 상자가 한 겹 늘었다 (11/18):
@@ -6245,7 +6283,9 @@ def _ask_panel_send(question: str) -> None:
             # 검색 질문은 '네, N건 있어요' 를 말풍선으로 (규칙(의도) 질문은 그 안내 문장)
             say = res.summary if not res.query.intent else (res.text or "")
             chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards, "say": say,
-                         "head": "" if not res.query.intent else (res.summary or _ASK_HEADS.get(res.query.intent, ""))})
+                         "head": "" if not res.query.intent else (res.summary or _ASK_HEADS.get(res.query.intent, ""))
+                         # 내 주변: '· 내 위치에서 가까운 순 N건 팝업이에요' 처럼 몇 건인지 붙인다 (11/18 요청)
+                         + (f" {len(res.hits)}건 팝업이에요" if res.query.intent == "near" and not res.summary else "")})
             _ask_log(q)
     del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
 
@@ -6350,8 +6390,19 @@ def _ask_panel_open(cafe_id: str) -> None:
 ASK_AVATAR = "app/static/ask_avatar.png"      # 로고의 토끼를 동그랗게 자른 그림
 
 
+_ASK_SPLIT = re.compile(r"(<[^>]+>|&[#\w]+;)")       # 태그·글자 참조(&#x27; 등)는 건드리지 않는다
+_ASK_NUM = re.compile(r"\d[\d,./:]*\d|\d")   # 1,234 · 12/04 · 11:39 는 한 덩어리
+
+
+def _ask_nums(html: str) -> str:
+    """답변 속 숫자만 굵은 포인트 민트로 (11/18 요청). 태그 안·글자 참조 안의 숫자는 그대로."""
+    return "".join(part if _ASK_SPLIT.fullmatch(part) else _ASK_NUM.sub(r'<b class="apn-num">\g<0></b>', part)
+                   for part in _ASK_SPLIT.split(html))
+
+
 def _ask_bot(html: str) -> str:
     """ANI:WHERE 말풍선: 왼쪽에 동그란 로고 캐릭터, 오른쪽에 둥근 회색 말풍선 (11/18 요청)."""
+    html = _ask_nums(html)
     return (f'<div class="apn-row"><img class="apn-ava" src="{ASK_AVATAR}" alt="ANI:WHERE">'
             f'<div class="apn-col"><div class="apn-name">ANI:WHERE</div><div class="apn-bot">{html}</div></div></div>')
 
