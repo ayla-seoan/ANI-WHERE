@@ -4063,7 +4063,7 @@ GNB_CSS = """
 <style>
 .st-key-gnb { align-items: center !important; gap: 4px !important; flex-wrap: nowrap; padding: 6px 0 2px; }
 /* 로고: 메뉴바 안에서는 작게 */
-.st-key-gnb .st-key-home_brand button { width: 155px !important; height: 47px !important; }   /* 11/18 로고 조금 작게 */
+.st-key-gnb .st-key-home_brand button { width: 200px !important; height: 60px !important; }   /* 로고 크게 (11/18 요청) */
 /* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
 .st-key-gnb { position: relative; background: #56c2a7; border-radius: 0 0 28px 28px;   /* 메뉴바: 브랜드 민트 (11/18 요청) */
   padding: 10px 28px !important; margin: 0 -28px; box-sizing: content-box; }
@@ -4229,7 +4229,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
   /* 모바일: 첫 줄 = 로고 + (검색·알림·로그인) */
   .st-key-gnb { flex-wrap: wrap !important; flex-direction: row !important; row-gap: 2px !important; }
   .st-key-gnb .st-key-home_brand { flex: 0 0 auto !important; width: auto !important; }
-  .st-key-gnb .st-key-home_brand button { width: 118px !important; height: 37px !important; }
+  .st-key-gnb .st-key-home_brand button { width: 150px !important; height: 47px !important; }   /* 모바일 로고도 크게 (11/18) */
   .st-key-gnb > *:has(.st-key-gnb_right), .st-key-gnb > .st-key-gnb_right { order: 2; margin-left: auto !important; }
   .st-key-gnb > *:has(.st-key-gnb_tabs), .st-key-gnb > .st-key-gnb_tabs { order: 3; flex: 1 1 100% !important; width: 100% !important; }
   .st-key-gnb_right { flex-wrap: nowrap !important; }
@@ -4251,7 +4251,7 @@ ASK_FAB_CSS = """
   .st-key-ask_fab { display: block; position: fixed !important; right: 16px; bottom: calc(76px + 50px + 12px);
     z-index: 1003; width: 50px !important; height: 50px; }
   .st-key-ask_fab button { width: 50px !important; height: 50px !important; min-height: 0 !important; border-radius: 50% !important;
-    padding: 0 !important; background: #14B8A6 !important; border: 0 !important; box-shadow: 0 6px 16px rgba(20,184,166,.4) !important;
+    padding: 0 !important; background: #9EDDCC !important; border: 0 !important; box-shadow: 0 6px 16px rgba(46,156,130,.35) !important;   /* mint-line (11/18 요청) */
     display: flex !important; align-items: center !important; justify-content: center !important; }
   .st-key-ask_fab button span { font-size: 1.55rem !important; color: #fff !important; margin: 0 !important; }
 }</style>
@@ -7171,6 +7171,25 @@ def _admin_board() -> None:
     st.caption("새로 생성 = 그 주에 처음 등록 · 예정 = 그 주가 끝난 뒤 4주 안에 시작 · 진행 = 그 주에 열려 있고 다음 주에도 이어짐 · 종료 = 그 주에 끝남")
 
 
+# 사용자 테스트 바로가기 (11/18 요청). .env / Secrets 로 바꿀 수 있고, 없으면 지금 쓰는 폼 주소
+SURVEY_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLScp02W0zqeqYRwdMPW4D9Az-2hJny5sFDFkg0gRlnqvnF71mA/viewform"
+SURVEY_FORM_EDIT_URL = "https://docs.google.com/forms/d/1P1TZjlF-YR-80fa4s2-ABUFRJfiSU0b4aQo_raosceg/edit"
+N8N_URL = "http://localhost:5678"     # n8n 은 운영자 컴퓨터에서 돈다 (그 컴퓨터에서만 열림)
+
+
+def _survey_links(sheet_id: str) -> None:
+    """설문 폼 · 폼 고치기 · 응답 시트 · n8n 바로가기 버튼."""
+    links = [("설문 폼 (테스트 때 여는 주소)", os.getenv("SURVEY_FORM_URL") or SURVEY_FORM_URL, ":material/assignment:"),
+             ("폼 고치기", os.getenv("SURVEY_FORM_EDIT_URL") or SURVEY_FORM_EDIT_URL, ":material/edit_note:"),
+             ("응답 시트", f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit" if sheet_id else "", ":material/table_view:"),
+             ("n8n 워크플로", os.getenv("N8N_URL") or N8N_URL, ":material/account_tree:")]
+    with st.container(horizontal=True, key="adm_survey_links"):
+        for label, url, icon in links:
+            if url:
+                st.link_button(label, url, icon=icon)
+    st.caption("n8n 은 운영자 컴퓨터(http://localhost:5678)에서 돌아서, 그 컴퓨터에서만 열려요. 테스트 날에는 n8n 을 켜 두세요.")
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _survey_rows(sheet_id: str) -> tuple[list[dict], str]:
     """n8n 이 쌓은 구글 시트 '정리' 탭을 CSV 로 읽는다 (1분 기억). (줄들, 오류 글)."""
@@ -7192,6 +7211,7 @@ def _admin_survey() -> None:
     """사용자 테스트 (11/18 요청): n8n 이 구글 폼 응답을 정리해 쌓은 '정리' 탭 → 1차 · 2차 비교 + 원본 표.
     시트 주소(번호)는 .env / Secrets 의 SURVEY_SHEET_ID. 숫자는 stats.survey_summary (n8n 메일과 같은 규칙)."""
     sheet_id = (os.getenv("SURVEY_SHEET_ID") or "").strip()
+    _survey_links(sheet_id)
     if not sheet_id:
         st.info("설문 시트가 아직 연결되지 않았어요. `.env`(배포는 Streamlit Secrets)에 `SURVEY_SHEET_ID` 를 넣어 주세요 "
                 "(구글 시트 주소의 /d/ 와 /edit 사이 글자). 만드는 법: automation/n8n/README.md", icon=":material/link_off:")
