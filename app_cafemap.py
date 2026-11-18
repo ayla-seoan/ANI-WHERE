@@ -6217,8 +6217,9 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                             st.rerun(scope="app")
     # 새 답이 생기면 대화창을 마지막 대화의 처음(방금 한 질문)이 맨 위에 오게 내린다 (11/18 요청). 대화 수가 바뀔 때만
     n_chat = len(st.session_state.get("ask_chat", []))
-    if st.session_state.get(f"_{prefix}_seen") != n_chat:
-        st.session_state[f"_{prefix}_seen"] = n_chat
+    # 지도 ↔ 리스트로 옮겨 대화창을 새로 그릴 때도 마지막 대화로 (11/18 요청). 같은 화면에서 대화 수가 그대로면
+    # 같은 내용의 스크립트라 다시 실행되지 않아, 읽던 자리가 튀지 않는다
+    if True:
         components.html(
             "<script>(function(){const d=window.parent.document;let t=0;"
             "const go=()=>{const box=d.querySelector('.st-key-" + prefix + "_log');if(!box)return;"
