@@ -14,17 +14,38 @@ import os
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCAL_DIR = Path(os.getenv("ANIWHERE_DATA_DIR") or ROOT / "data")
-# 원격 저장소 읽기를 잠깐 기억하는 시간(초). 다른 사람이 쓴 글은 이 시간 안에 보인다. 0 이면 끔
-CACHE_SECONDS = float(os.getenv("STORAGE_CACHE_SECONDS", "15"))
+# 원격 저장소(Supabase) 읽기를 서버에 기억해 두는 방식 (11/18 요청: 처음에 한 번 불러오고, 매일 아침 수집 뒤 · 저장했을 때만 다시)
+#  - 이 서버에서 등록·수정·리뷰·북마크를 저장하면 그 표의 기억을 바로 고친다 (append)
+#  - 매일 REFRESH_AT(한국 시간, 08:40 Notion 매일 가져오기가 끝난 뒤) 이후 첫 읽기에서 새로 불러온다
+#  - 혹시 다른 곳(Supabase 화면에서 직접 고침 등)에서 바뀐 것은 CACHE_SECONDS 뒤에 보인다. 0 이면 기억하지 않음
+CACHE_SECONDS = float(os.getenv("STORAGE_CACHE_SECONDS", "1800"))
+REFRESH_AT = os.getenv("STORAGE_REFRESH_AT", "08:45")
 _READ_CACHE: dict[str, tuple[float, list[dict]]] = {}
 _CACHE_LOCK = threading.Lock()
 _PROBED: dict[tuple[str, str], float] = {}     # 확인을 마친 Supabase 표 (서버마다 한 번)   # 테스트는 임시 복사본을 가리킨다
+
+
+def _past_refresh(cached_at: float, now: float) -> bool:
+    """기억한 뒤에 오늘(한국 시간) REFRESH_AT 이 지났으면 True → 매일 아침 수집 뒤 한 번 새로 불러온다."""
+    kst = timezone(timedelta(hours=9))
+    try:
+        hh, mm = (int(x) for x in REFRESH_AT.split(":"))
+    except ValueError:
+        return False
+    today = datetime.fromtimestamp(now, kst).replace(hour=hh, minute=mm, second=0, microsecond=0)
+    return cached_at < today.timestamp() <= now
+
+
+def refresh_all() -> None:
+    """기억한 것을 모두 버린다 (다음 읽기에서 새로 불러옴). 관리자 화면의 '데이터 새로 불러오기'가 쓴다."""
+    with _CACHE_LOCK:
+        _READ_CACHE.clear()
 
 HEADERS = [
     "row_id", "entry_id", "revision", "status", "updated_at",
@@ -240,7 +261,7 @@ class Storage:
         now = time.time()
         with _CACHE_LOCK:
             hit = _READ_CACHE.get(key)
-        if hit and now - hit[0] < CACHE_SECONDS:
+        if hit and now - hit[0] < CACHE_SECONDS and not _past_refresh(hit[0], now):
             return [dict(r) for r in hit[1]]
         rows = self._fresh_rows()
         with _CACHE_LOCK:

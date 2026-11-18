@@ -36,6 +36,7 @@ from common import links as links_check   # 참고 웹사이트 확인 (11/18 �
 from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
 from common.schema import CafeEntry
+from common import storage as storage_mod
 from common.storage import Storage, StorageWriteError
 
 load_dotenv()
@@ -5880,6 +5881,12 @@ def page_data() -> None:
     with st.container(horizontal=True, horizontal_alignment="right", key="adm_links"):
         st.link_button("Claude 예약 작업 (매일 08:00 수집)", ADMIN_ROUTINE_URL, icon=":material/schedule:")
         st.link_button("Notion 팝업 트래커", NOTION_TRACKER_URL, icon=":material/table_view:")
+        # 앱은 Supabase 를 처음에 한 번 불러와 기억한다 (매일 08:45 · 앱에서 저장할 때 자동 갱신).
+        # Supabase 화면에서 직접 고쳤을 때만 이 버튼으로 바로 새로 불러온다
+        if st.button("데이터 새로 불러오기", icon=":material/refresh:", key="adm_refresh"):
+            storage_mod.refresh_all()
+            st.session_state["flash"] = ("Supabase 에서 새로 불러왔어요.", ":material/check_circle:")
+            st.rerun()
     st.markdown(f'<div class="adm-eyebrow">ANI:WHERE ADMIN · {TODAY:%Y.%m.%d}</div>'
                 '<div class="adm-title">관리자 대시보드</div>'
                 f'<div class="adm-sub">저장소: {escape(store.mode)} · 모든 기록은 지우지 않고 쌓여요 (append-only)</div>'
