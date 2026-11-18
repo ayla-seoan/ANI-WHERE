@@ -2400,11 +2400,11 @@ iframe[src*="kakao_map"] {{
                  pointer-events:none; }}
 .pcard .chips {{ height:26px; overflow:hidden; flex-wrap:nowrap; margin:0; }}
 
-.pcard .t {{ font-family:"Jua", sans-serif; font-size:21px; line-height:1.25; margin-bottom:2px;
+.pcard .t {{ font-family:"Jua", sans-serif; font-size:17px; line-height:1.25; margin-bottom:2px;
              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
-.pcard .s {{ font-size:14.5px; opacity:.92; font-weight:600; overflow:hidden; text-overflow:ellipsis;
+.pcard .s {{ font-size:12.5px; opacity:.92; font-weight:600; overflow:hidden; text-overflow:ellipsis;
              white-space:nowrap; }}
-.pcard .d {{ font-size:16.5px; font-weight:700; opacity:1; margin:3px 0 7px; }}
+.pcard .d {{ font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:700; opacity:1; margin:3px 0 7px; }}
 /* 기간: PC 는 '10월 30일 - 11월 22일', 모바일 리스트는 짧게 '10/30-11/22' (아래 모바일 규칙) */
 .pcard .d-short {{ display:none; }}
 .pcard .chip {{ background:#fff; }}
