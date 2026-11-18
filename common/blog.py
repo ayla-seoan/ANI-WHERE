@@ -161,6 +161,14 @@ import threading
 import time as _time
 
 MONTHLY_LIMIT = 30_000
+# 달마다 다른 한도 (11/19 사용자 결정): 2026년 11월은 네이버 API HUB 한시적 무료라 크게 열어 둔다.
+# 12월부터는 다시 MONTHLY_LIMIT(30,000번)에서 멈춘다 — 이 표에 없는 달은 모두 30,000번.
+MONTH_LIMITS = {"2026-11": 1_000_000}
+
+
+def monthly_limit(month: str | None = None) -> int:
+    """이번 달(한국 시간) 블로그 검색 호출 한도."""
+    return MONTH_LIMITS.get(month or _month(), MONTHLY_LIMIT)
 USAGE_HEADERS = ["row_id", "entry_id", "revision", "status", "updated_at", "api", "month", "calls"]
 _FLUSH_EVERY = 25                 # 25번마다 한 줄씩 쌓는다 (저장소가 한 달에 최대 1,200줄 정도)
 _lock = threading.Lock()
@@ -188,7 +196,7 @@ def month_calls(store) -> int:
 def allowed(store) -> bool:
     """한도 안이면 True. 호출 수를 읽지 못하면(표가 없거나 연결 실패) 안전하게 False — 부르지 않는다."""
     try:
-        return month_calls(store) < MONTHLY_LIMIT
+        return month_calls(store) < monthly_limit()
     except Exception:
         return False
 
