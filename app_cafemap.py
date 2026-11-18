@@ -2564,13 +2564,42 @@ def _story_open(eid: str) -> None:
     st.session_state.update(selected=eid, scroll_top=True)
 
 
+def _guest_stories(rows: list[dict], limit: int = 12) -> None:
+    """로그인 전 홈: '요즘 일정 많은 작품' — 진행 중·예정 팝업이 많은 작품 순. 숫자 = 그 작품 팝업 수.
+    누르면 그 작품만 걸러진 리스트 보기로. 맨 앞 '최애 추가하기' 는 로그인 화면으로."""
+    count: dict[str, int] = {}
+    for r in rows:
+        w = str(r.get("work") or "").strip()
+        if w:
+            count[w] = count.get(w, 0) + 1
+    works = sorted(count, key=lambda w: (-count[w], w))[:limit]
+    posters = _work_posters(rows)
+    with st.container(key="stories"):
+        st.markdown('<div class="story-head">요즘 일정 많은 작품</div>', unsafe_allow_html=True,
+                    help="지금 진행 중이거나 곧 열리는 팝업이 많은 작품이에요. 숫자는 그 작품의 팝업 수예요. "
+                         "로그인하고 팝업을 북마크하면 여기가 내 '북마크 팝업' 으로 바뀌어요.")
+        with st.container(horizontal=True, key="story_row"):
+            with st.container(key="card_story_add"):
+                st.markdown(f'<div class="story add"><div class="ring">{_mi("add")}</div><div class="nm">최애 추가하기</div></div>',
+                            unsafe_allow_html=True)
+                st.button("최애 추가하기", key="open_story_add", on_click=_story_add)
+            for i, w in enumerate(works):
+                with st.container(key=f"card_story_{i}"):
+                    st.markdown(
+                        f'<div class="story hot"><div class="ring"><div class="pic" style="background-image:url(&quot;{posters.get(w, images.DEFAULT_POSTER_URL)}&quot;)"></div>'
+                        f'<span class="cnt">{count[w]}</span></div><div class="nm">{escape(w)}</div></div>', unsafe_allow_html=True)
+                    st.button("보기", key=f"open_story_{i}", on_click=_story_pick, args=(w,))
+
+
 def render_stories(df: pd.DataFrame) -> None:
     """홈 '북마크 팝업' (11/18 요청): 인스타 스토리처럼 동그란 포스터 줄. 내가 북마크한 (진행 중·예정) 팝업 하나에 동그라미 하나,
     위에는 지역, 아래는 작품 이름. 누르면 그 팝업 상세. 맨 앞 '최애 추가하기' 로 팝업을 골라 한 번에 북마크한다."""
     rows = _live_rows(df)
+    if not _member():
+        _guest_stories(rows)       # 로그인 전: '요즘 일정 많은 작품' (11/18 요청)
+        return
     _, mine, _ = _fav_state()
-    marked = sorted([r for r in rows if str(r.get("entry_id")) in mine], key=lambda r: (_status(r)[2], str(r.get("end_date")))) \
-        if _member() else []
+    marked = sorted([r for r in rows if str(r.get("entry_id")) in mine], key=lambda r: (_status(r)[2], str(r.get("end_date"))))
     with st.container(key="stories"):
         st.markdown('<div class="story-head">북마크 팝업</div>', unsafe_allow_html=True,
                     help="내가 북마크한 팝업(진행 중 · 오픈 예정)이 여기에 모여요. 동그라미를 누르면 그 팝업으로 가고, "
@@ -2682,6 +2711,10 @@ STORY_CSS = """
   font-size: .62rem; font-weight: 800; color: #fff; background: var(--accent-deep); padding: 1px 7px; border-radius: 999px;
   border: 1.5px solid #fff; }
 .st-key-story_row { padding-top: 10px !important; }
+.story.hot .ring { background: conic-gradient(from 210deg, var(--accent-deep), var(--accent), #ffd66b, var(--accent-deep)); }
+.story .cnt { position: absolute; right: -2px; bottom: -2px; min-width: 24px; height: 24px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 999px; background: var(--accent-deep); color: #fff; font-size: .75rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
 .story.mark .ring { background: conic-gradient(from 210deg, #FF7A8A, #FFB86B, #FFD66B, #FF7A8A); }
 .story .pic { width: 100%; height: 100%; border-radius: 50%; border: 3px solid #fff; box-sizing: border-box;
   background-size: cover; background-position: center; background-color: #EEF3F1; }
@@ -6501,11 +6534,20 @@ def _login_body() -> None:
             # 새 탭으로 연다: 배포 사이트(Streamlit Cloud)는 앱을 iframe 안에 띄우는데, 카카오·네이버 로그인 화면은
             # iframe 안에서 열리기를 거부하고("연결을 거부했습니다"), 그 iframe 은 바깥 창 이동(_top)도 막는다
             # (sandbox 에 allow-top-navigation 없음, allow-popups 는 있음). 로그인이 끝나면 새 탭에서 로그인된 상태가 된다
+            # 11/18 요청: 같은 페이지에서 넘어가게. iframe 밖(내 컴퓨터, 앱 주소를 바로 연 경우)이면 아래 스크립트가
+            # target 을 _self 로 바꾼다. 배포 사이트처럼 iframe 안이면 바깥 창 이동이 막혀 있어 새 탭 그대로
             st.markdown(f'<a class="auth-btn {prov}" href="{escape(auth.authorize_url(prov))}" target="_blank" rel="noopener">'
                         f'{label}로 {verb}</a>', unsafe_allow_html=True)
         else:
             st.markdown(f'<span class="auth-btn off">{label} {verb} 준비 중</span>', unsafe_allow_html=True)
 
+    # iframe 밖이면 간편 로그인 버튼을 같은 페이지에서 열고, 새 탭 안내 문구를 숨긴다 (11/18 요청)
+    components.html(
+        "<script>(function(){const w=window.parent,d=w.document;let n=0;const f=()=>{"
+        "if(w.top!==w){return;}"
+        "d.querySelectorAll('a.auth-btn').forEach(a=>{a.target='_self';a.removeAttribute('rel');});"
+        "d.documentElement.classList.add('aw-top');};f();const iv=setInterval(()=>{f();if(++n>10)clearInterval(iv);},400);})();</script>",
+        height=0)
     # 새 탭에서 간편 로그인이 끝나면(로그인 쿠키가 생기면) 이 탭도 메인으로 옮긴다 (11/18: 원래 탭이 로그인 화면에 남던 문제)
     components.html(
         "<script>(function(){const w=window.parent;const val=()=>((w.document.cookie.match(/(?:^|; )" + auth.COOKIE
@@ -6516,8 +6558,9 @@ def _login_body() -> None:
         r"w.eval(`location.replace(location.pathname.replace(/\\/(login|auth)\\/?$/,'/')+location.search)`);}},1500);"
         "setTimeout(()=>clearInterval(iv),600000);})();</script>", height=0)
     # 안내는 맨 아래에 작게 한 묶음으로 (11/18 요청)
-    st.markdown('<div class="auth-foot">카카오·네이버 로그인은 <b>새 탭</b>에서 열려요. 그 탭에서 로그인을 마치면 '
-                '이 화면도 자동으로 로그인된 메인으로 넘어가요.<br>로그인하지 않아도 팝업은 둘러볼 수 있어요.<br>'
+    st.markdown('<style>html.aw-top .auth-newtab { display: none; }</style>', unsafe_allow_html=True)
+    st.markdown('<div class="auth-foot"><span class="auth-newtab">카카오·네이버 로그인은 <b>새 탭</b>에서 열려요. 그 탭에서 로그인을 마치면 '
+                '이 화면도 자동으로 로그인된 메인으로 넘어가요.<br></span>로그인하지 않아도 팝업은 둘러볼 수 있어요.<br>'
                 '받는 정보: <b>별명(닉네임)</b>과 계정 고유 번호뿐이에요. 고유 번호는 알아볼 수 없게 바꿔서(해시) 저장하고, '
                 '이메일·전화번호·실명은 받지도 저장하지도 않아요.</div>', unsafe_allow_html=True)
     if not (auth.enabled("kakao") or auth.enabled("naver")):
