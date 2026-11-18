@@ -5,6 +5,7 @@ import { getPopupData } from "@/lib/data";
 import { dayLabel, todayKST } from "@/lib/popup";
 import { posterBg } from "@/components/cards";
 import KeepBox, { type KeepItem } from "@/components/member/KeepBox";
+import SeasonFx from "@/components/member/SeasonFx";
 import { displayName } from "@/lib/server/auth";
 import { inbox, myVisited, ruleSettings, whyOf } from "@/lib/server/member";
 import { calColor, calStatus, monthWeeks, noticeHistory, upcoming, type CalEvent } from "@/lib/server/mycal";
@@ -115,6 +116,8 @@ export default async function CalendarPage({ searchParams }: Props) {
 
   return (
     <div className="mycal">
+      {/* 내 캘린더에서만 계절 배경 (꽃잎 · 잎사귀 · 단풍 · 눈) — 다른 화면으로 가면 이 칸과 함께 사라진다 */}
+      <SeasonFx />
       <section className="mc-box mycal-box">
         <div className="cal-nav">
           <span className="cal-title">
