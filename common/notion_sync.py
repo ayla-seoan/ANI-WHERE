@@ -322,7 +322,8 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
         found = _match(store.current_rows(), entry, extra["notion_id"], latlng, all_rows=store.all_rows())
         if found:
             # 앱 쪽에 이미지·팝업 소개가 비어 있고 Notion 에 있으면 그 칸만 채운다 (다른 칸은 그대로)
-            saved = (_download(extra["images"]) if fill_images and not images.split(found.get("images"))
+            # 기록에 이미지 이름이 있어도 파일이 없으면(다른 컴퓨터·배포 서버에서 받은 것) 다시 받는다 (11/18)
+            saved = (_download(extra["images"]) if fill_images and not images.paths(found.get("images"))
                      and extra["images"] else [])
             # 팝업 소개는 Notion 기준 (바뀌면 바꾸고, Notion 에서 지웠으면 비운다). 사람이 앱에서 쓴 소개는 그대로
             intro = None if _intro_by_person(store, found["entry_id"]) else extra["intro"]
@@ -361,7 +362,7 @@ def fill_found(store, found: dict, intro: str | None = None, images_: list[str] 
     payload = {k: found.get(k, "") for k in store.headers
                if k not in ("row_id", "entry_id", "revision", "status", "updated_at")}
     changed = False
-    if images_ and not images.split(found.get("images")):
+    if images_ and not images.paths(found.get("images")):          # 이름만 있고 파일이 없어도 채운다
         payload["images"], changed = ", ".join(images_), True
     if intro is not None and guard.mask(intro)[:cafe.MAX_INTRO] != str(found.get("intro") or "").strip():
         payload["intro"], changed = guard.mask(intro)[:cafe.MAX_INTRO], True
