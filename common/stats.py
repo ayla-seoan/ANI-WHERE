@@ -250,3 +250,59 @@ def survey_summary(rows: list[dict]) -> dict:
         "막힌곳": blocks.most_common(5),
         "바라는점": [str(r.get("바라는점")).strip() for r in people if str(r.get("바라는점") or "").strip()],
     }
+
+
+def survey_version(row: dict) -> str:
+    """'정리' 탭 한 줄의 버전. 1차 폼 응답만 '1차', 나머지(버전 칸이 없던 예전 줄 포함)는 '2차'."""
+    return "1차" if str(row.get("버전") or "").strip() == "1차" else "2차"
+
+
+def survey_compare(rows: list[dict]) -> dict:
+    """1차(로그인 · 물어보기 없던 첫 버전) → 2차(지금) 비교 (관리자 '사용자 테스트' 탭).
+    - 버전별 survey_summary
+    - 지표 표: (이름, 1차, 2차, 단위, 클수록 좋은지, 목표)
+    - 같은 사람: 닉네임이 1차 · 2차 모두에 있는 사람의 질문 1 시간 · 해낸 과제 수 · 만족도 변화"""
+    by = {"1차": [r for r in rows if survey_version(r) == "1차"], "2차": [r for r in rows if survey_version(r) == "2차"]}
+    s = {v: survey_summary(rs) for v, rs in by.items()}
+    a, b = s["1차"], s["2차"]
+    metrics = [
+        ("과제 성공률", a["성공률"], b["성공률"], "%", True, SURVEY_TARGET["success"]),
+        ("질문 1 평균 시간 (이번 주말 서울 팝업 찾기)", a["질문1초"], b["질문1초"], "초", False, SURVEY_TARGET["q1"]),
+        *[(f"{t} 성공률 ({n})", a["과제별"][t]["성공률"], b["과제별"][t]["성공률"], "%", True, None)
+          for t, n in SURVEY_TASKS.items()],
+        *[(f"{t} 평균 시간 ({n})", a["과제별"][t]["평균초"], b["과제별"][t]["평균초"], "초", False, None)
+          for t, n in SURVEY_TASKS.items() if t != "질문 1"],     # 질문 1 시간은 맨 위 줄
+        ("평소 방법보다 편함 (5점)", a["비교"], b["비교"], "점", True, None),
+        ("만족도 (5점)", a["만족도"], b["만족도"], "점", True, None),
+        ("다시 쓸 의향", a["다시쓸의향"], b["다시쓸의향"], "%", True, None),
+    ]
+
+    def person(rs: list[dict]) -> dict:
+        out: dict = {}
+        for r in rs:
+            nick = str(r.get("닉네임") or "").strip()
+            if not nick:
+                continue
+            p = out.setdefault(nick, {"해낸 과제": 0, "질문1초": None, "만족도": None})
+            if str(r.get("결과")) in SURVEY_OK:
+                p["해낸 과제"] += 1
+            if r.get("과제") == "질문 1":
+                p["질문1초"] = (_nums([r.get("걸린시간초")]) or [None])[0]
+                p["만족도"] = (_nums([r.get("만족도")]) or [None])[0]
+        return out
+
+    p1, p2 = person(by["1차"]), person(by["2차"])
+    pairs = [{"닉네임": n, "질문 1 (1차)": p1[n]["질문1초"], "질문 1 (2차)": p2[n]["질문1초"],
+              "해낸 과제 (1차)": p1[n]["해낸 과제"], "해낸 과제 (2차)": p2[n]["해낸 과제"],
+              "만족도 (1차)": p1[n]["만족도"], "만족도 (2차)": p2[n]["만족도"]} for n in sorted(set(p1) & set(p2))]
+    timed = [p for p in pairs if p["질문 1 (1차)"] and p["질문 1 (2차)"]]
+    same = {
+        "명": len(pairs),
+        "빨라진 사람": sum(p["질문 1 (2차)"] < p["질문 1 (1차)"] for p in timed),
+        "시간 잰 사람": len(timed),
+        "평균 줄어든 초": round(sum(p["질문 1 (1차)"] - p["질문 1 (2차)"] for p in timed) / len(timed), 1) if timed else None,
+        "더 해낸 사람": sum(p["해낸 과제 (2차)"] > p["해낸 과제 (1차)"] for p in pairs),
+        "만족도 오른 사람": sum((p["만족도 (2차)"] or 0) > (p["만족도 (1차)"] or 0) for p in pairs
+                           if p["만족도 (1차)"] and p["만족도 (2차)"]),
+    }
+    return {"1차": a, "2차": b, "지표": metrics, "같은 사람": same, "짝": pairs}

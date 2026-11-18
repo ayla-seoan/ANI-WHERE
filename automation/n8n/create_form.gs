@@ -1,64 +1,98 @@
 /**
  * ANI:WHERE 사용해 보기 설문 (구글 폼) — 참여자가 직접 ANI:WHERE 를 써 보고 스스로 내는 설문 (11/18 다시 설계).
+ * 폼은 두 개: 1차(로그인 · 물어보기 없던 첫 버전) · 2차(지금 버전). 질문 1~4 는 같아서 1차 → 2차 를 바로 비교한다.
  *
- * 쓰는 법: https://script.google.com → (예전 프로젝트 또는 새 프로젝트) → 이 파일 내용을 통째로 붙여넣기 → 저장
- *        → 함수 rebuildSurveyForm ▶ 실행 → 권한 허용 → '실행 로그' 의 주소를 확인.
+ * 쓰는 법: https://script.google.com → 프로젝트 → 이 파일 내용을 통째로 붙여넣기 → 저장
+ *        → 함수 rebuildSurveyForm ▶ 실행 (2차 폼) · buildV1SurveyForm ▶ 실행 (1차 폼) → '실행 로그' 의 주소를 확인.
  *
- * 지금 있는 폼(FORM_ID)과 응답 시트를 그대로 쓴다 — 폼 주소 · 시트 주소가 바뀌지 않아 n8n · 관리자 페이지 설정을 다시 할 필요가 없다.
- *   - 폼 문항을 모두 지우고 새로 만들고, 예전 응답도 지운다 (아직 실제 응답이 없을 때 쓰는 함수)
- *   - 응답 탭은 새로 만들어 이름을 '설문지 응답 시트1' 로, '정리' 탭은 비우고 새 제목 줄을 쓴다
- *   FORM_ID 의 폼을 열 수 없으면 새 폼 · 새 시트를 만든다.
+ * 응답은 한 스프레드시트에 모은다: 2차 = '설문지 응답 시트1' 탭, 1차 = '1차 응답' 탭. n8n 이 둘 다 읽어 '정리' 탭에 버전과 함께 쌓는다.
+ *   - rebuildSurveyForm: 지금 있는 2차 폼(FORM_ID)의 문항 · 응답을 지우고 새로 만든다 (폼 · 시트 주소는 그대로). '정리' 탭도 비운다
+ *   - buildV1SurveyForm: 1차 폼을 처음엔 새로 만들고(번호를 스크립트 속성 V1_FORM_ID 에 기억), 다음부터는 같은 폼을 다시 만든다
  *
- * 설계 (A/B): A = 참여자가 평소 쓰던 방법(SNS · 커뮤니티 · 검색), B = ANI:WHERE.
+ * 설계 (A/B): A = 참여자가 평소 쓰던 방법(SNS · 커뮤니티 · 검색), B = ANI:WHERE (1차 / 2차).
  *   같은 사람이 평소 방법으로 걸리던 시간과 ANI:WHERE 로 직접 해 본 시간 · 성공 여부 · 어려움을 답한다.
  *   '평소 불편한 점' 문항은 문제 정의의 근거로 쓴다.
  * 개인정보: 이메일을 모으지 않는다. 받는 것은 ANI:WHERE 닉네임(응답을 묶는 데만)과 답뿐. 이름 · 연락처 문항 없음.
  */
-var FORM_ID = '1P1TZjlF-YR-80fa4s2-ABUFRJfiSU0b4aQo_raosceg';
+var FORM_ID = '1P1TZjlF-YR-80fa4s2-ABUFRJfiSU0b4aQo_raosceg';     // 2차 폼
+var SHEET_ID = '1OHB1_wSWowI-lVi-AOWXICUz-wH32Y1uG9YH_McnkrA';    // 응답 시트 (1차 · 2차 같이)
+var TAB = { '2차': '설문지 응답 시트1', '1차': '1차 응답' };        // n8n '폼 응답 들어옴' 노드들이 읽는 탭 이름
 
-var TASKS = [
-  ['질문 1', '이번 주말 서울에서 열리는 팝업 하나를 찾아 자세히 보기(상세 화면)를 열어 보세요.'],
-  ['질문 2', '보고 싶은 작품의 팝업을 찾아 북마크해 보세요. (로그인이 필요해요)'],
-  ['질문 3', '방금 북마크한 팝업이 "내 캘린더"에 들어갔는지 확인해 보세요.'],
-  ['질문 4', '그 팝업에 가기 전에 확인할 공식 공지(참고 웹사이트)를 열어 보세요.']
-];
-var TIDY_HEADER = ['닉네임', '과제', '결과', '걸린시간초', '막힌 지점', '방문빈도', '정보출처', '불편한점',
+var TASKS = {
+  '2차': [
+    ['질문 1', '이번 주말 서울에서 열리는 팝업 하나를 찾아 자세히 보기(상세 화면)를 열어 보세요.'],
+    ['질문 2', '보고 싶은 작품의 팝업을 찾아 북마크해 보세요. (로그인이 필요해요)'],
+    ['질문 3', '방금 북마크한 팝업이 "내 캘린더"에 들어갔는지 확인해 보세요.'],
+    ['질문 4', '그 팝업에 가기 전에 확인할 공식 공지(참고 웹사이트)를 열어 보세요.']
+  ],
+  '1차': [
+    ['질문 1', '이번 주말 서울에서 열리는 팝업 하나를 찾아 자세히 보기(상세 화면)를 열어 보세요.'],
+    ['질문 2', '보고 싶은 작품의 팝업을 찾아 팔로우(북마크)해 보세요. (1차는 로그인 없이 돼요)'],
+    ['질문 3', '방금 팔로우한 팝업이 "내 캘린더"(지도보기 오른쪽)에 들어갔는지 확인해 보세요.'],
+    ['질문 4', '그 팝업에 가기 전에 확인할 공식 공지(참고 웹사이트)를 열어 보세요.']
+  ]
+};
+var TIDY_HEADER = ['닉네임', '버전', '과제', '결과', '걸린시간초', '막힌 지점', '방문빈도', '정보출처', '불편한점',
                    '평소걸린시간초', '비교', '만족도', '다시쓸의향', '바라는점', '받은시각'];
 
+/** 2차 폼 (지금 버전) 다시 만들기 */
 function rebuildSurveyForm() {
-  var form = null;
-  try { form = FormApp.openById(FORM_ID); } catch (e) { form = null; }
-  var ss;
-  if (form) {
-    var ssId = null;
-    try { ssId = form.getDestinationId(); } catch (e) { ssId = null; }
-    form.getItems().forEach(function (it) { form.deleteItem(it); });
-    form.deleteAllResponses();
-    if (ssId) {
-      form.removeDestination();
-      ss = SpreadsheetApp.openById(ssId);
-      var old = ss.getSheetByName('설문지 응답 시트1');
-      if (old && ss.getSheets().length > 1) ss.deleteSheet(old);
-    } else {
-      ss = SpreadsheetApp.create('ANI:WHERE 사용해 보기 설문 응답');
-    }
-  } else {
-    form = FormApp.create('ANI:WHERE 사용해 보기 설문');
-    ss = SpreadsheetApp.create('ANI:WHERE 사용해 보기 설문 응답');
-  }
+  var form = FormApp.openById(FORM_ID);
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  resetForm_(form, ss, TAB['2차']);
+  fillForm_(form, '2차');
+  linkForm_(form, ss, TAB['2차']);
+  var tidy = ss.getSheetByName('정리') || ss.insertSheet('정리');
+  tidy.clear();
+  tidy.getRange(1, 1, 1, TIDY_HEADER.length).setValues([TIDY_HEADER]).setFontWeight('bold');
+  tidy.setFrozenRows(1);
+  logUrls_('2차', form, ss);
+}
 
-  form.setTitle('ANI:WHERE 사용해 보기 설문 (5분)');
-  form.setDescription(
-    '애니 팝업 · 콜라보 카페 · 굿즈 행사를 찾는 ANI:WHERE 를 직접 써 보고 답해 주세요.\n' +
-    '주소: https://ani-where.streamlit.app\n\n' +
-    '이름 · 연락처 · 이메일은 받지 않아요. ANI:WHERE 닉네임은 응답을 정리하는 데만 쓰고, 결과는 서비스를 고치는 데만 써요.');
+/** 1차 폼 (로그인 · 물어보기 없던 첫 버전) 만들기 / 다시 만들기 */
+function buildV1SurveyForm() {
+  var props = PropertiesService.getScriptProperties();
+  var form = null;
+  var id = props.getProperty('V1_FORM_ID');
+  if (id) { try { form = FormApp.openById(id); } catch (e) { form = null; } }
+  if (!form) {
+    form = FormApp.create('ANI:WHERE 사용해 보기 설문 — 1차');
+    props.setProperty('V1_FORM_ID', form.getId());
+  }
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  resetForm_(form, ss, TAB['1차']);
+  fillForm_(form, '1차');
+  linkForm_(form, ss, TAB['1차']);
+  logUrls_('1차', form, ss);
+}
+
+function resetForm_(form, ss, tabName) {
+  form.getItems().forEach(function (it) { form.deleteItem(it); });
+  form.deleteAllResponses();
+  try { if (form.getDestinationId()) form.removeDestination(); } catch (e) {}
+  var old = ss.getSheetByName(tabName);
+  if (old && ss.getSheets().length > 1) ss.deleteSheet(old);
+}
+
+function fillForm_(form, ver) {
+  var v1 = ver === '1차';
+  form.setTitle('ANI:WHERE 사용해 보기 설문 — ' + ver + ' (5분)');
+  form.setDescription(v1
+    ? '애니 팝업 · 콜라보 카페를 찾는 ANI:WHERE 의 1차 버전을 직접 써 보고 답해 주세요.\n' +
+      '1차 버전에는 로그인과 물어보기(AI 대화창)가 없어요. 리스트 · 필터 · 지도 · 팔로우 · 내 캘린더만 써 주세요.\n\n' +
+      '이름 · 연락처 · 이메일은 받지 않아요. 닉네임은 1차 · 2차 응답을 묶는 데만 쓰고, 결과는 서비스를 고치는 데만 써요.'
+    : '애니 팝업 · 콜라보 카페 · 굿즈 행사를 찾는 ANI:WHERE 를 직접 써 보고 답해 주세요.\n' +
+      '주소: https://ani-where.streamlit.app (로그인 · 물어보기 · 홈 추천 모두 써도 돼요)\n\n' +
+      '이름 · 연락처 · 이메일은 받지 않아요. ANI:WHERE 닉네임은 응답을 정리하는 데만 쓰고, 결과는 서비스를 고치는 데만 써요.');
   form.setCollectEmail(false);
   form.setLimitOneResponsePerUser(false);
   form.setAllowResponseEdits(false);
   form.setProgressBar(true);
 
   // 1. 나에 대해
-  form.addTextItem().setTitle('닉네임').setHelpText('ANI:WHERE 에 가입한 닉네임 (가입 전이면 지금 가입하고 그 닉네임을 적어 주세요)').setRequired(true);
+  form.addTextItem().setTitle('닉네임').setRequired(true).setHelpText(v1
+    ? '1차에는 로그인이 없어요. 2차(지금 ANI:WHERE)에서 로그인할 때 쓰는 닉네임을 적어 주세요 (1차 · 2차 응답을 묶어요)'
+    : 'ANI:WHERE 에 가입한 닉네임 (가입 전이면 지금 가입하고 그 닉네임을 적어 주세요)');
   form.addMultipleChoiceItem().setTitle('방문 빈도').setRequired(true)
     .setHelpText('애니 팝업 · 콜라보 카페에 얼마나 자주 가나요?')
     .setChoiceValues(['한 달에 2번 이상', '한 달에 1번쯤', '몇 달에 1번', '거의 안 가요']);
@@ -77,8 +111,9 @@ function rebuildSurveyForm() {
     .setChoiceValues(['1분 안에', '1~3분', '3~5분', '5~10분', '10분 넘게']);
 
   // 3. ANI:WHERE 로 해 보기 (B)
-  TASKS.forEach(function (t) {
-    form.addPageBreakItem().setTitle(t[0] + '. ' + t[1]).setHelpText('ANI:WHERE 에서 직접 해 보고 답해 주세요.');
+  TASKS[ver].forEach(function (t) {
+    form.addPageBreakItem().setTitle(t[0] + '. ' + t[1])
+      .setHelpText(v1 ? 'ANI:WHERE 1차 버전에서 직접 해 보고 답해 주세요.' : 'ANI:WHERE 에서 직접 해 보고 답해 주세요.');
     form.addMultipleChoiceItem().setTitle(t[0] + ' 결과').setRequired(true)
       .setChoiceValues(['해냈어요', '어렵게 해냈어요', '못 했어요']);
     form.addMultipleChoiceItem().setTitle(t[0] + ' 걸린 시간')
@@ -88,27 +123,25 @@ function rebuildSurveyForm() {
 
   // 4. 마무리
   form.addPageBreakItem().setTitle('마지막으로');
-  form.addScaleItem().setTitle('비교').setHelpText('평소 방법과 비교하면 ANI:WHERE 는 어땠나요?')
+  form.addScaleItem().setTitle('비교').setHelpText('평소 방법과 비교하면 ANI:WHERE ' + (v1 ? '1차 버전' : '') + '는 어땠나요?')
     .setBounds(1, 5).setLabels('훨씬 불편했어요', '훨씬 편했어요').setRequired(true);
   form.addScaleItem().setTitle('만족도').setBounds(1, 5).setLabels('불만족', '아주 만족').setRequired(true);
   form.addMultipleChoiceItem().setTitle('다시 쓸 의향').setChoiceValues(['있어요', '모르겠어요', '없어요']).setRequired(true);
   form.addParagraphTextItem().setTitle('바라는 점').setHelpText('있었으면 하는 기능이나 고칠 점을 자유롭게 적어 주세요');
+}
 
-  // 응답 시트 다시 연결 + 탭 이름 맞추기
+/** 폼 → 응답 시트 연결 + 새로 생긴 응답 탭 이름 맞추기 */
+function linkForm_(form, ss, tabName) {
+  var before = ss.getSheets().map(function (sh) { return sh.getSheetId(); });
   form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
   SpreadsheetApp.flush();
   ss = SpreadsheetApp.openById(ss.getId());
-  var responses = null;
-  ss.getSheets().forEach(function (sh) { if (sh.getFormUrl && sh.getFormUrl()) responses = sh; });
-  if (responses) responses.setName('설문지 응답 시트1');                 // n8n '폼 응답 들어옴' 노드가 읽는 이름
-  var tidy = ss.getSheetByName('정리') || ss.insertSheet('정리');
-  tidy.clear();
-  tidy.getRange(1, 1, 1, TIDY_HEADER.length).setValues([TIDY_HEADER]).setFontWeight('bold');
-  tidy.setFrozenRows(1);
-  var blank = ss.getSheetByName('시트1') || ss.getSheetByName('Sheet1');
-  if (blank && blank.getLastRow() === 0 && ss.getSheets().length > 2) ss.deleteSheet(blank);
+  var added = ss.getSheets().filter(function (sh) { return before.indexOf(sh.getSheetId()) < 0; });
+  if (added.length) added[0].setName(tabName);
+}
 
-  Logger.log('① 폼 고치기: ' + form.getEditUrl());
-  Logger.log('② 폼 내기(참여자에게 보낼 주소): ' + form.getPublishedUrl());
-  Logger.log('③ 응답 시트: ' + ss.getUrl());
+function logUrls_(ver, form, ss) {
+  Logger.log(ver + ' ① 폼 고치기: ' + form.getEditUrl());
+  Logger.log(ver + ' ② 폼 내기(참여자에게 보낼 주소): ' + form.getPublishedUrl());
+  Logger.log(ver + ' ③ 응답 시트: ' + ss.getUrl());
 }

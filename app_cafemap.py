@@ -7188,21 +7188,27 @@ def _admin_board() -> None:
 
 
 # 사용자 테스트 바로가기 (11/18 요청). .env / Secrets 로 바꿀 수 있고, 없으면 지금 쓰는 폼 주소
-SURVEY_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLScp02W0zqeqYRwdMPW4D9Az-2hJny5sFDFkg0gRlnqvnF71mA/viewform"
-SURVEY_FORM_EDIT_URL = "https://docs.google.com/forms/d/1P1TZjlF-YR-80fa4s2-ABUFRJfiSU0b4aQo_raosceg/edit"
+SURVEY_FORMS = {   # 버전: (참여자에게 보낼 주소, 폼 고치기). 1차 = 로그인 · 물어보기 없던 첫 버전, 2차 = 지금 (11/18 요청)
+    "1차": ("https://docs.google.com/forms/d/e/1FAIpQLSe8ZKxd1bcF4jgTYwHgFdmXGsX5Y2PcGe9KTZTDLl6V_gzHpA/viewform",
+            "https://docs.google.com/forms/d/1E53ZHq-zHC0qy4jfwwekTV-KrbsfU8PakrsJH77A8m8/edit"),
+    "2차": ("https://docs.google.com/forms/d/e/1FAIpQLScp02W0zqeqYRwdMPW4D9Az-2hJny5sFDFkg0gRlnqvnF71mA/viewform",
+            "https://docs.google.com/forms/d/1P1TZjlF-YR-80fa4s2-ABUFRJfiSU0b4aQo_raosceg/edit"),
+}
 N8N_URL = "http://localhost:5678"     # n8n 은 운영자 컴퓨터에서 돈다 (그 컴퓨터에서만 열림)
 
 
 def _survey_links(sheet_id: str) -> None:
-    """설문 폼 · 폼 고치기 · 응답 시트 · n8n 바로가기 버튼."""
-    links = [("설문 폼 (참여자에게 보낼 주소)", os.getenv("SURVEY_FORM_URL") or SURVEY_FORM_URL, ":material/assignment:"),
-             ("폼 고치기", os.getenv("SURVEY_FORM_EDIT_URL") or SURVEY_FORM_EDIT_URL, ":material/edit_note:"),
-             ("응답 시트", f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit" if sheet_id else "", ":material/table_view:"),
-             ("n8n 워크플로", os.getenv("N8N_URL") or N8N_URL, ":material/account_tree:")]
+    """1차 · 2차 설문 폼(참여자에게 보낼 주소 · 폼 고치기) · 응답 시트 · n8n 바로가기 버튼."""
+    for ver, (form, edit) in SURVEY_FORMS.items():
+        with st.container(horizontal=True, key=f"adm_survey_links_{ver}", vertical_alignment="center"):
+            st.link_button(f"{ver} 설문 폼 (참여자에게 보낼 주소)", form, icon=":material/assignment:",
+                           type="primary" if ver == "2차" else "secondary")
+            st.link_button(f"{ver} 폼 고치기", edit, icon=":material/edit_note:")
     with st.container(horizontal=True, key="adm_survey_links"):
-        for label, url, icon in links:
-            if url:
-                st.link_button(label, url, icon=icon)
+        if sheet_id:
+            st.link_button("응답 시트 (1차 · 2차 같이)", f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit",
+                           icon=":material/table_view:")
+        st.link_button("n8n 워크플로", os.getenv("N8N_URL") or N8N_URL, icon=":material/account_tree:")
     st.caption("n8n 은 운영자 컴퓨터(http://localhost:5678)에서 돌아서, 그 컴퓨터에서만 열려요. 테스트 날에는 n8n 을 켜 두세요.")
 
 
@@ -7245,11 +7251,128 @@ def _admin_survey() -> None:
         st.info("아직 들어온 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
                 icon=":material/hourglass_empty:")
         return
+    view = st.segmented_control("보기", ["1차 → 2차 개선", "2차 자세히", "1차 자세히"], default="1차 → 2차 개선",
+                                key="adm_survey_view", label_visibility="collapsed") or "1차 → 2차 개선"
+    if view == "1차 → 2차 개선":
+        _survey_improve(rows)
+    else:
+        ver = view[:2]
+        sub = [r for r in rows if stats.survey_version(r) == ver]
+        if not sub:
+            st.info(f"{ver} 폼 응답이 아직 없어요.", icon=":material/hourglass_empty:")
+        else:
+            _survey_detail(sub)
+    st.caption("구글 폼(1차 · 2차) → n8n(내 컴퓨터) → 구글 시트 '정리' 탭(버전 칸) → 여기. 이메일 · 이름 · 연락처는 받지 않고, "
+               "자유 답변의 전화번호 · 이메일은 n8n 이 지워요.")
+
+
+SV_COLORS = ["#A9B3B0", "#14B8A6"]     # 1차 회색 · 2차 포인트 민트
+
+
+def _sv_fmt(v, unit: str = "") -> str:
+    return "-" if v is None else f"{v:g}{unit}"
+
+
+def _survey_improve(rows: list[dict]) -> None:
+    """1차(로그인 · 물어보기 없던 첫 버전) → 2차(지금): 무엇이 나아지고 편해졌나 (11/18 요청). 숫자는 stats.survey_compare."""
+    c = stats.survey_compare(rows)
+    a, b, tgt = c["1차"], c["2차"], stats.SURVEY_TARGET
+    if not a["응답자"] or not b["응답자"]:
+        st.info(f"1차 응답 {a['응답자']}명 · 2차 응답 {b['응답자']}명이에요. 두 폼 모두 응답이 들어오면 여기서 1차 → 2차 를 비교해요. "
+                "(지금은 '2차 자세히' · '1차 자세히' 에서 볼 수 있어요)", icon=":material/compare_arrows:")
+        return
+
+    def delta(x, y, unit):
+        return None if x is None or y is None else f"{round(y - x, 1):+g}{unit}"
+
+    # 1) 숫자 카드: 2차 값 + 1차 대비 변화
+    m = st.columns(5)
+    m[0].metric("응답자 (1차 · 2차)", f"{a['응답자']} · {b['응답자']}명")
+    m[1].metric("과제 성공률", _sv_fmt(b["성공률"], "%"), delta(a["성공률"], b["성공률"], "%p"))
+    m[2].metric("질문 1 평균 시간", _sv_fmt(b["질문1초"], "초"), delta(a["질문1초"], b["질문1초"], "초"), delta_color="inverse")
+    m[3].metric("만족도 (5점)", _sv_fmt(b["만족도"]), delta(a["만족도"], b["만족도"], "점"))
+    m[4].metric("다시 쓸 의향", _sv_fmt(b["다시쓸의향"], "%"), delta(a["다시쓸의향"], b["다시쓸의향"], "%p"))
+    ok_s = b["성공률"] is not None and b["성공률"] >= tgt["success"]
+    ok_t = b["질문1초"] is not None and b["질문1초"] <= tgt["q1"]
+    st.caption(f"큰 숫자 = 2차, 작은 숫자 = 1차 대비 변화. 2차 목표: 과제 성공률 {tgt['success']:g}% 이상 {'O' if ok_s else 'X'} · "
+               f"질문 1 평균 {tgt['q1']:g}초 이하 {'O' if ok_t else 'X'}. 시간은 응답자가 고른 구간의 가운데 값(대략값)"
+               + ("  ·  응답자가 적어 참고용이에요" if min(a["응답자"], b["응답자"]) < 10 else ""))
+
+    # 2) 그래프
+    g1, g2 = st.columns(2)
+    with g1:
+        st.markdown('<div class="adm-panel-h">팝업 하나 찾는 시간 (초) · 평소 방법 → 1차 → 2차</div>', unsafe_allow_html=True)
+        base = stats._avg([x for x in (a["평소초"], b["평소초"]) if x is not None])
+        st.bar_chart(pd.DataFrame({"방법": ["① 평소 방법", "② 1차", "③ 2차"],
+                                   "초": [base or 0, a["질문1초"] or 0, b["질문1초"] or 0]}),
+                     x="방법", y="초", color="#14B8A6", horizontal=True, height=190, x_label="", y_label="", sort=False)
+        st.markdown('<div class="adm-panel-h">과제별 성공률 (%) · 1차 vs 2차</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame([{"과제": f"{t} · {n}", **{v: c[v]["과제별"][t]["성공률"] or 0 for v in ("1차", "2차")}}
+                                   for t, n in stats.SURVEY_TASKS.items()]),
+                     x="과제", y=["1차", "2차"], color=SV_COLORS, stack=False, horizontal=True, height=280,
+                     x_label="", y_label="", sort=False)
+    with g2:
+        st.markdown('<div class="adm-panel-h">과제별 평균 시간 (초, 해낸 사람) · 1차 vs 2차</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame([{"과제": f"{t} · {n}", **{v: c[v]["과제별"][t]["평균초"] or 0 for v in ("1차", "2차")}}
+                                   for t, n in stats.SURVEY_TASKS.items()]),
+                     x="과제", y=["1차", "2차"], color=SV_COLORS, stack=False, horizontal=True, height=280,
+                     x_label="", y_label="", sort=False)
+        st.markdown('<div class="adm-panel-h">만족도 분포 (명) · 1차 vs 2차</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame([{"점수": f"{i}점", **{v: c[v]["만족도분포"].get(str(i), 0) for v in ("1차", "2차")}}
+                                   for i in range(1, 6)]),
+                     x="점수", y=["1차", "2차"], color=SV_COLORS, stack=False, height=190, x_label="", y_label="", sort=False)
+
+    # 3) 지표 표 (나아짐 / 그대로 / 나빠짐)
+    st.markdown('<div class="adm-panel-h">무엇이 나아졌나 (1차 → 2차)</div>', unsafe_allow_html=True)
+    table = []
+    for name, x, y, unit, up, goal in c["지표"]:
+        if x is None or y is None:
+            verdict = "-"
+        elif abs(y - x) < 1e-9:
+            verdict = "그대로"
+        else:
+            verdict = "나아짐" if (y > x) == up else "나빠짐"
+        table.append({"지표": name, "1차": _sv_fmt(x, unit), "2차": _sv_fmt(y, unit),
+                      "변화": "-" if x is None or y is None else f"{round(y - x, 1):+g}{'%p' if unit == '%' else unit}",
+                      "판정": verdict,
+                      "목표": "-" if goal is None else (f"{goal:g}{unit} 이상" if up else f"{goal:g}{unit} 이하")})
+    st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch", height=35 * (len(table) + 1) + 3)
+
+    # 4) 같은 사람 (닉네임으로 묶인 1차 · 2차)
+    same = c["같은 사람"]
+    st.markdown('<div class="adm-panel-h">같은 사람이 1차 · 2차 둘 다 해 봤을 때 (닉네임으로 묶음)</div>', unsafe_allow_html=True)
+    if not same["명"]:
+        st.caption("1차 · 2차 모두 낸 사람이 아직 없어요 (1차 폼에는 2차 로그인 닉네임을 적게 안내해요).")
+    else:
+        k = st.columns(4)
+        k[0].metric("두 번 다 한 사람", f"{same['명']}명")
+        k[1].metric("질문 1 이 빨라진 사람", f"{same['빨라진 사람']} / {same['시간 잰 사람']}명")
+        k[2].metric("평균 줄어든 시간", _sv_fmt(same["평균 줄어든 초"], "초"))
+        k[3].metric("해낸 과제가 늘어난 사람", f"{same['더 해낸 사람']}명")
+        with st.expander(f"사람별 ({same['명']}명)"):
+            st.dataframe(pd.DataFrame(c["짝"]), hide_index=True, width="stretch")
+
+    # 5) 막힌 곳 1차 · 2차 나란히 + 평소 불편한 점
+    c1, c2 = st.columns(2)
+    for col, v in ((c1, "1차"), (c2, "2차")):
+        with col:
+            st.markdown(f'<div class="adm-panel-h">{v} · 자주 막힌 곳</div>', unsafe_allow_html=True)
+            st.markdown("\n".join(f"- {escape(bk)} — {n}번" for bk, n in c[v]["막힌곳"]) or "없어요.", unsafe_allow_html=True)
+    pains: dict = {}
+    for v in ("1차", "2차"):
+        for p_, n in c[v]["불편한점"]:
+            pains[p_] = pains.get(p_, 0) + n
+    if pains:
+        st.markdown('<div class="adm-panel-h">평소 불편한 점 (문제 정의 · 1차 · 2차 응답 합계)</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame(sorted(pains.items(), key=lambda kv: -kv[1]), columns=["불편한 점", "명"]),
+                     x="불편한 점", y="명", color="#F2A33A", horizontal=True, height=240, x_label="", y_label="", sort="-명")
+
+
+def _survey_detail(rows: list[dict]) -> None:
+    """한 버전(1차 또는 2차)의 자세한 결과."""
     s = stats.survey_summary(rows)
     tgt = stats.SURVEY_TARGET
-
-    def fmt(v, unit=""):
-        return "-" if v is None else f"{v:g}{unit}"
+    fmt = _sv_fmt
 
     # 1) 숫자 카드 (A/B · 목표)
     m1, m2, m3, m4, m5 = st.columns(5)
@@ -7311,7 +7434,6 @@ def _admin_survey() -> None:
         st.markdown("\n".join(f"- {escape(w)}" for w in s["바라는점"][:10]) or "아직 없어요.", unsafe_allow_html=True)
     with st.expander(f"원본 응답 ({len(rows)}줄 · 한 사람 = 질문 1~4 네 줄)"):
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-    st.caption("구글 폼 → n8n(내 컴퓨터) → 구글 시트 '정리' 탭 → 여기. 이메일 · 이름 · 연락처는 받지 않고, 자유 답변의 전화번호 · 이메일은 n8n 이 지워요.")
 
 
 def _admin_usage() -> None:

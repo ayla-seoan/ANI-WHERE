@@ -33,6 +33,37 @@
       }
     },
     {
+      "id": "4c4d26b8-5190-5619-97e1-6efb22c4fedd",
+      "name": "1차 폼 응답 들어옴",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "1차 응답"
+        },
+        "event": "rowAdded",
+        "options": {}
+      }
+    },
+    {
       "id": "5d125fd2-6ad1-50b1-9588-3eb54be50501",
       "name": "과업 4줄로 정리 · 개인정보 지우기",
       "type": "n8n-nodes-base.code",
@@ -42,7 +73,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// n8n Code 노드 ①: 구글 폼 응답 한 줄 → '정리' 탭 과제 4줄 (질문 1~4). 응답자 정보(방문 빈도 · 평소 방법 · 불편한 점 ·\n// 비교 · 만족도 …)는 '질문 1' 줄에만 적는다 (사람 단위로 셀 때 '질문 1' 줄만 보면 된다)\n// 모드: Run Once for All Items. 입력 = 'Google Sheets Trigger'(폼 응답 시트, 새 줄) 의 items. 폼은 automation/n8n/create_form.gs\n// 개인정보: 이메일 · 이름 · 연락처를 받지 않는다. 자유 답변에 전화번호 · 이메일이 있으면 지운다 (common/guard.py 와 같은 생각)\n\nconst PHONE = /(01[016789]|0\\d{1,2})[-.\\s]?\\d{3,4}[-.\\s]?\\d{4}/g;\nconst EMAIL = /[\\w.+-]+@[\\w-]+\\.[\\w.-]+/g;\nconst mask = (v) => String(v ?? '').replace(PHONE, '[전화번호]').replace(EMAIL, '[이메일]').trim();\nconst get = (row, key) => row[key] ?? '';\n\n// 고른 구간 → 초 (구간 가운데 값. '넘게' 는 아래 끝보다 조금 크게)\nconst TASK_SEC = { '30초 안에': 20, '30초~1분': 45, '1~2분': 90, '2~3분': 150, '3분 넘게': 200 };\nconst BASE_SEC = { '1분 안에': 45, '1~3분': 120, '3~5분': 240, '5~10분': 450, '10분 넘게': 720 };\n\nconst out = [];\nfor (const item of $input.all()) {\n  const r = item.json;\n  const nick = mask(get(r, '닉네임')).slice(0, 30);\n  if (!nick) continue;\n  ['질문 1', '질문 2', '질문 3', '질문 4'].forEach((t, i) => {\n    const first = i === 0;\n    out.push({ json: {\n      닉네임: nick, 과제: t, 결과: get(r, `${t} 결과`),\n      걸린시간초: TASK_SEC[get(r, `${t} 걸린 시간`)] ?? '',\n      '막힌 지점': mask(get(r, `${t} 막힌 곳`)),\n      방문빈도: first ? get(r, '방문 빈도') : '',\n      정보출처: first ? mask(get(r, '정보 출처')) : '',\n      불편한점: first ? mask(get(r, '불편한 점')) : '',\n      평소걸린시간초: first ? (BASE_SEC[get(r, '평소 걸린 시간')] ?? '') : '',\n      비교: first ? get(r, '비교') : '',\n      만족도: first ? get(r, '만족도') : '',\n      다시쓸의향: first ? get(r, '다시 쓸 의향') : '',\n      바라는점: first ? mask(get(r, '바라는 점')) : '',\n      받은시각: get(r, '타임스탬프') || new Date().toISOString(),\n    } });\n  });\n}\nreturn out;\n"
+        "jsCode": "// n8n Code 노드 ①: 구글 폼 응답 한 줄 → '정리' 탭 과제 4줄 (질문 1~4). 응답자 정보(방문 빈도 · 평소 방법 · 불편한 점 ·\n// 비교 · 만족도 …)는 '질문 1' 줄에만 적는다 (사람 단위로 셀 때 '질문 1' 줄만 보면 된다)\n// 모드: Run Once for All Items. 입력 = 'Google Sheets Trigger'(폼 응답 시트, 새 줄) 의 items. 폼은 automation/n8n/create_form.gs\n// 버전: 1차 폼 응답('1차 응답' 탭 → '1차 폼 응답 들어옴' 노드)이면 1차, 아니면 2차\n// 개인정보: 이메일 · 이름 · 연락처를 받지 않는다. 자유 답변에 전화번호 · 이메일이 있으면 지운다 (common/guard.py 와 같은 생각)\n\nconst PHONE = /(01[016789]|0\\d{1,2})[-.\\s]?\\d{3,4}[-.\\s]?\\d{4}/g;\nconst EMAIL = /[\\w.+-]+@[\\w-]+\\.[\\w.-]+/g;\nconst mask = (v) => String(v ?? '').replace(PHONE, '[전화번호]').replace(EMAIL, '[이메일]').trim();\nconst get = (row, key) => row[key] ?? '';\n\n// 고른 구간 → 초 (구간 가운데 값. '넘게' 는 아래 끝보다 조금 크게)\nconst TASK_SEC = { '30초 안에': 20, '30초~1분': 45, '1~2분': 90, '2~3분': 150, '3분 넘게': 200 };\nconst BASE_SEC = { '1분 안에': 45, '1~3분': 120, '3~5분': 240, '5~10분': 450, '10분 넘게': 720 };\n\nlet ver = '2차';\ntry { if (String($prevNode.name).includes('1차')) ver = '1차'; } catch (e) { /* 노드 이름을 못 읽으면 2차 */ }\n\nconst out = [];\nfor (const item of $input.all()) {\n  const r = item.json;\n  const nick = mask(get(r, '닉네임')).slice(0, 30);\n  if (!nick) continue;\n  ['질문 1', '질문 2', '질문 3', '질문 4'].forEach((t, i) => {\n    const first = i === 0;\n    out.push({ json: {\n      닉네임: nick, 버전: ver, 과제: t, 결과: get(r, `${t} 결과`),\n      걸린시간초: TASK_SEC[get(r, `${t} 걸린 시간`)] ?? '',\n      '막힌 지점': mask(get(r, `${t} 막힌 곳`)),\n      방문빈도: first ? get(r, '방문 빈도') : '',\n      정보출처: first ? mask(get(r, '정보 출처')) : '',\n      불편한점: first ? mask(get(r, '불편한 점')) : '',\n      평소걸린시간초: first ? (BASE_SEC[get(r, '평소 걸린 시간')] ?? '') : '',\n      비교: first ? get(r, '비교') : '',\n      만족도: first ? get(r, '만족도') : '',\n      다시쓸의향: first ? get(r, '다시 쓸 의향') : '',\n      바라는점: first ? mask(get(r, '바라는 점')) : '',\n      받은시각: get(r, '타임스탬프') || new Date().toISOString(),\n    } });\n  });\n}\nreturn out;\n"
       }
     },
     {
@@ -91,6 +122,17 @@
         [
           {
             "node": "정리 시트에 쌓기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1차 폼 응답 들어옴": {
+      "main": [
+        [
+          {
+            "node": "과업 4줄로 정리 · 개인정보 지우기",
             "type": "main",
             "index": 0
           }
