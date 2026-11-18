@@ -181,34 +181,128 @@ def _top(c: Counter, label: str, top: int) -> pd.DataFrame:
 
 
 # ------------------------------------------------------------------ 사용자 테스트 설문 (11/18, n8n 이 쌓은 '정리' 탭)
-SURVEY_TARGET = {"success": 80.0, "t1": 60.0}     # PRD 사용자 지표: 과업 성공률 80% 이상, T1 평균 60초 이하
-SURVEY_TASKS = {"T1": "이번 주말 서울 팝업 찾기", "T2": "주술회전 팝업 북마크", "T3": "내 캘린더에서 확인", "T4": "공식 공지 열기"}
+# 폼: automation/n8n/create_form.gs — 참여자가 직접 써 보고 내는 설문. A = 평소 방법, B = ANI:WHERE (같은 사람이 둘 다 답함)
+SURVEY_TARGET = {"success": 80.0, "q1": 60.0}     # PRD 사용자 지표: 과업 성공률 80% 이상, 첫 과제 평균 60초 이하
+SURVEY_TASKS = {"질문 1": "이번 주말 서울 팝업 찾기", "질문 2": "작품 팝업 북마크", "질문 3": "내 캘린더에서 확인",
+                "질문 4": "공식 공지 열기"}
+SURVEY_OK = ("해냈어요", "어렵게 해냈어요")
+
+
+def _nums(values) -> list[float]:
+    out = []
+    for v in values:
+        try:
+            x = float(str(v).strip())
+        except (TypeError, ValueError):
+            continue
+        if x > 0:
+            out.append(x)
+    return out
+
+
+def _avg(values) -> float | None:
+    xs = _nums(values)
+    return round(sum(xs) / len(xs), 1) if xs else None
 
 
 def survey_summary(rows: list[dict]) -> dict:
-    """'정리' 탭(참가자 · 버전 · 과업 · 성공 · 소요초 · 막힌 지점) → 1차 · 2차 비교.
-    automation/n8n/code/summarize.js 와 같은 규칙 (성공률 = 성공 줄 / 전체 줄, 평균초 = 성공한 줄만)."""
-    rows = [r for r in rows if str(r.get("참가자") or "").strip() and str(r.get("과업") or "").strip()]
+    """'정리' 탭 → 응답자 · A/B 시간 · 과제별 성공률 · 만족도 · 문제 정의(불편한 점 · 정보 출처) 집계.
+    automation/n8n/code/summarize.js 와 같은 규칙 (성공 = 해냈어요 + 어렵게 해냈어요, 평균 시간 = 성공한 줄만).
+    사람 단위 값(방문 빈도 · 불편한 점 …)은 '질문 1' 줄에만 있다."""
+    rows = [r for r in rows if str(r.get("닉네임") or "").strip() and str(r.get("과제") or "").strip()]
+    people = [r for r in rows if r.get("과제") == "질문 1"]
 
-    def num(v):
-        try:
-            return float(str(v).strip())
-        except (TypeError, ValueError):
-            return None
+    def ok(r) -> bool:
+        return str(r.get("결과")) in SURVEY_OK
 
-    out = {}
-    for ver in ("1차", "2차"):
-        rs = [r for r in rows if str(r.get("버전")) == ver]
-        ok = [r for r in rs if str(r.get("성공")).strip().upper() == "Y"]
-        tasks = {}
-        for t in SURVEY_TASKS:
-            ts = [r for r in rs if str(r.get("과업")) == t]
-            tok = [r for r in ts if str(r.get("성공")).strip().upper() == "Y"]
-            secs = [num(r.get("소요초")) for r in tok if num(r.get("소요초")) is not None]
-            tasks[t] = {"명": len(ts), "성공률": round(len(tok) / len(ts) * 100, 1) if ts else None,
-                        "평균초": round(sum(secs) / len(secs)) if secs else None}
-        blocks = Counter(str(r.get("막힌 지점") or "").strip() for r in rs if str(r.get("막힌 지점") or "").strip())
-        out[ver] = {"참가자": len({r.get("참가자") for r in rs}), "줄": len(rs),
-                    "성공률": round(len(ok) / len(rs) * 100, 1) if rs else None, "과업별": tasks,
-                    "막힌곳": blocks.most_common(3)}
-    return out
+    def pct(a: int, b: int) -> float | None:
+        return round(a / b * 100, 1) if b else None
+
+    tasks = {}
+    for t in SURVEY_TASKS:
+        ts = [r for r in rows if r.get("과제") == t]
+        tasks[t] = {"명": len(ts), "성공률": pct(sum(ok(r) for r in ts), len(ts)),
+                    "평균초": _avg(r.get("걸린시간초") for r in ts if ok(r)),
+                    "결과": Counter(str(r.get("결과") or "응답 없음") for r in ts)}
+
+    def multi(key: str) -> list[tuple[str, int]]:
+        c: Counter = Counter()
+        for r in people:
+            for x in str(r.get(key) or "").split(","):
+                if x.strip():
+                    c[x.strip()] += 1
+        return c.most_common()
+
+    blocks = Counter(f'{r.get("과제")} · {str(r.get("막힌 지점")).strip()}' for r in rows if str(r.get("막힌 지점") or "").strip())
+    return {
+        "응답자": len(people),
+        "성공률": pct(sum(ok(r) for r in rows), len(rows)),
+        "평소초": _avg(r.get("평소걸린시간초") for r in people),
+        "질문1초": tasks["질문 1"]["평균초"],
+        "비교": _avg(r.get("비교") for r in people),
+        "만족도": _avg(r.get("만족도") for r in people),
+        "다시쓸의향": pct(sum(str(r.get("다시쓸의향")) == "있어요" for r in people), len(people)),
+        "과제별": tasks,
+        "불편한점": multi("불편한점"),
+        "정보출처": multi("정보출처"),
+        "방문빈도": Counter(str(r.get("방문빈도") or "") for r in people if r.get("방문빈도")).most_common(),
+        "만족도분포": Counter(str(r.get("만족도")) for r in people if str(r.get("만족도") or "").strip()),
+        "막힌곳": blocks.most_common(5),
+        "바라는점": [str(r.get("바라는점")).strip() for r in people if str(r.get("바라는점") or "").strip()],
+    }
+
+
+def survey_version(row: dict) -> str:
+    """'정리' 탭 한 줄의 버전. 1차 폼 응답만 '1차', 나머지(버전 칸이 없던 예전 줄 포함)는 '2차'."""
+    return "1차" if str(row.get("버전") or "").strip() == "1차" else "2차"
+
+
+def survey_compare(rows: list[dict]) -> dict:
+    """1차(로그인 · 물어보기 없던 첫 버전) → 2차(지금) 비교 (관리자 '사용자 테스트' 탭).
+    - 버전별 survey_summary
+    - 지표 표: (이름, 1차, 2차, 단위, 클수록 좋은지, 목표)
+    - 같은 사람: 닉네임이 1차 · 2차 모두에 있는 사람의 질문 1 시간 · 해낸 과제 수 · 만족도 변화"""
+    by = {"1차": [r for r in rows if survey_version(r) == "1차"], "2차": [r for r in rows if survey_version(r) == "2차"]}
+    s = {v: survey_summary(rs) for v, rs in by.items()}
+    a, b = s["1차"], s["2차"]
+    metrics = [
+        ("과제 성공률", a["성공률"], b["성공률"], "%", True, SURVEY_TARGET["success"]),
+        ("질문 1 평균 시간 (이번 주말 서울 팝업 찾기)", a["질문1초"], b["질문1초"], "초", False, SURVEY_TARGET["q1"]),
+        *[(f"{t} 성공률 ({n})", a["과제별"][t]["성공률"], b["과제별"][t]["성공률"], "%", True, None)
+          for t, n in SURVEY_TASKS.items()],
+        *[(f"{t} 평균 시간 ({n})", a["과제별"][t]["평균초"], b["과제별"][t]["평균초"], "초", False, None)
+          for t, n in SURVEY_TASKS.items() if t != "질문 1"],     # 질문 1 시간은 맨 위 줄
+        ("평소 방법보다 편함 (5점)", a["비교"], b["비교"], "점", True, None),
+        ("만족도 (5점)", a["만족도"], b["만족도"], "점", True, None),
+        ("다시 쓸 의향", a["다시쓸의향"], b["다시쓸의향"], "%", True, None),
+    ]
+
+    def person(rs: list[dict]) -> dict:
+        out: dict = {}
+        for r in rs:
+            nick = str(r.get("닉네임") or "").strip()
+            if not nick:
+                continue
+            p = out.setdefault(nick, {"해낸 과제": 0, "질문1초": None, "만족도": None})
+            if str(r.get("결과")) in SURVEY_OK:
+                p["해낸 과제"] += 1
+            if r.get("과제") == "질문 1":
+                p["질문1초"] = (_nums([r.get("걸린시간초")]) or [None])[0]
+                p["만족도"] = (_nums([r.get("만족도")]) or [None])[0]
+        return out
+
+    p1, p2 = person(by["1차"]), person(by["2차"])
+    pairs = [{"닉네임": n, "질문 1 (1차)": p1[n]["질문1초"], "질문 1 (2차)": p2[n]["질문1초"],
+              "해낸 과제 (1차)": p1[n]["해낸 과제"], "해낸 과제 (2차)": p2[n]["해낸 과제"],
+              "만족도 (1차)": p1[n]["만족도"], "만족도 (2차)": p2[n]["만족도"]} for n in sorted(set(p1) & set(p2))]
+    timed = [p for p in pairs if p["질문 1 (1차)"] and p["질문 1 (2차)"]]
+    same = {
+        "명": len(pairs),
+        "빨라진 사람": sum(p["질문 1 (2차)"] < p["질문 1 (1차)"] for p in timed),
+        "시간 잰 사람": len(timed),
+        "평균 줄어든 초": round(sum(p["질문 1 (1차)"] - p["질문 1 (2차)"] for p in timed) / len(timed), 1) if timed else None,
+        "더 해낸 사람": sum(p["해낸 과제 (2차)"] > p["해낸 과제 (1차)"] for p in pairs),
+        "만족도 오른 사람": sum((p["만족도 (2차)"] or 0) > (p["만족도 (1차)"] or 0) for p in pairs
+                           if p["만족도 (1차)"] and p["만족도 (2차)"]),
+    }
+    return {"1차": a, "2차": b, "지표": metrics, "같은 사람": same, "짝": pairs}

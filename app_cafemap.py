@@ -49,7 +49,7 @@ ROOT = Path(__file__).resolve().parent
 TODAY = date.today()
 MAP_HEIGHT = 620
 # 제목 로고: 민트 로고 하나로 고정 (11/18 요청: 흰 글자 로고 → 다시 민트 로고, 크기는 그대로)
-LOGOS = ["logo_mint.png"]
+LOGOS = ["logo_mint.png"]          # 연한 메뉴바 + 초록 로고로 되돌림 (11/18 요청)
 FIXED_LOGO = "logo_mint.png"
 ADD_LOGO = "logo_add.png"          # 등록 화면 로고 (흰 글자 + 민트 테두리)           # 상세·등록 화면에서는 이 로고로 고정
 TOPBAR_TOP = "0rem"      # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
@@ -213,6 +213,8 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   grid-template-columns: 1fr !important; margin-top: 18px !important; }}
 [data-testid="stLayoutWrapper"]:has(> .st-key-list_more) {{ width: 100% !important; flex: 1 1 100% !important; }}
 /* 회색 바탕 + 아래 화살표 + 'N건 더보기' (PC·모바일 같게, 11/18 요청) */
+[class*="st-key-adm_more_"] button {{ border-radius: 999px !important; background: #F2F4F3 !important; border: 1px solid #E3E8E6 !important; }}
+[class*="st-key-adm_more_"] button p, [class*="st-key-adm_more_"] button span {{ color: #5F6B67 !important; font-size: .85rem !important; font-weight: 700 !important; }}
 .st-key-list_more button {{ border-radius: 999px !important; background: #F2F4F3 !important; border: 1px solid #E3E8E6 !important;
   padding: 4px 18px !important; min-height: 0 !important; }}
 .st-key-list_more button p {{ color: #5F6B67 !important; font-size: .88rem !important; font-weight: 700 !important; }}
@@ -2719,7 +2721,7 @@ STORY_CSS = """
 .story { display: flex; flex-direction: column; align-items: center; padding-bottom: 16px; }
 .story .ring { position: relative; width: 72px; height: 72px; border-radius: 50%; padding: 3px; box-sizing: border-box;
   background: conic-gradient(from 210deg, #14b8a6, #7FE0CF, #FFD66B, #14b8a6); transition: transform .18s ease; }
-.story .rg { position: absolute; left: 50%; top: -7px; transform: translateX(-50%); z-index: 2; white-space: nowrap;
+.story .rg { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); z-index: 2; white-space: nowrap;
   font-size: .62rem; font-weight: 800; color: #fff; background: var(--accent-deep); padding: 1px 7px; border-radius: 999px;
   border: 1.5px solid #fff; }
 .st-key-story_row { padding-top: 10px !important; }
@@ -2727,13 +2729,13 @@ STORY_CSS = """
 .story .cnt { position: absolute; right: -2px; bottom: -2px; min-width: 24px; height: 24px; padding: 0 5px; box-sizing: border-box;
   border-radius: 999px; background: var(--accent-deep); color: #fff; font-size: .75rem; font-weight: 800;
   display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
-.story.mark .ring { background: conic-gradient(from 210deg, #FF7A8A, #FFB86B, #FFD66B, #FF7A8A); }
+.story.mark .ring { background: conic-gradient(from 210deg, #14b8a6, #7FE0CF, #FFD66B, #14b8a6); }   /* 북마크 동그라미: 민트→노랑 (11/18 요청) */
 .story .pic { width: 100%; height: 100%; border-radius: 50%; border: 3px solid #fff; box-sizing: border-box;
   background-size: cover; background-position: center; background-color: #EEF3F1; }
 .story .cnt { position: absolute; right: -4px; bottom: -3px; min-width: 17px; height: 17px; padding: 0 3px; box-sizing: border-box;
   border-radius: 999px; background: var(--accent-deep); color: #fff; font-size: .6rem; font-weight: 800;
   display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; }
-.story .nm { margin-top: 6px; width: 84px; text-align: center; font-size: .78rem; font-weight: 700; white-space: nowrap;
+.story .nm { margin-top: 10px; width: 84px; text-align: center; font-size: .78rem; font-weight: 700; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
 .story.on .nm { color: var(--accent-deep); }
 .story.on .ring { box-shadow: 0 0 0 2px var(--accent-soft); }
@@ -4251,7 +4253,7 @@ ASK_FAB_CSS = """
   .st-key-ask_fab { display: block; position: fixed !important; right: 16px; bottom: calc(76px + 50px + 12px);
     z-index: 1003; width: 50px !important; height: 50px; }
   .st-key-ask_fab button { width: 50px !important; height: 50px !important; min-height: 0 !important; border-radius: 50% !important;
-    padding: 0 !important; background: #14B8A6 !important; border: 0 !important; box-shadow: 0 6px 16px rgba(20,184,166,.4) !important;
+    padding: 0 !important; background: #9EDDCC !important; border: 2px solid #0D9488 !important; box-shadow: 0 6px 16px rgba(46,156,130,.35) !important;   /* mint-line + 진한 테두리 (11/18 요청) */
     display: flex !important; align-items: center !important; justify-content: center !important; }
   .st-key-ask_fab button span { font-size: 1.55rem !important; color: #fff !important; margin: 0 !important; }
 }</style>
@@ -6284,6 +6286,11 @@ def _set_cookie(value: str, days: int) -> None:
     js = (f"window.parent.document.cookie = {json.dumps(auth.COOKIE + '=' + value)} + "
           f"'; path=/; max-age={days * 86400}; SameSite=Lax{secure}"
           + ("; expires=Thu, 01 Jan 1970 00:00:00 GMT" if days <= 0 else "") + "';")
+    if value and days > 0:
+        # 간편 로그인 창(로그인 화면이 window.open 으로 연 'aw_login' 창)에서 로그인이 끝났으면 쿠키를 심은 뒤 그 창을 닫는다.
+        # 원래 창은 쿠키가 생긴 걸 알아채고 새로고침해 로그인된 화면이 된다 (11/18 요청). 보통 창이면 아무 일도 없다
+        # 타이머는 바깥 창(parent.eval)에 건다 — 로그인 뒤 화면을 다시 그리면 이 부품 iframe 이 사라져 타이머도 같이 사라졌다
+        js += ("window.parent.eval(\"setTimeout(function(){try{if(window.top.name==='aw_login'){window.top.close();}}catch(e){}},700)\");")
     components.html(f"<script>{js}</script>", height=0)
 
 
@@ -6574,9 +6581,14 @@ def _login_body() -> None:
             st.markdown(f'<span class="auth-btn off">{label} {verb} 준비 중</span>', unsafe_allow_html=True)
 
     # iframe 밖이면 간편 로그인 버튼을 같은 페이지에서 열고, 새 탭 안내 문구를 숨긴다 (11/18 요청)
+    # iframe 안(배포 사이트)이면 새 탭 대신 작은 로그인 창(window.open, 이름 aw_login)으로 연다 →
+    # 로그인이 끝나면 그 창이 스스로 닫히고(_set_cookie), 이 창은 쿠키를 보고 새로고침된다 (11/18 요청)
     components.html(
         "<script>(function(){const w=window.parent,d=w.document;let n=0;const f=()=>{"
-        "if(w.top!==w){return;}"
+        "if(w.top!==w){d.querySelectorAll('a.auth-btn').forEach(a=>{if(a.dataset.awPop)return;a.dataset.awPop='1';"
+        "a.addEventListener('click',e=>{const x=Math.max(0,(w.screen.width-480)/2),y=Math.max(0,(w.screen.height-720)/2);"
+        "const pop=w.open(a.href,'aw_login','popup=yes,width=480,height=720,left='+x+',top='+y);"
+        "if(pop){e.preventDefault();pop.focus();}});});return;}"   # 창이 막히면(팝업 차단) 원래대로 새 탭
         "d.querySelectorAll('a.auth-btn').forEach(a=>{a.target='_self';a.removeAttribute('rel');});"
         "d.documentElement.classList.add('aw-top');};f();const iv=setInterval(()=>{f();if(++n>10)clearInterval(iv);},400);})();</script>",
         height=0)
@@ -6591,8 +6603,8 @@ def _login_body() -> None:
         "setTimeout(()=>clearInterval(iv),600000);})();</script>", height=0)
     # 안내는 맨 아래에 작게 한 묶음으로 (11/18 요청)
     st.markdown('<style>html.aw-top .auth-newtab { display: none; }</style>', unsafe_allow_html=True)
-    st.markdown('<div class="auth-foot"><span class="auth-newtab">카카오·네이버 로그인은 <b>새 탭</b>에서 열려요. 그 탭에서 로그인을 마치면 '
-                '이 화면도 자동으로 로그인된 메인으로 넘어가요.<br></span>로그인하지 않아도 팝업은 둘러볼 수 있어요.<br>'
+    st.markdown('<div class="auth-foot"><span class="auth-newtab">카카오·네이버 로그인은 <b>작은 새 창</b>에서 열려요. 로그인을 마치면 그 창은 저절로 닫히고 '
+                '이 화면이 로그인된 메인으로 바뀌어요.<br></span>로그인하지 않아도 팝업은 둘러볼 수 있어요.<br>'
                 '받는 정보: <b>별명(닉네임)</b>과 계정 고유 번호뿐이에요. 고유 번호는 알아볼 수 없게 바꿔서(해시) 저장하고, '
                 '이메일·전화번호·실명은 받지도 저장하지도 않아요.</div>', unsafe_allow_html=True)
     if not (auth.enabled("kakao") or auth.enabled("naver")):
@@ -7093,14 +7105,18 @@ def _adm_href(r: dict) -> str:
     return f"./?cafe={quote(str(r.get('entry_id') or ''))}"
 
 
-GANTT_COLOR = {"예정": "#3672BD", "진행": "#14B8A6", "종료": "#A9B3B0"}
+GANTT_COLOR = {"예정": "#3672BD", "진행": "#14B8A6", "종료": "#A9B3B0"}     # 진한 색으로 되돌림 (11/18 요청)
+GANTT_PAGE = 20     # 이 주 일정: 처음 20곳, 더보기마다 20곳 더 (11/18 요청)
+BOARD_PAGE = 10     # 고른 주 현황: 칸마다 처음 10곳, 더보기마다 10곳 더
 
 
 def _admin_gantt(mon: date) -> None:
     """고른 주(월~일) 하루 단위 팝업 일정. 주 밖으로 이어지면 막대 끝을 ‹ › 로, 오늘 칸은 연한 민트."""
     start, end = mon, mon + timedelta(days=6)
     span = (end - start).days + 1
-    rows = admin.gantt_rows(store.all_rows(), start, end, limit=80)
+    every = admin.gantt_rows(store.all_rows(), start, end, limit=10_000)
+    n_key = f"adm_gantt_n_{mon.isoformat()}"
+    rows = every[:st.session_state.get(n_key, GANTT_PAGE)]
 
     def pct(d: date) -> float:
         return max(0.0, min(100.0, (d - start).days / span * 100))
@@ -7119,7 +7135,7 @@ def _admin_gantt(mon: date) -> None:
                     f'<span class="gt-short">{"오늘" if start + timedelta(days=i) == TODAY else wd[i]}</span></div>'
                     for i in range(span))
     today = ""
-    html = [f'<div class="gt"><div class="gt-row gt-head"><div class="gt-lab"><b>팝업 {len(rows)}곳</b></div>'
+    html = [f'<div class="gt"><div class="gt-row gt-head"><div class="gt-lab"><b>팝업 {len(every)}곳</b></div>'
             f'<div class="gt-track">{ticks}</div></div>']
     for r in rows:
         s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
@@ -7137,6 +7153,10 @@ def _admin_gantt(mon: date) -> None:
                                                      for k, c in GANTT_COLOR.items())
                 + '<span><i style="background:#FF5A5A"></i>오늘 (빨간 칸)</span><span>막대가 칸 끝에 붙어 있으면 이 주 앞뒤로 이어져요</span></div></div>')
     st.markdown("".join(html), unsafe_allow_html=True)
+    if len(every) > len(rows):
+        with st.container(horizontal=True, horizontal_alignment="center", key="adm_more_gantt"):
+            st.button(f"{len(every) - len(rows)}건 더보기", icon=":material/expand_more:", key="adm_gantt_more_btn",
+                      on_click=lambda: st.session_state.update({n_key: len(rows) + GANTT_PAGE}))
 
 
 def _admin_board() -> None:
@@ -7147,7 +7167,9 @@ def _admin_board() -> None:
     board = admin.popup_board(store.all_rows(), mon)
     colors = {"새로 생성": "#14B8A6", "예정": "#3672BD", "진행": "#23866A", "종료": "#8A9592"}
     cols = st.columns(4, gap="small")
-    for col, (name, rows) in zip(cols, board.items()):
+    for i, (col, (name, rows)) in enumerate(zip(cols, board.items())):
+        n_key = f"adm_board_n_{i}_{mon.isoformat()}"
+        n_show = st.session_state.get(n_key, BOARD_PAGE)
         with col:
             cards = "".join(
                 f'<a class="adm-card adm-link adm-pcard" href="{_adm_href(r)}" target="_self">'
@@ -7155,10 +7177,39 @@ def _admin_board() -> None:
                 f'<b>{escape(str(r.get("work") or ""))}</b>'
                 f'<span>{escape(str(r.get("cafe_name") or ""))}</span>'
                 f'<em>{escape(str(r.get("start_date") or "")[5:])} ~ {escape(str(r.get("end_date") or "")[5:])}</em></div></a>'
-                for r in rows[:40]) or '<div class="adm-empty">없어요</div>'
+                for r in rows[:n_show]) or '<div class="adm-empty">없어요</div>'
             st.markdown(f'<div class="adm-col" style="--c:{colors[name]}"><div class="adm-colhead">{name}'
                         f'<small>{len(rows)}곳</small></div>{cards}</div>', unsafe_allow_html=True)
+            if len(rows) > n_show:
+                with st.container(horizontal=True, horizontal_alignment="center", key=f"adm_more_board_{i}"):
+                    st.button(f"{len(rows) - n_show}건 더보기", icon=":material/expand_more:", key=f"adm_board_more_btn_{i}",
+                              on_click=lambda k=n_key, n=n_show: st.session_state.update({k: n + BOARD_PAGE}))
     st.caption("새로 생성 = 그 주에 처음 등록 · 예정 = 그 주가 끝난 뒤 4주 안에 시작 · 진행 = 그 주에 열려 있고 다음 주에도 이어짐 · 종료 = 그 주에 끝남")
+
+
+# 사용자 테스트 바로가기 (11/18 요청). .env / Secrets 로 바꿀 수 있고, 없으면 지금 쓰는 폼 주소
+SURVEY_FORMS = {   # 버전: (참여자에게 보낼 주소, 폼 고치기). 1차 = 로그인 · 물어보기 없던 첫 버전, 2차 = 지금 (11/18 요청)
+    "1차": ("https://docs.google.com/forms/d/e/1FAIpQLSe8ZKxd1bcF4jgTYwHgFdmXGsX5Y2PcGe9KTZTDLl6V_gzHpA/viewform",
+            "https://docs.google.com/forms/d/1E53ZHq-zHC0qy4jfwwekTV-KrbsfU8PakrsJH77A8m8/edit"),
+    "2차": ("https://docs.google.com/forms/d/e/1FAIpQLScp02W0zqeqYRwdMPW4D9Az-2hJny5sFDFkg0gRlnqvnF71mA/viewform",
+            "https://docs.google.com/forms/d/1P1TZjlF-YR-80fa4s2-ABUFRJfiSU0b4aQo_raosceg/edit"),
+}
+N8N_URL = "http://localhost:5678"     # n8n 은 운영자 컴퓨터에서 돈다 (그 컴퓨터에서만 열림)
+
+
+def _survey_links(sheet_id: str) -> None:
+    """1차 · 2차 설문 폼(참여자에게 보낼 주소 · 폼 고치기) · 응답 시트 · n8n 바로가기 버튼."""
+    for ver, (form, edit) in SURVEY_FORMS.items():
+        with st.container(horizontal=True, key=f"adm_survey_links_{ver}", vertical_alignment="center"):
+            st.link_button(f"{ver} 설문 폼 (참여자에게 보낼 주소)", form, icon=":material/assignment:",
+                           type="primary" if ver == "2차" else "secondary")
+            st.link_button(f"{ver} 폼 고치기", edit, icon=":material/edit_note:")
+    with st.container(horizontal=True, key="adm_survey_links"):
+        if sheet_id:
+            st.link_button("응답 시트 (1차 · 2차 같이)", f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit",
+                           icon=":material/table_view:")
+        st.link_button("n8n 워크플로", os.getenv("N8N_URL") or N8N_URL, icon=":material/account_tree:")
+    st.caption("n8n 은 운영자 컴퓨터(http://localhost:5678)에서 돌아서, 그 컴퓨터에서만 열려요. 테스트 날에는 n8n 을 켜 두세요.")
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -7179,9 +7230,11 @@ def _survey_rows(sheet_id: str) -> tuple[list[dict], str]:
 
 
 def _admin_survey() -> None:
-    """사용자 테스트 (11/18 요청): n8n 이 구글 폼 응답을 정리해 쌓은 '정리' 탭 → 1차 · 2차 비교 + 원본 표.
+    """사용자 테스트 (11/18 요청): n8n 이 구글 폼 응답을 정리해 쌓은 '정리' 탭 → A(평소 방법)/B(ANI:WHERE) 비교 ·
+    과제별 성공률 · 문제 정의(불편한 점 · 정보 출처) · 만족도 그래프 + 원본 표.
     시트 주소(번호)는 .env / Secrets 의 SURVEY_SHEET_ID. 숫자는 stats.survey_summary (n8n 메일과 같은 규칙)."""
     sheet_id = (os.getenv("SURVEY_SHEET_ID") or "").strip()
+    _survey_links(sheet_id)
     if not sheet_id:
         st.info("설문 시트가 아직 연결되지 않았어요. `.env`(배포는 Streamlit Secrets)에 `SURVEY_SHEET_ID` 를 넣어 주세요 "
                 "(구글 시트 주소의 /d/ 와 /edit 사이 글자). 만드는 법: automation/n8n/README.md", icon=":material/link_off:")
@@ -7195,39 +7248,192 @@ def _admin_survey() -> None:
         st.warning(err, icon=":material/error:")
         return
     if not rows:
-        st.info("아직 들어온 응답이 없어요. 1차(11/25) · 2차(11/30) 테스트 때 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
+        st.info("아직 들어온 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
                 icon=":material/hourglass_empty:")
         return
+    view = st.segmented_control("보기", ["1차 → 2차 개선", "2차 자세히", "1차 자세히"], default="1차 → 2차 개선",
+                                key="adm_survey_view", label_visibility="collapsed") or "1차 → 2차 개선"
+    if view == "1차 → 2차 개선":
+        _survey_improve(rows)
+    else:
+        ver = view[:2]
+        sub = [r for r in rows if stats.survey_version(r) == ver]
+        if not sub:
+            st.info(f"{ver} 폼 응답이 아직 없어요.", icon=":material/hourglass_empty:")
+        else:
+            _survey_detail(sub)
+    st.caption("구글 폼(1차 · 2차) → n8n(내 컴퓨터) → 구글 시트 '정리' 탭(버전 칸) → 여기. 이메일 · 이름 · 연락처는 받지 않고, "
+               "자유 답변의 전화번호 · 이메일은 n8n 이 지워요.")
+
+
+SV_COLORS = ["#A9B3B0", "#14B8A6"]     # 1차 회색 · 2차 포인트 민트
+
+
+def _sv_fmt(v, unit: str = "") -> str:
+    return "-" if v is None else f"{v:g}{unit}"
+
+
+def _survey_improve(rows: list[dict]) -> None:
+    """1차(로그인 · 물어보기 없던 첫 버전) → 2차(지금): 무엇이 나아지고 편해졌나 (11/18 요청). 숫자는 stats.survey_compare."""
+    c = stats.survey_compare(rows)
+    a, b, tgt = c["1차"], c["2차"], stats.SURVEY_TARGET
+    if not a["응답자"] or not b["응답자"]:
+        st.info(f"1차 응답 {a['응답자']}명 · 2차 응답 {b['응답자']}명이에요. 두 폼 모두 응답이 들어오면 여기서 1차 → 2차 를 비교해요. "
+                "(지금은 '2차 자세히' · '1차 자세히' 에서 볼 수 있어요)", icon=":material/compare_arrows:")
+        return
+
+    def delta(x, y, unit):
+        return None if x is None or y is None else f"{round(y - x, 1):+g}{unit}"
+
+    # 1) 숫자 카드: 2차 값 + 1차 대비 변화
+    m = st.columns(5)
+    m[0].metric("응답자 (1차 · 2차)", f"{a['응답자']} · {b['응답자']}명")
+    m[1].metric("과제 성공률", _sv_fmt(b["성공률"], "%"), delta(a["성공률"], b["성공률"], "%p"))
+    m[2].metric("질문 1 평균 시간", _sv_fmt(b["질문1초"], "초"), delta(a["질문1초"], b["질문1초"], "초"), delta_color="inverse")
+    m[3].metric("만족도 (5점)", _sv_fmt(b["만족도"]), delta(a["만족도"], b["만족도"], "점"))
+    m[4].metric("다시 쓸 의향", _sv_fmt(b["다시쓸의향"], "%"), delta(a["다시쓸의향"], b["다시쓸의향"], "%p"))
+    ok_s = b["성공률"] is not None and b["성공률"] >= tgt["success"]
+    ok_t = b["질문1초"] is not None and b["질문1초"] <= tgt["q1"]
+    st.caption(f"큰 숫자 = 2차, 작은 숫자 = 1차 대비 변화. 2차 목표: 과제 성공률 {tgt['success']:g}% 이상 {'O' if ok_s else 'X'} · "
+               f"질문 1 평균 {tgt['q1']:g}초 이하 {'O' if ok_t else 'X'}. 시간은 응답자가 고른 구간의 가운데 값(대략값)"
+               + ("  ·  응답자가 적어 참고용이에요" if min(a["응답자"], b["응답자"]) < 10 else ""))
+
+    # 2) 그래프
+    g1, g2 = st.columns(2)
+    with g1:
+        st.markdown('<div class="adm-panel-h">팝업 하나 찾는 시간 (초) · 평소 방법 → 1차 → 2차</div>', unsafe_allow_html=True)
+        base = stats._avg([x for x in (a["평소초"], b["평소초"]) if x is not None])
+        st.bar_chart(pd.DataFrame({"방법": ["① 평소 방법", "② 1차", "③ 2차"],
+                                   "초": [base or 0, a["질문1초"] or 0, b["질문1초"] or 0]}),
+                     x="방법", y="초", color="#14B8A6", horizontal=True, height=190, x_label="", y_label="", sort=False)
+        st.markdown('<div class="adm-panel-h">과제별 성공률 (%) · 1차 vs 2차</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame([{"과제": f"{t} · {n}", **{v: c[v]["과제별"][t]["성공률"] or 0 for v in ("1차", "2차")}}
+                                   for t, n in stats.SURVEY_TASKS.items()]),
+                     x="과제", y=["1차", "2차"], color=SV_COLORS, stack=False, horizontal=True, height=280,
+                     x_label="", y_label="", sort=False)
+    with g2:
+        st.markdown('<div class="adm-panel-h">과제별 평균 시간 (초, 해낸 사람) · 1차 vs 2차</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame([{"과제": f"{t} · {n}", **{v: c[v]["과제별"][t]["평균초"] or 0 for v in ("1차", "2차")}}
+                                   for t, n in stats.SURVEY_TASKS.items()]),
+                     x="과제", y=["1차", "2차"], color=SV_COLORS, stack=False, horizontal=True, height=280,
+                     x_label="", y_label="", sort=False)
+        st.markdown('<div class="adm-panel-h">만족도 분포 (명) · 1차 vs 2차</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame([{"점수": f"{i}점", **{v: c[v]["만족도분포"].get(str(i), 0) for v in ("1차", "2차")}}
+                                   for i in range(1, 6)]),
+                     x="점수", y=["1차", "2차"], color=SV_COLORS, stack=False, height=190, x_label="", y_label="", sort=False)
+
+    # 3) 지표 표 (나아짐 / 그대로 / 나빠짐)
+    st.markdown('<div class="adm-panel-h">무엇이 나아졌나 (1차 → 2차)</div>', unsafe_allow_html=True)
+    table = []
+    for name, x, y, unit, up, goal in c["지표"]:
+        if x is None or y is None:
+            verdict = "-"
+        elif abs(y - x) < 1e-9:
+            verdict = "그대로"
+        else:
+            verdict = "나아짐" if (y > x) == up else "나빠짐"
+        table.append({"지표": name, "1차": _sv_fmt(x, unit), "2차": _sv_fmt(y, unit),
+                      "변화": "-" if x is None or y is None else f"{round(y - x, 1):+g}{'%p' if unit == '%' else unit}",
+                      "판정": verdict,
+                      "목표": "-" if goal is None else (f"{goal:g}{unit} 이상" if up else f"{goal:g}{unit} 이하")})
+    st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch", height=35 * (len(table) + 1) + 3)
+
+    # 4) 같은 사람 (닉네임으로 묶인 1차 · 2차)
+    same = c["같은 사람"]
+    st.markdown('<div class="adm-panel-h">같은 사람이 1차 · 2차 둘 다 해 봤을 때 (닉네임으로 묶음)</div>', unsafe_allow_html=True)
+    if not same["명"]:
+        st.caption("1차 · 2차 모두 낸 사람이 아직 없어요 (1차 폼에는 2차 로그인 닉네임을 적게 안내해요).")
+    else:
+        k = st.columns(4)
+        k[0].metric("두 번 다 한 사람", f"{same['명']}명")
+        k[1].metric("질문 1 이 빨라진 사람", f"{same['빨라진 사람']} / {same['시간 잰 사람']}명")
+        k[2].metric("평균 줄어든 시간", _sv_fmt(same["평균 줄어든 초"], "초"))
+        k[3].metric("해낸 과제가 늘어난 사람", f"{same['더 해낸 사람']}명")
+        with st.expander(f"사람별 ({same['명']}명)"):
+            st.dataframe(pd.DataFrame(c["짝"]), hide_index=True, width="stretch")
+
+    # 5) 막힌 곳 1차 · 2차 나란히 + 평소 불편한 점
+    c1, c2 = st.columns(2)
+    for col, v in ((c1, "1차"), (c2, "2차")):
+        with col:
+            st.markdown(f'<div class="adm-panel-h">{v} · 자주 막힌 곳</div>', unsafe_allow_html=True)
+            st.markdown("\n".join(f"- {escape(bk)} — {n}번" for bk, n in c[v]["막힌곳"]) or "없어요.", unsafe_allow_html=True)
+    pains: dict = {}
+    for v in ("1차", "2차"):
+        for p_, n in c[v]["불편한점"]:
+            pains[p_] = pains.get(p_, 0) + n
+    if pains:
+        st.markdown('<div class="adm-panel-h">평소 불편한 점 (문제 정의 · 1차 · 2차 응답 합계)</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame(sorted(pains.items(), key=lambda kv: -kv[1]), columns=["불편한 점", "명"]),
+                     x="불편한 점", y="명", color="#F2A33A", horizontal=True, height=240, x_label="", y_label="", sort="-명")
+
+
+def _survey_detail(rows: list[dict]) -> None:
+    """한 버전(1차 또는 2차)의 자세한 결과."""
     s = stats.survey_summary(rows)
     tgt = stats.SURVEY_TARGET
-    one, two = s["1차"], s["2차"]
+    fmt = _sv_fmt
 
-    def fmt(v, unit=""):
-        return "-" if v is None else f"{v:g}{unit}"
+    # 1) 숫자 카드 (A/B · 목표)
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("응답자", f"{s['응답자']}명")
+    m2.metric("팝업 하나 찾기 (평소 → ANI:WHERE)", f"{fmt(s['평소초'], '초')} → {fmt(s['질문1초'], '초')}",
+              None if s["평소초"] is None or s["질문1초"] is None else f"{s['질문1초'] - s['평소초']:+g}초", delta_color="inverse")
+    m3.metric("과제 성공률 (목표 80% 이상)", fmt(s["성공률"], "%"))
+    m4.metric("만족도 · 평소보다 편함 (5점)", f"{fmt(s['만족도'])} · {fmt(s['비교'])}")
+    m5.metric("다시 쓸 의향", fmt(s["다시쓸의향"], "%"))
+    ok_s = s["성공률"] is not None and s["성공률"] >= tgt["success"]
+    ok_t = s["질문1초"] is not None and s["질문1초"] <= tgt["q1"]
+    st.caption(f"목표 달성: 과제 성공률 {'O' if ok_s else 'X'} · 질문 1 평균 {tgt['q1']:g}초 이하 {'O' if ok_t else 'X'}"
+               "  ·  A = 평소 방법(SNS · 커뮤니티 · 검색)으로 걸리던 시간(응답자가 고른 구간), B = ANI:WHERE 로 직접 해 본 시간"
+               + ("  ·  응답자가 적어 참고용이에요" if s["응답자"] < 10 else ""))
 
-    def delta(a, b, unit):
-        return None if a is None or b is None else f"{b - a:+g}{unit}"
+    # 2) 그래프
+    g1, g2 = st.columns(2)
+    with g1:
+        st.markdown('<div class="adm-panel-h">A/B · 팝업 하나 찾는 시간 (초)</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame({"방법": ["평소 방법", "ANI:WHERE"], "초": [s["평소초"] or 0, s["질문1초"] or 0]}),
+                     x="방법", y="초", color="#56C2A7", horizontal=True, height=180, x_label="", y_label="")
+        st.markdown('<div class="adm-panel-h">과제별 성공률 (%)</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame({"과제": [f"{t} · {n}" for t, n in stats.SURVEY_TASKS.items()],
+                                   "성공률": [s["과제별"][t]["성공률"] or 0 for t in stats.SURVEY_TASKS]}),
+                     x="과제", y="성공률", color="#14B8A6", horizontal=True, height=220, x_label="", y_label="", sort=False)
+    with g2:
+        st.markdown('<div class="adm-panel-h">평소 불편한 점 (문제 정의 · 명)</div>', unsafe_allow_html=True)
+        if s["불편한점"]:
+            st.bar_chart(pd.DataFrame(s["불편한점"], columns=["불편한 점", "명"]), x="불편한 점", y="명", color="#F2A33A",
+                         horizontal=True, height=240, x_label="", y_label="", sort="-명")
+        st.markdown('<div class="adm-panel-h">평소 정보를 찾는 곳 (명)</div>', unsafe_allow_html=True)
+        if s["정보출처"]:
+            st.bar_chart(pd.DataFrame(s["정보출처"], columns=["출처", "명"]), x="출처", y="명", color="#A9C3EA",
+                         horizontal=True, height=200, x_label="", y_label="", sort="-명")
+    g3, g4 = st.columns(2)
+    with g3:
+        st.markdown('<div class="adm-panel-h">만족도 분포 (명)</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame({"점수": [f"{i}점" for i in range(1, 6)], "명": [s["만족도분포"].get(str(i), 0) for i in range(1, 6)]}),
+                     x="점수", y="명", color="#9EDDCC", height=180, x_label="", y_label="", sort=False)
+    with g4:
+        st.markdown('<div class="adm-panel-h">팝업 방문 빈도 (명)</div>', unsafe_allow_html=True)
+        if s["방문빈도"]:
+            st.bar_chart(pd.DataFrame(s["방문빈도"], columns=["빈도", "명"]), x="빈도", y="명", color="#56C2A7",
+                         height=180, x_label="", y_label="", sort=False)
 
-    m1, m2, m3 = st.columns(3)
-    m1.metric("참가자 (1차 → 2차)", f"{one['참가자']} → {two['참가자']}명")
-    m2.metric("과업 성공률 (2차 · 목표 80% 이상)", fmt(two["성공률"], "%"), delta(one["성공률"], two["성공률"], "%p"))
-    t1a, t1b = one["과업별"]["T1"]["평균초"], two["과업별"]["T1"]["평균초"]
-    m3.metric("T1 평균 (2차 · 목표 60초 이하)", fmt(t1b, "초"), delta(t1a, t1b, "초"), delta_color="inverse")
-    ok_s = two["성공률"] is not None and two["성공률"] >= tgt["success"]
-    ok_t = t1b is not None and t1b <= tgt["t1"]
-    st.caption(("목표 달성: 성공률 " + ("O" if ok_s else "X") + " · T1 " + ("O" if ok_t else "X"))
-               + ("  ·  참가자가 3명보다 적어 참고용이에요" if max(one["참가자"], two["참가자"]) < 3 else ""))
-    table = pd.DataFrame([{"과업": f"{t} · {name}",
-                           "1차 성공률": fmt(one["과업별"][t]["성공률"], "%"), "1차 평균": fmt(one["과업별"][t]["평균초"], "초"),
-                           "2차 성공률": fmt(two["과업별"][t]["성공률"], "%"), "2차 평균": fmt(two["과업별"][t]["평균초"], "초")}
-                          for t, name in stats.SURVEY_TASKS.items()])
-    st.dataframe(table, hide_index=True, width="stretch")
-    st.markdown('<div class="adm-panel-h">자주 막힌 곳</div>', unsafe_allow_html=True)
-    blocks = [f"- ({v}) {b} — {n}번" for v in ("2차", "1차") for b, n in s[v]["막힌곳"]]
-    st.markdown("\n".join(blocks) if blocks else "아직 없어요.")
-    with st.expander(f"원본 응답 ({len(rows)}줄, 참가자는 P 번호로만)"):
+    # 3) 표 · 글
+    st.markdown('<div class="adm-panel-h">과제별</div>', unsafe_allow_html=True)
+    st.dataframe(pd.DataFrame([{"과제": f"{t} · {n}", "응답": s["과제별"][t]["명"], "성공률": fmt(s["과제별"][t]["성공률"], "%"),
+                                "평균 시간(성공)": fmt(s["과제별"][t]["평균초"], "초"),
+                                "해냈어요 / 어렵게 / 못 했어요": " / ".join(str(s["과제별"][t]["결과"].get(k, 0))
+                                                                     for k in ("해냈어요", "어렵게 해냈어요", "못 했어요"))}
+                               for t, n in stats.SURVEY_TASKS.items()]), hide_index=True, width="stretch")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown('<div class="adm-panel-h">자주 막힌 곳</div>', unsafe_allow_html=True)
+        st.markdown("\n".join(f"- {b} — {n}번" for b, n in s["막힌곳"]) or "아직 없어요.")
+    with c2:
+        st.markdown('<div class="adm-panel-h">바라는 점</div>', unsafe_allow_html=True)
+        st.markdown("\n".join(f"- {escape(w)}" for w in s["바라는점"][:10]) or "아직 없어요.", unsafe_allow_html=True)
+    with st.expander(f"원본 응답 ({len(rows)}줄 · 한 사람 = 질문 1~4 네 줄)"):
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-    st.caption("구글 폼 → n8n(내 컴퓨터) → 구글 시트 '정리' 탭 → 여기. 이름 · 연락처는 받지 않고, 자유 답변의 전화번호 · 이메일은 n8n 이 지워요.")
 
 
 def _admin_usage() -> None:

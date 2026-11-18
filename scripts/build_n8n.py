@@ -3,7 +3,7 @@
     python scripts/build_n8n.py
 
 만든 파일: automation/n8n/survey_collect.json (응답 정리), automation/n8n/survey_report.json (요약 메일)
-JS 는 code/ 폴더 한 곳에서만 고친다 (Node 로 시험할 수 있게). 프롬프트는 common/prompts/survey_summary.v1.txt 를
+JS 는 code/ 폴더 한 곳에서만 고친다 (Node 로 시험할 수 있게). 프롬프트는 common/prompts/survey_summary.v3.txt 를
 n8n 이 GitHub 에서 읽는다 (프롬프트를 워크플로 안에 문자열로 두지 않는다 — CLAUDE.md).
 받는 메일 주소 · 시트 주소 · 키는 여기 적지 않는다. 가져온 뒤 n8n 화면에서 넣는다 (automation/n8n/README.md).
 """
@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "automation" / "n8n"
 CODE = OUT / "code"
-PROMPT_URL = "https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/common/prompts/survey_summary.v1.txt"
+PROMPT_URL = "https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/common/prompts/survey_summary.v3.txt"
 SHEET = {"__rl": True, "mode": "url", "value": ""}           # 가져온 뒤 n8n 에서 구글 시트 주소를 넣는다
 
 
@@ -38,13 +38,17 @@ def collect() -> dict:
         node("폼 응답 들어옴", "n8n-nodes-base.googleSheetsTrigger", 1, (0, 0),
              {"pollTimes": {"item": [{"mode": "everyMinute"}]}, "documentId": SHEET,
               "sheetName": {"__rl": True, "mode": "name", "value": "설문지 응답 시트1"}, "event": "rowAdded", "options": {}}),
+        node("1차 폼 응답 들어옴", "n8n-nodes-base.googleSheetsTrigger", 1, (0, 200),       # 1차 폼 (같은 시트의 '1차 응답' 탭)
+             {"pollTimes": {"item": [{"mode": "everyMinute"}]}, "documentId": SHEET,
+              "sheetName": {"__rl": True, "mode": "name", "value": "1차 응답"}, "event": "rowAdded", "options": {}}),
         code_node("과업 4줄로 정리 · 개인정보 지우기", "clean_response.js", (240, 0)),
         node("정리 시트에 쌓기", "n8n-nodes-base.googleSheets", 4.5, (480, 0),
              {"operation": "append", "documentId": SHEET, "sheetName": {"__rl": True, "mode": "name", "value": "정리"},
               "columns": {"mappingMode": "autoMapInputData", "value": {}}, "options": {}}),
     ]
     return {"name": "ANI:WHERE 사용자 테스트 ① 응답 정리", "nodes": nodes,
-            "connections": link("폼 응답 들어옴", "과업 4줄로 정리 · 개인정보 지우기", "정리 시트에 쌓기"),
+            "connections": {**link("폼 응답 들어옴", "과업 4줄로 정리 · 개인정보 지우기", "정리 시트에 쌓기"),
+                            **link("1차 폼 응답 들어옴", "과업 4줄로 정리 · 개인정보 지우기")},
             "settings": {"timezone": "Asia/Seoul", "executionOrder": "v1"}, "active": False}
 
 

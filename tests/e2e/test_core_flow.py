@@ -270,7 +270,10 @@ def test_9_로그아웃하면_새로고침해도_로그인되지_않는다(page:
     wait_idle(page)
     page.get_by_role("button", name="로그아웃").click()
     wait_idle(page)
-    page.wait_for_timeout(1500)
+    for _ in range(20):                            # 쿠키는 화면 속 스크립트가 지운다 → 지워질 때까지 잠깐 기다림
+        if not any(c["name"] == "aw_session" and c["value"] for c in page.context.cookies()):
+            break
+        page.wait_for_timeout(500)
     assert not any(c["name"] == "aw_session" and c["value"] for c in page.context.cookies()), "로그인 쿠키가 남아 있어요"
     open_list(page, app_url)                       # 새로 연 화면(=새로고침)
     expect(page.locator(".st-key-login_btn button").last).not_to_contain_text("테스트봇", timeout=LONG)
@@ -316,6 +319,7 @@ def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_
     expect(dlg.get_by_text("놓치고 싶지 않은 팝업을 골라 주세요")).to_be_visible(timeout=LONG)
     # 팝업 하나 (마지막 카드)
     cards = dlg.locator('[class*="st-key-card_fw_"]')
+    expect(dlg.locator(".fwn").first).to_be_visible(timeout=LONG)   # 카드가 다 뜬 뒤에 읽는다 (가끔 빈 목록을 읽음)
     names = dlg.locator(".fwn").all_inner_texts()
     idx = len(names) - 1
     pick = names[idx]
