@@ -3343,7 +3343,8 @@ MYCAL_CSS = """
 /* 알림 받은 내역 = 데일리 팝업 노트 모양: 둥근 포스터 · 작은 태그 · 굵은 이름 한 줄, 점선으로 잇기 */
 .st-key-ntf_box { padding: 12px 12px !important; }
 .st-key-ntf_box .mc-title { font-family: inherit; text-align: center; color: var(--accent-deep, #0d9488); font-size: .82rem;
-  font-weight: 800; margin: 0 0 2px; }   /* 포인트 색 (11/18 요청) */
+  font-weight: 800; margin: 0 auto 4px; display: table; border: 1.5px solid var(--accent); border-radius: 999px;
+  padding: 3px 12px; background: #fff; }   /* 글자만 감싸는 포인트 색 테두리 (11/18 요청) */
 .st-key-ntf_box .mc-sub { text-align: center; font-size: .7rem; line-height: 1.4; margin-bottom: 6px; }
 .st-key-ntf_box .nh-day { font-size: .7rem; margin: 12px 0 6px; }
 .st-key-ntf_box .nh-item { background: transparent; padding: 0 0 12px; gap: 10px; border-radius: 0; position: relative; }
@@ -3567,8 +3568,6 @@ BOX_CSS = """
 [class*="st-key-bx_"]:hover .bxc { background: #F1FAF7; border-color: var(--accent); box-shadow: 0 4px 14px rgba(20,184,166,.14); }
 /* 다녀온 후기 상자가 칸 아래 테두리에 겹치지 않게 아래 여백 (11/18) */
 .st-key-keep_box, .st-key-ntf_box { padding-bottom: 22px !important; }
-/* 알림 받은 내역 칸: 포인트 색 테두리 (11/18 요청) */
-.st-key-ntf_box { border: 2px solid var(--accent) !important; box-shadow: 0 4px 16px rgba(20,184,166,.10); }
 /* '내 주변 추천' 옆 회색 ? : 커서를 올리면 추천 기준 안내 */
 .nh-help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px;
   border-radius: 50%; background: #E3E8E6; color: #6B7672; font-size: .66rem; font-weight: 900; cursor: help; margin-left: 4px;
