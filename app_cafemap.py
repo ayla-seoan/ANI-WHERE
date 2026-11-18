@@ -550,6 +550,7 @@ def address_field(value: str, key: str, on_pick, placeholder: str = "") -> str:
 
 # ================================================================ 카페 상세
 _WEEKDAYS = "월화수목금토일"
+WEEK_MAX = 3
 
 
 def _member() -> dict | None:
@@ -2096,14 +2097,14 @@ def _home_areas(rows: list[dict], n: int = 3) -> list[str]:
     return [a for a, _ in sorted(cnt.items(), key=lambda t: -t[1])[:n]]
 
 
-def _home_card(sec: str, r: dict, rank: int | None = None, badge: str = "") -> None:
+def _home_card(sec: str, r: dict, rank: int | None = None, badge: str = "", tall: bool = False) -> None:
     """홈 포스터 카드: 포스터(순위 숫자 · 배지 · 북마크) · 이름 · 기간 · 지역/상태 칩. 누르면 상세."""
     eid = str(r["entry_id"])
     label, color, _ = _status(r)
     area = geo.area_name(str(r.get("address") or ""))
     with st.container(key=f"card_h{sec}_{eid}"):
         st.markdown(
-            f'<div class="hc"><div class="hcp" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')">'
+            f'<div class="hc{" tall" if tall else ""}"><div class="hcp" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')">'
             + (f'<span class="hcbadge{" res" if badge.startswith("사전예약") else ""}">{escape(badge)}</span>' if badge else "")
             + (f'<span class="hcrank">{rank}</span>' if rank else "")
             + f'</div><div class="hct">{escape(str(r.get("work") or ""))}</div>'
@@ -2156,6 +2157,74 @@ def _home_rank_rows(rows: list[dict]) -> None:
     st.markdown(f'<div class="hls-wrap">{"".join(out)}</div>', unsafe_allow_html=True)
 
 
+WEEKDAYS = "월화수목금토일"
+
+
+def _home_week(df: pd.DataFrame) -> None:
+    """월~일 일곱 칸. 칸 머리: 요일 · (오늘) · 그날 끝나는 팝업 수. 지난 요일 칸은 이미 끝난 팝업이라 흐리게."""
+    monday = TODAY - timedelta(days=TODAY.weekday())
+    rows = df.to_dict("records")
+    with st.container(horizontal=True, key="home_week"):
+        for i in range(7):
+            day = monday + timedelta(days=i)
+            ends = sorted([r for r in rows if pd.to_datetime(r["end_date"]).date() == day
+                           and pd.to_datetime(r["start_date"]).date() <= day], key=lambda r: str(r.get("work") or ""))
+            cls = "today" if day == TODAY else ("past" if day < TODAY else "")
+            with st.container(key=f"wk_{i}"):
+                st.markdown(f'<div class="wkh {cls}"><b>{WEEKDAYS[i]}{" · 오늘" if day == TODAY else ""}</b>'
+                            f'<span class="wkd">{day.month}.{day.day}</span><span class="wkn">{len(ends)}</span></div>',
+                            unsafe_allow_html=True)
+                if not ends:
+                    st.markdown('<div class="wk-empty">끝나는 팝업 없음</div>', unsafe_allow_html=True)
+                # 칸이 너무 길어지지 않게 요일마다 3곳까지, 나머지는 '+N건 더보기' 를 누르면 그 칸에서 펼친다 (11/18 요청)
+                opened = bool(st.session_state.get(f"wk_open_{i}"))
+                for r in ends if opened else ends[:WEEK_MAX]:
+                    d = (day - TODAY).days
+                    _home_card("w", r, badge="오늘 종료" if d == 0 else ("종료" if d < 0 else f"D-{d}"), tall=True)
+                if len(ends) > WEEK_MAX and not opened:
+                    st.button(f"+{len(ends) - WEEK_MAX}건 더보기", key=f"wk_more_{i}", icon=":material/expand_more:",
+                              on_click=lambda i=i: st.session_state.update({f"wk_open_{i}": True}))
+
+
+def _home_reviews(df: pd.DataFrame, limit: int = 12) -> None:
+    """꿀팁 가득! 실시간 후기 모음 (11/18 요청): 최신 리뷰 순, 사진 있는 리뷰가 먼저. 답글은 빼고, 지금 있는 팝업 것만.
+    카드: 팝업(포스터 · 작품 · 상태 · 지역) + 리뷰(사진 · 닉네임 · 날짜 · 별점 · 본문 · 사진 2장). 누르면 그 팝업 상세."""
+    by_id = {str(r["entry_id"]): r for r in df.to_dict("records")}
+    rows = [r for r in reviews.current_rows() if not str(r.get("parent_id") or "") and str(r.get("cafe_id")) in by_id
+            and str(r.get("body") or "").strip()]
+    rows.sort(key=lambda r: (bool(images.paths(r.get("images"))), str(r.get("updated_at") or "")), reverse=True)
+    rows = rows[:limit]
+    if not rows:
+        st.markdown('<div class="home-empty">아직 후기가 없어요. 다녀온 팝업에 첫 후기를 남겨 보세요.</div>', unsafe_allow_html=True)
+        return
+    with st.container(horizontal=True, key="home_row_rv"):
+        for rv in rows:
+            pop = by_id[str(rv["cafe_id"])]
+            label, color, _ = _status(pop)
+            area = geo.area_name(str(pop.get("address") or ""))
+            who, pic = _author(rv.get("nickname"))
+            pics = images.paths(rv.get("images"))[:2]
+            stars = ""
+            if rv.get("rating") not in (None, ""):
+                try:
+                    n = max(0, min(5, int(float(rv["rating"]))))
+                    stars = (f'<div class="rvs">{"★" * n}<span class="off">{"★" * (5 - n)}</span>'
+                             f'<b>{n:.1f}</b><span class="of"> / 5.0</span></div>')
+                except (TypeError, ValueError):
+                    stars = ""
+            photos = "".join(f'<div class="rvp" style="background-image:url(&quot;{images.url(x)}&quot;)"></div>' for x in pics)
+            with st.container(key=f"card_hv_{rv['entry_id']}"):
+                st.markdown(
+                    f'<div class="rvc"><div class="rvtop"><div class="rvth" style="background-image:url(&quot;{_poster_url(pop.get("images"))}&quot;)"></div>'
+                    f'<div class="rvtt"><div class="rvw">{escape(str(pop.get("work") or ""))}</div><div class="rvchips">'
+                    f'<span class="st {color}">{escape(label)}</span>' + (f'<span>{escape(area)}</span>' if area else "")
+                    + '</div></div></div><div class="rvbox"><div class="rvme">' + _avatar_img(pic, 34, "rv-av")
+                    + f'<div class="rvwho"><b>{escape(_nick_only(who))}</b>{stars}</div><span class="rvdate">{escape(_when(rv.get("updated_at")))}</span></div>'
+                    f'<div class="rvbody">{escape(str(rv.get("body") or ""))}</div>'
+                    + (f'<div class="rvpics">{photos}</div>' if photos else "") + '</div></div>', unsafe_allow_html=True)
+                _open_btn(f"open_hv_{rv['entry_id']}", str(rv["cafe_id"]))
+
+
 def _home_more(sort: str, reserve: bool = False) -> None:
     """'더보기' → 리스트 보기 (정렬을 맞춰서). reserve 면 사전예약 팝업만."""
     st.session_state.update(home_view=False, list_only=True, sort=sort, selected=None, scroll_top=True, res_only=reserve)
@@ -2201,18 +2270,9 @@ def render_home(df: pd.DataFrame) -> None:
             for r in new:
                 _home_card("n", r)
 
-        # 이번 주(일요일까지)에 끝나는 진행 중 팝업
-        sunday = TODAY + timedelta(days=6 - TODAY.weekday())
-        week = sorted([r for r in live if _status(r)[2] == 0 and pd.to_datetime(r["end_date"]).date() <= sunday],
-                      key=lambda r: str(r.get("end_date")))
+        # 이번 주에 끝나는 팝업: 월~일 주간 캘린더 (11/18 요청). 그날 끝나는 팝업을 그 요일 칸에, 오늘 칸은 강조
         _home_head("이번 주에 끝나는 팝업", "hourglass_bottom", more_sort="종료 임박순", key="week")
-        if week:
-            with st.container(horizontal=True, key="home_row_week"):
-                for r in week:
-                    d = (pd.to_datetime(r["end_date"]).date() - TODAY).days
-                    _home_card("w", r, badge="오늘 종료" if d == 0 else f"종료 D-{d}")
-        else:
-            st.markdown('<div class="home-empty">이번 주에 끝나는 팝업은 없어요. 여유 있게 둘러보세요.</div>', unsafe_allow_html=True)
+        _home_week(df)
 
         # 사전예약 팝업 (태그·특전·소개에 '사전 예약')
         # 아직 열기 전(오픈 예정)인 팝업만 — 이미 진행 중인 건 뺀다 (11/18 요청). 빨리 여는 순
@@ -2226,11 +2286,16 @@ def render_home(df: pd.DataFrame) -> None:
         else:
             st.markdown('<div class="home-empty">곧 열리는 팝업 중 사전예약을 받는 곳이 없어요.</div>', unsafe_allow_html=True)
 
+        # 꿀팁 가득! 실시간 후기 모음 (11/18 요청)
+        _home_head("꿀팁 가득! 실시간 후기 모음", "rate_review", key="rv")
+        _home_reviews(df)
+
 
 HOME_CSS = """
 <style>
 .st-key-home { gap: 6px; }
 [class*="st-key-hh_"] { margin-top: 22px; margin-bottom: 6px; min-height: 34px; justify-content: space-between !important; }
+.st-key-hh_rank { margin-top: 8px; }     /* 내 최애 팝업 줄과 랭킹 제목 사이를 1/3 줄임 (11/18 요청) */
 .home-h { font-size: 1.2rem; font-weight: 800; display: flex; align-items: center; gap: 6px; }
 .home-h .mi { color: var(--accent); font-size: 1.35rem; }
 [class*="st-key-hmore_"] button p { color: #7B8784 !important; font-size: .85rem !important; }
@@ -2308,6 +2373,50 @@ HOME_CSS = """
 .hc .hcchips span.st.blue { color: #2C5BC5; background: #EAF0FC; }
 .hc .hcchips span.st.red { color: #D93A4A; background: #FDECEE; }
 [class*="st-key-card_h"] [class*="st-key-fav_"] { top: 8px; right: 8px; }
+/* 이번 주 캘린더: 월~일 일곱 칸 */
+.st-key-home_week { flex-wrap: nowrap !important; gap: 0 !important; overflow-x: auto; overflow-y: hidden;
+  border-top: 1px solid #E3E9E7; align-items: stretch !important; }
+.st-key-home_week > div { flex: 1 0 0 !important; min-width: 150px !important; }
+[class*="st-key-wk_"] { padding: 12px 10px 4px; border-right: 1px solid #EEF2F1; gap: 10px !important; height: 100%; }
+.st-key-home_week > div:last-child [class*="st-key-wk_"] { border-right: 0; }
+[class*="st-key-wk_"]:has(.wkh.today) { background: #EAF8F5; }
+.wkh { display: flex; align-items: baseline; gap: 6px; font-size: 1rem; }
+.wkh b { font-weight: 800; } .wkh .wkd { font-size: .75rem; color: #9AA5A1; }
+.wkh .wkn { margin-left: auto; font-weight: 800; color: #9AA5A1; font-size: .9rem; }
+.wkh.today b, .wkh.today .wkn { color: var(--accent-deep); }
+.wkh.past { opacity: .5; }
+[class*="st-key-wk_"]:has(.wkh.past) .hc { opacity: .55; }
+.wk-empty { font-size: .75rem; color: #B3BCB9; padding: 8px 0; }
+[class*="st-key-wk_more_"] button { width: 100%; min-height: 0; padding: 4px 6px; border-radius: 10px; background: #F1F4F3; border: 0; }
+[class*="st-key-wk_more_"] button p { font-size: .78rem !important; color: #5B6663 !important; font-weight: 700; }
+.hc.tall .hcp { aspect-ratio: 1/1; }     /* 포스터 높이 줄임 (11/18 요청) */
+.hc.tall .hcbadge { border-radius: 12px 0 10px 0; background: #26302D; }
+.hc.tall .hcd, .hc.tall .hcchips { display: none; }
+.hc.tall { padding-bottom: 12px; }
+.hc.tall .hct { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: .88rem; }
+/* 후기 모음 카드 */
+[class*="st-key-home_row_rv"] > div { flex: 0 0 340px !important; width: 340px !important; min-width: 340px !important; }
+.rvc { border: 1px solid #E6ECEA; border-radius: 16px; padding: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.04); margin-bottom: 18px;
+  background: #fff; }
+.rvtop { display: flex; gap: 10px; align-items: center; }
+.rvth { width: 48px; height: 48px; border-radius: 10px; background-size: cover; background-position: center; flex: none;
+  border: 1px solid #EEF2F1; }
+.rvtt { min-width: 0; }
+.rvw { font-weight: 800; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rvchips { display: flex; gap: 4px; margin-top: 4px; }
+.rvchips span { font-size: .68rem; padding: 1px 7px; border-radius: 6px; background: #F1F4F3; color: #5B6663; font-weight: 600; }
+.rvchips span.st.green { color: var(--accent-deep); background: var(--accent-soft); }
+.rvchips span.st.blue { color: #2C5BC5; background: #EAF0FC; } .rvchips span.st.red { color: #D93A4A; background: #FDECEE; }
+.rvbox { margin-top: 12px; background: #F7F9F8; border-radius: 12px; padding: 12px; min-height: 150px; }
+.rvme { display: flex; gap: 8px; align-items: center; }
+.rvwho { min-width: 0; flex: 1; } .rvwho b { font-size: .85rem; }
+.rvs { color: #F4B63F; font-size: .8rem; letter-spacing: 1px; } .rvs .off { color: #DDE3E1; }
+.rvs b { color: #26302D; margin-left: 4px; letter-spacing: 0; } .rvs .of { color: #9AA5A1; letter-spacing: 0; }
+.rvdate { font-size: .72rem; color: #9AA5A1; align-self: flex-start; }
+.rvbody { margin-top: 10px; font-size: .85rem; line-height: 1.5; color: #3A4542; display: -webkit-box; -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
+.rvpics { display: flex; gap: 6px; margin-top: 10px; }
+.rvpics .rvp { flex: 1; aspect-ratio: 4/3; border-radius: 8px; background-size: cover; background-position: center; }
 @media (max-width: 640px) {
   .hb { height: 240px; } .hb .hbpic { right: 14px; top: 16px; bottom: 16px; }
   .hb .hbtxt { left: 18px; right: 150px; bottom: 18px; } .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
@@ -2315,6 +2424,8 @@ HOME_CSS = """
   .st-key-home_banner, .st-key-home_banner [class*="st-key-card_hb_"] { height: 240px !important; min-height: 240px; }
   [class*="st-key-home_row_"] > div { flex-basis: 150px !important; width: 150px !important; min-width: 150px !important; }
   .hc .hcrank { font-size: 2.6rem; }
+  .st-key-home_week > div { min-width: 132px !important; }
+  [class*="st-key-home_row_rv"] > div { flex-basis: 280px !important; width: 280px !important; min-width: 280px !important; }
   .hc .hct { font-size: .85rem; }
   .home-h { font-size: 1.05rem; }
 }
@@ -2453,7 +2564,16 @@ STORY_CSS = """
 .st-key-stories { margin: 0 0 8px; }
 .story-head { font-size: .95rem; font-weight: 800; margin-bottom: 2px; color: var(--accent-deep); }
 .st-key-stories [data-testid="stMarkdown"]:has(.story-head) { width: fit-content !important; }
-.st-key-stories [data-testid="stMarkdown"]:has(.story-head) > div { justify-content: flex-start !important; gap: 6px; }
+.st-key-stories [data-testid="stMarkdown"]:has(.story-head) > div { justify-content: flex-start !important; gap: 6px;
+  align-items: center !important; }
+/* 제목 옆 ? 를 글자와 같은 크기 · 같은 줄 가운데로 (11/18 요청) */
+.st-key-stories [data-testid="stMarkdown"]:has(.story-head) [data-testid="stTooltipIcon"],
+.st-key-stories [data-testid="stMarkdown"]:has(.story-head) [data-testid="stTooltipHoverTarget"] { display: flex; align-items: center;
+  margin: 0 !important; height: .95rem; }
+.st-key-stories [data-testid="stMarkdown"]:has(.story-head) [data-testid="stTooltipIcon"] svg { width: .95rem; height: .95rem; }
+.st-key-stories .story-head { line-height: 1; margin: 0 !important; }
+.st-key-stories [data-testid="stMarkdown"]:has(.story-head) [data-testid="stMarkdownContainer"] { margin: 0 !important; padding: 0 !important; }
+.st-key-stories [data-testid="stMarkdown"]:has(.story-head) [data-testid="stMarkdownContainer"] > div { margin: 0 !important; }
 .st-key-story_row { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; gap: 8px !important; padding: 4px 2px 2px;
   scrollbar-width: none; }
 .st-key-story_row::-webkit-scrollbar { display: none; }
@@ -3299,7 +3419,7 @@ def _pin_view_icon() -> None:
 _DRAG_JS = """
 (function () {
   if (window.__awDrag) return; window.__awDrag = true;
-  const SEL = '.st-key-story_row, [class*="st-key-sim_row_"], [class*="st-key-home_row_"], .st-key-home_banner';
+  const SEL = '.st-key-story_row, [class*="st-key-sim_row_"], [class*="st-key-home_row_"], .st-key-home_banner, .st-key-home_week';
   function arrows(row) {
     const box = row.parentElement; if (!box) return;
     if (getComputedStyle(box).position === 'static') box.style.position = 'relative';
