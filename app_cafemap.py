@@ -49,8 +49,8 @@ ROOT = Path(__file__).resolve().parent
 TODAY = date.today()
 MAP_HEIGHT = 620
 # 제목 로고: 민트 로고 하나로 고정 (11/18 요청: 흰 글자 로고 → 다시 민트 로고, 크기는 그대로)
-LOGOS = ["logo_mint.png"]
-FIXED_LOGO = "logo_mint.png"
+LOGOS = ["logo_add.png"]          # 진한 민트 메뉴바 위: 흰 글자 로고 (11/18 요청)
+FIXED_LOGO = "logo_add.png"
 ADD_LOGO = "logo_add.png"          # 등록 화면 로고 (흰 글자 + 민트 테두리)           # 상세·등록 화면에서는 이 로고로 고정
 TOPBAR_TOP = "0rem"      # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
 TOPBAR_H = "282px"        # 상단 묶음 높이 (로고 + 문구 + 검색 필터. '팝업 카페 N곳' 줄은 묶음 밖)
@@ -357,7 +357,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
 /* 로고 그림 아래 'ANIME POP-UP · CAFE · GOODS' 글씨까지 읽히게 로고 칸을 키운다 */
 .st-key-home_brand button {{ width: 330px !important; height: 100px !important;
-  background: url("app/static/logo_mint.png") no-repeat left center / contain !important; }}
+  background: url("app/static/logo_add.png") no-repeat left center / contain !important; }}
 .st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
 /* 로고는 눌러도·커서를 올려도 바탕·그림자·밝기 변화 없이 그대로 (모바일 탭 하이라이트도 끈다) */
 .st-key-home_brand button, .st-key-home_brand button:hover, .st-key-home_brand button:focus,
@@ -4065,7 +4065,7 @@ GNB_CSS = """
 /* 로고: 메뉴바 안에서는 작게 */
 .st-key-gnb .st-key-home_brand button { width: 155px !important; height: 47px !important; }   /* 11/18 로고 조금 작게 */
 /* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
-.st-key-gnb { position: relative; background: #E9F7F2; border-radius: 0 0 28px 28px;
+.st-key-gnb { position: relative; background: #14b8a6; border-radius: 0 0 28px 28px;   /* 메뉴바: 진한 포인트색 (11/18 요청) */
   padding: 10px 28px !important; margin: 0 -28px; box-sizing: content-box; }
 /* 메뉴바가 있는 화면은 페이지 위 여백을 없애 메뉴바를 화면 맨 위에 붙인다 */
 .stMainBlockContainer { padding-top: 0 !important; }
@@ -4075,20 +4075,20 @@ GNB_CSS = """
 html body .st-key-gnb_right [class*="st-key-gnb_search_"] button,
 html body .st-key-gnb_right [data-testid="stPopover"] button { background-color: transparent !important; background-repeat: no-repeat !important; background-size: 27px 27px !important;
   min-width: 42px; min-height: 42px; }
-html body .st-key-gnb_right .st-key-gnb_search_off button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.3' stroke-linecap='round'><circle cx='10.5' cy='10.5' r='6.6'/><path d='M15.6 15.6L20 20'/></svg>") !important; background-position: center !important; }
-html body .st-key-gnb_right .st-key-gnb_search_on button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.3' stroke-linecap='round'><path d='M6.5 6.5l11 11M17.5 6.5l-11 11'/></svg>") !important; background-position: center !important; }
-html body .st-key-gnb_right [data-testid="stPopover"] button { position: relative; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6.3 16.4V11.2a5.7 5.7 0 0 1 11.4 0v5.2'/><path d='M4.6 16.6c0 .3.3.5.6.5h13.6c.3 0 .6-.2.6-.5'/><path d='M10.2 19.6a1.9 1.9 0 0 0 3.6 0'/></svg>") !important; background-position: center !important;
+html body .st-key-gnb_right .st-key-gnb_search_off button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2.3' stroke-linecap='round'><circle cx='10.5' cy='10.5' r='6.6'/><path d='M15.6 15.6L20 20'/></svg>") !important; background-position: center !important; }
+html body .st-key-gnb_right .st-key-gnb_search_on button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2.3' stroke-linecap='round'><path d='M6.5 6.5l11 11M17.5 6.5l-11 11'/></svg>") !important; background-position: center !important; }
+html body .st-key-gnb_right [data-testid="stPopover"] button { position: relative; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6.3 16.4V11.2a5.7 5.7 0 0 1 11.4 0v5.2'/><path d='M4.6 16.6c0 .3.3.5.6.5h13.6c.3 0 .6-.2.6-.5'/><path d='M10.2 19.6a1.9 1.9 0 0 0 3.6 0'/></svg>") !important; background-position: center !important;
   padding: 0 !important; width: 42px !important; }
 .st-key-gnb_right [data-testid="stPopover"] button p { margin-left: -6px !important; font-size: .85rem !important; }
 .st-key-gnb_right [class*="st-key-gnb_search_"] button p, .st-key-gnb_right [data-testid="stPopover"] button p {
-  font-family: "NanumSquareRound", "Jua", sans-serif !important; color: #2E9C82 !important; font-weight: 800 !important; }
-.st-key-gnb_right .st-key-admin_btn button { background: #fff !important; border: 1.5px solid #9EDDCC !important;
+  font-family: "NanumSquareRound", "Jua", sans-serif !important; color: #FFFFFF !important; font-weight: 800 !important; }
+.st-key-gnb_right .st-key-admin_btn button { background: #fff !important; border: 1.5px solid #fff !important;
   border-radius: 999px !important; padding: 2px 12px !important; min-height: 0 !important; }
 .st-key-gnb_right .st-key-admin_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 800 !important;
   color: #2E9C82 !important; font-size: .88rem !important; }
 .st-key-gnb_right .st-key-admin_btn button span { color: #2E9C82 !important; font-size: 1.1rem !important; }
 .st-key-gnb_right .st-key-login_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 700 !important;
-  color: #4B5260 !important; font-size: .88rem !important; letter-spacing: -.01em; }
+  color: #FFFFFF !important; font-size: .88rem !important; letter-spacing: -.01em; }
 .st-key-gnb_tabs button p { font-family: "NanumSquareRound", sans-serif !important; }
 /* 메뉴바 묶음 안의 보이지 않는 칸(스타일·높이 0 iframe·위치 받기)이 간격만 차지하지 않게 */
 .st-key-topbar { gap: 0 !important; }
@@ -4114,10 +4114,10 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .st-key-gnb_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important;
   box-shadow: none !important; padding: 10px 16px 3px !important; border-bottom: 3px solid transparent !important;
   min-height: 0 !important; }   /* 글자와 밑줄 사이 반으로 (12px → 6px, 11/18 요청) */
-.st-key-gnb_tabs button p { font-size: .92rem !important; font-weight: 600 !important; color: #8A9592 !important; }
-.st-key-gnb_tabs button:hover p { color: #26302D !important; }
-.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: #26302D !important; }
-.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
+.st-key-gnb_tabs button p { font-size: .92rem !important; font-weight: 600 !important; color: rgba(255,255,255,.78) !important; }
+.st-key-gnb_tabs button:hover p { color: #FFFFFF !important; }
+.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: #FFFFFF !important; }
+.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: #FFFFFF !important; font-weight: 800 !important; }
 /* 오른쪽 끝: 검색 · 알림 · 로그인 */
 .st-key-gnb_right { margin-left: auto; width: auto !important; flex: 0 0 auto; gap: 2px !important; align-items: center; }
 .st-key-gnb_right [class*="st-key-gnb_search_"] button { background: transparent !important; border: 0 !important;
@@ -6284,6 +6284,11 @@ def _set_cookie(value: str, days: int) -> None:
     js = (f"window.parent.document.cookie = {json.dumps(auth.COOKIE + '=' + value)} + "
           f"'; path=/; max-age={days * 86400}; SameSite=Lax{secure}"
           + ("; expires=Thu, 01 Jan 1970 00:00:00 GMT" if days <= 0 else "") + "';")
+    if value and days > 0:
+        # 간편 로그인 창(로그인 화면이 window.open 으로 연 'aw_login' 창)에서 로그인이 끝났으면 쿠키를 심은 뒤 그 창을 닫는다.
+        # 원래 창은 쿠키가 생긴 걸 알아채고 새로고침해 로그인된 화면이 된다 (11/18 요청). 보통 창이면 아무 일도 없다
+        # 타이머는 바깥 창(parent.eval)에 건다 — 로그인 뒤 화면을 다시 그리면 이 부품 iframe 이 사라져 타이머도 같이 사라졌다
+        js += ("window.parent.eval(\"setTimeout(function(){try{if(window.top.name==='aw_login'){window.top.close();}}catch(e){}},700)\");")
     components.html(f"<script>{js}</script>", height=0)
 
 
@@ -6574,9 +6579,14 @@ def _login_body() -> None:
             st.markdown(f'<span class="auth-btn off">{label} {verb} 준비 중</span>', unsafe_allow_html=True)
 
     # iframe 밖이면 간편 로그인 버튼을 같은 페이지에서 열고, 새 탭 안내 문구를 숨긴다 (11/18 요청)
+    # iframe 안(배포 사이트)이면 새 탭 대신 작은 로그인 창(window.open, 이름 aw_login)으로 연다 →
+    # 로그인이 끝나면 그 창이 스스로 닫히고(_set_cookie), 이 창은 쿠키를 보고 새로고침된다 (11/18 요청)
     components.html(
         "<script>(function(){const w=window.parent,d=w.document;let n=0;const f=()=>{"
-        "if(w.top!==w){return;}"
+        "if(w.top!==w){d.querySelectorAll('a.auth-btn').forEach(a=>{if(a.dataset.awPop)return;a.dataset.awPop='1';"
+        "a.addEventListener('click',e=>{const x=Math.max(0,(w.screen.width-480)/2),y=Math.max(0,(w.screen.height-720)/2);"
+        "const pop=w.open(a.href,'aw_login','popup=yes,width=480,height=720,left='+x+',top='+y);"
+        "if(pop){e.preventDefault();pop.focus();}});});return;}"   # 창이 막히면(팝업 차단) 원래대로 새 탭
         "d.querySelectorAll('a.auth-btn').forEach(a=>{a.target='_self';a.removeAttribute('rel');});"
         "d.documentElement.classList.add('aw-top');};f();const iv=setInterval(()=>{f();if(++n>10)clearInterval(iv);},400);})();</script>",
         height=0)
@@ -6591,8 +6601,8 @@ def _login_body() -> None:
         "setTimeout(()=>clearInterval(iv),600000);})();</script>", height=0)
     # 안내는 맨 아래에 작게 한 묶음으로 (11/18 요청)
     st.markdown('<style>html.aw-top .auth-newtab { display: none; }</style>', unsafe_allow_html=True)
-    st.markdown('<div class="auth-foot"><span class="auth-newtab">카카오·네이버 로그인은 <b>새 탭</b>에서 열려요. 그 탭에서 로그인을 마치면 '
-                '이 화면도 자동으로 로그인된 메인으로 넘어가요.<br></span>로그인하지 않아도 팝업은 둘러볼 수 있어요.<br>'
+    st.markdown('<div class="auth-foot"><span class="auth-newtab">카카오·네이버 로그인은 <b>작은 새 창</b>에서 열려요. 로그인을 마치면 그 창은 저절로 닫히고 '
+                '이 화면이 로그인된 메인으로 바뀌어요.<br></span>로그인하지 않아도 팝업은 둘러볼 수 있어요.<br>'
                 '받는 정보: <b>별명(닉네임)</b>과 계정 고유 번호뿐이에요. 고유 번호는 알아볼 수 없게 바꿔서(해시) 저장하고, '
                 '이메일·전화번호·실명은 받지도 저장하지도 않아요.</div>', unsafe_allow_html=True)
     if not (auth.enabled("kakao") or auth.enabled("naver")):
