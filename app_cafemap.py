@@ -19,6 +19,7 @@ import json
 import os
 import re
 import time
+import uuid
 from urllib.parse import quote
 from datetime import date, datetime, timedelta, timezone
 from html import escape
@@ -594,6 +595,18 @@ def _author(name) -> tuple[str, str]:
 def _nick_only(name) -> str:
     """'닉네임#m1a2b' → 화면에 보일 닉네임 (꼬리표는 저장·내 글 확인에만 쓴다, 11/18 요청)."""
     return _author(name)[0]
+
+
+def _suggest_nick(final: bool = False) -> str:
+    """가입 화면 닉네임 칸에 흐리게 보여 줄 랜덤 닉네임 (이 화면에서는 늘 같은 것).
+    칸을 비워 두고 가입하면 바로 이 닉네임으로 정한다 — 그사이 누가 먼저 썼으면 새로 짓는다 (11/18 요청)."""
+    cur = st.session_state.get("_suggest_nick")
+    if not cur or (final and (auth.validate_nick(cur) or auth.nick_taken(members, cur))):
+        cur = _auto_nick(uuid.uuid4().hex)
+        st.session_state["_suggest_nick"] = cur
+    if final:
+        st.session_state.pop("_suggest_nick", None)       # 쓴 닉네임은 다음 가입 화면에서 새로
+    return cur
 
 
 def _auto_nick(seed: str) -> str:
@@ -5020,7 +5033,7 @@ AUTH_CSS = """
   border-top: 1px solid #EEF1F0; max-width: 100%; }
 .auth-foot b { color: #6B7672; }
 /* 회원가입 안내: 작은 글씨 · 연한 회색 바탕 · 테두리 (11/18 요청) */
-.auth-sub.auth-guide { font-size: .78rem; line-height: 1.65; color: #5F6B67; background: #F4F6F5; border: 1px solid #E3E8E6;
+.auth-sub.auth-guide { font-size: .7rem; line-height: 1.6; color: #5F6B67; background: #F4F6F5; border: 1px solid #E3E8E6;
   border-radius: 12px; padding: 10px 14px; text-align: left !important; }
 .auth-or { display: flex; align-items: center; gap: .6rem; max-width: 380px; color: #9AA5A1; font-size: .8rem;
   margin: 1rem 0 .3rem; }
@@ -5236,11 +5249,13 @@ def _password_signup_form() -> None:
                            placeholder="영문+숫자 8자 이상", autocomplete="new-password")
         pw2 = st.text_input("비밀번호 확인 (필수)", type="password", max_chars=auth.PW_MAX, autocomplete="new-password")
         nick = st.text_input("닉네임 (필수)", max_chars=auth.MAX_NICK,
-                             placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
-        st.caption("다른 회원과 같은 닉네임, 욕설·음란한 말, 관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
+                             placeholder=_suggest_nick())
+        st.caption("비워 두면 칸에 흐리게 보이는 닉네임으로 정해져요. 다른 회원과 같은 닉네임, 욕설·음란한 말, "
+                   "관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
         consent = _consent_boxes("local", "pwc")
-        st.caption("이메일·전화번호를 받지 않아서 비밀번호를 잊으면 찾을 수 없어요. 꼭 기억해 두세요. "
-                   "프로필 사진(선택)은 가입한 뒤 마이페이지에서 올릴 수 있어요.")
+        st.markdown('<div class="auth-sub auth-guide">이메일·전화번호를 받지 않아서 <b>비밀번호를 잊으면 찾을 수 없어요.</b> '
+                    '꼭 기억해 두세요. 프로필 사진(선택)은 가입한 뒤 마이페이지에서 올릴 수 있어요.</div>',
+                    unsafe_allow_html=True)
         done = st.form_submit_button("가입하기", type="primary", icon=":material/person_add:", width="stretch")
     if not done:
         return
@@ -5250,7 +5265,7 @@ def _password_signup_form() -> None:
         return
     try:
         if not " ".join(str(nick or "").split()):      # 닉네임을 비워 두면 '꾸밈말 + 캐릭터' 로 자동 (11/18)
-            nick = _auto_nick(str(lid).strip().lower())
+            nick = _suggest_nick(final=True)
         row = auth.register_password(members, lid, pw, pw2, nick)
     except auth.AuthError as e:
         st.warning(str(e), icon=":material/error:")
@@ -5409,8 +5424,9 @@ def _auth_body() -> None:
                    else "프로필 사진은 선택이에요. 마이페이지에서 언제든 올릴 수 있어요.") + '</div>', unsafe_allow_html=True)
     with st.form("signup", border=False):
         nick = st.text_input("닉네임", value=ident.nickname, max_chars=auth.MAX_NICK,
-                             placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
-        st.caption("다른 회원과 같은 닉네임, 욕설·음란한 말, 관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
+                             placeholder=_suggest_nick())
+        st.caption("비워 두면 칸에 흐리게 보이는 닉네임으로 정해져요. 다른 회원과 같은 닉네임, 욕설·음란한 말, "
+                   "관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
         consent = _consent_boxes("social", "soc", f"[선택] {label} 프로필 사진을 불러와 리뷰 옆에 보여 줘요 (사진 주소 저장, "
                                  "마이페이지에서 언제든 지울 수 있어요)" if ident.avatar else None)
         done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")
@@ -5423,7 +5439,7 @@ def _auth_body() -> None:
             ident = dataclasses.replace(ident, avatar="none")
         try:
             if not " ".join(str(nick or "").split()):
-                nick = _auto_nick(ident.member_key)
+                nick = _suggest_nick(final=True)
             row = auth.signup(members, ident, nick)
         except auth.AuthError as e:
             st.warning(str(e), icon=":material/error:")
