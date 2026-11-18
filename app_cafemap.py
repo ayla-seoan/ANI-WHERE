@@ -2722,8 +2722,8 @@ STORY_CSS = """
 .story .ring { position: relative; width: 72px; height: 72px; border-radius: 50%; padding: 3px; box-sizing: border-box;
   background: conic-gradient(from 210deg, #14b8a6, #7FE0CF, #FFD66B, #14b8a6); transition: transform .18s ease; }
 .story .rg { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); z-index: 2; white-space: nowrap;
-  font-size: .62rem; font-weight: 800; color: var(--accent-deep); background: var(--accent-soft); padding: 1px 7px; border-radius: 999px;
-  border: 1.5px solid var(--accent); }   /* 연한 민트 바탕 + 진한 민트 글자 · 테두리 (11/18 요청) */
+  font-size: .62rem; font-weight: 800; color: #fff; background: var(--accent-deep); padding: 1px 7px; border-radius: 999px;
+  border: 1.5px solid #fff; }
 .st-key-story_row { padding-top: 10px !important; }
 .story.hot .ring { background: conic-gradient(from 210deg, var(--accent-deep), var(--accent), #ffd66b, var(--accent-deep)); }
 .story .cnt { position: absolute; right: -2px; bottom: -2px; min-width: 24px; height: 24px; padding: 0 5px; box-sizing: border-box;
