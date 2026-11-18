@@ -164,15 +164,20 @@ def can_delete(row: dict, nickname: str) -> bool:
     return bool(nickname) and _tag(str(row.get("nickname") or "")) == _tag(nickname)
 
 
-def auto_nickname(seed: str, max_len: int = 16) -> str:
+def auto_nickname(seed: str, max_len: int = 10) -> str:
     """회원가입 때 닉네임을 비워 두면 쓰는 이름. 손님 닉네임처럼 '꾸밈말 + 캐릭터' 이고 #꼬리표는 없다
-    (회원은 뒤에 #m네 글자가 따로 붙는다). 같은 seed(아이디·계정 번호)면 늘 같은 이름, max_len 을 넘지 않는다."""
+    (회원은 뒤에 #m네 글자가 따로 붙는다). 같은 seed(아이디·계정 번호)면 늘 같은 이름, max_len(10자)을 넘지 않는다.
+    캐릭터 이름이 길어 넘치면 마지막 이름만 쓴다 ('윈리 록벨' → '록벨', 11/18 요청)."""
     h = hashlib.sha256(f"member-nick:{seed}".encode()).hexdigest()
     names = [n for n in _characters() if "#" not in n] or _NOUN_FALLBACK
     name = names[int(h[20:28], 16) % len(names)]
+    last = name.split()[-1] if name.split() else name
     start = int(h[12:20], 16) % len(_ADJ)
-    for i in range(len(_ADJ)):                       # 길이에 맞는 꾸밈말을 같은 순서로 찾는다
-        nick = f"{_ADJ[(start + i) % len(_ADJ)]} {name}"
-        if len(nick) <= max_len:
-            return nick
-    return name[:max_len] if len(name) >= 2 else _NOUN_FALLBACK[0]
+    for nm in dict.fromkeys([name, last]):           # 전체 이름 → 안 맞으면 마지막 이름
+        for i in range(len(_ADJ)):                   # 길이에 맞는 꾸밈말을 같은 순서로 찾는다
+            nick = f"{_ADJ[(start + i) % len(_ADJ)]} {nm}"
+            if len(nick) <= max_len:
+                return nick
+    if 2 <= len(last) <= max_len:
+        return last
+    return last[:max_len] if len(last) >= 2 else _NOUN_FALLBACK[0]

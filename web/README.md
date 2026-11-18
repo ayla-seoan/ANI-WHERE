@@ -12,17 +12,24 @@
 | 휴대폰 | 브라우저 탭 | 홈 화면 설치, 한 번 본 화면은 오프라인에서도 열림 |
 
 - 팝업은 **현장에 가는 것**이 목적이라, 사용자는 이동 중에 휴대폰으로 "지금 열려 있나, 언제까지인가, 어디인가, 특전이 뭔가"만 빨리 확인하면 됩니다. 이 순간에 Streamlit 의 느린 첫 로딩은 이탈 원인이 됩니다.
-- 쓰기 기능을 빼면 로그인·스팸·권한 문제를 이 웹에서 신경 쓸 필요가 없습니다. 수정·리뷰는 상세 화면의 **"리뷰·수정은 ANI:WHERE 앱에서"** 링크로 Streamlit 앱(`?cafe=<id>`)에 넘깁니다.
+- 쓰기 기능을 빼면 로그인·스팸·권한 문제를 이 웹에서 신경 쓸 필요가 없습니다. 수정·리뷰는 상세 화면의 **"리뷰·북마크는 ANI:WHERE 앱에서"** 링크로 Streamlit 앱(`?cafe=<id>`)에 넘깁니다.
 - 데이터 출처는 화면 아래에 항상 표시합니다 (`데이터: Supabase` / `데이터: GitHub 공개 데이터`). "AI 산출 / 규칙 기반 대체" 를 늘 표시하는 프로젝트 원칙과 같은 이유입니다.
 
 ## 화면
 
+앱(Streamlit, `app_cafemap.py`)과 같은 모양으로 맞췄습니다 (PC 1440px · 모바일 390px 기준, 모바일 = 폭 640px 이하). 메뉴바는 앱과 같은 연민트 바탕에 **홈 · 지도로 보기 · 리스트로 보기** 탭이고, 로그인·알림·관리자 대신 오른쪽에 참여용 앱으로 가는 글자 링크만 있습니다.
+
 | 주소 | 내용 |
 |---|---|
-| `/` | 검색(작품·캐릭터·매장·주소) + 상태 탭(진행 중 / 예정 / 전체) + 지역 칩. 진행 중이 먼저, 그다음 시작일 순. 조건에 맞는 게 없으면 빈 화면 대신 "조건을 줄여 보세요 / 앱에서 직접 등록" 안내 |
-| `/popup/[id]` | 포스터, 작품·캐릭터·매장, 기간·상태, 주소 + 카카오맵, 특전·굿즈, 참고 링크(recal.kr 은 맨 뒤), 소개, 별점 평균, 앱 링크. 없는 id 는 404 안내 화면 |
-| `/this-week` | 오늘~이번 주 일요일과 기간이 겹치는 팝업을 지역별로. "현장 가기 전" 화면 |
+| `/` 홈 | 요즘 일정 많은 작품(동그란 포스터 · 팝업 수) · 실시간 인기 급상승 랭킹 5위(배너 + 목록) · 따끈따끈 신규 등록 · 이번 주에 끝나는 팝업(월~일 칸, 요일마다 2곳 + 더보기) · 사전예약 팝업. 앱의 '후기 모음'은 리뷰 본문·닉네임이라 넣지 않음 |
+| `/map` 지도로 보기 | 데일리 팝업 노트 · 지도(카카오맵, 키가 없거나 실패하면 OpenStreetMap) · 팝업 목록. 검색 필터(검색 · 지역 · 진행여부 · 날짜)는 메뉴바 검색 아이콘(모바일은 필터 아이콘)으로 연다 |
+| `/list` 리스트로 보기 | 포스터 카드 4열(모바일 2~3열) · 같은 검색 필터 · 지역 고르기 · 정렬(최신순 · 등록순 · 오픈 임박순 · 종료 임박순) · 24장씩 'N건 더보기'. 조건은 주소창(`?q=&area=&span=&day=&work=&reserve=&sort=`)에 남는다 |
+| `/popup/[id]` 상세 | 이미지 슬라이드 · 지역/상태 · 방문 전 확인(위치 · 일정) · 혜택(특전 · 굿즈 · 이벤트) · 참고 웹사이트(recal.kr 은 맨 뒤) · 팝업 소개 · 별점 평균 · "리뷰·북마크는 ANI:WHERE 앱에서" · 비슷한 팝업 / 이 근처 다른 팝업 |
+| `/this-week` | 오늘~이번 주 일요일과 기간이 겹치는 팝업을 지역별로 |
 | `/offline` | 인터넷이 끊겼고 그 화면이 저장돼 있지 않을 때 서비스 워커가 보여 주는 화면 |
+
+- '실시간 인기 급상승'은 앱처럼 북마크·조회 수로 세지 않습니다 (그 기록은 공개 데이터에 없음). 공개된 별점 수 → 진행 중 먼저 → 곧 끝나는 순 → 최근 등록 순으로 정합니다 (`app/page.tsx` 의 `rankTop`).
+- 앱의 '인기순 · 리뷰 많은 순' 정렬과 북마크 버튼은 이 웹에 없습니다 (읽기 전용).
 
 ## 데이터 흐름
 
@@ -86,6 +93,7 @@ npm run start -- -p 3100
    - **service_role 키는 절대 넣지 않습니다.** RLS 를 건너뛰어 수정·삭제까지 됩니다. 이 웹은 읽기만 하므로 anon 키로 충분합니다.
    - `NEXT_PUBLIC_` 접두사를 붙이지 않습니다.
    - (선택) `SITE_URL` = 실제 도메인. 공유 미리보기(OG) 주소에 씁니다. 비우면 Vercel 의 production 주소를 씁니다.
+   - (선택) `NEXT_PUBLIC_KAKAO_JS_KEY` = 카카오 개발자 콘솔 > 내 애플리케이션 > 앱 키 > **JavaScript 키**. 브라우저에 그대로 보이는 공개용 키라 `NEXT_PUBLIC_` 을 붙이는 유일한 값입니다 (REST API 키·Admin 키는 넣지 않음). 같은 콘솔 > 플랫폼 > **Web 사이트 도메인**에 `https://ani-where.vercel.app` 을 등록해야 지도가 뜹니다. 비우거나 도메인이 등록되지 않으면 `/map` 은 OpenStreetMap 지도로 대신 보입니다. 빌드 때 코드에 들어가므로 바꾼 뒤에는 다시 배포합니다.
 4. Deploy. 이후 `main` 에 push 하면 자동 배포됩니다. 데이터는 배포 없이도 10분마다 새로 읽습니다.
 5. Supabase 를 쓴다면 `supabase/migrations/002_public_views.sql` 이 먼저 적용돼 있어야 합니다 (`popups_current`, `popup_ratings` 뷰). 없으면 자동으로 GitHub 데이터로 내려가고 화면 아래에 이유가 표시됩니다.
 
@@ -109,22 +117,24 @@ npm run start -- -p 3100
 ```
 web/
 ├─ app/
-│  ├─ layout.tsx          헤더·푸터(데이터 출처)·설치 안내·SW 등록
-│  ├─ page.tsx            / 찾기
+│  ├─ layout.tsx          메뉴바(Gnb)·바닥글(데이터 출처)·설치 안내·SW 등록 · 글꼴(Jua · 나눔스퀘어라운드 · Pretendard)
+│  ├─ page.tsx            / 홈 (스토리 · 랭킹 · 신규 · 이번 주 · 사전예약)
+│  ├─ map/page.tsx        /map 지도로 보기
+│  ├─ list/page.tsx       /list 리스트로 보기
 │  ├─ popup/[id]/page.tsx 상세 (generateMetadata: 제목·설명·OG 포스터)
 │  ├─ this-week/page.tsx  이번 주
 │  ├─ offline/page.tsx    오프라인 안내
 │  ├─ not-found.tsx       404 안내
 │  ├─ manifest.ts         웹 앱 매니페스트
 │  └─ icon.png, apple-icon.png
-├─ components/            PopupBrowser(검색·탭·칩, 클라이언트), PopupCard, InstallHint, SWRegister …
+├─ components/            Gnb · Footer · cards(포스터 카드) · HScroll · home/(랭킹·신규·이번 주) · browse/(필터·리스트·지도) · detail/Gallery …
 ├─ lib/
 │  ├─ data.ts             데이터 읽기 (서버 전용, Supabase → GitHub 대체)
 │  └─ popup.ts            날짜·상태·지역 등 순수 함수
 ├─ public/
 │  ├─ sw.js               서비스 워커 (직접 작성)
 │  ├─ icons/              PWA 아이콘 (scripts/make_icons.py 로 생성)
-│  └─ logo.png, poster-placeholder.svg
+│  └─ logo_mint.png(앱 static/ 과 같은 파일), logo_mint_sm.webp(메뉴바용), default_poster.webp(앱 기본 포스터를 줄인 것)
 └─ scripts/make_icons.py  ../static/logo_mint.png 에서 아이콘 만들기 (Pillow, scipy)
 ```
 

@@ -3,7 +3,7 @@
  * - 화면(HTML): 네트워크 먼저, 실패하면 저장된 화면 → 그것도 없으면 /offline
  * - 바꿀 때는 VERSION 을 올린다. activate 때 예전 캐시를 지운다.
  */
-const VERSION = "v1";
+const VERSION = "v2"; // v2: 앱과 같은 화면(홈·지도·리스트)으로 바꾸며 기본 포스터·로고 파일이 바뀜
 const STATIC_CACHE = `aniwhere-static-${VERSION}`;
 const PAGE_CACHE = `aniwhere-pages-${VERSION}`;
 const IMAGE_CACHE = `aniwhere-images-${VERSION}`;
@@ -13,8 +13,8 @@ const PRECACHE = [
   OFFLINE_URL,
   "/manifest.webmanifest",
   "/icons/icon-192.png",
-  "/logo.png",
-  "/poster-placeholder.svg",
+  "/logo_mint_sm.webp",
+  "/default_poster.webp",
 ];
 const MAX_IMAGES = 150;
 const MAX_PAGES = 60;
@@ -56,7 +56,7 @@ async function cacheFirst(request, cacheName, max) {
     return res;
   } catch (err) {
     if (request.destination === "image") {
-      const ph = await caches.match("/poster-placeholder.svg");
+      const ph = await caches.match("/default_poster.webp");
       if (ph) return ph;
     }
     throw err;

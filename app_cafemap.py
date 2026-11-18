@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import base64
 import hashlib
 import json
 import os
@@ -36,6 +37,7 @@ from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo,
 from common import blog     # 블로그 후기 (네이버 블로그 검색 · API HUB)
 from common import season   # 계절 배경 그림 (내 캘린더, 11/18)
 from common import favwork  # 스토리 줄 '내가 관심있는 작품' (11/18)
+from common import cookie_bridge   # 브라우저 로그인 쿠키 → 서버 (배포에서 st.context.cookies 에 안 옴, 11/18)
 from common import links as links_check   # 참고 웹사이트 확인 (11/18 안정성)
 from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
@@ -72,6 +74,18 @@ GLOBAL_CSS = f"""
 img.pst, .apc img, .nh-item img, .cal-pop img, .adm-pcard img, .rv-pics img, .bxr .imgs img {{
   background: #F4F6F5 url('app/static/default_poster.png') center / cover no-repeat; }}
 img.rv-av, img.me-avimg, .auth-av img {{ background: #DDF3EC; }}
+/* 프로필 사진이 다 받아지기 전에는 동그라미 안이 반짝인다 (11/18 요청: 로딩이 보이게) */
+img.av-wait {{ background: linear-gradient(100deg, #DDF3EC 20%, #F4FBF8 45%, #DDF3EC 70%) !important;
+  background-size: 220% 100% !important; animation: av-shine 1.1s linear infinite; }}
+@keyframes av-shine {{ from {{ background-position: 120% 0; }} to {{ background-position: -120% 0; }} }}
+.av-preview {{ display: flex; align-items: center; gap: 12px; margin: 4px 0 10px; }}
+.av-preview img {{ width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-soft); }}
+.av-preview span {{ font-size: .8rem; color: #6B7672; }}
+/* 물어보기 '더보기' 로 온 리스트: 위에 결과 표시 (11/18) */
+.st-key-ask_only_bar {{ background: var(--accent-soft); border: 1px solid #BFEDE3; border-radius: 12px; padding: 6px 12px; margin: 4px 0 8px; }}
+.ask-only {{ font-size: .9rem; color: #26302D; display: flex; align-items: center; gap: 6px; }}
+.ask-only .mi {{ color: var(--accent-deep); font-size: 1.1rem; }}
+.ask-only span {{ color: var(--accent-deep); font-weight: 800; }}
 /* 긴 행사명(「○○○」 팝업스토어 in 홍대 2호점 …)이 모바일에서 화면 밖으로 나가지 않게 */
 .dtitle, .dcafe, .daddr, .nh-name, .apc-cafe, .apc-addr {{ overflow-wrap: anywhere; }}
 /* 포인트 컬러 변수 (map-template.html 과 같은 값). 지도·등록하기 버튼 등이 쓴다 */
@@ -568,8 +582,12 @@ def _member() -> dict | None:
     # 배포(Streamlit Cloud)에서는 새로고침해도 예전 세션에 다시 붙어 '손님' 기억이 남아 로그인이 안 됐다 (11/18).
     # 방금 로그아웃한 세션(_logged_out)은 다시 보지 않는다 (지운 쿠키가 남아 있어도 되살리지 않게)
     if not key and not st.session_state.get("_logged_out"):
+        # 서버가 받은 쿠키가 먼저, 없으면 브라우저에서 읽어 넘겨준 값(cookie_bridge).
+        # ANIWHERE_COOKIE_BRIDGE_ONLY=1 이면 서버 쿠키를 무시한다 (배포처럼 쿠키가 안 오는 상황을 로컬에서 시험)
+        raw = None if os.getenv("ANIWHERE_COOKIE_BRIDGE_ONLY") else st.context.cookies.get(auth.COOKIE)
+        raw = raw or st.session_state.get(cookie_bridge.KEY)
         try:
-            sess = auth.read_session(st.context.cookies.get(auth.COOKIE))
+            sess = auth.read_session(raw)
         except auth.AuthError:            # AUTH_SECRET 이 없으면 로그인 기능 자체가 꺼진 상태
             sess = None
         key = sess["k"] if sess else ""
@@ -611,8 +629,10 @@ def _avatar_url(value) -> str:
 
 
 def _avatar_img(value, size: int = 28, cls: str = "av") -> str:
-    return (f'<img class="{cls}" src="{escape(_avatar_url(value))}" alt="" width="{size}" height="{size}" '
-            f'referrerpolicy="no-referrer" onerror="this.src=\'{DEFAULT_AVATAR}\'">')
+    # 사진이 다 받아지기 전에는 동그라미 안이 반짝인다(.av-wait), 다 받으면 멈춘다 (11/18 요청: 로딩이 보이게)
+    return (f'<img class="{cls} av-wait" src="{escape(_avatar_url(value))}" alt="" width="{size}" height="{size}" '
+            f'referrerpolicy="no-referrer" loading="lazy" decoding="async" onload="this.classList.remove(\'av-wait\')" '
+            f'onerror="this.classList.remove(\'av-wait\');this.src=\'{DEFAULT_AVATAR}\'">')
 
 
 def _member_by_tag() -> dict[str, dict]:
@@ -4055,6 +4075,7 @@ def _reset_filters() -> None:
     처음 값을 직접 넣어 화면까지 새로 그리게 한다.
     """
     st.session_state.update({"f_query": "", "f_work": "전체", "f_span": "진행중 + 예정", "res_only": False})
+    st.session_state.pop("ask_only", None)
     st.session_state.pop(f"f_date_{st.session_state.get('date_ver', 0)}", None)
     st.session_state["date_ver"] = st.session_state.get("date_ver", 0) + 1
     for k in [k for k in st.session_state if str(k).startswith("filter_chars_")]:
@@ -4275,6 +4296,7 @@ def _gnb_go(view: str) -> None:
     st.session_state["box_view"] = view == "box"
     st.session_state["home_view"] = view == "home"      # 홈 (11/18 요청)
     st.session_state["res_only"] = False                # 홈 '사전예약 더보기' 로 건 조건은 탭을 옮기면 푼다
+    st.session_state.pop("ask_only", None)              # 물어보기 '더보기' 로 건 조건도
     if view not in ("cal", "box", "home"):
         st.session_state["list_only"] = view == "list"
     st.session_state["selected"] = None
@@ -5117,6 +5139,9 @@ def page_map() -> None:
              "fav": bool(st.session_state.get("fav_only")) if wide else False,
              "reserve": bool(st.session_state.get("res_only")) if wide else False}
     view = _filter_view(df, fcond)
+    ask_only = st.session_state.get("ask_only") if wide else None
+    if ask_only:          # 물어보기 '더보기': 그 답에서 찾은 팝업 전부 (검색 조건 대신)
+        view = df[df["entry_id"].astype(str).isin(set(ask_only["ids"]))]
     if wide:
         view = _sort_view(view, st.session_state.get("sort", SORTS[0]))
     else:
@@ -5151,6 +5176,12 @@ def page_map() -> None:
     else:
         left = contextlib.nullcontext()
     with left:
+        if ask_only:     # 물어보기 '더보기' 로 왔다는 표시 + 풀기
+            with st.container(horizontal=True, key="ask_only_bar", vertical_alignment="center"):
+                st.markdown(f'<div class="ask-only">{_mi("forum")} 물어보기 결과 · <b>{escape(ask_only["label"])}</b> '
+                            f'<span>{len(view)}건</span></div>', unsafe_allow_html=True)
+                st.button("전체 팝업 보기", icon=":material/close:", key="ask_only_clear", type="tertiary",
+                          on_click=lambda: st.session_state.pop("ask_only", None))
         # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
         with st.container(key="listtools"):
             # 정렬 칸 위에 보기 전환 아이콘이 있어서, 팔로우·지역 고르기는 아래(정렬과 같은 줄)에 맞춘다
@@ -6334,7 +6365,8 @@ def _set_cookie(value: str, days: int) -> None:
     components.html(f"<script>{js}</script>", height=0)
 
 
-_USER_STATE = ("_ntf_read", "_ntf_cookie", "recent_seen", "box_tab", "_fav_cache", "_member_cache", "_avatar_cache")
+_USER_STATE = ("_ntf_read", "_ntf_cookie", "recent_seen", "box_tab", "_fav_cache", "_member_cache", "_avatar_cache",
+               cookie_bridge.KEY)
 
 
 def _clear_user_state() -> None:
@@ -6812,6 +6844,10 @@ def _my_account(row: dict) -> None:
         st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
         n = st.session_state.get("_av_n", 0)
         up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n}")
+        if up is not None:     # 고른 사진을 바로 보여 준다 (저장 전 미리보기, 11/18 요청: 기다리는 게 보이게)
+            st.markdown(f'<div class="av-preview"><img src="data:{up.type or "image/png"};base64,'
+                        f'{base64.b64encode(up.getvalue()).decode()}" alt=""><span>이 사진으로 바뀌어요 — 가운데를 동그랗게 잘라요</span></div>',
+                        unsafe_allow_html=True)
         ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 사진 설정'을 누르면 바로 지워요",
                                key=f"av_agree_{n}")
         c1, c2 = st.columns(2)
@@ -6821,7 +6857,8 @@ def _my_account(row: dict) -> None:
                 st.warning("5MB 이하 사진만 올릴 수 있어요.", icon=":material/error:")
             else:
                 try:
-                    auth.set_avatar(members, row, images.save(up.name, data))
+                    with st.spinner("사진을 줄여서 저장하는 중…"):
+                        auth.set_avatar(members, row, images.save_avatar(up.name, data))
                     _avatar_saved("프로필 사진을 바꿨어요.")
                 except ValueError as err:
                     st.warning(str(err), icon=":material/error:")
@@ -6831,7 +6868,12 @@ def _my_account(row: dict) -> None:
         if row.get("provider") in ("kakao", "naver"):
             st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.')
     with st.form("rename", border=False):
-        nick = st.text_input("닉네임 바꾸기", value=row.get("nickname", ""), max_chars=auth.MAX_NICK)
+        cur_nick = str(row.get("nickname", "") or "")
+        if len(cur_nick) > auth.MAX_NICK:      # 예전(16자까지) 닉네임: 칸에는 10자까지만 들어간다 (11/18 10자 제한)
+            st.caption(f"지금 닉네임이 {auth.MAX_NICK}자를 넘어요. 저장하면 {auth.MAX_NICK}자 안으로 바뀌어요.")
+        nick = st.text_input("닉네임 바꾸기", value=cur_nick[:auth.MAX_NICK], max_chars=auth.MAX_NICK,
+                             placeholder=_suggest_nick(),
+                             help="칸을 비워 두고 저장하면 흐리게 보이는 랜덤 닉네임으로 바꿔요 (가입할 때와 같게)")
         # 저장 · 로그아웃을 한 줄에 반반 (11/18 요청). 폼 안에는 제출 버튼만 둘 수 있어서 로그아웃도 제출 버튼으로
         b1, b2 = st.columns(2)
         saved = b1.form_submit_button("저장", icon=":material/check:", type="primary", width="stretch")
@@ -6840,10 +6882,12 @@ def _my_account(row: dict) -> None:
             st.session_state["flash"] = ("로그아웃했어요.", ":material/logout:")
             st.rerun()
         if saved:
+            # 비워 두고 저장 → 랜덤 닉네임 (11/18 요청). 그사이 누가 먼저 썼으면 _suggest_nick 이 새로 짓는다
+            nick = (nick or "").strip() or _suggest_nick(final=True)
             try:
                 auth.rename(members, row, nick)
                 st.session_state.pop("_member_cache", None)
-                st.session_state["flash"] = ("닉네임을 바꿨어요.", ":material/check_circle:")
+                st.session_state["flash"] = (f"닉네임을 '{nick}'(으)로 바꿨어요.", ":material/check_circle:")
                 st.rerun()
             except auth.AuthError as e:
                 st.warning(str(e), icon=":material/error:")
@@ -6946,7 +6990,7 @@ def _auth_body() -> None:
                    else "프로필 사진은 선택이에요. 마이페이지에서 언제든 올릴 수 있어요.") + '</div>', unsafe_allow_html=True)
     # 폼으로 묶지 않는다: '약관 전체 동의' 가 아래 항목을 바로 바꿔야 해서 (11/18)
     with st.container(key="soc_signup"):
-        nick = st.text_input("닉네임 (선택)", value=ident.nickname, max_chars=auth.MAX_NICK,
+        nick = st.text_input("닉네임 (선택)", value=str(ident.nickname or "")[:auth.MAX_NICK], max_chars=auth.MAX_NICK,
                              placeholder=_suggest_nick(), help=NICK_HELP, key="soc_nick")
         consent = _consent_boxes("social", "soc", f"[선택] {label} 프로필 사진을 불러와 리뷰 옆에 보여 줘요 (사진 주소 저장, "
                                  "마이페이지에서 언제든 지울 수 있어요)" if ident.avatar else None, all_toggle=True)
@@ -8020,7 +8064,10 @@ def _ask_panel_send(question: str) -> None:
             cards = [_ask_card(i, rows[i], res.distances.get(i)) for i in used[:limit] if i in rows]
             # 검색 질문은 '네, N건 있어요' 를 말풍선으로 (규칙(의도) 질문은 그 안내 문장)
             say = res.summary if not res.query.intent else (res.text or "")
+            all_ids = [str(h.row.get("entry_id")) for h in res.hits]
+            more = {"ids": all_ids, "label": q[:40]} if len(all_ids) > len(cards) else None
             chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards, "say": say, "links": list(res.links),
+                         "more": more,
                          "head": "" if not res.query.intent else (res.summary or _ASK_HEADS.get(res.query.intent, ""))
                          # 내 주변: '· 내 위치에서 가까운 순 N건 팝업이에요' 처럼 몇 건인지 붙인다 (11/18 요청)
                          + (f" {len(res.hits)}건 팝업이에요" if res.query.intent == "near" and not res.summary else "")})
@@ -8131,6 +8178,14 @@ def _ask_panel_submit(prefix: str = "apn") -> None:
     st.session_state[f"{prefix}_q"] = ""
 
 
+def _ask_show_all(more: dict) -> None:
+    """물어보기 답의 팝업 전부를 리스트로 보기에 (다른 검색 조건은 풀고, 위에 '물어보기 결과' 표시 · 해제 버튼)."""
+    _reset_filters()
+    _gnb_go("list")
+    st.session_state["ask_only"] = {"ids": list(more.get("ids") or []), "label": str(more.get("label") or "")}
+    st.session_state["list_n"] = LIST_PAGE
+
+
 def _ask_panel_open(cafe_id: str) -> None:
     st.session_state["selected"] = str(cafe_id)
     st.session_state["scroll_top"] = True
@@ -8220,6 +8275,14 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                         if st.button(f"{card['work']} 상세 보기", key=key):
                             _ask_panel_open(cid)
                             st.rerun(scope="app")
+            more = m.get("more")
+            if more and m.get("ids"):
+                # 카드는 5건까지만 → 나머지는 리스트로 보기에서 다 (11/18 요청)
+                with st.container(key=f"{prefix}_more_{n}"):
+                    # 조건 바꾸기는 콜백에서 (입력칸이 그려지기 전에 돌아야 값을 바꿀 수 있다), 그다음 앱 전체를 다시 그린다
+                    if st.button(f"{len(more['ids']) - len(m['ids'])}건 더보기 · 리스트로 보기", icon=":material/add:",
+                                 key=f"{prefix}_morebtn_{n}", width="stretch", on_click=_ask_show_all, args=(more,)):
+                        st.rerun() if in_dialog else st.rerun(scope="app")
     # 새 답이 생기면 대화창을 마지막 대화의 처음(방금 한 질문)이 맨 위에 오게 내린다 (11/18 요청). 대화 수가 바뀔 때만
     n_chat = len(st.session_state.get("ask_chat", []))
     # 지도 ↔ 리스트로 옮겨 대화창을 새로 그릴 때도 마지막 대화로 (11/18 요청). 같은 화면에서 대화 수가 그대로면
@@ -8451,6 +8514,9 @@ PAGES = {
     "guide": st.Page(page_guide, title="사용자 튜토리얼 · ANI:WHERE", icon=":material/help:", url_path="guide"),
     "design": st.Page(page_design, title="디자인 시스템 · ANI:WHERE", icon=":material/palette:", url_path="design"),
 }
+# 손님이면(방금 로그아웃한 경우는 빼고) 브라우저의 로그인 쿠키를 읽어 서버로 넘겨주는 부품을 둔다 (11/18 배포 로그인 유지)
+if not st.session_state.get("member_key") and not st.session_state.get("_logged_out"):
+    cookie_bridge.mount(auth.COOKIE)
 try:
     st.navigation(list(PAGES.values()), position="hidden").run()
     _footer()          # 바닥글은 모든 페이지 맨 아래에 (11/18 요청)
