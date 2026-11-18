@@ -1849,7 +1849,9 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
     if not wide:
         # 모바일 지도보기: 필터 버튼을 리스트로 보기와 같은 높이에 두고, 비는 자리에 '마지막 업데이트' 줄을 왼쪽에 붙인다 (11/18 요청)
         st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: var(--aw-map-fgap, 21px) !important; }"
-                    " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }</style>",
+                    " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }"
+                    # PC 지도보기: '마지막 업데이트' 줄을 메뉴바와 지도 사이 위아래 가운데로 (지도 자리는 그대로, 11/18 요청)
+                    "@media (min-width: 641px) { [data-testid=\"stElementContainer\"]:has(.upd) { transform: translateY(-11px); } }</style>",
                     unsafe_allow_html=True)
     tools = st.container(horizontal=True, key="view_tools")
     with tools:
@@ -3335,6 +3337,8 @@ def _ntf_cell(nid: str, html: str, cafe_id: str | None, poster: str | None = Non
 
 
 def _gnb(current: dict | None, on_map: bool = True) -> None:
+    if st.session_state.pop("_cookie_clear", None):     # 방금 로그아웃·탈퇴 → 로그인 쿠키를 지운다
+        _set_cookie("", 0)
     if st.session_state.get("_cookie_pending"):     # 방금 로그인했으면 쿠키를 심는다 (메인으로 옮긴 뒤에도)
         _set_cookie(st.session_state.pop("_cookie_pending"), auth.SESSION_DAYS)
     msg = st.session_state.pop("_need_login", None)
@@ -5107,7 +5111,8 @@ def _set_cookie(value: str, days: int) -> None:
     """로그인 쿠키를 브라우저에 심는다 (다음에 열어도 로그인 유지). 서버는 st.context.cookies 로 읽는다."""
     secure = "; Secure" if auth.base_url().startswith("https") else ""
     js = (f"window.parent.document.cookie = {json.dumps(auth.COOKIE + '=' + value)} + "
-          f"'; path=/; max-age={days * 86400}; SameSite=Lax{secure}';")
+          f"'; path=/; max-age={days * 86400}; SameSite=Lax{secure}"
+          + ("; expires=Thu, 01 Jan 1970 00:00:00 GMT" if days <= 0 else "") + "';")
     components.html(f"<script>{js}</script>", height=0)
 
 
@@ -5317,7 +5322,10 @@ def _move_guest_favs(row: dict) -> int:
 
 
 def _logout() -> None:
-    _set_cookie("", 0)
+    # 여기서 바로 쿠키 지우는 스크립트를 그리면 뒤따르는 st.rerun() 에 묻혀 브라우저에 닿지 않는다 →
+    # 새로고침하면 남은 쿠키로 다시 로그인됐다 (11/18). 다시 그린 화면의 메뉴바(_gnb)에서 지운다
+    st.session_state["_cookie_clear"] = True
+    st.session_state.pop("_cookie_pending", None)
     st.session_state.update({"member_key": "", "_logged_out": True})
     st.session_state.pop("_member_cache", None)
     st.session_state.pop("_fav_cache", None)
