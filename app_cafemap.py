@@ -36,6 +36,7 @@ from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo,
 from common import blog     # 블로그 후기 (네이버 블로그 검색 · API HUB)
 from common import season   # 계절 배경 그림 (내 캘린더, 11/18)
 from common import favwork  # 스토리 줄 '내가 관심있는 작품' (11/18)
+from common import cookie_bridge   # 브라우저 로그인 쿠키 → 서버 (배포에서 st.context.cookies 에 안 옴, 11/18)
 from common import links as links_check   # 참고 웹사이트 확인 (11/18 안정성)
 from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
@@ -568,8 +569,12 @@ def _member() -> dict | None:
     # 배포(Streamlit Cloud)에서는 새로고침해도 예전 세션에 다시 붙어 '손님' 기억이 남아 로그인이 안 됐다 (11/18).
     # 방금 로그아웃한 세션(_logged_out)은 다시 보지 않는다 (지운 쿠키가 남아 있어도 되살리지 않게)
     if not key and not st.session_state.get("_logged_out"):
+        # 서버가 받은 쿠키가 먼저, 없으면 브라우저에서 읽어 넘겨준 값(cookie_bridge).
+        # ANIWHERE_COOKIE_BRIDGE_ONLY=1 이면 서버 쿠키를 무시한다 (배포처럼 쿠키가 안 오는 상황을 로컬에서 시험)
+        raw = None if os.getenv("ANIWHERE_COOKIE_BRIDGE_ONLY") else st.context.cookies.get(auth.COOKIE)
+        raw = raw or st.session_state.get(cookie_bridge.KEY)
         try:
-            sess = auth.read_session(st.context.cookies.get(auth.COOKIE))
+            sess = auth.read_session(raw)
         except auth.AuthError:            # AUTH_SECRET 이 없으면 로그인 기능 자체가 꺼진 상태
             sess = None
         key = sess["k"] if sess else ""
@@ -6334,7 +6339,8 @@ def _set_cookie(value: str, days: int) -> None:
     components.html(f"<script>{js}</script>", height=0)
 
 
-_USER_STATE = ("_ntf_read", "_ntf_cookie", "recent_seen", "box_tab", "_fav_cache", "_member_cache", "_avatar_cache")
+_USER_STATE = ("_ntf_read", "_ntf_cookie", "recent_seen", "box_tab", "_fav_cache", "_member_cache", "_avatar_cache",
+               cookie_bridge.KEY)
 
 
 def _clear_user_state() -> None:
@@ -8451,6 +8457,9 @@ PAGES = {
     "guide": st.Page(page_guide, title="사용자 튜토리얼 · ANI:WHERE", icon=":material/help:", url_path="guide"),
     "design": st.Page(page_design, title="디자인 시스템 · ANI:WHERE", icon=":material/palette:", url_path="design"),
 }
+# 손님이면(방금 로그아웃한 경우는 빼고) 브라우저의 로그인 쿠키를 읽어 서버로 넘겨주는 부품을 둔다 (11/18 배포 로그인 유지)
+if not st.session_state.get("member_key") and not st.session_state.get("_logged_out"):
+    cookie_bridge.mount(auth.COOKIE)
 try:
     st.navigation(list(PAGES.values()), position="hidden").run()
     _footer()          # 바닥글은 모든 페이지 맨 아래에 (11/18 요청)
