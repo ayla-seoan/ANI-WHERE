@@ -564,12 +564,17 @@ def _member() -> dict | None:
     if cached and cached[0] == run:
         return cached[1]
     key = st.session_state.get("member_key")
-    if key is None and not st.session_state.get("_logged_out"):
+    # 손님(빈 값)이어도 쿠키를 다시 본다: 간편 로그인 작은 창에서 로그인하면 원래 창은 쿠키만 새로 받는다.
+    # 배포(Streamlit Cloud)에서는 새로고침해도 예전 세션에 다시 붙어 '손님' 기억이 남아 로그인이 안 됐다 (11/18).
+    # 방금 로그아웃한 세션(_logged_out)은 다시 보지 않는다 (지운 쿠키가 남아 있어도 되살리지 않게)
+    if not key and not st.session_state.get("_logged_out"):
         try:
             sess = auth.read_session(st.context.cookies.get(auth.COOKIE))
         except auth.AuthError:            # AUTH_SECRET 이 없으면 로그인 기능 자체가 꺼진 상태
             sess = None
         key = sess["k"] if sess else ""
+        if key and st.session_state.get("member_key") == "":
+            _clear_user_state()           # 손님일 때 기억한 북마크·알림 등을 비우고 회원 것으로
         st.session_state["member_key"] = key
     row = auth.find(members, key) if key else None
     st.session_state["_member_cache"] = (run, row)
