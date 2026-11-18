@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { PLACEHOLDER_POSTER, periodDot, periodLong, periodSlash, regionColor, stateOf, type Item } from "@/lib/popup";
 import { StoreIcon } from "./Icons";
+import BookmarkButton from "./member/BookmarkButton";
 
 // 포스터는 CSS 배경 두 겹으로 그린다 (앱과 같은 방법): 포스터가 깨지거나 없으면 아래 겹의 기본 포스터가 보인다.
 // 그래서 서버 컴포넌트에서도 JS 없이 깨진 그림 아이콘이 안 보인다.
@@ -40,28 +41,31 @@ export function AreaBadge({ area, city }: { area: string; city: string }) {
 export function PosterCard({ p, today }: { p: Item; today: string }) {
   const s = stateOf(p, today);
   return (
-    <Link href={`/popup/${p.id}`} className="pcard-link" aria-label={`${p.work} ${p.name}`} prefetch={false}>
-      <div className="pcard" style={posterBg(p.poster)}>
-        <AreaOnPoster area={p.area} city={p.city} />
-        <span className={`state ${s.color}`}>{s.label}</span>
-        <div className="info">
-          <div className="t">{p.work}</div>
-          <div className="s">
-            <StoreIcon />
-            <span>{p.name}</span>
-          </div>
-          <div className="d">
-            <span className="d-long">{periodLong(p)}</span>
-            <span className="d-short">{periodSlash(p)}</span>
-          </div>
-          {p.chip && (
-            <div className="chips short">
-              <span className={`chip${p.chipTag ? " tag" : ""}`}>{p.chip}</span>
+    <div className="pcard-wrap">
+      <Link href={`/popup/${p.id}`} className="pcard-link" aria-label={`${p.work} ${p.name}`} prefetch={false}>
+        <div className="pcard" style={posterBg(p.poster)}>
+          <AreaOnPoster area={p.area} city={p.city} />
+          <span className={`state ${s.color}`}>{s.label}</span>
+          <div className="info">
+            <div className="t">{p.work}</div>
+            <div className="s">
+              <StoreIcon />
+              <span>{p.name}</span>
             </div>
-          )}
+            <div className="d">
+              <span className="d-long">{periodLong(p)}</span>
+              <span className="d-short">{periodSlash(p)}</span>
+            </div>
+            {p.chip && (
+              <div className="chips short">
+                <span className={`chip${p.chipTag ? " tag" : ""}`}>{p.chip}</span>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </Link>
+      </Link>
+      <BookmarkButton cafeId={p.id} />
+    </div>
   );
 }
 
@@ -81,18 +85,21 @@ export function HomeCard({
 }) {
   const s = stateOf(p, today);
   return (
-    <Link href={`/popup/${p.id}`} className={`hc${tall ? " tall" : ""}`} prefetch={false}>
-      <div className="hcp" style={posterBg(p.poster)}>
-        {badge && <span className={`hcbadge${badge.startsWith("사전예약") ? " res" : ""}`}>{badge}</span>}
-        {rank ? <span className="hcrank">{rank}</span> : null}
-      </div>
-      <div className="hct">{p.work}</div>
-      <div className="hcd">{periodDot(p)}</div>
-      <div className="hcchips">
-        {p.area && <span>{p.area}</span>}
-        <span className={`st ${s.color}`}>{s.label}</span>
-      </div>
-    </Link>
+    <div className={`hc-wrap${tall ? " tall" : ""}`}>
+      <Link href={`/popup/${p.id}`} className={`hc${tall ? " tall" : ""}`} prefetch={false}>
+        <div className="hcp" style={posterBg(p.poster)}>
+          {badge && <span className={`hcbadge${badge.startsWith("사전예약") ? " res" : ""}`}>{badge}</span>}
+          {rank ? <span className="hcrank">{rank}</span> : null}
+        </div>
+        <div className="hct">{p.work}</div>
+        <div className="hcd">{periodDot(p)}</div>
+        <div className="hcchips">
+          {p.area && <span>{p.area}</span>}
+          <span className={`st ${s.color}`}>{s.label}</span>
+        </div>
+      </Link>
+      <BookmarkButton cafeId={p.id} variant="row" />
+    </div>
   );
 }
 

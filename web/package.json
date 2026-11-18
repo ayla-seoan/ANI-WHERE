@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:ask": "tsc lib/ask.ts lib/popup.ts scripts/ask_check.ts --outDir .ask-check --module commonjs --target es2020 --esModuleInterop --skipLibCheck --types node && node .ask-check/scripts/ask_check.js"
+    "test:ask": "tsc lib/ask.ts lib/popup.ts scripts/ask_check.ts --outDir .ask-check --module commonjs --target es2020 --esModuleInterop --skipLibCheck --types node && node .ask-check/scripts/ask_check.js",
+    "test:auth": "tsc lib/guard.ts lib/nickrule.ts lib/server/sign.ts lib/server/nick.ts scripts/auth_check.ts --outDir .auth-check --module commonjs --target es2020 --esModuleInterop --resolveJsonModule --skipLibCheck --types node && node .auth-check/scripts/auth_check.js"
   },
   "dependencies": {
     "next": "15.5.29",

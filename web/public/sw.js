@@ -3,7 +3,7 @@
  * - 화면(HTML): 네트워크 먼저, 실패하면 저장된 화면 → 그것도 없으면 /offline
  * - 바꿀 때는 VERSION 을 올린다. activate 때 예전 캐시를 지운다.
  */
-const VERSION = "v2"; // v2: 앱과 같은 화면(홈·지도·리스트)으로 바꾸며 기본 포스터·로고 파일이 바뀜
+const VERSION = "v3"; // v3: 회원 기능 — 로그인·내 캘린더 화면은 저장하지 않는다 (v2: 앱과 같은 화면, 기본 포스터·로고 바뀜)
 const STATIC_CACHE = `aniwhere-static-${VERSION}`;
 const PAGE_CACHE = `aniwhere-pages-${VERSION}`;
 const IMAGE_CACHE = `aniwhere-images-${VERSION}`;
@@ -88,6 +88,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.origin !== self.location.origin) return;
+
+  // 로그인 · 가입 · 내 캘린더는 회원 개인 화면이라 저장하지 않는다 (공용 기기에서 오프라인으로 남지 않게)
+  if (request.mode === "navigate" && /^\/(login|auth|calendar)(\/|$)/.test(url.pathname)) return;
 
   // 화면 이동 (주소창·링크로 새 페이지 열기)
   if (request.mode === "navigate") {

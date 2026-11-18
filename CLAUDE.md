@@ -65,7 +65,10 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
   - 평가 데이터는 `DATA_ASOF` 전 기록으로 고정돼 있다. 새 데이터로 평가하려면 날짜를 바꾸고 그 사실을 기록한다.
 - `docs/metrics-log.md` · `docs/ask-eval.md` · `docs/qa-results.md` · `docs/user-test/report.md` 는 날짜별로 **쌓기만** 한다.
 - 저장소 모드는 `local | sheets | supabase`. Supabase 쓰기 실패는 `StorageWriteError` 로 올라온다 (조용히 로컬에 쓰지 않음). 표·정책을 바꾸면 `supabase/migrations/` 에 **새 번호 파일**을 만들고 `db.md` 를 고친다.
-- 공개 웹(`web/`)은 읽기 전용. Supabase 키는 서버 코드에서만 쓰고 `NEXT_PUBLIC_` 으로 내보내지 않는다.
+- 공개 웹(`web/`, Vercel)도 회원 기능(로그인·북마크·리뷰·닉네임)을 쓴다. 회원 데이터 쓰기는 **서버 코드(서버 액션·route handler)에서만**, Supabase **anon 키**로만 한다 (service_role 금지). Streamlit 과 같은 표·같은 규칙(append-only, `common/auth.py` · `review.py` · `guard.py` 를 옮긴 `web/lib/server/`)을 지킨다.
+  - 비밀값(`SUPABASE_ANON_KEY` · `AUTH_SECRET` · 카카오/네이버 client secret)은 서버 환경변수에만. `NEXT_PUBLIC_` 은 카카오 지도 JS 키 하나뿐이다.
+  - 로그인 쿠키(`aw_session`) 모양을 바꾸면 Streamlit 쪽도 같이 바꾸고 `cd web && npm run test:auth` 로 두 쪽이 서로 읽히는지 확인한다.
+  - 회원 기능 시험은 실제 DB 가 아니라 `WEB_STORAGE=local` 로 (`web/scripts/e2e_member.py`). 등록하기 · 사진 올리기 · 관리자는 Streamlit 앱에만 있다 (웹은 링크).
 - MCP 서버(`mcp_server/`)는 읽기 전용. 쓰기 도구를 만들지 않고, `note`·`editor`·`source`·리뷰 본문·닉네임은 내보내지 않는다. stdout 에 print 하지 않는다.
 - 테스트·로컬 실행은 실제 `data/` 를 바꿀 수 있다 (앱을 켜면 Notion 동기화·기간 종료 처리가 돈다). 시험할 때는 `ANIWHERE_DATA_DIR` 로 임시 복사본을 쓴다 (`tests/e2e/conftest.py` 참고).
 - `.claude/hooks/` 가 커밋 전 검사(키·민감정보·코드 속 프롬프트)와 프롬프트 덮어쓰기 차단을 한다. 훅에 걸리면 우회하지 말고 원인을 고친다.

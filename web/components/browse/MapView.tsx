@@ -10,6 +10,7 @@ import DailyNote from "./DailyNote";
 import MapCanvas, { type Bounds } from "./MapCanvas";
 import NoResult from "./NoResult";
 import AskPanel from "../ask/AskPanel";
+import BookmarkButton from "../member/BookmarkButton";
 import AskFab from "../ask/AskFab";
 import { activeCount, applyCond, sortItems, useAreas, useCond, useFilterToggle } from "./filters";
 
@@ -121,6 +122,7 @@ export default function MapView({ items, today }: { items: Item[]; today: string
                         </span>
                       </span>
                     </Link>
+                    <BookmarkButton cafeId={p.id} variant="row" />
                     {p.lat !== null && (
                       <button
                         type="button"

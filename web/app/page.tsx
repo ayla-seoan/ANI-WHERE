@@ -7,7 +7,8 @@ import RankBanner from "@/components/home/RankBanner";
 import NewSection from "@/components/home/NewSection";
 import WeekCalendar from "@/components/home/WeekCalendar";
 import EmptyState from "@/components/EmptyState";
-import { EventIcon, HelpIcon, HourglassIcon, NewIcon } from "@/components/Icons";
+import { getMe, getMyFavs } from "@/lib/server/session";
+import { AddIcon, EventIcon, HelpIcon, HourglassIcon, NewIcon } from "@/components/Icons";
 
 export const revalidate = 600;
 
@@ -81,6 +82,11 @@ export default async function Home() {
     if (w && !posterOf.has(w) && p.images[0]) posterOf.set(w, p.images[0]);
   }
 
+  const me = await getMe();
+  const favs = new Set(await getMyFavs());
+  const marked = live
+    .filter((p) => favs.has(p.id))
+    .sort((a, b) => stateOf(a, today).rank - stateOf(b, today).rank || a.end.localeCompare(b.end));
   const top = rankTop(live, today).map(toItem);
   const fresh = [...liveItems].sort((a, b) => b.created.localeCompare(a.created));
   const monday = mondayOf(today);
@@ -94,32 +100,65 @@ export default async function Home() {
     <div className="home">
       <h1 className="sr-only">ANI:WHERE 홈 — 애니 팝업·콜라보 카페</h1>
 
-      <section className="stories" aria-labelledby="story-h">
-        <div className="story-head" id="story-h">
-          요즘 일정 많은 작품
-          <span
-            className="help"
-            tabIndex={0}
-            aria-label="지금 진행 중이거나 곧 열리는 팝업이 많은 작품이에요. 숫자는 그 작품의 팝업 수예요."
-          >
-            <HelpIcon />
-            <span className="tip">
-              지금 진행 중이거나 곧 열리는 팝업이 많은 작품이에요. 숫자는 그 작품의 팝업 수예요.
-            </span>
-          </span>
-        </div>
-        <HScroll className="story-row" label="요즘 일정 많은 작품">
-          {works.map((w) => (
-            <Link key={w} href={`/list?work=${encodeURIComponent(w)}`} className="story hot" prefetch={false}>
-              <span className="ring">
-                <span className="pic" style={posterBg(posterOf.get(w) ?? "")} />
-                <span className="cnt">{count.get(w)}</span>
+      {me ? (
+        // 회원: '북마크 팝업' — 내가 북마크한 (진행 중 · 예정) 팝업 하나에 동그라미 하나, 위에 지역, 아래 작품 (앱 render_stories)
+        <section className="stories" aria-labelledby="story-h">
+          <div className="story-head" id="story-h">
+            북마크 팝업
+            <span className="help" tabIndex={0}>
+              <HelpIcon />
+              <span className="tip">
+                내가 북마크한 팝업(진행 중 · 오픈 예정)이 여기에 모여요. 동그라미를 누르면 그 팝업으로 가요.
               </span>
-              <span className="nm">{w}</span>
+            </span>
+          </div>
+          <HScroll className="story-row" label="북마크 팝업">
+            <Link href="/list" className="story add" prefetch={false}>
+              <span className="ring">
+                <AddIcon />
+              </span>
+              <span className="nm">최애 추가하기</span>
             </Link>
-          ))}
-        </HScroll>
-      </section>
+            {!marked.length && <span className="story-empty">팝업을 북마크하면 여기에 모여요.</span>}
+            {marked.map((p) => (
+              <Link key={p.id} href={`/popup/${p.id}`} className="story mark" prefetch={false}>
+                <span className="ring">
+                  {p.area && <span className="rg">{p.area}</span>}
+                  <span className="pic" style={posterBg(p.images[0] ?? "")} />
+                </span>
+                <span className="nm">{p.work}</span>
+              </Link>
+            ))}
+          </HScroll>
+        </section>
+      ) : (
+        <section className="stories" aria-labelledby="story-h">
+          <div className="story-head" id="story-h">
+            요즘 일정 많은 작품
+            <span
+              className="help"
+              tabIndex={0}
+              aria-label="지금 진행 중이거나 곧 열리는 팝업이 많은 작품이에요. 숫자는 그 작품의 팝업 수예요."
+            >
+              <HelpIcon />
+              <span className="tip">
+                지금 진행 중이거나 곧 열리는 팝업이 많은 작품이에요. 숫자는 그 작품의 팝업 수예요.
+              </span>
+            </span>
+          </div>
+          <HScroll className="story-row" label="요즘 일정 많은 작품">
+            {works.map((w) => (
+              <Link key={w} href={`/list?work=${encodeURIComponent(w)}`} className="story hot" prefetch={false}>
+                <span className="ring">
+                  <span className="pic" style={posterBg(posterOf.get(w) ?? "")} />
+                  <span className="cnt">{count.get(w)}</span>
+                </span>
+                <span className="nm">{w}</span>
+              </Link>
+            ))}
+          </HScroll>
+        </section>
+      )}
 
       {top.length > 0 && <RankBanner items={top} today={today} />}
 
