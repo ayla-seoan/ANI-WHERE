@@ -335,14 +335,22 @@ def test_12_로고를_누르면_홈이_열리고_랭킹_카드로_상세에_간�
     open_list(page, app_url)
     page.locator(".st-key-home_brand button").click()
     expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
-    expect(page.locator(".story-head")).to_have_text("내가 관심있는 (북마크) 팝업")
+    expect(page.locator(".story-head")).to_have_text("내 최애 팝업")
     for title in ("실시간 인기 급상승 랭킹", "따끈따끈 신규 등록 팝업", "이번 주에 끝나는 팝업", "사전예약 팝업"):
         expect(page.locator(".home-h", has_text=title)).to_be_visible(timeout=LONG)
     expect(page.locator(".st-key-gnbtab_on_home")).to_be_visible()
-    rank = page.locator('[class*="st-key-card_hl_"]')
+    rank = page.locator(".hls-wrap .hl")
     expect(rank.first).to_be_visible(timeout=LONG)
     assert rank.count() <= 5
-    rank.first.click(position={"x": 40, "y": 40})
+    if rank.count() > 1:
+        # 목록 2위를 누르면 배너가 2위 장으로 (상세로 가지 않음)
+        rank.nth(1).click()
+        page.wait_for_function("(() => { const b = document.querySelector('.st-key-home_banner');"
+                               " return Math.round(b.scrollLeft / b.clientWidth) === 1; })()", timeout=LONG)
+        expect(page.locator(".aw-dots button.on")).to_have_count(1)
+        expect(page.locator(".st-key-home")).to_be_visible()
+    # 배너를 누르면 그 팝업 상세
+    page.locator('[class*="st-key-card_hb_"]').nth(1 if rank.count() > 1 else 0).click(position={"x": 120, "y": 120})
     expect(page.locator(".dtitle")).to_be_visible(timeout=LONG)
     # 리스트로 보기 탭으로 가면 홈이 아니다
     page.locator('[class*="st-key-gnbtab_"][class*="list"] button').click()
