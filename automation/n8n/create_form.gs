@@ -9,7 +9,7 @@
  *  - 응답이 쌓이는 구글 시트 + 응답 탭 이름을 '설문지 응답 시트1' 로 맞춤 (n8n 워크플로가 이 이름을 읽음)
  *  - '정리' 탭 + 첫 줄 제목 (참가자 · 버전 · 과업 · 성공 · 소요초 · 막힌 지점 · 메모 · 받은시각)
  *
- * 개인정보: 이메일 주소를 모으지 않고(로그인 요구도 끔), 이름 · 나이 · 연락처 문항이 없다. 참가자는 P1, P2 … 번호로만.
+ * 개인정보: 이메일 주소를 모으지 않고, 이름 · 나이 · 연락처 문항이 없다. 참가자는 P1, P2 … 번호로만.
  * 여러 번 실행하면 폼과 시트가 새로 하나씩 더 생긴다 (기존 것은 지우지 않는다).
  */
 function createSurveyForm() {
@@ -18,7 +18,6 @@ function createSurveyForm() {
     '진행자가 참가자 한 명이 끝날 때마다 한 번 냅니다. 참가자는 이름 대신 P1, P2 … 번호로만 적어 주세요.\n' +
     '도와주지 않고 휴대폰 스톱워치로 잽니다. 3분(180초)이 넘으면 실패로 처리돼요.');
   form.setCollectEmail(false);
-  form.setRequireLogin(false);
   form.setLimitOneResponsePerUser(false);
   form.setAllowResponseEdits(false);
   form.setProgressBar(true);
