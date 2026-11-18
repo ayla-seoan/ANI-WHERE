@@ -18,7 +18,7 @@
   .main.open { border-color: #56C2A7; background: #E6F6F0; }
   #panel { display: none; gap: 8px; }
   #panel.open { display: flex; }
-  .msg { font-size: 12.5px; color: #2E9C82; min-height: 0; margin-top: 4px; text-align: right; }
+  .msg { font-size: 11px; line-height: 1.35; color: #2E9C82; min-height: 0; margin-top: 4px; text-align: right; }
   .msg:empty { display: none; }
   /* 모바일에서 작품 이름 위에 겹쳐 펼칠 때: 뒤의 글자가 비치지 않게 흰 바탕 */
   body.overlay .row { background: #fff; border-radius: 10px; }
@@ -105,9 +105,14 @@ function link() {
   return u.href;
 }
 // 안내 문구를 띄우고, 길면 줄이 늘어난 만큼 칸 높이도 늘린다 (잘리지 않게)
+// 3초 보였다가 사라진다 (11/18 요청). 사라지면 칸 높이도 원래대로
+let sayTimer = null;
+function fit() { send("streamlit:setFrameHeight", { height: Math.max(34, document.body.scrollHeight) }); }
 function say(t) {
   document.getElementById("msg").textContent = t;
-  send("streamlit:setFrameHeight", { height: Math.max(34, document.body.scrollHeight) });
+  fit();
+  clearTimeout(sayTimer);
+  sayTimer = setTimeout(() => { document.getElementById("msg").textContent = ""; fit(); }, 3000);
 }
 
 async function copy(okText) {

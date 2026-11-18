@@ -2399,7 +2399,7 @@ iframe[src*="kakao_map"] {{
 .st-key-rv_subtabs button p {{ font-size:1rem !important; font-weight:700 !important; color:#9AA5A1 !important; }}
 .st-key-rv_subtabs [class*="st-key-rvsub_on_"] button {{ background:#fff !important; border-bottom-color:#26302D !important; }}
 .st-key-rv_subtabs [class*="st-key-rvsub_on_"] button p {{ color:#26302D !important; font-weight:800 !important; }}
-.blog-note {{ border:0; border-radius:12px; padding:11px 14px; text-align:center; font-size:.88rem; font-weight:600;
+.blog-note {{ border:0; border-radius:12px; padding:5px 14px; text-align:center; font-size:.76rem; font-weight:600;   /* 글자 작게·위아래 여백 반 (11/18 요청) */
   color:#fff; background:{MINT}; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:6px; }}
 .blog-note .mi {{ color:#fff; }}
 .blog-empty {{ color:#8A9592; font-size:.88rem; text-align:center; padding:28px 0; }}
@@ -2588,6 +2588,12 @@ _PIN_ICON_JS = """
     fitAsk();
     const btn = document.querySelector('.st-key-view_tools');      // 필터·보기 전환 아이콘 묶음
     const box = btn && btn.parentElement;                          // 원래 자리 (높이를 남겨 둔다)
+    if (!btn && document.querySelector('.st-key-mycal_mnav')) {
+      // 내 캘린더(아이콘 묶음이 없는 화면): 조금이라도 내려가면 글자 탭 대신 위에 붙는 아이콘 줄 (11/18 요청)
+      const m = document.querySelector('[data-testid="stMain"]') || document.scrollingElement;
+      document.documentElement.classList.toggle('aw-scrolled', (m ? m.scrollTop : 0) > 60);
+      return;
+    }
     if (!btn || !box) return;
     const r = box.getBoundingClientRect();
     if (!r.width) return;                       // 상세 화면처럼 숨어 있으면 그대로
@@ -3474,8 +3480,8 @@ MYCAL_CSS = """
 /* 알림 받은 내역 = 데일리 팝업 노트 모양: 둥근 포스터 · 작은 태그 · 굵은 이름 한 줄, 점선으로 잇기 */
 .st-key-ntf_box { padding: 12px 12px !important; }
 .st-key-ntf_box .mc-title { font-family: inherit; text-align: center; color: var(--accent-deep, #0d9488); font-size: .82rem;
-  font-weight: 800; margin: 0 auto 4px; display: table; border: 1.5px solid var(--accent); border-radius: 999px;
-  padding: 3px 12px; background: #fff; }   /* 글자만 감싸는 포인트 색 테두리 (11/18 요청) */
+  font-weight: 800; margin: 0 auto 4px; display: table; border: 0; border-radius: 999px;
+  padding: 3px 12px; background: var(--accent-soft, #E6F7F4); }   /* 테두리 대신 연한 포인트 색 배경 (11/18 요청) */
 .st-key-ntf_box .mc-sub { text-align: center; font-size: .7rem; line-height: 1.4; margin-bottom: 6px; }
 .st-key-ntf_box .nh-day { font-size: .7rem; margin: 12px 0 6px; }
 .st-key-ntf_box .nh-item { background: transparent; padding: 0 0 12px; gap: 10px; border-radius: 0; position: relative; }
@@ -3571,7 +3577,17 @@ def render_my_calendar_view() -> None:
     with st.container(horizontal=True, horizontal_alignment="right", key="mycal_mnav"):
         st.button("", icon=":material/format_list_bulleted:", key="mycal_to_list", on_click=_gnb_go, args=("list",))
         st.button("", icon=":material/map:", key="mycal_to_map", on_click=_gnb_go, args=("map",))
-    st.markdown("<style>@media (min-width: 641px) { .st-key-mycal_mnav { display: none !important; } }</style>",
+    # 모바일도 리스트·지도 보기와 같은 형식 (11/18 요청): 맨 위에서는 메뉴바 글자 탭만, 스크롤하면 위에 붙는 아이콘 줄
+    st.markdown("<style>@media (min-width: 641px) { .st-key-mycal_mnav { display: none !important; } }"
+                "@media (max-width: 640px) {"
+                " html:not(.aw-scrolled) .st-key-mycal_mnav { display: none !important; }"
+                " html.aw-scrolled .st-key-mycal_mnav { position: fixed !important; top: 10px; right: 16px; left: auto;"
+                "   width: auto !important; z-index: 1002; gap: 8px !important; }"
+                " .st-key-mycal_mnav button { width: 40px !important; min-width: 40px !important; height: 34px !important;"
+                "   min-height: 0 !important; padding: 0 !important; border: 1.5px solid var(--accent) !important;"
+                "   border-radius: 10px !important; background: #fff !important; box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }"
+                " .st-key-mycal_mnav button span { color: var(--accent-deep) !important; font-size: 1.2rem !important; margin: 0 !important; }"
+                " .st-key-mycal_mnav button [data-testid='stMarkdownContainer'] { display: none !important; } }</style>",
                 unsafe_allow_html=True)
     # 순서 (11/18 요청): 왼쪽 = 내 캘린더(가장 넓게) · 가운데 = 찜·다녀온·최근 본(조금 작게) · 오른쪽 = 알림 받은 내역
     # 캘린더는 지도 보기 오른쪽 캘린더와 같은 크기, 알림은 데일리 팝업 노트와 같은 폭·모양
@@ -3726,6 +3742,9 @@ BOX_CSS = """
 .bxc .st { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800; background: #E6F6F0;
   color: #2E9C82; width: fit-content; }
 .bxc .st.end { background: #EEF1F0; color: #8A9592; }
+/* 예정: 배지·작품 이름·기간을 파란색으로 (11/18 요청, 캘린더의 '예정' 표와 같은 파랑) */
+.bxc.soon .st { background: #E5EEFC; color: #2C5BC5; }
+.bxc.soon .w, .bxc.soon .d { color: #2C5BC5; }
 .bxr { margin-top: 8px; background: #F4F8F6; border-radius: 12px; padding: 10px 12px; font-size: .88rem; line-height: 1.55; }
 .bxr .stars { color: #F5A623; letter-spacing: 1px; font-size: .95rem; }
 .bxr .when { color: #9AA5A1; font-size: .75rem; margin-left: 6px; }
@@ -3758,7 +3777,7 @@ def _box_card(r: dict, key: str, review_html: str = "") -> None:
     state = ("종료" if e_ and e_ < TODAY else "예정" if s_ and s_ > TODAY else "진행 중") if s_ else ""
     with st.container(key=f"bx_{key}_{eid}"):
         st.markdown(
-            f'<div class="bxc"><img class="pst" src="{escape(_poster_url(r.get("images")))}" alt="">'
+            f'<div class="bxc{" soon" if state == "예정" else ""}"><img class="pst" src="{escape(_poster_url(r.get("images")))}" alt="">'
             f'<div class="t"><span class="st{" end" if state == "종료" else ""}">{state}</span>'
             f'<div class="w">{escape(str(r.get("work") or ""))}</div><div class="c">{escape(str(r.get("cafe_name") or ""))}</div>'
             f'<div class="d">{escape(_period(r))}</div></div></div>{review_html}', unsafe_allow_html=True)
