@@ -26,6 +26,7 @@ import hashlib
 import hmac
 import json
 import os
+import sys
 import secrets
 import time
 from dataclasses import dataclass
@@ -191,7 +192,10 @@ def exchange(code: str, state: str, timeout: float = 10.0) -> Identity:
         tok = requests.post(p["token"], data=data, timeout=timeout).json()
         access = tok.get("access_token")
         if not access:
-            raise AuthError(f'{p["label"]} 로그인 확인에 실패했어요. 다시 시도해 주세요.')
+            # 왜 거절됐는지(카카오 KOE000 · 네이버 error) 화면과 서버 기록에 남긴다. 토큰·비밀값은 들어 있지 않다
+            why = str(tok.get("error_code") or tok.get("error") or "?")
+            print(f"[auth] {provider} token 실패: {why} {str(tok.get('error_description') or '')[:120]}", file=sys.stderr)
+            raise AuthError(f'{p["label"]} 로그인 확인에 실패했어요 ({why}). 다시 시도해 주세요.')
         prof = requests.get(p["profile"], headers={"Authorization": f"Bearer {access}"}, timeout=timeout).json()
     except requests.RequestException:
         raise AuthError(f'{p["label"]} 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.') from None

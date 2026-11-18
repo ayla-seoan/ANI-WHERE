@@ -6190,6 +6190,9 @@ ASK_PANEL_CSS = """
   min-height: 0; padding: 4px 10px; border-radius: 10px; }
 .st-key-apn_chips, .st-key-apd_chips { padding-top: 10px; border-top: 1px solid #EEF1F0; gap: 6px !important; flex-wrap: wrap; }
 .st-key-apn_chips button, .st-key-apd_chips button { border-radius: 999px !important; font-size: .78rem; min-height: 0; padding: 4px 12px; }
+/* 추천 질문 칩 글자를 한 단계 작게 (11/18 요청) — 버튼 안 p 가 자기 글자 크기를 따로 가져서 p 에 준다 */
+.st-key-apn_chips button p, .st-key-apd_chips button p { font-size: .78rem !important; line-height: 1.3; }
+.st-key-apn_chips button, .st-key-apd_chips button { padding: 3px 10px !important; }
 .st-key-apn_form [data-testid="stForm"], .st-key-apd_form [data-testid="stForm"] { padding: 10px 0 14px; }
 .st-key-apn_form [data-testid="stFormSubmitButton"] button, .st-key-apd_form [data-testid="stFormSubmitButton"] button { background: #E0895A !important; border-color: #E0895A !important;
   color: #fff !important; font-weight: 800; }
