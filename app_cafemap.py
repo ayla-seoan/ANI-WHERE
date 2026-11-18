@@ -2566,7 +2566,7 @@ def _story_open(eid: str) -> None:
 
 def _guest_stories(rows: list[dict], limit: int = 12) -> None:
     """로그인 전 홈: '요즘 일정 많은 작품' — 진행 중·예정 팝업이 많은 작품 순. 숫자 = 그 작품 팝업 수.
-    누르면 그 작품만 걸러진 리스트 보기로. 맨 앞 '최애 추가하기' 는 로그인 화면으로."""
+    누르면 그 작품만 걸러진 리스트 보기로."""
     count: dict[str, int] = {}
     for r in rows:
         w = str(r.get("work") or "").strip()
@@ -2579,10 +2579,7 @@ def _guest_stories(rows: list[dict], limit: int = 12) -> None:
                     help="지금 진행 중이거나 곧 열리는 팝업이 많은 작품이에요. 숫자는 그 작품의 팝업 수예요. "
                          "로그인하고 팝업을 북마크하면 여기가 내 '북마크 팝업' 으로 바뀌어요.")
         with st.container(horizontal=True, key="story_row"):
-            with st.container(key="card_story_add"):
-                st.markdown(f'<div class="story add"><div class="ring">{_mi("add")}</div><div class="nm">최애 추가하기</div></div>',
-                            unsafe_allow_html=True)
-                st.button("최애 추가하기", key="open_story_add", on_click=_story_add)
+            # (로그인 전에는 '최애 추가하기' 칸을 두지 않는다, 11/18 요청)
             for i, w in enumerate(works):
                 with st.container(key=f"card_story_{i}"):
                     st.markdown(
@@ -2813,7 +2810,19 @@ def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | N
             if len(view) > n_show:
                 with st.container(horizontal=True, horizontal_alignment="center", key="list_more"):
                     st.button(f"{len(view) - n_show}건 더보기", icon=":material/expand_more:", key="list_more_btn",
-                              on_click=lambda: st.session_state.update(list_n=n_show + LIST_PAGE))
+                              on_click=lambda: st.session_state.update(list_n=n_show + LIST_PAGE, _more_from=n_show))
+            # 방금 '더보기' 로 불러왔으면 새로 나온 첫 카드가 화면 위쪽에 오게 내린다 (11/18 요청)
+            first = st.session_state.pop("_more_from", None)
+            if first is not None and first < len(view):
+                eid = str(view.iloc[first]["entry_id"])
+                components.html(
+                    "<script>(function(){const d=window.parent.document;let n=0;const go=()=>{"
+                    f"const el=d.querySelector('.st-key-card_w_{eid}');"
+                    "const box=d.querySelector('[data-testid=stMain]');"
+                    "if(el&&box){const top=el.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop-110;"
+                    "box.scrollTo({top:top,behavior:n?'auto':'smooth'});return true;}return false;};"
+                    "const iv=setInterval(()=>{if(go()&&++n>2)clearInterval(iv);if(++n>20)clearInterval(iv);},250);})();</script>",
+                    height=0)
         return
 
     # 반반 보기: 페이지를 스크롤하면 리스트만 내려가고 지도는 화면에 붙어 있다 (LIST_CSS 의 sticky)

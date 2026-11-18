@@ -303,12 +303,10 @@ def go_home(page: Page, url: str) -> None:
 
 def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_온다(page: Page, app_url, data_dir):
     go_home(page, app_url)
-    expect(page.locator(".st-key-stories .story.add")).to_be_visible(timeout=LONG)
-    # 손님은 북마크가 없어 작품 없이 안내만
+    # 로그인 전에는 '요즘 일정 많은 작품' 만 (최애 추가하기 · 북마크 동그라미 없음, 11/18)
+    expect(page.locator(".st-key-stories .story.hot").first).to_be_visible(timeout=LONG)
+    expect(page.locator(".st-key-stories .story.add")).to_have_count(0)
     expect(page.locator(".st-key-stories .story.mark")).to_have_count(0)
-    # 손님이 '최애 추가하기' 를 누르면 로그인 화면으로
-    page.locator(".st-key-open_story_add button").click()
-    expect(page).to_have_url(re.compile(r"/login"), timeout=LONG)
 
     sign_up(page, app_url)
     go_home(page, app_url)
