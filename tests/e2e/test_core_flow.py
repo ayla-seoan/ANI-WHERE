@@ -118,6 +118,8 @@ def test_2_검색으로_좁혀지고_없으면_안내가_뜬다(page: Page, app_
     box.press("Enter")
     wait_idle(page)
     expect(page.locator(f".st-key-card_w_{target['entry_id']}")).to_be_visible(timeout=LONG)
+    # 다시 그리는 동안 예전 카드가 잠깐 같이 남아 있을 수 있다 → 수가 처음 장수 이하로 내려올 때까지 기다린다
+    page.wait_for_function(f"document.querySelectorAll('{CARD}').length <= {total}", timeout=LONG)
     found = page.locator(CARD).count()
     assert 0 < found <= total
     assert found < total or total == 1, f"검색해도 카드 수가 그대로입니다 ({found}/{total})"
@@ -278,8 +280,16 @@ def test_10_새로_가입하면_북마크가_비어_있다(page: Page, app_url, 
 
 
 # ------------------------------------------------------------------ 11. 스토리 줄 · 팝업 북마크 추가 (11/18)
+def go_home(page: Page, url: str) -> None:
+    """로고를 눌러 홈으로 ('내가 관심있는 작품' 줄은 홈에만, 11/18)."""
+    open_list(page, url)
+    page.locator(".st-key-home_brand button").click()
+    expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
+    wait_idle(page)
+
+
 def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_온다(page: Page, app_url, data_dir):
-    open_list(page, app_url)
+    go_home(page, app_url)
     expect(page.locator(".st-key-stories .story.add")).to_be_visible(timeout=LONG)
     # 손님은 북마크가 없어 작품 없이 안내만
     expect(page.locator(".st-key-stories .story.mark")).to_have_count(0)
@@ -288,7 +298,7 @@ def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_
     expect(page).to_have_url(re.compile(r"/login"), timeout=LONG)
 
     sign_up(page, app_url)
-    open_list(page, app_url)
+    go_home(page, app_url)
     expect(page.locator(".st-key-stories .story-empty")).to_be_visible(timeout=LONG)     # 새 회원도 아직 없음
     page.locator(".st-key-open_story_add button").click()
     dlg = page.locator('[role="dialog"]')
@@ -307,14 +317,34 @@ def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_
     expect(dlg).to_have_count(0, timeout=LONG)
     wait_idle(page)
     expect(page.locator(".st-key-stories .story.mark .nm")).to_have_text([pick], timeout=LONG)   # 북마크한 것만
-    # 고른 팝업은 정말 북마크됐다 (카드의 북마크 버튼이 '켜짐')
-    reveal(page, eid)
-    expect(page.locator(f".st-key-fav_on_w_{eid}")).to_be_attached(timeout=LONG)
     if os.getenv("E2E_SHOTS"):
         page.locator(".st-key-stories").screenshot(path=os.path.join(os.getenv("E2E_SHOTS"), "stories.png"))
-    # 스토리를 누르면 그 작품 팝업만 보인다
+    # 스토리를 누르면 그 작품 팝업만 걸러진 리스트 보기로
     page.locator(".st-key-open_story_0 button").click()
-    expect(page.locator(".st-key-stories .story.on .nm")).to_have_text(pick, timeout=LONG)
+    expect(page.locator(".st-key-home")).to_have_count(0, timeout=LONG)
+    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
     wait_idle(page)
+    # 고른 팝업은 정말 북마크됐다 (카드의 북마크 버튼이 '켜짐')
+    expect(page.locator(f".st-key-fav_on_w_{eid}")).to_be_attached(timeout=LONG)
     works = page.locator(f"{CARD} .pcard .t").all_inner_texts()
     assert works and all(pick in w or w in pick for w in works), works
+
+
+# ------------------------------------------------------------------ 12. 홈 (11/18)
+def test_12_로고를_누르면_홈이_열리고_랭킹_카드로_상세에_간다(page: Page, app_url):
+    open_list(page, app_url)
+    page.locator(".st-key-home_brand button").click()
+    expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
+    expect(page.locator(".story-head")).to_have_text("내가 관심있는 (북마크) 팝업")
+    for title in ("실시간 인기 급상승 랭킹", "따끈따끈 신규 등록 팝업", "이번 주에 끝나는 팝업", "사전예약 팝업"):
+        expect(page.locator(".home-h", has_text=title)).to_be_visible(timeout=LONG)
+    expect(page.locator(".st-key-gnbtab_on_home")).to_be_visible()
+    rank = page.locator('[class*="st-key-card_hl_"]')
+    expect(rank.first).to_be_visible(timeout=LONG)
+    assert rank.count() <= 5
+    rank.first.click(position={"x": 40, "y": 40})
+    expect(page.locator(".dtitle")).to_be_visible(timeout=LONG)
+    # 리스트로 보기 탭으로 가면 홈이 아니다
+    page.locator('[class*="st-key-gnbtab_"][class*="list"] button').click()
+    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
+    expect(page.locator(".st-key-home")).to_have_count(0)

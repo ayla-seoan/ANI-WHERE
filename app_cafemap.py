@@ -2054,6 +2054,256 @@ def _view_switch(wide: bool) -> None:
 LIST_PAGE = 24         # 리스트 보기에서 처음 보여 줄 카드 수 (4열 × 6줄). '더 보기' 로 24장씩 더
 
 
+# ================================================================ 홈 (11/18 요청)
+HOME_WEEK_DAYS = 7          # 실시간 인기: 최근 7일 북마크·리뷰
+
+
+def _created_map() -> dict[str, str]:
+    """팝업별 처음 등록한 시각 (첫 기록)."""
+    out: dict[str, str] = {}
+    for r in store.all_rows():
+        eid, at = str(r.get("entry_id")), str(r.get("updated_at") or "")
+        if eid not in out or at < out[eid]:
+            out[eid] = at
+    return out
+
+
+def _recent(rows: list[dict], days: int) -> list[dict]:
+    since = (datetime.now().astimezone() - timedelta(days=days)).isoformat()
+    return [r for r in rows if str(r.get("updated_at") or "") >= since]
+
+
+def _home_rank(live: list[dict]) -> list[dict]:
+    """실시간 인기 급상승: 최근 7일 북마크 × 2 + 리뷰·답글 수, 같으면 전체 기간 점수. 0점은 오픈 임박 순으로 채운다."""
+    frows, rrows = favs.current_rows(), reviews.current_rows()
+    f7, r7 = favorite.counts(_recent(frows, HOME_WEEK_DAYS)), review.counts(_recent(rrows, HOME_WEEK_DAYS))
+    fa, ra = favorite.counts(frows), review.counts(rrows)
+    score = lambda e: (f7.get(e, 0) * 2 + r7.get(e, 0), fa.get(e, 0) * 2 + ra.get(e, 0))
+    return sorted(live, key=lambda r: (tuple(-x for x in score(str(r["entry_id"]))), str(r.get("start_date") or "")))
+
+
+def _is_reserve(r: dict) -> bool:
+    text = " ".join(str(r.get(k) or "") for k in ("tags", "goods", "note"))
+    return bool(re.search(r"사전\s*예약|예약제|사전\s*예매", text))
+
+
+def _home_areas(rows: list[dict], n: int = 3) -> list[str]:
+    cnt: dict[str, int] = {}
+    for r in rows:
+        a = geo.area_name(str(r.get("address") or ""))
+        if a:
+            cnt[a] = cnt.get(a, 0) + 1
+    return [a for a, _ in sorted(cnt.items(), key=lambda t: -t[1])[:n]]
+
+
+def _home_card(sec: str, r: dict, rank: int | None = None, badge: str = "") -> None:
+    """홈 포스터 카드: 포스터(순위 숫자 · 배지 · 북마크) · 이름 · 기간 · 지역/상태 칩. 누르면 상세."""
+    eid = str(r["entry_id"])
+    label, color, _ = _status(r)
+    area = geo.area_name(str(r.get("address") or ""))
+    with st.container(key=f"card_h{sec}_{eid}"):
+        st.markdown(
+            f'<div class="hc"><div class="hcp" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')">'
+            + (f'<span class="hcbadge">{escape(badge)}</span>' if badge else "")
+            + (f'<span class="hcrank">{rank}</span>' if rank else "")
+            + f'</div><div class="hct">{escape(str(r.get("work") or ""))}</div>'
+            f'<div class="hcd">{escape(_period(r, lambda d: f"{d:%m.%d}", show_raw=False))}</div>'
+            f'<div class="hcchips">' + (f'<span>{escape(area)}</span>' if area else "")
+            + f'<span class="st {color}">{escape(label)}</span></div></div>', unsafe_allow_html=True)
+        if st.button("자세히 보기", key=f"open_h{sec}_{eid}", width="stretch"):
+            st.session_state.update(selected=eid, scroll_top=True)
+            st.rerun()
+        _heart(eid, f"h{sec}")
+
+
+def _open_btn(key: str, eid: str) -> None:
+    if st.button("자세히 보기", key=key, width="stretch"):
+        st.session_state.update(selected=eid, scroll_top=True)
+        st.rerun()
+
+
+def _home_slide(r: dict, rank: int, total: int) -> None:
+    """랭킹 배너 한 장: 흐린 포스터 바탕 + 오른쪽 포스터 + 왼쪽 글 (순위 · 작품 · 장소 · 기간 · 칩)."""
+    eid = str(r["entry_id"])
+    label, _, _ = _status(r)
+    area = geo.area_name(str(r.get("address") or ""))
+    url = _poster_url(r.get("images"))
+    period = _period(r, lambda d: f"{d:%m.%d}", show_raw=False)
+    chips = (f'<span>{escape(area)}</span>' if area else "") + f'<span>{escape(label)}</span>'
+    with st.container(key=f"card_hb_{eid}"):
+        st.markdown(
+            f'<div class="hb"><div class="hbbg" style="background-image:url(&quot;{url}&quot;)"></div>'
+            f'<div class="hbpic" style="background-image:url(&quot;{url}&quot;), url(&quot;{images.DEFAULT_POSTER_URL}&quot;)"></div>'
+            f'<div class="hbtxt"><div class="hbrank">{rank}<small>위</small></div>'
+            '<div class="hbsub">실시간 인기 급상승</div>'
+            f'<div class="hbt">{escape(str(r.get("work") or ""))}</div>'
+            f'<div class="hbd">{escape(str(r.get("cafe_name") or ""))} · {escape(period)}</div>'
+            f'<div class="hbchips">{chips}</div></div>'
+            f'<div class="hbcnt">{rank} / {total}</div></div>', unsafe_allow_html=True)
+        _open_btn(f"open_hb_{eid}", eid)
+
+
+def _home_rank_row(r: dict, rank: int) -> None:
+    """오른쪽 랭킹 목록 한 줄: 순위 숫자 · 작품 · 장소 · 상태."""
+    eid = str(r["entry_id"])
+    label, color, _ = _status(r)
+    with st.container(key=f"card_hl_{eid}"):
+        st.markdown(
+            f'<div class="hl"><b class="hln">{rank}</b><div class="hlb"><div class="hlt">{escape(str(r.get("work") or ""))}</div>'
+            f'<div class="hls">{escape(str(r.get("cafe_name") or ""))}</div></div><span class="hlst {color}">{escape(label)}</span></div>',
+            unsafe_allow_html=True)
+        _open_btn(f"open_hl_{eid}", eid)
+
+
+def _home_more(sort: str) -> None:
+    """'더보기' → 리스트 보기 (정렬을 맞춰서)."""
+    st.session_state.update(home_view=False, list_only=True, sort=sort, selected=None, scroll_top=True)
+
+
+def _home_head(title: str, icon: str, more_sort: str = "", key: str = "") -> None:
+    with st.container(horizontal=True, vertical_alignment="center", key=f"hh_{key}"):
+        st.markdown(f'<div class="home-h">{_mi(icon)}{escape(title)}</div>', unsafe_allow_html=True)
+        if more_sort:
+            st.button("더보기", key=f"hmore_{key}", type="tertiary", on_click=_home_more, args=(more_sort,))
+
+
+def _home_area_pills(key: str, areas: list[str]) -> str:
+    pick = st.pills("지역", ["전체"] + areas, default="전체", key=f"hp_{key}", label_visibility="collapsed")
+    return pick or "전체"
+
+
+def render_home(df: pd.DataFrame) -> None:
+    """홈 (11/18 요청): 내가 관심있는 작품 · 실시간 인기 급상승 랭킹 · 따끈따끈 신규 등록 · 이번 주에 끝나는 · 사전예약 팝업."""
+    live = _live_rows(df)
+    areas = _home_areas(live)
+    by_area = lambda rows, a: rows if a == "전체" else [r for r in rows if geo.area_name(str(r.get("address") or "")) == a]
+    with st.container(key="home"):
+        render_stories(df)
+
+        # 실시간 인기 급상승 랭킹 (5위까지, 11/18 요청): 왼쪽 큰 배너(‹ › 로 넘김 · 5초마다 넘어감) + 오른쪽 1~5위 목록
+        _home_head("실시간 인기 급상승 랭킹", "trending_up", key="rank")
+        a = _home_area_pills("rank", areas)
+        top = by_area(_home_rank(live), a)[:5]
+        if top:
+            ban, lst = st.columns([2.3, 1], gap="medium")
+            with ban, st.container(horizontal=True, key="home_banner"):
+                for i, r in enumerate(top, 1):
+                    _home_slide(r, i, len(top))
+            with lst, st.container(key="home_ranklist"):
+                for i, r in enumerate(top, 1):
+                    _home_rank_row(r, i)
+
+        # 따끈따끈 신규 등록 (먼저 등록한 시각이 늦은 순)
+        _home_head("따끈따끈 신규 등록 팝업", "fiber_new", more_sort="최신순", key="new")
+        a = _home_area_pills("new", areas)
+        made = _created_map()
+        new = sorted(by_area(live, a), key=lambda r: made.get(str(r["entry_id"]), ""), reverse=True)[:12]
+        with st.container(horizontal=True, key="home_row_new"):
+            for r in new:
+                _home_card("n", r)
+
+        # 이번 주(일요일까지)에 끝나는 진행 중 팝업
+        sunday = TODAY + timedelta(days=6 - TODAY.weekday())
+        week = sorted([r for r in live if _status(r)[2] == 0 and pd.to_datetime(r["end_date"]).date() <= sunday],
+                      key=lambda r: str(r.get("end_date")))
+        _home_head("이번 주에 끝나는 팝업", "hourglass_bottom", more_sort="종료 임박순", key="week")
+        if week:
+            with st.container(horizontal=True, key="home_row_week"):
+                for r in week:
+                    d = (pd.to_datetime(r["end_date"]).date() - TODAY).days
+                    _home_card("w", r, badge="오늘 종료" if d == 0 else f"종료 D-{d}")
+        else:
+            st.markdown('<div class="home-empty">이번 주에 끝나는 팝업은 없어요. 여유 있게 둘러보세요.</div>', unsafe_allow_html=True)
+
+        # 사전예약 팝업 (태그·특전·소개에 '사전 예약')
+        res = sorted([r for r in live if _is_reserve(r)], key=lambda r: (_status(r)[2] == 0, str(r.get("start_date"))))
+        _home_head("사전예약 팝업", "event_available", key="res")
+        if res:
+            with st.container(horizontal=True, key="home_row_res"):
+                for r in res:
+                    sd = pd.to_datetime(r["start_date"]).date()
+                    _home_card("p", r, badge=f"사전예약 D-{(sd - TODAY).days}" if sd > TODAY else "사전예약")
+        else:
+            st.markdown('<div class="home-empty">지금 사전예약을 받는 팝업이 없어요.</div>', unsafe_allow_html=True)
+
+
+HOME_CSS = """
+<style>
+.st-key-home { gap: 6px; }
+[class*="st-key-hh_"] { margin-top: 22px; margin-bottom: 6px; min-height: 34px; justify-content: space-between !important; }
+.home-h { font-size: 1.2rem; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.home-h .mi { color: var(--accent); font-size: 1.35rem; }
+[class*="st-key-hmore_"] button p { color: #7B8784 !important; font-size: .85rem !important; }
+[class*="st-key-hp_"] { margin-bottom: 2px; }
+.home-empty { color: #7B8784; font-size: .85rem; padding: 10px 2px 4px; }
+/* 랭킹 배너: 한 장씩 넘기는 줄 (scroll-snap) + ‹ › (_DRAG_JS) */
+.st-key-home_banner { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; gap: 0 !important;
+  scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none; border-radius: 18px; }
+.st-key-home_banner::-webkit-scrollbar { display: none; }
+.st-key-home_banner > div { flex: 0 0 100% !important; width: 100% !important; min-width: 100% !important; scroll-snap-align: start; }
+.hb { position: relative; height: 340px; border-radius: 18px; overflow: hidden; background: #1E2523; }
+.hb .hbbg { position: absolute; inset: -20px; background-size: cover; background-position: center; filter: blur(18px) brightness(.55); }
+.hb .hbpic { position: absolute; right: 28px; top: 24px; bottom: 24px; aspect-ratio: 3/4; border-radius: 12px;
+  background-size: cover; background-position: center; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+.hb .hbtxt { position: absolute; left: 56px; bottom: 32px; right: 300px; color: #fff; }
+.hb .hbrank { font-size: 4rem; font-weight: 900; font-style: italic; line-height: 1; letter-spacing: -2px; }
+.hb .hbrank small { font-size: 1.2rem; font-style: normal; margin-left: 4px; }
+.hb .hbsub { font-size: .85rem; font-weight: 700; opacity: .85; margin-top: 10px; }
+.hb .hbt { font-size: 1.9rem; font-weight: 900; line-height: 1.2; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden; }
+.hb .hbd { font-size: .9rem; opacity: .9; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb .hbchips { display: flex; gap: 6px; margin-top: 12px; }
+.hb .hbchips span { font-size: .75rem; font-weight: 700; padding: 3px 10px; border-radius: 8px; background: rgba(255,255,255,.18); }
+.hb .hbcnt { position: absolute; right: 18px; bottom: 10px; color: #fff; font-size: .8rem; font-weight: 800;
+  background: rgba(0,0,0,.35); padding: 2px 10px; border-radius: 999px; }
+[data-testid="stColumn"]:has(.st-key-home_banner) .aw-arrow { width: 36px; height: 36px; font-size: 22px; line-height: 32px;
+  background: rgba(255,255,255,.85); }
+[data-testid="stColumn"]:has(.st-key-home_banner) .aw-arrow.l { left: 10px; }
+[data-testid="stColumn"]:has(.st-key-home_banner) .aw-arrow.r { right: 10px; }
+/* 오른쪽 1~5위 목록 */
+.st-key-home_ranklist { background: #F6F8F7; border-radius: 18px; padding: 14px 16px 0; height: 340px; box-sizing: border-box;
+  gap: 0 !important; }
+.hl { display: flex; align-items: center; gap: 12px; padding: 6px 0 22px; }
+.hl .hln { font-size: 1.5rem; font-weight: 900; font-style: italic; color: var(--accent-deep); width: 22px; text-align: center; }
+.hl .hlb { flex: 1; min-width: 0; }
+.hl .hlt { font-weight: 800; font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hl .hls { font-size: .76rem; color: #7B8784; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hl .hlst { font-size: .72rem; font-weight: 800; color: var(--accent-deep); white-space: nowrap; }
+.hl .hlst.blue { color: #2C5BC5; } .hl .hlst.red { color: #D93A4A; }
+[class*="st-key-card_hl_"]:hover .hlt { color: var(--accent-deep); }
+/* 옆으로 넘기는 줄 */
+[class*="st-key-home_row_"] { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; gap: 14px !important; align-items: flex-start !important;
+  padding-bottom: 4px; cursor: grab; scroll-behavior: smooth; scrollbar-width: thin; }
+[class*="st-key-home_row_"] > div { flex: 0 0 210px !important; width: 210px !important; min-width: 210px !important; }
+.hc { padding-bottom: 18px; }
+.hc .hcp { position: relative; aspect-ratio: 4/3; border-radius: 12px; background-size: cover; background-position: center;
+  background-color: #EEF3F1; transition: transform .18s ease; }
+[class*="st-key-card_h"]:hover .hcp { transform: scale(.97); }
+.hc .hcrank { position: absolute; left: -2px; bottom: -14px; font-size: 3.4rem; font-weight: 900; line-height: 1; color: #fff;
+  font-style: italic; text-shadow: 0 2px 10px rgba(0,0,0,.35); letter-spacing: -2px; }
+.hc .hcbadge { position: absolute; left: 0; top: 0; padding: 4px 10px; border-radius: 12px 0 12px 0; background: #F2A33A;
+  color: #fff; font-size: .74rem; font-weight: 800; }
+.hc .hct { margin-top: 10px; font-weight: 800; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hc .hcd { margin-top: 2px; font-size: .8rem; color: #5B6663; }
+.hc .hcchips { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+.hc .hcchips span { font-size: .7rem; padding: 2px 7px; border-radius: 6px; background: #F1F4F3; color: #5B6663; font-weight: 600; }
+.hc .hcchips span.st.green { color: var(--accent-deep); background: var(--accent-soft); }
+.hc .hcchips span.st.blue { color: #2C5BC5; background: #EAF0FC; }
+.hc .hcchips span.st.red { color: #D93A4A; background: #FDECEE; }
+[class*="st-key-card_h"] [class*="st-key-fav_"] { top: 8px; right: 8px; }
+@media (max-width: 640px) {
+  .hb { height: 240px; } .hb .hbpic { right: 14px; top: 16px; bottom: 16px; }
+  .hb .hbtxt { left: 18px; right: 150px; bottom: 18px; } .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
+  .st-key-home_ranklist { height: auto; }
+  [class*="st-key-home_row_"] > div { flex-basis: 150px !important; width: 150px !important; min-width: 150px !important; }
+  .hc .hcrank { font-size: 2.6rem; }
+  .hc .hct { font-size: .85rem; }
+  .home-h { font-size: 1.05rem; }
+}
+</style>
+"""
+
+
 # ================================================================ 스토리 줄 (11/18 요청)
 def _live_rows(df: pd.DataFrame) -> list[dict]:
     """진행 중·오픈 예정 팝업만 (끝난 건 뺌)."""
@@ -2075,6 +2325,8 @@ def _story_pick(work: str) -> None:
     ss = st.session_state
     ss["f_work"] = "전체" if ss.get("f_work") == work else work
     ss["selected"] = None
+    if ss.get("home_view"):          # 홈에서 누르면 그 작품만 걸러진 리스트 보기로 (11/18)
+        ss.update(home_view=False, list_only=True, f_work=work, scroll_top=True)
 
 
 def _story_add() -> None:
@@ -2096,7 +2348,7 @@ def render_stories(df: pd.DataFrame) -> None:
     posters = _work_posters(marked)
     picked = st.session_state.get("f_work", "전체")
     with st.container(key="stories"):
-        st.markdown('<div class="story-head">내가 관심있는 작품</div>', unsafe_allow_html=True)
+        st.markdown('<div class="story-head">내가 관심있는 (북마크) 팝업</div>', unsafe_allow_html=True)
         with st.container(horizontal=True, key="story_row"):
             # 맨 앞에 두어 줄이 길어도 늘 보이게 (인스타 '내 스토리' 자리)
             with st.container(key="card_story_add"):
@@ -2110,7 +2362,6 @@ def render_stories(df: pd.DataFrame) -> None:
                 with st.container(key=f"card_story_{i}"):
                     st.markdown(
                         f'<div class="{cls}"><div class="ring"><div class="pic" style="background-image:url(\'{posters.get(w, images.DEFAULT_POSTER_URL)}\')"></div>'
-                        + (f'<span class="cnt">{n}</span>' if n else "")
                         + f'</div><div class="nm">{escape(w)}</div></div>', unsafe_allow_html=True)
                     st.button("보기", key=f"open_story_{i}", on_click=_story_pick, args=(w,))
     if st.session_state.pop("_bm_open", False):
@@ -2179,31 +2430,31 @@ def bookmark_pick_dialog(df: pd.DataFrame) -> None:
 STORY_CSS = """
 <style>
 .st-key-stories { margin: 0 0 8px; }
-.story-head { font-size: .95rem; font-weight: 800; margin-bottom: 0; }
-.st-key-story_row { flex-wrap: nowrap !important; overflow-x: auto; gap: 8px !important; padding: 4px 2px 2px;
+.story-head { font-size: 1.2rem; font-weight: 800; margin-bottom: 2px; }
+.st-key-story_row { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; gap: 8px !important; padding: 4px 2px 2px;
   scrollbar-width: none; }
 .st-key-story_row::-webkit-scrollbar { display: none; }
 /* 절반 크기 (11/18 요청) */
-.st-key-story_row > div { flex: 0 0 58px !important; width: 58px !important; min-width: 58px !important; }
+.st-key-story_row > div { flex: 0 0 84px !important; width: 84px !important; min-width: 84px !important; }
 .story { display: flex; flex-direction: column; align-items: center; padding-bottom: 16px; }
-.story .ring { position: relative; width: 44px; height: 44px; border-radius: 50%; padding: 2px; box-sizing: border-box;
+.story .ring { position: relative; width: 72px; height: 72px; border-radius: 50%; padding: 3px; box-sizing: border-box;
   background: conic-gradient(from 210deg, #14b8a6, #7FE0CF, #FFD66B, #14b8a6); transition: transform .18s ease; }
 .story.mark .ring { background: conic-gradient(from 210deg, #FF7A8A, #FFB86B, #FFD66B, #FF7A8A); }
-.story .pic { width: 100%; height: 100%; border-radius: 50%; border: 2px solid #fff; box-sizing: border-box;
+.story .pic { width: 100%; height: 100%; border-radius: 50%; border: 3px solid #fff; box-sizing: border-box;
   background-size: cover; background-position: center; background-color: #EEF3F1; }
 .story .cnt { position: absolute; right: -4px; bottom: -3px; min-width: 17px; height: 17px; padding: 0 3px; box-sizing: border-box;
   border-radius: 999px; background: var(--accent-deep); color: #fff; font-size: .6rem; font-weight: 800;
   display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; }
-.story .nm { margin-top: 4px; width: 58px; text-align: center; font-size: .66rem; font-weight: 700; white-space: nowrap;
+.story .nm { margin-top: 6px; width: 84px; text-align: center; font-size: .78rem; font-weight: 700; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
 .story.on .nm { color: var(--accent-deep); }
 .story.on .ring { box-shadow: 0 0 0 2px var(--accent-soft); }
 [class*="st-key-card_story_"]:hover .ring { transform: scale(.95); }
 .story.add .ring { background: none; border: 2px dashed #D3DAD8; display: flex; align-items: center; justify-content: center; }
-.story.add .ring .mi { font-size: 22px; color: var(--accent-deep); }
+.story.add .ring .mi { font-size: 32px; color: var(--accent-deep); }
 .story.add .nm { white-space: normal; line-height: 1.2; word-break: keep-all; }
 .st-key-story_row > div:has(.story-empty) { flex: 0 1 auto !important; width: auto !important; min-width: 0 !important; }
-.story-empty { font-size: .8rem; color: #7B8784; padding-top: 14px; white-space: nowrap; }
+.story-empty { font-size: .85rem; color: #7B8784; padding-top: 26px; white-space: nowrap; }
 /* 옆으로 넘기기: 끌어서(드래그) 넘기고, 넘길 게 있으면 양옆 ‹ › 버튼 (_DRAG_JS 가 붙인다, 11/18 요청) */
 .st-key-story_row, [class*="st-key-sim_row_"] { cursor: grab; scroll-behavior: smooth; }
 .aw-dragging { cursor: grabbing !important; scroll-behavior: auto !important; user-select: none; }
@@ -2354,7 +2605,7 @@ LIST_CSS = f"""
 [class*="st-key-simsec_"] [data-testid="stMarkdown"]:has(.sim-head) > div {{ justify-content:flex-start !important; gap:6px; }}
 .sim-head {{ font-size:1.05rem; font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:6px; }}
 .sim-head .mi {{ color:var(--accent); font-size:1.35rem; }}
-[class*="st-key-sim_row_"] {{ flex-wrap:nowrap !important; overflow-x:auto; gap:12px !important; align-items:flex-start !important;
+[class*="st-key-sim_row_"] {{ flex-wrap:nowrap !important; overflow-x:auto; overflow-y:hidden; gap:12px !important; align-items:flex-start !important;
   padding-bottom:4px; scrollbar-width:thin; }}
 [class*="st-key-sim_row_"] > div {{ flex:0 0 136px !important; width:136px !important; min-width:136px !important; }}
 .simc {{ padding-bottom:18px; }}   /* 마크다운 칸의 아래 음수 여백(-1rem)에 글 줄이 잘리지 않게 */
@@ -2668,11 +2919,13 @@ iframe[src*="kakao_map"] {{
 .chip {{ font-size:12.5px; font-weight:600; padding:3px 10px; border-radius:999px; background:{MINT_SOFT};
         color:{MINT_DEEP}; border:1px solid {MINT}; white-space:nowrap; }}
 .chip.tag {{ background:{MINT}; color:#fff; border-color:{MINT}; }}
-.upd {{ color:#8A9592; font-size:.78rem; margin:-4px 0 6px; display:flex; align-items:center; gap:4px; }}
+.upd {{ color:#8A9592; font-size:.7rem; margin:-4px 0 6px; display:flex; align-items:center; gap:4px; }}
 .upd .mi {{ font-size:.95rem; }}
-@media (min-width: 641px) {{ .stMain:has(.st-key-stories) .st-key-map_row {{ margin-top:12px; }} }}   /* 지도 보기: 마지막 업데이트와 지도 칸 사이 (11/18) */
+@media (min-width: 641px) {{ .stMain:has(.upd) .st-key-map_row {{ margin-top:12px; }}
+  [data-testid="stElementContainer"]:has(.upd) {{ margin-bottom:8px; }}
+  .st-key-listtools {{ margin-bottom:10px; }} }}   /* 리스트 보기: 마지막 업데이트 · 팝업 카페 N곳 · 카드 사이 여백 (11/18 요청) */   /* 지도 보기: 마지막 업데이트와 지도 칸 사이 (11/18) */
 .upd.warn {{ color:#C2560C; background:#FFF4EA; border-radius:10px; padding:6px 10px; margin:0 0 8px; }}
-@media (max-width: 640px) {{ .upd {{ font-size:.7rem; margin:-8px 0 0; }}
+@media (max-width: 640px) {{ .upd {{ font-size:.64rem; margin:-8px 0 0; }}
   [data-testid="stMarkdownContainer"]:has(.upd) {{ margin-bottom:0 !important; }}
   [data-testid="stElementContainer"]:has(.upd) {{ margin-bottom:8px !important; }} }}   /* 모바일: 아래 칸과 붙지 않게 (11/18) */
 .empty-box {{ text-align:center; padding:40px 16px 14px; }}
@@ -3023,7 +3276,7 @@ def _pin_view_icon() -> None:
 _DRAG_JS = """
 (function () {
   if (window.__awDrag) return; window.__awDrag = true;
-  const SEL = '.st-key-story_row, [class*="st-key-sim_row_"]';
+  const SEL = '.st-key-story_row, [class*="st-key-sim_row_"], [class*="st-key-home_row_"], .st-key-home_banner';
   function arrows(row) {
     const box = row.parentElement; if (!box) return;
     if (getComputedStyle(box).position === 'static') box.style.position = 'relative';
@@ -3033,13 +3286,23 @@ _DRAG_JS = """
       r = document.createElement('button'); r.className = 'aw-arrow r'; r.type = 'button'; r.textContent = '›'; r.setAttribute('aria-label', '다음');
       box.appendChild(l); box.appendChild(r);
     }
-    l.onclick = () => row.scrollBy({left: -row.clientWidth * .8});
-    r.onclick = () => row.scrollBy({left: row.clientWidth * .8});
+    const step = row.classList.contains('st-key-home_banner') ? 1 : .8;     // 배너는 한 장씩
+    l.onclick = () => { row.__awTouched = Date.now(); row.scrollBy({left: -row.clientWidth * step}); };
+    r.onclick = () => { row.__awTouched = Date.now(); row.scrollBy({left: row.clientWidth * step}); };
+    if (step === 1 && !row.__awAuto) {        // 배너: 5초마다 다음 장 (누른 뒤 8초는 멈춤), 끝이면 처음으로
+      row.__awAuto = setInterval(() => {
+        if (!row.isConnected) { clearInterval(row.__awAuto); return; }
+        if (Date.now() - (row.__awTouched || 0) < 8000) return;
+        const end = row.scrollLeft + row.clientWidth >= row.scrollWidth - 4;
+        row.scrollTo({left: end ? 0 : row.scrollLeft + row.clientWidth});
+      }, 5000);
+    }
     if (row.__awPlace) { row.__awPlace(); return; }
     const place = row.__awPlace = () => {
       const l = box.querySelector(':scope > .aw-arrow.l'), r = box.querySelector(':scope > .aw-arrow.r');
       if (!l || !r) return;
-      const top = row.offsetTop + Math.min(row.clientHeight / 2, 60) - 16;
+      const mid = row.classList.contains('st-key-home_banner') ? row.clientHeight / 2 : Math.min(row.clientHeight / 2, 60);
+      const top = row.offsetTop + mid - (l.offsetHeight || 28) / 2;
       l.style.top = r.style.top = top + 'px';
       l.classList.toggle('show', row.scrollLeft > 4);
       r.classList.toggle('show', row.scrollLeft + row.clientWidth < row.scrollWidth - 4);
@@ -3050,7 +3313,7 @@ _DRAG_JS = """
     if (row.dataset.awDrag) { arrows(row); return; }
     row.dataset.awDrag = '1';
     let down = false, x0 = 0, s0 = 0, moved = 0;
-    row.addEventListener('mousedown', e => { if (e.button !== 0) return; down = true; moved = 0; x0 = e.pageX; s0 = row.scrollLeft; });
+    row.addEventListener('mousedown', e => { if (e.button !== 0) return; down = true; moved = 0; x0 = e.pageX; s0 = row.scrollLeft; row.__awTouched = Date.now(); });
     window.addEventListener('mousemove', e => {
       if (!down) return; const dx = e.pageX - x0; moved = Math.max(moved, Math.abs(dx));
       if (moved > 5) { row.classList.add('aw-dragging'); row.scrollLeft = s0 - dx; e.preventDefault(); }
@@ -3678,7 +3941,8 @@ def _gnb_go(view: str) -> None:
     st.session_state["_gnb_to_map"] = True
     st.session_state["cal_view"] = view == "cal"
     st.session_state["box_view"] = view == "box"
-    if view not in ("cal", "box"):
+    st.session_state["home_view"] = view == "home"      # 홈 (11/18 요청)
+    if view not in ("cal", "box", "home"):
         st.session_state["list_only"] = view == "list"
     st.session_state["selected"] = None
     st.session_state["scroll_top"] = True
@@ -3839,7 +4103,7 @@ def _ntf_click(nid: str, cafe_id: str | None) -> None:
     """알림 칸을 누름 → 읽음 처리, 팝업이면 그 팝업 상세로 (다른 화면이면 메인으로 옮겨서)."""
     _ntf_mark([nid])
     if cafe_id:
-        st.session_state.update(cal_view=False, box_view=False, _gnb_to_map=True)
+        st.session_state.update(cal_view=False, box_view=False, home_view=False, _gnb_to_map=True)
         _gnb_open(cafe_id)
 
 
@@ -3883,10 +4147,9 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
             st.markdown(f'<style>html body .st-key-home_brand button {{ background-image: url("app/static/{FIXED_LOGO}")'
                         ' !important; }</style>', unsafe_allow_html=True)
         if st.button("ANI:WHERE", key="home_brand", type="tertiary"):
-            st.session_state["selected"] = None
-            st.session_state["scroll_top"] = True
-            if not on_map:                     # 로그인·내 계정·등록하기 등에서 로고 → 리스트 보기 (11/18)
-                st.session_state.update(list_only=True, cal_view=False, box_view=False)
+            # 로고 → 홈 (11/18 요청). 다른 화면(로그인·내 계정·등록하기 등)에서도 메인의 홈으로
+            st.session_state.update(selected=None, scroll_top=True, home_view=True, cal_view=False, box_view=False)
+            if not on_map:
                 go("map")
             st.rerun()
         with st.container(horizontal=True, key="gnb_tabs"):
@@ -3894,10 +4157,13 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
             box = bool(st.session_state.get("box_view"))
             if not on_map:
                 current = {"_": "다른 화면"}       # 탭 밑줄을 모두 끈다
-            tab_map = not wide and not current and not cal and not box      # (on_map 과 이름을 나눔 — 겹쳐서 +·물어보기 버튼이 사라졌다)
-            on_list = wide and not current and not cal and not box
+            home = bool(st.session_state.get("home_view"))
+            on_home = home and not current and not cal and not box
+            tab_map = not wide and not current and not cal and not box and not home      # (on_map 과 이름을 나눔 — 겹쳐서 +·물어보기 버튼이 사라졌다)
+            on_list = wide and not current and not cal and not box and not home
             on_cal = cal and not current
             on_box = box and not current
+            st.button("홈", key=f"gnbtab_{'on_' if on_home else ''}home", on_click=_gnb_go, args=("home",))   # 11/18 요청
             st.button("지도로 보기", key=f"gnbtab_{'on_' if tab_map else ''}map", on_click=_gnb_go, args=("map",))
             st.button("리스트로 보기", key=f"gnbtab_{'on_' if on_list else ''}list", on_click=_gnb_go, args=("list",))
             if _member():                       # 내 캘린더(알림·찜·다녀온)는 로그인한 사람만
@@ -4361,7 +4627,7 @@ def render_box_view(tab: str) -> None:
 
 
 def page_map() -> None:
-    st.markdown(GLOBAL_CSS + LIST_CSS + STORY_CSS, unsafe_allow_html=True)
+    st.markdown(GLOBAL_CSS + LIST_CSS + STORY_CSS + HOME_CSS, unsafe_allow_html=True)
     ss = st.session_state
     _no_translate(season_on=bool(ss.get("cal_view") and not ss.get("selected") and _member()))   # 계절 배경은 내 캘린더에서만
     _history_guard(on_main=True)
@@ -4434,6 +4700,9 @@ def page_map() -> None:
         return
 
     df["entry_id"] = df["entry_id"].astype(str)
+    if st.session_state.get("home_view") and not current:
+        render_home(df)
+        return
     # '스파이패밀리' 와 '스파이 패밀리' 가 따로 걸리지 않게 목록의 작품명으로 맞춘다
     df["work"] = df["work"].fillna("").astype(str).map(catalog.canonical_work)
 
@@ -4558,7 +4827,6 @@ def page_map() -> None:
         left = contextlib.nullcontext()
     with left:
         if wide:
-            render_stories(df)  # '내가 관심있는 작품' (11/18 요청)
             _update_note()      # '마지막 업데이트' 는 관심 작품 아래, '팝업 카페 N곳' 위 (11/18 요청)
         # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
         with st.container(key="listtools"):
@@ -4577,9 +4845,7 @@ def page_map() -> None:
             st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
 
         if not wide:
-            if not current:
-                render_stories(df)   # 지도로 보기에도 같은 자리에 (11/18 요청)
-            _update_note()           # 마지막 업데이트는 관심 작품 아래 (11/18 요청)
+            _update_note()           # ('내가 관심있는 작품' 줄은 홈에만, 11/18 요청)           # 마지막 업데이트는 관심 작품 아래 (11/18 요청)
         else:
             render_list(view, wide=True, df_all=df, fcond=fcond)
     if wide:
@@ -4632,7 +4898,8 @@ def page_map() -> None:
                     # 옆 물어보기 창은 '마지막 업데이트' 줄부터 화면 아래까지 길게 (11/18 요청, 리스트 보기와 같게)
                     " .st-key-ask_panel { height: calc(100vh - 115px) !important; min-height: 520px; max-height: none !important; }"
                     # 위에 '내가 관심있는 작품' 줄이 있으면 지도는 그만큼 줄여 물어보기 창과 아래 선을 맞춘다 (11/18)
-                    " body:has(.st-key-stories) .st-key-map_frame iframe { height: calc(100vh - 248px) !important; min-height: 440px; } }</style>",
+                    # 지도는 물어보기 창과 아래 선을 맞춘다 (위에 '마지막 업데이트' 줄만큼 짧게, 11/18)
+                    " .st-key-map_frame iframe { height: calc(100vh - 134px) !important; } }</style>",
                     unsafe_allow_html=True)
         with map_right, st.container(key="ask_panel"):   # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
             render_ask_panel()
