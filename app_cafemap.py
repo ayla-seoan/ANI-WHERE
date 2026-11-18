@@ -33,6 +33,7 @@ from dotenv import load_dotenv
 from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
                     kakao_postcode, mycal, notice, notion_sync, review, share, stats)
 from common import blog     # 블로그 후기 (네이버 블로그 검색 · API HUB)
+from common import season   # 계절 배경 그림 (내 캘린더, 11/18)
 from common import links as links_check   # 참고 웹사이트 확인 (11/18 안정성)
 from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
@@ -2650,37 +2651,18 @@ def _scroll_top() -> None:
     )
 
 
-def _season(month: int) -> str:
-    """3~5월 봄 · 6~8월 여름 · 9~11월 가을 · 12~2월 겨울."""
-    return {3: "spring", 4: "spring", 5: "spring", 6: "summer", 7: "summer", 8: "summer",
-            9: "autumn", 10: "autumn", 11: "autumn"}.get(month, "winter")
-
-
-# 계절 배경 (11/18 요청): 봄 꽃잎 · 여름 잎사귀 · 가을 단풍 · 겨울 눈이 화면 위에서 천천히 떨어진다.
-# 그림은 직접 그린 작은 SVG. 클릭을 막지 않고(pointer-events:none), '동작 줄이기' 설정이면 멈춘다
-_SEASON_SVG = {
-    "spring": ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M10 1C14 5 15 11 10 19C5 11 6 5 10 1Z" fill="#F7B6C8"/><path d="M10 4V16" stroke="#EE93AE" stroke-width=".8"/></svg>',
-               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M10 2C15 4 16 10 10 18C4 10 5 4 10 2Z" fill="#FBD3DE"/><path d="M8 2L10 5L12 2" fill="#fff"/></svg>'],
-    "summer": ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M3 17C3 8 9 3 18 2C17 11 12 17 3 17Z" fill="#7CCB8C"/><path d="M3 17L14 6" stroke="#4FA766" stroke-width="1"/></svg>',
-               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M3 17C3 8 9 3 18 2C17 11 12 17 3 17Z" fill="#A6DDA0"/><path d="M3 17L14 6" stroke="#6CBF6F" stroke-width="1"/></svg>'],
-    "autumn": ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M10 1L12 6L16 4L15 9L19 10L15 12L16 16L11 14L10 19L9 14L4 16L5 12L1 10L5 9L4 4L8 6Z" fill="#E0674A"/></svg>',
-               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M10 1L12 6L16 4L15 9L19 10L15 12L16 16L11 14L10 19L9 14L4 16L5 12L1 10L5 9L4 4L8 6Z" fill="#F2A541"/></svg>',
-               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M3 17C3 8 9 3 18 2C17 11 12 17 3 17Z" fill="#E9C46A"/><path d="M3 17L14 6" stroke="#C99A3A" stroke-width="1"/></svg>'],
-    "winter": ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="#CFE3F2"/></svg>',
-               '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><g stroke="#B9D6EC" stroke-width="1.6" stroke-linecap="round"><path d="M10 2V18M3 6L17 14M3 14L17 6"/></g></svg>'],
-}
-
-
-def _season_fx() -> str:
-    """계절 배경 스크립트 (한 번만 붙고, 다시 그려도 새로 만들지 않음. 계절이 바뀌면 새 것으로)."""
-    import base64
+def _season_fx(on: bool) -> str:
+    """계절 배경 스크립트 (11/18 요청: 내 캘린더에서만). 봄 꽃잎 · 여름 잎사귀 · 가을 단풍 · 겨울 눈.
+    그림은 common/season.py 의 작은 SVG.
+    한 번만 붙고 다시 그려도 새로 만들지 않는다. on 이 아니면(다른 화면) 떼어 낸다. 클릭을 막지 않고, '동작 줄이기' 면 끈다."""
     import json as _json
 
-    season = _season(TODAY.month)
-    urls = ["data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode() for svg in _SEASON_SVG[season]]
+    if not on:
+        return "<script>(function(){const o = window.parent.document.getElementById('aw-season'); if (o) o.remove();})();</script>"
+    name = season.season_of(TODAY.month)
     return (
         "<script>(function(){const d = window.parent.document, w = window.parent;"
-        f"const season = '{season}', urls = {_json.dumps(urls)};"
+        f"const season = '{name}', urls = {_json.dumps(season.urls(name))};"
         "const old = d.getElementById('aw-season'); if (old && old.dataset.s === season) return; if (old) old.remove();"
         "if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) return;"
         "if (!d.getElementById('aw-season-css')) { const st = d.createElement('style'); st.id = 'aw-season-css';"
@@ -2704,14 +2686,14 @@ def _season_fx() -> str:
     )
 
 
-def _no_translate() -> None:
+def _no_translate(season_on: bool = False) -> None:
     """페이지를 한국어로 표시해 크롬 자동 번역이 'ANI:WHERE' 를 '아니:어디에' 로 바꾸지 않게 한다.
-    모든 화면이 부르는 곳이라 계절 배경(_season_fx)도 여기서 붙인다."""
+    모든 화면이 부르는 곳이라 계절 배경도 여기서 붙이고 뗀다 (내 캘린더에서만 season_on=True)."""
     components.html(
         "<script>const d = window.parent.document;"
         "d.documentElement.lang = 'ko'; d.documentElement.setAttribute('translate', 'no');"
         "if (!d.querySelector('meta[name=google]')) { const m = d.createElement('meta');"
-        "m.name = 'google'; m.content = 'notranslate'; d.head.appendChild(m); }</script>" + _season_fx(),
+        "m.name = 'google'; m.content = 'notranslate'; d.head.appendChild(m); }</script>" + _season_fx(season_on),
         height=0,
     )
 
@@ -4077,7 +4059,8 @@ def render_box_view(tab: str) -> None:
 
 def page_map() -> None:
     st.markdown(GLOBAL_CSS + LIST_CSS, unsafe_allow_html=True)
-    _no_translate()
+    ss = st.session_state
+    _no_translate(season_on=bool(ss.get("cal_view") and not ss.get("selected") and _member()))   # 계절 배경은 내 캘린더에서만
     _history_guard(on_main=True)
     _clear_buttons()    # 상단 검색칸 오른쪽 × 로 검색어 한 번에 지우기
     _keep_scroll()
@@ -5278,7 +5261,7 @@ def _cal_shift(delta: int) -> None:
 
 def page_calendar() -> None:
     st.markdown(GLOBAL_CSS + CAL_CSS, unsafe_allow_html=True)
-    _no_translate()
+    _no_translate(season_on=True)      # 계절 배경 (내 캘린더에서만, 11/18)
     if _brand(home=True, fixed=True):
         go("map")
     render_calendar()

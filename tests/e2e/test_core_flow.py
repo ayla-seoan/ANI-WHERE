@@ -173,9 +173,12 @@ def test_4_북마크하면_내_캘린더에_보인다(page: Page, app_url, data_
         # 곧 있는 팝업 목록(또는 달력 막대)에 이 팝업이 들어 있어야 한다
         expect(page.locator(".up-name", has_text=work).first).to_be_attached(timeout=LONG)
         expect(page.locator(".cal-bar", has_text=work).first).to_be_attached()
+        # 계절 배경은 내 캘린더에서만 (11/18 요청). 동작 줄이기 설정이 아닌 브라우저 기준
+        expect(page.locator("#aw-season")).to_be_attached(timeout=LONG)
     finally:
         # 상태 되돌리기: 북마크 해제
         open_list(page, app_url)
+        expect(page.locator("#aw-season")).to_have_count(0)        # 리스트에서는 떨어지는 그림이 없다
         page.locator(f".st-key-fav_on_w_{eid} button").click()
         expect(page.locator(f".st-key-fav_off_w_{eid}")).to_be_visible(timeout=LONG)
         wait_idle(page)
