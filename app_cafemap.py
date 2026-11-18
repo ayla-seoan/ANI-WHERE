@@ -6279,7 +6279,148 @@ def _footer() -> None:
         f'<div class="aw-foot"><div>© {TODAY.year} ANI:WHERE</div>'
         f'<div>운영: ANI:WHERE · 개인정보 문의: <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a></div>'
         '<div class="aw-foot-links"><a href="./privacy" target="_self">개인정보처리방침 · 이용약관</a>'
-        '<a href="./guide" target="_self">사용자 튜토리얼</a></div></div>', unsafe_allow_html=True)
+        '<a href="./guide" target="_self">사용자 튜토리얼</a><a href="./design" target="_self">디자인 시스템</a></div></div>', unsafe_allow_html=True)
+
+
+DESIGN_DIR = Path(__file__).resolve().parent / "docs" / "design"
+DESIGN_COMPONENTS = [("Badge", "배지"), ("Button", "버튼"), ("PosterCard", "포스터 카드"), ("StoryCircle", "북마크 팝업 동그라미"),
+                     ("Chip", "칩")]
+DESIGN_CSS = """
+<style>
+.st-key-design_wrap { max-width: 1040px; margin: 0 auto; }
+.ds-cover { width: 100%; max-width: 960px; overflow: hidden; border-radius: 18px; border: 1px solid #E3E9E7; margin: 6px 0 10px; }
+.ds-cover .cv { transform-origin: 0 0; }
+@media (max-width: 1040px) { .ds-cover { height: 270px; } .ds-cover .cv { transform: scale(0.9); } }
+@media (max-width: 900px) { .ds-cover { height: 225px; } .ds-cover .cv { transform: scale(0.75); } }
+@media (max-width: 760px) { .ds-cover { height: 186px; } .ds-cover .cv { transform: scale(0.62); } }
+@media (max-width: 640px) { .ds-cover { height: 156px; } .ds-cover .cv { transform: scale(0.52); } }
+@media (max-width: 520px) { .ds-cover { height: 126px; } .ds-cover .cv { transform: scale(0.42); } }
+@media (max-width: 430px) { .ds-cover { height: 108px; } .ds-cover .cv { transform: scale(0.36); } }
+@media (max-width: 380px) { .ds-cover { height: 96px; } .ds-cover .cv { transform: scale(0.32); } }
+.ds-h2 { font-size: 1.4rem; font-weight: 900; margin: 34px 0 6px; padding-top: 22px; border-top: 1px solid #E6ECEA; }
+.ds-sub { color: #7B8784; font-size: .88rem; margin: 0 0 12px; }
+.ds-sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin: 8px 0 14px; }
+.ds-sw > div { border: 1px solid #E3E9E7; border-radius: 12px; overflow: hidden; background: #fff; }
+.ds-sw .chip { height: 64px; border-bottom: 1px solid #EEF2F1; }
+.ds-sw .nm { padding: 8px 10px 0; font-weight: 800; font-size: .85rem; }
+.ds-sw .vl { padding: 0 10px; font-size: .75rem; color: #7B8784; font-variant-numeric: tabular-nums; }
+.ds-sw .us { padding: 4px 10px 10px; font-size: .74rem; color: #4B5653; line-height: 1.5; }
+.ds-grp { font-weight: 800; color: #0d9488; margin: 14px 0 2px; font-size: .95rem; }
+.ds-type > div { display: flex; gap: 16px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid #EEF2F1; }
+.ds-type .meta { width: 190px; flex: none; font-size: .75rem; color: #7B8784; }
+.ds-type .meta b { display: block; color: #26302D; font-size: .85rem; }
+.ds-scale { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end; margin: 6px 0 12px; }
+.ds-scale > div { text-align: center; font-size: .75rem; color: #7B8784; }
+.ds-scale .bar { background: var(--accent); border-radius: 3px; margin: 0 auto 6px; }
+.ds-scale .box { width: 72px; height: 72px; background: #e6fbf7; border: 2px solid #14b8a6; margin: 0 auto 6px; }
+.ds-scale .shd { width: 110px; height: 64px; background: #fff; border-radius: 12px; margin: 0 auto 10px; }
+.ds-comp { border: 1px solid #E3E9E7; border-radius: 16px; margin: 12px 0 18px; overflow: hidden; }
+.ds-comp .stage { background: #F6F8F7; padding: 6px; overflow-x: auto; }
+.ds-comp .doc { padding: 4px 18px 10px; font-size: .9rem; line-height: 1.7; }
+.ds-logos { display: flex; flex-wrap: wrap; gap: 14px; }
+.ds-logos figure { margin: 0; width: 220px; text-align: center; font-size: .78rem; color: #7B8784; }
+.ds-logos img { width: 100%; height: 110px; object-fit: contain; background: #fff; border: 1px solid #E3E9E7; border-radius: 12px; padding: 10px; box-sizing: border-box; }
+@media (max-width: 640px) { .ds-type > div { flex-direction: column; gap: 4px; } .ds-type .meta { width: auto; } }
+</style>
+"""
+
+
+def _design_vars(tok: dict) -> str:
+    """tokens.json → CSS 변수 (컴포넌트 모습 · 색 칸이 같은 값을 쓰게). 별칭 {mint} 은 var(--mint)."""
+    out = []
+    for t in tok["color"]["tokens"]:
+        v = t["value"] if isinstance(t["value"], str) else next(iter(t["value"].values()))
+        out.append(f'--{t["name"]}: ' + (f'var(--{v[1:-1]})' if v.startswith("{") else v) + ";")
+    for fam in ("spacing", "radius", "shadow"):
+        out += [f'--{t["name"]}: {t["value"]};' for t in tok.get(fam, {}).get("tokens", [])]
+    out += [f'--font-{k}: {v};' for k, v in tok["type"]["families"].items()]
+    return "<style>.st-key-design_wrap { " + " ".join(out) + " }</style>"
+
+
+def page_design() -> None:
+    """ANI:WHERE 디자인 시스템 (/design, 누구나 열람, 11/18 요청). Claude Design 의 디자인 시스템과 같은 내용을
+    docs/design/ (tokens.json · README.md · components/) 에서 읽어 그린다 — 값은 이 파일들 한 곳에서만 고친다."""
+    import json as _json
+
+    try:
+        tok = _json.loads((DESIGN_DIR / "tokens.json").read_text(encoding="utf-8"))
+        book = (DESIGN_DIR / "README.md").read_text(encoding="utf-8")
+        comp_css = (Path(__file__).resolve().parent / "static" / "design" / "components.css").read_text(encoding="utf-8")
+        comp_css += (Path(__file__).resolve().parent / "static" / "design" / "cover.css").read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        st.warning("디자인 시스템을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.", icon=":material/error:")
+        return
+    st.markdown(GLOBAL_CSS + AUTH_CSS + DESIGN_CSS + "<style>" + comp_css + "</style>", unsafe_allow_html=True)
+    st.markdown(_design_vars(tok), unsafe_allow_html=True)
+    _no_translate()
+    with st.container(key="topbar"):
+        _gnb(None, on_map=False)
+    with st.container(key="design_wrap"):
+        # 표지 (Claude Design 표지와 같은 그림). 960px 로 그리고 화면이 좁으면 줄여 보인다
+        cover = (DESIGN_DIR / "components" / "Cover.html").read_text(encoding="utf-8")
+        st.markdown(f'<div class="ds-cover">{cover}</div>', unsafe_allow_html=True)
+        st.markdown('<div class="ds-sub">ANI:WHERE 앱 코드(<code>app_cafemap.py</code>)에서 값을 그대로 옮긴 디자인 시스템이에요. '
+                    'Claude Design 에 같은 내용이 있고, 이 페이지는 누구나 볼 수 있게 앱 안에 둔 것이에요.</div>', unsafe_allow_html=True)
+
+        # 1) 브랜드 안내서 (말투 · 색 쓰임 · 글꼴 · 모양 · 배지 뜻 · 아이콘 · 로고 · 옮기지 않은 것)
+        st.markdown(book.split("\n", 1)[1] if book.startswith("# ") else book)
+
+        # 2) 색 토큰
+        st.markdown('<div class="ds-h2">색 토큰</div><div class="ds-sub">이름 · 값 · 언제 쓰는지. 칸의 색은 실제 값이에요.</div>',
+                    unsafe_allow_html=True)
+        groups = [("포인트 · 브랜드", ("accent", "mint", "gnb")), ("글자 · 바탕 · 선", ("ink", "muted", "subtle", "line", "surface", "gray")),
+                  ("강조 · 상태", ("coral", "blue", "red", "purple", "orange", "star", "today", "gantt")), ("지역", ("city",))]
+        for title, pre in groups:
+            cells = []
+            for t in tok["color"]["tokens"]:
+                if not t["name"].startswith(pre):
+                    continue
+                v = t["value"] if isinstance(t["value"], str) else next(iter(t["value"].values()))
+                cells.append(f'<div><div class="chip" style="background:var(--{t["name"]})"></div><div class="nm">{escape(t["name"])}</div>'
+                             f'<div class="vl">{escape(v)}</div><div class="us">{escape(t.get("usage", ""))}</div></div>')
+            st.markdown(f'<div class="ds-grp">{escape(title)}</div><div class="ds-sw">{"".join(cells)}</div>', unsafe_allow_html=True)
+
+        # 3) 글꼴
+        st.markdown('<div class="ds-h2">글꼴</div><div class="ds-sub">제목은 Jua, 본문은 나눔스퀘어라운드 → Pretendard, 아이콘은 Material Symbols Rounded.</div>',
+                    unsafe_allow_html=True)
+        rows = []
+        for g in tok["type"]["groups"]:
+            fam = f'var(--font-{g["family"]})'
+            for sty in g["styles"]:
+                rows.append(f'<div><div class="meta"><b>{escape(sty["name"])}</b>{escape(g["name"])} · {sty["fontSize"]} / {sty["lineHeight"]} · {sty["fontWeight"]}'
+                            f'<br>{escape(sty.get("usage", ""))}</div><div style="font-family:{fam};font-size:{sty["fontSize"]};line-height:{sty["lineHeight"]};'
+                            f'font-weight:{sty["fontWeight"]}">{escape(sty.get("sample", ""))}</div></div>')
+        st.markdown(f'<div class="ds-type">{"".join(rows)}</div>', unsafe_allow_html=True)
+
+        # 4) 간격 · 모서리 · 그림자
+        st.markdown('<div class="ds-h2">간격 · 모서리 · 그림자</div>', unsafe_allow_html=True)
+        sp = "".join(f'<div><div class="bar" style="width:{t["value"]};height:40px"></div><b>{t["name"]}</b><br>{t["value"]}</div>' for t in tok["spacing"]["tokens"])
+        rd = "".join(f'<div><div class="box" style="border-radius:{t["value"]}"></div><b>{t["name"]}</b><br>{t["value"]}</div>' for t in tok["radius"]["tokens"])
+        sh = "".join(f'<div><div class="shd" style="box-shadow:{t["value"]}"></div><b>{t["name"]}</b></div>' for t in tok["shadow"]["tokens"])
+        st.markdown(f'<div class="ds-grp">간격</div><div class="ds-scale">{sp}</div><div class="ds-grp">모서리</div><div class="ds-scale">{rd}</div>'
+                    f'<div class="ds-grp">그림자</div><div class="ds-scale">{sh}</div>', unsafe_allow_html=True)
+
+        # 5) 컴포넌트 (앱 CSS 를 옮긴 모습 + 쓰는 규칙)
+        st.markdown('<div class="ds-h2">컴포넌트</div><div class="ds-sub">앱 화면의 CSS 를 보고 옮긴 모습이에요 (누르는 동작은 없어요).</div>',
+                    unsafe_allow_html=True)
+        for key, label in DESIGN_COMPONENTS:
+            try:
+                html = (DESIGN_DIR / "components" / f"{key}.html").read_text(encoding="utf-8")
+                doc = (DESIGN_DIR / "components" / f"{key}.md").read_text(encoding="utf-8")
+            except OSError:
+                continue
+            doc = doc.split("\n", 1)[1] if doc.startswith("# ") else doc
+            st.markdown(f'<div class="ds-grp">{escape(label)} <span style="color:#9AA5A1;font-weight:600">{key}</span></div>'
+                        f'<div class="ds-comp"><div class="stage">{html}</div></div>', unsafe_allow_html=True)
+            st.markdown(doc)
+
+        # 6) 로고 · 그림
+        st.markdown('<div class="ds-h2">로고 · 그림</div><div class="ds-sub">저장소 static/ 의 파일 그대로. 다시 그리거나 색을 바꾸지 않아요.</div>'
+                    '<div class="ds-logos">'
+                    + "".join(f'<figure><img src="app/static/{f}" alt="{a}"><figcaption>{f} · {a}</figcaption></figure>'
+                              for f, a in (("logo.png", "기본 로고"), ("logo_mint.png", "민트 로고"), ("logo2.png", "보조 로고"),
+                                           ("ask_avatar.png", "물어보기 도우미"), ("default_poster.png", "기본 포스터")))
+                    + '</div>', unsafe_allow_html=True)
 
 
 def page_guide() -> None:
@@ -7879,6 +8020,7 @@ PAGES = {
     "data": st.Page(page_data, title="데이터 보기 · ANI:WHERE", icon=":material/database:", url_path="data"),
     "privacy": st.Page(page_privacy, title="개인정보처리방침 · ANI:WHERE", icon=":material/policy:", url_path="privacy"),
     "guide": st.Page(page_guide, title="사용자 튜토리얼 · ANI:WHERE", icon=":material/help:", url_path="guide"),
+    "design": st.Page(page_design, title="디자인 시스템 · ANI:WHERE", icon=":material/palette:", url_path="design"),
 }
 try:
     st.navigation(list(PAGES.values()), position="hidden").run()

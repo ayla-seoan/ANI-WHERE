@@ -1,0 +1,54 @@
+/* ANI:WHERE 정적 컴포넌트 모습 — app_cafemap.py 의 CSS 를 손으로 옮김 (토큰 이름으로) */
+.aw { font-family: var(--font-body); color: var(--ink); }
+.aw .mi { font-family: var(--font-icon); font-weight: normal; font-style: normal; line-height: 1; font-size: 1.15em;
+  display: inline-block; vertical-align: -0.15em; -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga'; }
+
+/* 배지 */
+.aw-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--radius-pill);
+  font-size: 12px; font-weight: 800; line-height: 1.4; white-space: nowrap; }
+.aw-badge.live { color: var(--accent-deep); background: var(--accent-soft); }
+.aw-badge.soon { color: var(--blue); background: var(--blue-soft); }
+.aw-badge.closing { color: var(--red); background: var(--red-soft); }
+.aw-badge.reserve { color: #ffffff; background: var(--purple); }
+.aw-badge.ends { color: #ffffff; background: var(--orange); }
+.aw-badge.area { color: #ffffff; border: 1.5px solid rgba(255,255,255,.8); }
+
+/* 버튼 */
+.aw-btn { font-family: var(--font-body); font-size: 14px; font-weight: 700; border-radius: var(--radius-pill); padding: 8px 18px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.aw-btn.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+.aw-btn.more { background: var(--gray-soft); border-color: var(--gray-soft); color: var(--muted); }
+.aw-btn.tertiary { background: transparent; border-color: transparent; color: var(--muted); padding: 8px 6px; }
+.aw-fab { width: 56px; height: 56px; border-radius: 50%; background: var(--coral); color: #ffffff; border: 0;
+  display: inline-flex; align-items: center; justify-content: center; box-shadow: var(--shadow-float); font-size: 28px; }
+.aw-bm { width: 30px; height: 30px; border-radius: var(--radius-sm); border: 0; display: inline-flex; align-items: center;
+  justify-content: center; font-size: 20px; color: var(--ink); background: rgba(255,255,255,.3); }
+.aw-bm.on { background: var(--accent); color: #ffffff; }
+
+/* 포스터 카드 */
+.aw-card { position: relative; width: 210px; border: 2.5px solid var(--mint-line); border-radius: var(--radius-md); overflow: hidden;
+  aspect-ratio: 3 / 4; background: var(--gray-soft) center / cover no-repeat; box-sizing: border-box; }
+.aw-card .tl { position: absolute; left: 10px; top: 10px; }
+.aw-card .tr { position: absolute; right: 10px; top: 10px; }
+.aw-card .info { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 14px 12px;
+  background: linear-gradient(transparent, rgba(0,0,0,.72)); color: #ffffff; }
+.aw-card .t { font-family: var(--font-display); font-size: 17px; line-height: 1.25; }
+.aw-card .s, .aw-card .d { font-size: 12px; opacity: .92; margin-top: 2px; }
+.aw-card .bm { position: absolute; right: 12px; bottom: 12px; }
+
+/* 북마크 팝업 동그라미 (스토리) */
+.aw-story { display: inline-flex; flex-direction: column; align-items: center; width: 84px; }
+.aw-story .ring { position: relative; width: 72px; height: 72px; border-radius: 50%; padding: 3px; box-sizing: border-box;
+  background: conic-gradient(from 210deg, var(--coral), #ffb86b, #ffd66b, var(--coral)); }
+.aw-story .pic { width: 100%; height: 100%; border-radius: 50%; border: 3px solid #ffffff; box-sizing: border-box;
+  background: var(--gray-soft) center / cover no-repeat; }
+.aw-story .rg { position: absolute; left: 50%; top: -7px; transform: translateX(-50%); font-size: 10px; font-weight: 800;
+  color: #ffffff; background: var(--accent-deep); padding: 1px 7px; border-radius: var(--radius-pill); border: 1.5px solid #ffffff; white-space: nowrap; }
+.aw-story .nm { margin-top: 6px; width: 84px; text-align: center; font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aw-story.add .ring { background: none; border: 2px dashed #d3dad8; display: flex; align-items: center; justify-content: center;
+  color: var(--accent-deep); font-size: 32px; }
+
+/* 칩 (지역 고르기 · 추천 질문) */
+.aw-chip { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: var(--radius-pill); font-size: 13px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.aw-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); font-weight: 700; }

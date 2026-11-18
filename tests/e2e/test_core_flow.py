@@ -411,3 +411,14 @@ def test_13_내_리뷰는_고칠때_사진을_붙이고_직접_지울_수_있다
     dlg.get_by_role("button", name="삭제", exact=True).click()
     wait_idle(page)
     expect(page.get_by_text(text)).to_have_count(0, timeout=LONG)
+
+
+# ------------------------------------------------------------------ 14. 디자인 시스템 공개 페이지 (11/18)
+def test_14_디자인_시스템_페이지는_로그인_없이_열린다(page: Page, app_url):
+    page.goto(app_url + "/design")
+    expect(page.locator(".ds-cover svg")).to_be_visible(timeout=LONG)
+    tokens = json.loads((Path(__file__).resolve().parents[2] / "docs" / "design" / "tokens.json").read_text(encoding="utf-8"))
+    expect(page.locator(".ds-sw > div")).to_have_count(len(tokens["color"]["tokens"]), timeout=LONG)   # 색 토큰마다 한 칸
+    expect(page.locator(".ds-comp")).to_have_count(5)
+    assert page.evaluate("document.documentElement.scrollWidth") <= page.viewport_size["width"]
+    expect(page.locator(".aw-foot a", has_text="디자인 시스템")).to_be_visible()
