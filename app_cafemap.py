@@ -5954,10 +5954,17 @@ ASK_PANEL_CSS = """
 /* 위 고정줄(메뉴·검색 필터) 아래에 붙고, 대화창 전체가 화면 안에 들어오게:
    대화창 = 세로 flex, 높이는 (화면 - 위 고정줄 - 여백)까지. 대화 기록만 남는 공간을 쓰고 넘치면 그 안에서 스크롤 */
 .st-key-ask_panel { display: flex !important; flex-direction: column !important;
-  max-height: calc(100vh - var(--apn-top, 172px) - 16px); }
+  height: calc(100vh - var(--apn-top, 172px) - 112px) !important; max-height: calc(100vh - var(--apn-top, 172px) - 16px);
+  flex: 0 0 auto !important; }   /* Streamlit 기본 flex:1 1 0% 이면 높이가 무시돼 대화창이 내용만큼 줄어든다 */
 .st-key-ask_panel > * { flex: 0 0 auto; }
 .st-key-ask_panel > *:has(.st-key-apn_log), .st-key-ask_panel > .st-key-apn_log {
   flex: 1 1 auto !important; min-height: 0 !important; display: flex; flex-direction: column; }
+/* 대화창을 따로 다시 그리는 칸(fragment)으로 바꾸며 감싸는 상자가 한 겹 늘었다 (11/18):
+   대화 기록까지 이어지는 상자를 모두 세로 flex 로 → 대화 기록이 남는 높이만 쓰고, 추천 칩·입력칸은 늘 보인다 */
+.st-key-ask_panel :has(.st-key-apn_log):not(.st-key-apn_log) { display: flex !important; flex-direction: column !important;
+  flex: 1 1 auto !important; min-height: 0 !important; height: auto !important; }
+.st-key-ask_panel :has(.st-key-apn_log):not(.st-key-apn_log) > :not(:has(.st-key-apn_log)):not(.st-key-apn_log) {
+  flex: 0 0 auto !important; }
 .st-key-apn_log { flex: 1 1 auto !important; height: auto !important; max-height: none !important;
   min-height: 90px !important; overflow-y: auto !important; }
 .st-key-ask_panel { border: 1.5px solid #E3E8E6; border-radius: 16px; background: #fff;
