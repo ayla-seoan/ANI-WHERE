@@ -3,7 +3,7 @@
     python scripts/build_n8n.py
 
 만든 파일: automation/n8n/survey_collect.json (응답 정리), automation/n8n/survey_report.json (요약 메일)
-JS 는 code/ 폴더 한 곳에서만 고친다 (Node 로 시험할 수 있게). 프롬프트는 common/prompts/survey_summary.v1.txt 를
+JS 는 code/ 폴더 한 곳에서만 고친다 (Node 로 시험할 수 있게). 프롬프트는 common/prompts/survey_summary.v2.txt 를
 n8n 이 GitHub 에서 읽는다 (프롬프트를 워크플로 안에 문자열로 두지 않는다 — CLAUDE.md).
 받는 메일 주소 · 시트 주소 · 키는 여기 적지 않는다. 가져온 뒤 n8n 화면에서 넣는다 (automation/n8n/README.md).
 """
@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "automation" / "n8n"
 CODE = OUT / "code"
-PROMPT_URL = "https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/common/prompts/survey_summary.v1.txt"
+PROMPT_URL = "https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/common/prompts/survey_summary.v2.txt"
 SHEET = {"__rl": True, "mode": "url", "value": ""}           # 가져온 뒤 n8n 에서 구글 시트 주소를 넣는다
 
 

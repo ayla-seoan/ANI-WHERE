@@ -49,8 +49,8 @@ ROOT = Path(__file__).resolve().parent
 TODAY = date.today()
 MAP_HEIGHT = 620
 # 제목 로고: 민트 로고 하나로 고정 (11/18 요청: 흰 글자 로고 → 다시 민트 로고, 크기는 그대로)
-LOGOS = ["logo_add.png"]          # 진한 민트 메뉴바 위: 흰 글자 로고 (11/18 요청)
-FIXED_LOGO = "logo_add.png"
+LOGOS = ["logo_mint.png"]          # 연한 메뉴바 + 초록 로고로 되돌림 (11/18 요청)
+FIXED_LOGO = "logo_mint.png"
 ADD_LOGO = "logo_add.png"          # 등록 화면 로고 (흰 글자 + 민트 테두리)           # 상세·등록 화면에서는 이 로고로 고정
 TOPBAR_TOP = "0rem"      # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
 TOPBAR_H = "282px"        # 상단 묶음 높이 (로고 + 문구 + 검색 필터. '팝업 카페 N곳' 줄은 묶음 밖)
@@ -213,6 +213,8 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   grid-template-columns: 1fr !important; margin-top: 18px !important; }}
 [data-testid="stLayoutWrapper"]:has(> .st-key-list_more) {{ width: 100% !important; flex: 1 1 100% !important; }}
 /* 회색 바탕 + 아래 화살표 + 'N건 더보기' (PC·모바일 같게, 11/18 요청) */
+[class*="st-key-adm_more_"] button {{ border-radius: 999px !important; background: #F2F4F3 !important; border: 1px solid #E3E8E6 !important; }}
+[class*="st-key-adm_more_"] button p, [class*="st-key-adm_more_"] button span {{ color: #5F6B67 !important; font-size: .85rem !important; font-weight: 700 !important; }}
 .st-key-list_more button {{ border-radius: 999px !important; background: #F2F4F3 !important; border: 1px solid #E3E8E6 !important;
   padding: 4px 18px !important; min-height: 0 !important; }}
 .st-key-list_more button p {{ color: #5F6B67 !important; font-size: .88rem !important; font-weight: 700 !important; }}
@@ -357,7 +359,7 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
 /* 로고 그림 아래 'ANIME POP-UP · CAFE · GOODS' 글씨까지 읽히게 로고 칸을 키운다 */
 .st-key-home_brand button {{ width: 330px !important; height: 100px !important;
-  background: url("app/static/logo_add.png") no-repeat left center / contain !important; }}
+  background: url("app/static/logo_mint.png") no-repeat left center / contain !important; }}
 .st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
 /* 로고는 눌러도·커서를 올려도 바탕·그림자·밝기 변화 없이 그대로 (모바일 탭 하이라이트도 끈다) */
 .st-key-home_brand button, .st-key-home_brand button:hover, .st-key-home_brand button:focus,
@@ -2719,21 +2721,21 @@ STORY_CSS = """
 .story { display: flex; flex-direction: column; align-items: center; padding-bottom: 16px; }
 .story .ring { position: relative; width: 72px; height: 72px; border-radius: 50%; padding: 3px; box-sizing: border-box;
   background: conic-gradient(from 210deg, #14b8a6, #7FE0CF, #FFD66B, #14b8a6); transition: transform .18s ease; }
-.story .rg { position: absolute; left: 50%; top: -7px; transform: translateX(-50%); z-index: 2; white-space: nowrap;
-  font-size: .62rem; font-weight: 800; color: #fff; background: var(--accent-deep); padding: 1px 7px; border-radius: 999px;
-  border: 1.5px solid #fff; }
+.story .rg { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); z-index: 2; white-space: nowrap;
+  font-size: .62rem; font-weight: 800; color: var(--accent-deep); background: var(--accent-soft); padding: 1px 7px; border-radius: 999px;
+  border: 1.5px solid var(--accent); }   /* 연한 민트 바탕 + 진한 민트 글자 · 테두리 (11/18 요청) */
 .st-key-story_row { padding-top: 10px !important; }
 .story.hot .ring { background: conic-gradient(from 210deg, var(--accent-deep), var(--accent), #ffd66b, var(--accent-deep)); }
 .story .cnt { position: absolute; right: -2px; bottom: -2px; min-width: 24px; height: 24px; padding: 0 5px; box-sizing: border-box;
   border-radius: 999px; background: var(--accent-deep); color: #fff; font-size: .75rem; font-weight: 800;
   display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
-.story.mark .ring { background: conic-gradient(from 210deg, #FF7A8A, #FFB86B, #FFD66B, #FF7A8A); }
+.story.mark .ring { background: conic-gradient(from 210deg, #14b8a6, #7FE0CF, #FFD66B, #14b8a6); }   /* 북마크 동그라미: 민트→노랑 (11/18 요청) */
 .story .pic { width: 100%; height: 100%; border-radius: 50%; border: 3px solid #fff; box-sizing: border-box;
   background-size: cover; background-position: center; background-color: #EEF3F1; }
 .story .cnt { position: absolute; right: -4px; bottom: -3px; min-width: 17px; height: 17px; padding: 0 3px; box-sizing: border-box;
   border-radius: 999px; background: var(--accent-deep); color: #fff; font-size: .6rem; font-weight: 800;
   display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; }
-.story .nm { margin-top: 6px; width: 84px; text-align: center; font-size: .78rem; font-weight: 700; white-space: nowrap;
+.story .nm { margin-top: 10px; width: 84px; text-align: center; font-size: .78rem; font-weight: 700; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
 .story.on .nm { color: var(--accent-deep); }
 .story.on .ring { box-shadow: 0 0 0 2px var(--accent-soft); }
@@ -4063,9 +4065,9 @@ GNB_CSS = """
 <style>
 .st-key-gnb { align-items: center !important; gap: 4px !important; flex-wrap: nowrap; padding: 6px 0 2px; }
 /* 로고: 메뉴바 안에서는 작게 */
-.st-key-gnb .st-key-home_brand button { width: 200px !important; height: 60px !important; }   /* 로고 크게 (11/18 요청) */
+.st-key-gnb .st-key-home_brand button { width: 155px !important; height: 47px !important; }   /* 11/18 로고 조금 작게 */
 /* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
-.st-key-gnb { position: relative; background: #56c2a7; border-radius: 0 0 28px 28px;   /* 메뉴바: 브랜드 민트 (11/18 요청) */
+.st-key-gnb { position: relative; background: #E9F7F2; border-radius: 0 0 28px 28px;
   padding: 10px 28px !important; margin: 0 -28px; box-sizing: content-box; }
 /* 메뉴바가 있는 화면은 페이지 위 여백을 없애 메뉴바를 화면 맨 위에 붙인다 */
 .stMainBlockContainer { padding-top: 0 !important; }
@@ -4075,20 +4077,20 @@ GNB_CSS = """
 html body .st-key-gnb_right [class*="st-key-gnb_search_"] button,
 html body .st-key-gnb_right [data-testid="stPopover"] button { background-color: transparent !important; background-repeat: no-repeat !important; background-size: 27px 27px !important;
   min-width: 42px; min-height: 42px; }
-html body .st-key-gnb_right .st-key-gnb_search_off button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2.3' stroke-linecap='round'><circle cx='10.5' cy='10.5' r='6.6'/><path d='M15.6 15.6L20 20'/></svg>") !important; background-position: center !important; }
-html body .st-key-gnb_right .st-key-gnb_search_on button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2.3' stroke-linecap='round'><path d='M6.5 6.5l11 11M17.5 6.5l-11 11'/></svg>") !important; background-position: center !important; }
-html body .st-key-gnb_right [data-testid="stPopover"] button { position: relative; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6.3 16.4V11.2a5.7 5.7 0 0 1 11.4 0v5.2'/><path d='M4.6 16.6c0 .3.3.5.6.5h13.6c.3 0 .6-.2.6-.5'/><path d='M10.2 19.6a1.9 1.9 0 0 0 3.6 0'/></svg>") !important; background-position: center !important;
+html body .st-key-gnb_right .st-key-gnb_search_off button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.3' stroke-linecap='round'><circle cx='10.5' cy='10.5' r='6.6'/><path d='M15.6 15.6L20 20'/></svg>") !important; background-position: center !important; }
+html body .st-key-gnb_right .st-key-gnb_search_on button { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.3' stroke-linecap='round'><path d='M6.5 6.5l11 11M17.5 6.5l-11 11'/></svg>") !important; background-position: center !important; }
+html body .st-key-gnb_right [data-testid="stPopover"] button { position: relative; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5260' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6.3 16.4V11.2a5.7 5.7 0 0 1 11.4 0v5.2'/><path d='M4.6 16.6c0 .3.3.5.6.5h13.6c.3 0 .6-.2.6-.5'/><path d='M10.2 19.6a1.9 1.9 0 0 0 3.6 0'/></svg>") !important; background-position: center !important;
   padding: 0 !important; width: 42px !important; }
 .st-key-gnb_right [data-testid="stPopover"] button p { margin-left: -6px !important; font-size: .85rem !important; }
 .st-key-gnb_right [class*="st-key-gnb_search_"] button p, .st-key-gnb_right [data-testid="stPopover"] button p {
-  font-family: "NanumSquareRound", "Jua", sans-serif !important; color: #FFFFFF !important; font-weight: 800 !important; }
-.st-key-gnb_right .st-key-admin_btn button { background: #fff !important; border: 1.5px solid #fff !important;
+  font-family: "NanumSquareRound", "Jua", sans-serif !important; color: #2E9C82 !important; font-weight: 800 !important; }
+.st-key-gnb_right .st-key-admin_btn button { background: #fff !important; border: 1.5px solid #9EDDCC !important;
   border-radius: 999px !important; padding: 2px 12px !important; min-height: 0 !important; }
 .st-key-gnb_right .st-key-admin_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 800 !important;
   color: #2E9C82 !important; font-size: .88rem !important; }
 .st-key-gnb_right .st-key-admin_btn button span { color: #2E9C82 !important; font-size: 1.1rem !important; }
 .st-key-gnb_right .st-key-login_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 700 !important;
-  color: #FFFFFF !important; font-size: .88rem !important; letter-spacing: -.01em; }
+  color: #4B5260 !important; font-size: .88rem !important; letter-spacing: -.01em; }
 .st-key-gnb_tabs button p { font-family: "NanumSquareRound", sans-serif !important; }
 /* 메뉴바 묶음 안의 보이지 않는 칸(스타일·높이 0 iframe·위치 받기)이 간격만 차지하지 않게 */
 .st-key-topbar { gap: 0 !important; }
@@ -4114,10 +4116,10 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .st-key-gnb_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important;
   box-shadow: none !important; padding: 10px 16px 3px !important; border-bottom: 3px solid transparent !important;
   min-height: 0 !important; }   /* 글자와 밑줄 사이 반으로 (12px → 6px, 11/18 요청) */
-.st-key-gnb_tabs button p { font-size: .92rem !important; font-weight: 600 !important; color: rgba(255,255,255,.78) !important; }
-.st-key-gnb_tabs button:hover p { color: #FFFFFF !important; }
-.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: #FFFFFF !important; }
-.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: #FFFFFF !important; font-weight: 800 !important; }
+.st-key-gnb_tabs button p { font-size: .92rem !important; font-weight: 600 !important; color: #8A9592 !important; }
+.st-key-gnb_tabs button:hover p { color: #26302D !important; }
+.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: #26302D !important; }
+.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
 /* 오른쪽 끝: 검색 · 알림 · 로그인 */
 .st-key-gnb_right { margin-left: auto; width: auto !important; flex: 0 0 auto; gap: 2px !important; align-items: center; }
 .st-key-gnb_right [class*="st-key-gnb_search_"] button { background: transparent !important; border: 0 !important;
@@ -4229,7 +4231,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
   /* 모바일: 첫 줄 = 로고 + (검색·알림·로그인) */
   .st-key-gnb { flex-wrap: wrap !important; flex-direction: row !important; row-gap: 2px !important; }
   .st-key-gnb .st-key-home_brand { flex: 0 0 auto !important; width: auto !important; }
-  .st-key-gnb .st-key-home_brand button { width: 150px !important; height: 47px !important; }   /* 모바일 로고도 크게 (11/18) */
+  .st-key-gnb .st-key-home_brand button { width: 118px !important; height: 37px !important; }
   .st-key-gnb > *:has(.st-key-gnb_right), .st-key-gnb > .st-key-gnb_right { order: 2; margin-left: auto !important; }
   .st-key-gnb > *:has(.st-key-gnb_tabs), .st-key-gnb > .st-key-gnb_tabs { order: 3; flex: 1 1 100% !important; width: 100% !important; }
   .st-key-gnb_right { flex-wrap: nowrap !important; }
@@ -4251,7 +4253,7 @@ ASK_FAB_CSS = """
   .st-key-ask_fab { display: block; position: fixed !important; right: 16px; bottom: calc(76px + 50px + 12px);
     z-index: 1003; width: 50px !important; height: 50px; }
   .st-key-ask_fab button { width: 50px !important; height: 50px !important; min-height: 0 !important; border-radius: 50% !important;
-    padding: 0 !important; background: #9EDDCC !important; border: 0 !important; box-shadow: 0 6px 16px rgba(46,156,130,.35) !important;   /* mint-line (11/18 요청) */
+    padding: 0 !important; background: #9EDDCC !important; border: 2px solid #0D9488 !important; box-shadow: 0 6px 16px rgba(46,156,130,.35) !important;   /* mint-line + 진한 테두리 (11/18 요청) */
     display: flex !important; align-items: center !important; justify-content: center !important; }
   .st-key-ask_fab button span { font-size: 1.55rem !important; color: #fff !important; margin: 0 !important; }
 }</style>
@@ -7103,14 +7105,18 @@ def _adm_href(r: dict) -> str:
     return f"./?cafe={quote(str(r.get('entry_id') or ''))}"
 
 
-GANTT_COLOR = {"예정": "#3672BD", "진행": "#14B8A6", "종료": "#A9B3B0"}
+GANTT_COLOR = {"예정": "#3672BD", "진행": "#14B8A6", "종료": "#A9B3B0"}     # 진한 색으로 되돌림 (11/18 요청)
+GANTT_PAGE = 20     # 이 주 일정: 처음 20곳, 더보기마다 20곳 더 (11/18 요청)
+BOARD_PAGE = 10     # 고른 주 현황: 칸마다 처음 10곳, 더보기마다 10곳 더
 
 
 def _admin_gantt(mon: date) -> None:
     """고른 주(월~일) 하루 단위 팝업 일정. 주 밖으로 이어지면 막대 끝을 ‹ › 로, 오늘 칸은 연한 민트."""
     start, end = mon, mon + timedelta(days=6)
     span = (end - start).days + 1
-    rows = admin.gantt_rows(store.all_rows(), start, end, limit=80)
+    every = admin.gantt_rows(store.all_rows(), start, end, limit=10_000)
+    n_key = f"adm_gantt_n_{mon.isoformat()}"
+    rows = every[:st.session_state.get(n_key, GANTT_PAGE)]
 
     def pct(d: date) -> float:
         return max(0.0, min(100.0, (d - start).days / span * 100))
@@ -7129,7 +7135,7 @@ def _admin_gantt(mon: date) -> None:
                     f'<span class="gt-short">{"오늘" if start + timedelta(days=i) == TODAY else wd[i]}</span></div>'
                     for i in range(span))
     today = ""
-    html = [f'<div class="gt"><div class="gt-row gt-head"><div class="gt-lab"><b>팝업 {len(rows)}곳</b></div>'
+    html = [f'<div class="gt"><div class="gt-row gt-head"><div class="gt-lab"><b>팝업 {len(every)}곳</b></div>'
             f'<div class="gt-track">{ticks}</div></div>']
     for r in rows:
         s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
@@ -7147,6 +7153,10 @@ def _admin_gantt(mon: date) -> None:
                                                      for k, c in GANTT_COLOR.items())
                 + '<span><i style="background:#FF5A5A"></i>오늘 (빨간 칸)</span><span>막대가 칸 끝에 붙어 있으면 이 주 앞뒤로 이어져요</span></div></div>')
     st.markdown("".join(html), unsafe_allow_html=True)
+    if len(every) > len(rows):
+        with st.container(horizontal=True, horizontal_alignment="center", key="adm_more_gantt"):
+            st.button(f"{len(every) - len(rows)}건 더보기", icon=":material/expand_more:", key="adm_gantt_more_btn",
+                      on_click=lambda: st.session_state.update({n_key: len(rows) + GANTT_PAGE}))
 
 
 def _admin_board() -> None:
@@ -7157,7 +7167,9 @@ def _admin_board() -> None:
     board = admin.popup_board(store.all_rows(), mon)
     colors = {"새로 생성": "#14B8A6", "예정": "#3672BD", "진행": "#23866A", "종료": "#8A9592"}
     cols = st.columns(4, gap="small")
-    for col, (name, rows) in zip(cols, board.items()):
+    for i, (col, (name, rows)) in enumerate(zip(cols, board.items())):
+        n_key = f"adm_board_n_{i}_{mon.isoformat()}"
+        n_show = st.session_state.get(n_key, BOARD_PAGE)
         with col:
             cards = "".join(
                 f'<a class="adm-card adm-link adm-pcard" href="{_adm_href(r)}" target="_self">'
@@ -7165,9 +7177,13 @@ def _admin_board() -> None:
                 f'<b>{escape(str(r.get("work") or ""))}</b>'
                 f'<span>{escape(str(r.get("cafe_name") or ""))}</span>'
                 f'<em>{escape(str(r.get("start_date") or "")[5:])} ~ {escape(str(r.get("end_date") or "")[5:])}</em></div></a>'
-                for r in rows[:40]) or '<div class="adm-empty">없어요</div>'
+                for r in rows[:n_show]) or '<div class="adm-empty">없어요</div>'
             st.markdown(f'<div class="adm-col" style="--c:{colors[name]}"><div class="adm-colhead">{name}'
                         f'<small>{len(rows)}곳</small></div>{cards}</div>', unsafe_allow_html=True)
+            if len(rows) > n_show:
+                with st.container(horizontal=True, horizontal_alignment="center", key=f"adm_more_board_{i}"):
+                    st.button(f"{len(rows) - n_show}건 더보기", icon=":material/expand_more:", key=f"adm_board_more_btn_{i}",
+                              on_click=lambda k=n_key, n=n_show: st.session_state.update({k: n + BOARD_PAGE}))
     st.caption("새로 생성 = 그 주에 처음 등록 · 예정 = 그 주가 끝난 뒤 4주 안에 시작 · 진행 = 그 주에 열려 있고 다음 주에도 이어짐 · 종료 = 그 주에 끝남")
 
 
@@ -7179,7 +7195,7 @@ N8N_URL = "http://localhost:5678"     # n8n 은 운영자 컴퓨터에서 돈다
 
 def _survey_links(sheet_id: str) -> None:
     """설문 폼 · 폼 고치기 · 응답 시트 · n8n 바로가기 버튼."""
-    links = [("설문 폼 (테스트 때 여는 주소)", os.getenv("SURVEY_FORM_URL") or SURVEY_FORM_URL, ":material/assignment:"),
+    links = [("설문 폼 (참여자에게 보낼 주소)", os.getenv("SURVEY_FORM_URL") or SURVEY_FORM_URL, ":material/assignment:"),
              ("폼 고치기", os.getenv("SURVEY_FORM_EDIT_URL") or SURVEY_FORM_EDIT_URL, ":material/edit_note:"),
              ("응답 시트", f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit" if sheet_id else "", ":material/table_view:"),
              ("n8n 워크플로", os.getenv("N8N_URL") or N8N_URL, ":material/account_tree:")]
@@ -7208,7 +7224,8 @@ def _survey_rows(sheet_id: str) -> tuple[list[dict], str]:
 
 
 def _admin_survey() -> None:
-    """사용자 테스트 (11/18 요청): n8n 이 구글 폼 응답을 정리해 쌓은 '정리' 탭 → 1차 · 2차 비교 + 원본 표.
+    """사용자 테스트 (11/18 요청): n8n 이 구글 폼 응답을 정리해 쌓은 '정리' 탭 → A(평소 방법)/B(ANI:WHERE) 비교 ·
+    과제별 성공률 · 문제 정의(불편한 점 · 정보 출처) · 만족도 그래프 + 원본 표.
     시트 주소(번호)는 .env / Secrets 의 SURVEY_SHEET_ID. 숫자는 stats.survey_summary (n8n 메일과 같은 규칙)."""
     sheet_id = (os.getenv("SURVEY_SHEET_ID") or "").strip()
     _survey_links(sheet_id)
@@ -7225,39 +7242,76 @@ def _admin_survey() -> None:
         st.warning(err, icon=":material/error:")
         return
     if not rows:
-        st.info("아직 들어온 응답이 없어요. 1차(11/25) · 2차(11/30) 테스트 때 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
+        st.info("아직 들어온 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
                 icon=":material/hourglass_empty:")
         return
     s = stats.survey_summary(rows)
     tgt = stats.SURVEY_TARGET
-    one, two = s["1차"], s["2차"]
 
     def fmt(v, unit=""):
         return "-" if v is None else f"{v:g}{unit}"
 
-    def delta(a, b, unit):
-        return None if a is None or b is None else f"{b - a:+g}{unit}"
+    # 1) 숫자 카드 (A/B · 목표)
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("응답자", f"{s['응답자']}명")
+    m2.metric("팝업 하나 찾기 (평소 → ANI:WHERE)", f"{fmt(s['평소초'], '초')} → {fmt(s['질문1초'], '초')}",
+              None if s["평소초"] is None or s["질문1초"] is None else f"{s['질문1초'] - s['평소초']:+g}초", delta_color="inverse")
+    m3.metric("과제 성공률 (목표 80% 이상)", fmt(s["성공률"], "%"))
+    m4.metric("만족도 · 평소보다 편함 (5점)", f"{fmt(s['만족도'])} · {fmt(s['비교'])}")
+    m5.metric("다시 쓸 의향", fmt(s["다시쓸의향"], "%"))
+    ok_s = s["성공률"] is not None and s["성공률"] >= tgt["success"]
+    ok_t = s["질문1초"] is not None and s["질문1초"] <= tgt["q1"]
+    st.caption(f"목표 달성: 과제 성공률 {'O' if ok_s else 'X'} · 질문 1 평균 {tgt['q1']:g}초 이하 {'O' if ok_t else 'X'}"
+               "  ·  A = 평소 방법(SNS · 커뮤니티 · 검색)으로 걸리던 시간(응답자가 고른 구간), B = ANI:WHERE 로 직접 해 본 시간"
+               + ("  ·  응답자가 적어 참고용이에요" if s["응답자"] < 10 else ""))
 
-    m1, m2, m3 = st.columns(3)
-    m1.metric("참가자 (1차 → 2차)", f"{one['참가자']} → {two['참가자']}명")
-    m2.metric("과업 성공률 (2차 · 목표 80% 이상)", fmt(two["성공률"], "%"), delta(one["성공률"], two["성공률"], "%p"))
-    t1a, t1b = one["과업별"]["T1"]["평균초"], two["과업별"]["T1"]["평균초"]
-    m3.metric("T1 평균 (2차 · 목표 60초 이하)", fmt(t1b, "초"), delta(t1a, t1b, "초"), delta_color="inverse")
-    ok_s = two["성공률"] is not None and two["성공률"] >= tgt["success"]
-    ok_t = t1b is not None and t1b <= tgt["t1"]
-    st.caption(("목표 달성: 성공률 " + ("O" if ok_s else "X") + " · T1 " + ("O" if ok_t else "X"))
-               + ("  ·  참가자가 3명보다 적어 참고용이에요" if max(one["참가자"], two["참가자"]) < 3 else ""))
-    table = pd.DataFrame([{"과업": f"{t} · {name}",
-                           "1차 성공률": fmt(one["과업별"][t]["성공률"], "%"), "1차 평균": fmt(one["과업별"][t]["평균초"], "초"),
-                           "2차 성공률": fmt(two["과업별"][t]["성공률"], "%"), "2차 평균": fmt(two["과업별"][t]["평균초"], "초")}
-                          for t, name in stats.SURVEY_TASKS.items()])
-    st.dataframe(table, hide_index=True, width="stretch")
-    st.markdown('<div class="adm-panel-h">자주 막힌 곳</div>', unsafe_allow_html=True)
-    blocks = [f"- ({v}) {b} — {n}번" for v in ("2차", "1차") for b, n in s[v]["막힌곳"]]
-    st.markdown("\n".join(blocks) if blocks else "아직 없어요.")
-    with st.expander(f"원본 응답 ({len(rows)}줄, 참가자는 P 번호로만)"):
+    # 2) 그래프
+    g1, g2 = st.columns(2)
+    with g1:
+        st.markdown('<div class="adm-panel-h">A/B · 팝업 하나 찾는 시간 (초)</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame({"방법": ["평소 방법", "ANI:WHERE"], "초": [s["평소초"] or 0, s["질문1초"] or 0]}),
+                     x="방법", y="초", color="#56C2A7", horizontal=True, height=180, x_label="", y_label="")
+        st.markdown('<div class="adm-panel-h">과제별 성공률 (%)</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame({"과제": [f"{t} · {n}" for t, n in stats.SURVEY_TASKS.items()],
+                                   "성공률": [s["과제별"][t]["성공률"] or 0 for t in stats.SURVEY_TASKS]}),
+                     x="과제", y="성공률", color="#14B8A6", horizontal=True, height=220, x_label="", y_label="", sort=False)
+    with g2:
+        st.markdown('<div class="adm-panel-h">평소 불편한 점 (문제 정의 · 명)</div>', unsafe_allow_html=True)
+        if s["불편한점"]:
+            st.bar_chart(pd.DataFrame(s["불편한점"], columns=["불편한 점", "명"]), x="불편한 점", y="명", color="#F2A33A",
+                         horizontal=True, height=240, x_label="", y_label="", sort="-명")
+        st.markdown('<div class="adm-panel-h">평소 정보를 찾는 곳 (명)</div>', unsafe_allow_html=True)
+        if s["정보출처"]:
+            st.bar_chart(pd.DataFrame(s["정보출처"], columns=["출처", "명"]), x="출처", y="명", color="#A9C3EA",
+                         horizontal=True, height=200, x_label="", y_label="", sort="-명")
+    g3, g4 = st.columns(2)
+    with g3:
+        st.markdown('<div class="adm-panel-h">만족도 분포 (명)</div>', unsafe_allow_html=True)
+        st.bar_chart(pd.DataFrame({"점수": [f"{i}점" for i in range(1, 6)], "명": [s["만족도분포"].get(str(i), 0) for i in range(1, 6)]}),
+                     x="점수", y="명", color="#9EDDCC", height=180, x_label="", y_label="", sort=False)
+    with g4:
+        st.markdown('<div class="adm-panel-h">팝업 방문 빈도 (명)</div>', unsafe_allow_html=True)
+        if s["방문빈도"]:
+            st.bar_chart(pd.DataFrame(s["방문빈도"], columns=["빈도", "명"]), x="빈도", y="명", color="#56C2A7",
+                         height=180, x_label="", y_label="", sort=False)
+
+    # 3) 표 · 글
+    st.markdown('<div class="adm-panel-h">과제별</div>', unsafe_allow_html=True)
+    st.dataframe(pd.DataFrame([{"과제": f"{t} · {n}", "응답": s["과제별"][t]["명"], "성공률": fmt(s["과제별"][t]["성공률"], "%"),
+                                "평균 시간(성공)": fmt(s["과제별"][t]["평균초"], "초"),
+                                "해냈어요 / 어렵게 / 못 했어요": " / ".join(str(s["과제별"][t]["결과"].get(k, 0))
+                                                                     for k in ("해냈어요", "어렵게 해냈어요", "못 했어요"))}
+                               for t, n in stats.SURVEY_TASKS.items()]), hide_index=True, width="stretch")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown('<div class="adm-panel-h">자주 막힌 곳</div>', unsafe_allow_html=True)
+        st.markdown("\n".join(f"- {b} — {n}번" for b, n in s["막힌곳"]) or "아직 없어요.")
+    with c2:
+        st.markdown('<div class="adm-panel-h">바라는 점</div>', unsafe_allow_html=True)
+        st.markdown("\n".join(f"- {escape(w)}" for w in s["바라는점"][:10]) or "아직 없어요.", unsafe_allow_html=True)
+    with st.expander(f"원본 응답 ({len(rows)}줄 · 한 사람 = 질문 1~4 네 줄)"):
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-    st.caption("구글 폼 → n8n(내 컴퓨터) → 구글 시트 '정리' 탭 → 여기. 이름 · 연락처는 받지 않고, 자유 답변의 전화번호 · 이메일은 n8n 이 지워요.")
+    st.caption("구글 폼 → n8n(내 컴퓨터) → 구글 시트 '정리' 탭 → 여기. 이메일 · 이름 · 연락처는 받지 않고, 자유 답변의 전화번호 · 이메일은 n8n 이 지워요.")
 
 
 def _admin_usage() -> None:
