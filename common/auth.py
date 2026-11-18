@@ -40,7 +40,7 @@ from .guard import mask, scan
 COOKIE = "aw_session"
 SESSION_DAYS = 30
 STATE_MAX_AGE = 600          # 동의 화면에서 10분 안에 돌아와야 한다
-MAX_NICK = 16
+MAX_NICK = 10      # 회원 닉네임 최대 글자 (11/18 요청: 10자 이내. 랜덤 닉네임도 같게)
 
 HEADERS = ["row_id", "entry_id", "revision", "status", "updated_at",
            "provider", "nickname", "agreed_at", "avatar"]

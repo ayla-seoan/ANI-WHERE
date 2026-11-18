@@ -79,6 +79,32 @@ def save(name: str, data: bytes) -> str:
     return filename
 
 
+AVATAR_PX = 256      # 프로필 사진은 화면에 72px 이하로만 보인다 → 256px 정사각형이면 레티나에서도 충분
+
+
+def save_avatar(name: str, data: bytes) -> str:
+    """프로필 사진: 가운데를 정사각형으로 잘라 256px webp 로 줄여 저장한다 (11/18 — 원본(최대 5MB)을 그대로 두면
+    마이페이지 · 리뷰 옆 동그라미가 뜨는 데 오래 걸렸다). 다시 저장하므로 위치 · 기기 정보(EXIF)도 남지 않는다.
+    움직이는 GIF 도 첫 장면만 쓴다. 그림으로 읽을 수 없으면 ValueError."""
+    ext = Path(name).suffix.lower().lstrip(".")
+    if ext not in TYPES:
+        raise ValueError(f"지원하지 않는 이미지 형식입니다: {name}")
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    try:
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+        img = img.convert("RGBA" if img.mode in ("RGBA", "LA", "P") else "RGB")
+        img = ImageOps.fit(img, (AVATAR_PX, AVATAR_PX), Image.LANCZOS)      # 가운데 정사각형
+        out = io.BytesIO()
+        img.save(out, "WEBP", quality=85, method=4)
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise ValueError("사진을 읽지 못했어요. 다른 사진으로 다시 올려 주세요.") from exc
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex[:12]}.webp"
+    (IMAGE_DIR / filename).write_bytes(out.getvalue())
+    return filename
+
+
 def remove(names) -> int:
     """지운 리뷰에 붙어 있던 사진 파일을 실제로 지운다 (11/18 개인정보: 주소를 알아도 더는 열리지 않게).
     리뷰 사진만 — 카페 포스터는 되돌리기가 옛 그림을 가리킬 수 있어 지우지 않는다. 지운 수를 돌려준다."""
