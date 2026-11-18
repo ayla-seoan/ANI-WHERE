@@ -4065,7 +4065,7 @@ GNB_CSS = """
 /* 로고: 메뉴바 안에서는 작게 */
 .st-key-gnb .st-key-home_brand button { width: 155px !important; height: 47px !important; }   /* 11/18 로고 조금 작게 */
 /* 보기 탭: 글자 + 아래 밑줄 (고른 탭만 진하게) */
-.st-key-gnb { position: relative; background: #14b8a6; border-radius: 0 0 28px 28px;   /* 메뉴바: 진한 포인트색 (11/18 요청) */
+.st-key-gnb { position: relative; background: #56c2a7; border-radius: 0 0 28px 28px;   /* 메뉴바: 브랜드 민트 (11/18 요청) */
   padding: 10px 28px !important; margin: 0 -28px; box-sizing: content-box; }
 /* 메뉴바가 있는 화면은 페이지 위 여백을 없애 메뉴바를 화면 맨 위에 붙인다 */
 .stMainBlockContainer { padding-top: 0 !important; }
