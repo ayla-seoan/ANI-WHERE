@@ -35,7 +35,7 @@ def sign_up(page: Page, url: str) -> None:
     f.get_by_label("아이디 (필수)").fill("qa_" + uuid.uuid4().hex[:8])
     f.get_by_label("비밀번호 (필수)").fill("qatest1234")
     f.get_by_label("비밀번호 확인 (필수)").fill("qatest1234")
-    f.get_by_label("닉네임 (필수)").fill("테스트봇" + uuid.uuid4().hex[:4])   # 닉네임 중복 가입 금지 (11/18)
+    f.get_by_role("textbox", name="닉네임 (선택)").fill("테스트봇" + uuid.uuid4().hex[:4])   # 중복 금지 · 칸 옆 ? 가 있어 역할로 찾음
     # 필수 동의 3개 (만 14세 이상 · 이용약관 · 개인정보 수집·이용) — 11/18 개인정보 설계
     for i in range(3):
         f.locator('[data-testid="stCheckbox"] label').nth(i).click()
@@ -206,7 +206,7 @@ def test_6_모바일_390px에서_가로_스크롤이_없다(mobile_page: Page, a
 def test_7_손님이_북마크를_누르면_로그인_화면으로(page: Page, app_url, data_dir):
     open_list(page, app_url)
     page.locator('[class*="st-key-fav_off_w_"] button').first.click()
-    expect(page.get_by_text("다시 오셨네요")).to_be_visible(timeout=LONG)
+    expect(page.get_by_text("환영합니다", exact=True)).to_be_visible(timeout=LONG)
     assert page.url.rstrip("/").endswith("/login")
 
 
@@ -215,7 +215,7 @@ def test_8_등록은_회원만(page: Page, app_url, data_dir):
     open_list(page, app_url)
     assert page.locator(".st-key-add_btn").count() == 0, "손님에게 등록(+) 버튼이 보입니다"
     page.goto(app_url + "/add")
-    expect(page.get_by_text("다시 오셨네요")).to_be_visible(timeout=LONG)   # 로그인 화면으로
+    expect(page.get_by_text("환영합니다", exact=True)).to_be_visible(timeout=LONG)   # 로그인 화면으로
     sign_up(page, app_url)
     open_list(page, app_url)
     expect(page.locator(".st-key-add_btn button")).to_be_visible(timeout=LONG)

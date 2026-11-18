@@ -19,6 +19,7 @@ import json
 import os
 import re
 import time
+import uuid
 from urllib.parse import quote
 from datetime import date, datetime, timedelta, timezone
 from html import escape
@@ -594,6 +595,24 @@ def _author(name) -> tuple[str, str]:
 def _nick_only(name) -> str:
     """'닉네임#m1a2b' → 화면에 보일 닉네임 (꼬리표는 저장·내 글 확인에만 쓴다, 11/18 요청)."""
     return _author(name)[0]
+
+
+# 닉네임 칸 옆 ? 안내 (11/18 요청: 닉네임은 선택, 안 쓰면 자동)
+NICK_HELP = ("입력하지 않으면 칸에 흐리게 보이는 닉네임(꾸밈말 + 애니 캐릭터 이름)으로 자동으로 정해져요. "
+             "2~16자, 다른 회원과 같은 닉네임 · 욕설·음란한 말 · 관리자·운영자처럼 보이는 이름은 쓸 수 없어요. "
+             "가입한 뒤 마이페이지에서 언제든 바꿀 수 있어요.")
+
+
+def _suggest_nick(final: bool = False) -> str:
+    """가입 화면 닉네임 칸에 흐리게 보여 줄 랜덤 닉네임 (이 화면에서는 늘 같은 것).
+    칸을 비워 두고 가입하면 바로 이 닉네임으로 정한다 — 그사이 누가 먼저 썼으면 새로 짓는다 (11/18 요청)."""
+    cur = st.session_state.get("_suggest_nick")
+    if not cur or (final and (auth.validate_nick(cur) or auth.nick_taken(members, cur))):
+        cur = _auto_nick(uuid.uuid4().hex)
+        st.session_state["_suggest_nick"] = cur
+    if final:
+        st.session_state.pop("_suggest_nick", None)       # 쓴 닉네임은 다음 가입 화면에서 새로
+    return cur
 
 
 def _auto_nick(seed: str) -> str:
@@ -1827,6 +1846,11 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
     """보기 전환 아이콘: 리스트 전체보기에서는 '지도로 보기'(→ 지도보기), 지도보기에서는 '리스트로 보기'(→ 리스트 전체보기).
     정렬(최신순) 칸 위 오른쪽 끝, 두 화면에서 같은 자리. 모바일에서는 그 왼쪽에 필터 아이콘도 둔다
     (누르면 검색 필터 판이 열린다. 걸린 조건 수가 있으면 아이콘 옆에 숫자). 둘이 함께 화면 위에 붙는다 (_pin_view_icon)."""
+    if not wide:
+        # 모바일 지도보기: 필터 버튼을 리스트로 보기와 같은 높이에 두고, 비는 자리에 '마지막 업데이트' 줄을 왼쪽에 붙인다 (11/18 요청)
+        st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: var(--aw-map-fgap, 21px) !important; }"
+                    " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }</style>",
+                    unsafe_allow_html=True)
     tools = st.container(horizontal=True, key="view_tools")
     with tools:
         if st.button(str(active) if active else "", icon=":material/close:" if m_open else ":material/tune:",
@@ -2234,6 +2258,9 @@ iframe[src*="kakao_map"] {{
 .upd {{ color:#8A9592; font-size:.78rem; margin:-4px 0 6px; display:flex; align-items:center; gap:4px; }}
 .upd .mi {{ font-size:.95rem; }}
 .upd.warn {{ color:#C2560C; background:#FFF4EA; border-radius:10px; padding:6px 10px; margin:0 0 8px; }}
+@media (max-width: 640px) {{ .upd {{ font-size:.7rem; margin:-8px 0 0; }}
+  [data-testid="stMarkdownContainer"]:has(.upd) {{ margin-bottom:0 !important; }}
+  [data-testid="stElementContainer"]:has(.upd) {{ margin-bottom:8px !important; }} }}   /* 모바일: 아래 칸과 붙지 않게 (11/18) */
 .empty-box {{ text-align:center; padding:40px 16px 14px; }}
 .empty-ic .mi {{ font-size:3.4rem; color:#C9D6D2; }}
 .empty-t {{ font-family:"Jua", sans-serif; font-size:1.35rem; color:#26302D; margin-top:6px; }}
@@ -2312,6 +2339,11 @@ iframe[src*="kakao_map"] {{
         border-radius:999px; background:#fff; color:#26302D !important; text-decoration:none !important;
         font-size:.92rem; font-weight:700; white-space:nowrap; }}
 .dbtn:hover {{ border-color:{MINT}; color:{MINT_DEEP} !important; }}
+/* 모바일: 지도에서 확인하기는 주소 바로 아래, 주소와 같은 왼쪽 선에 (11/18 요청) */
+@media (max-width: 640px) {{
+  .dval {{ flex-basis: calc(100% - 90px); }}
+  .dbtn {{ margin-left: 90px; }}
+}}
 /* '방문 전 확인' 상자와 혜택 사이 여백 (상자가 회색이라 따로 띠는 두지 않는다) */
 .dband {{ height:0; margin:0 0 22px; }}
 /* 혜택 · 참고 웹사이트 묶음: 굵은 제목, 검은 알약 라벨, 연회색 상자 목록 */
@@ -2550,6 +2582,8 @@ _PIN_ICON_JS = """
     // 원래 자리가 위에 붙은 상단 묶음(PC) / 화면 맨 위(모바일) 밑으로 들어가기 시작하면 붙이고, 붙일 때는 조금 띄운다
     const edge = mobile ? 0 : (bar ? Math.max(bar.getBoundingClientRect().bottom, 0) : 0);
     const limit = edge + 10;
+    // 모바일: 아이콘 자리가 화면 위로 올라가면(스크롤함) 아이콘 줄, 아니면 메뉴바의 글자 탭 (11/18 요청)
+    document.documentElement.classList.toggle('aw-scrolled', r.top < edge);
     if (r.top < edge) {
       btn.style.position = 'fixed';
       btn.style.top = limit + 'px';
@@ -2566,6 +2600,38 @@ _PIN_ICON_JS = """
   document.addEventListener('scroll', update, true);
   window.addEventListener('resize', update);
   new MutationObserver(() => requestAnimationFrame(update)).observe(document.body, { childList: true, subtree: true });
+})();
+"""
+
+
+# 모바일 '맨 위로' 버튼 (11/18 요청): 어느 화면이든(리스트·지도·내 캘린더·관리자…) 아래로 스크롤하면 화면 아래 가운데에
+# 위쪽 화살표 아이콘, 누르면 맨 위로. 메뉴바(_gnb)가 모든 화면에 있어서 거기서 한 번 붙인다
+_TOP_BTN_JS = """
+(function () {
+  if (window.__aniTopBtn) return;
+  window.__aniTopBtn = true;
+  let scroller = null;
+  const pos = () => Math.max(scroller ? scroller.scrollTop : 0, document.scrollingElement ? document.scrollingElement.scrollTop : 0);
+  const sync = () => document.documentElement.classList.toggle('aw-top-on', pos() > 240);
+  const make = () => {
+    if (document.getElementById('aw-top')) return;
+    const top = document.createElement('button');
+    top.id = 'aw-top'; top.type = 'button'; top.setAttribute('aria-label', '맨 위로');
+    top.innerHTML = '<span class="material-symbols-rounded">keyboard_arrow_up</span>';
+    top.onclick = () => {
+      [scroller, document.scrollingElement, document.querySelector('[data-testid="stMain"]'), document.querySelector('.stMain')]
+        .forEach((el) => { if (el && el.scrollTo) el.scrollTo({ top: 0, behavior: 'smooth' }); });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+    document.body.appendChild(top);
+  };
+  make();
+  document.addEventListener('scroll', (e) => {
+    const t = e.target === document ? document.scrollingElement : e.target;
+    if (t && t.scrollHeight > t.clientHeight + 20) scroller = t;
+    sync();
+  }, true);
+  new MutationObserver(() => { make(); requestAnimationFrame(sync); }).observe(document.body, { childList: true });
 })();
 """
 
@@ -2982,6 +3048,11 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .ntf-item.plain { margin-bottom: 4px; cursor: default; }
 .ntf-empty { color: #8A9592; font-size: .88rem; padding: 6px 2px; }
 .st-key-gnb_loc_box { height: 0 !important; overflow: hidden !important; margin: 0 !important; }
+#aw-top { display: none; position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 1003; width: 42px; height: 42px;
+  border-radius: 50%; border: 1.5px solid var(--accent); background: #fff; color: var(--accent-deep); align-items: center;
+  justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.16); cursor: pointer; padding: 0; }
+#aw-top .material-symbols-rounded { font-size: 28px; line-height: 1; }
+@media (min-width: 641px) { #aw-top { display: none !important; } }
 @media (max-width: 640px) {
   /* 모바일: 메뉴바의 글자 탭은 숨기고, 필터 아이콘 옆 '보기 전환 아이콘'(지도 ↔ 리스트)으로 — 위에 늘 붙어 있다 (11/18 요청) */
   .st-key-gnb > *:has(.st-key-gnb_tabs), html body .st-key-gnb .st-key-gnb_tabs { display: none !important; }
@@ -3003,6 +3074,31 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
   html body .st-key-view_tools > .st-key-map_icon, html body .st-key-view_tools > *:has(.st-key-map_icon) { order: 1; }
   html body .st-key-view_tools > .st-key-m_cal_btn, html body .st-key-view_tools > *:has(.st-key-m_cal_btn) { order: 2; }
   html body .st-key-view_tools > .st-key-m_filter_btn, html body .st-key-view_tools > *:has(.st-key-m_filter_btn) { order: 3; }
+  /* 스크롤하지 않았을 때(맨 위): PC 처럼 메뉴바에 글자 탭, 아이콘 줄은 자리만 남기고 숨김.
+     스크롤해서 아이콘 자리가 화면 위로 올라가면(html.aw-scrolled): 글자 탭 대신 위에 붙는 아이콘 줄 (11/18 요청) */
+  html:not(.aw-scrolled) body .st-key-gnb > *:has(.st-key-gnb_tabs) { display: flex !important; order: 3; flex: 1 1 100% !important;
+    width: 100% !important; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs { display: flex !important; position: static !important; transform: none !important;
+    order: 3; flex: 1 1 100% !important; width: 100% !important; justify-content: center !important; gap: 14px !important; margin-top: 2px; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button { padding: 6px 4px 6px !important; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button p { font-size: .84rem !important; white-space: nowrap; }
+  /* 맨 위에서는 지도·캘린더 아이콘을 숨기고(글자 탭이 대신) 필터 버튼만 둔다 (11/18 요청: 필터는 늘 보이게) */
+  html:not(.aw-scrolled) body .st-key-view_tools .st-key-map_icon,
+  html:not(.aw-scrolled) body .st-key-view_tools .st-key-m_cal_btn,
+  html:not(.aw-scrolled) body .st-key-view_tools > *:has(.st-key-map_icon),
+  html:not(.aw-scrolled) body .st-key-view_tools > *:has(.st-key-m_cal_btn) { display: none !important; }
+  /* 모바일 지도: 화면 높이에 맞춰 크게 */
+  .st-key-map_frame iframe { height: calc(100vh - 210px) !important; min-height: 420px; }
+  html.aw-top-on body #aw-top { display: flex; }
+  /* 아이콘을 버튼 가운데에 (아이콘 오른쪽에 붙는 빈 글자 칸 여백 제거) */
+  html body .st-key-view_tools button { display: flex !important; align-items: center !important; justify-content: center !important; }
+  html body .st-key-view_tools button > div, html body .st-key-view_tools button [data-testid="stMarkdownContainer"] {
+    margin: 0 !important; justify-content: center !important; }
+  html body .st-key-view_tools button span[data-testid="stIconMaterial"] { margin: 0 !important; }
+  html body .st-key-view_tools button > div { gap: 0 !important; width: 100%; justify-content: center !important; }
+  html body .st-key-view_tools .st-key-map_icon button [data-testid="stMarkdownContainer"],
+  html body .st-key-view_tools .st-key-m_cal_btn button [data-testid="stMarkdownContainer"] { display: none !important; }
+  html body .st-key-view_tools button p:empty, html body .st-key-view_tools button [data-testid="stMarkdownContainer"]:empty { display: none !important; }
   html body .st-key-view_tools .st-key-m_box_btn { display: block !important; width: auto !important; }
   html body .st-key-view_tools .st-key-m_box_btn button { height: 32px !important; min-width: 32px; padding: 0 9px !important;
     border: 1.5px solid var(--accent) !important; border-radius: 10px !important; background: #fff !important; min-height: 0 !important; }
@@ -3242,6 +3338,7 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
     if st.session_state.pop("_gnb_to_map", False) and not on_map:
         go("map")                            # 다른 화면에서 지도·리스트·내 캘린더 탭을 누름 (메인이면 표시만 지운다)
     st.markdown(GNB_CSS, unsafe_allow_html=True)
+    components.html(f"<script>window.parent.eval({json.dumps(_TOP_BTN_JS)});</script>", height=0)   # 모바일 '맨 위로'
     wide = bool(st.session_state.get("list_only"))
     with st.container(horizontal=True, key="gnb"):
         _logo_swap()
@@ -4948,6 +5045,17 @@ AUTH_CSS = """
 .auth-btn.naver { background: #03C75A; color: #fff !important; }
 .auth-btn.off { background: #EEF1F0; color: #9AA5A1 !important; pointer-events: none; }
 .auth-note { color: #6B7672; font-size: .8rem; line-height: 1.6; max-width: 420px; }
+.auth-foot { color: #9AA5A1; font-size: .7rem; line-height: 1.6; text-align: center; margin: 22px auto 0; padding-top: 12px;
+  border-top: 1px solid #EEF1F0; max-width: 100%; }
+.auth-foot b { color: #6B7672; }
+/* 로그인·가입 화면: 입력칸 이름 옆 ? 를 오른쪽 끝이 아니라 이름 바로 옆에 (11/18 요청) */
+.st-key-auth_wrap [data-testid="stWidgetLabel"], [data-testid="stForm"] [data-testid="stWidgetLabel"] {
+  justify-content: flex-start !important; gap: 4px !important; }
+.st-key-auth_wrap [data-testid="stWidgetLabel"] > div, [data-testid="stForm"] [data-testid="stWidgetLabel"] > div {
+  flex: 0 0 auto !important; width: auto !important; margin-left: 0 !important; }
+/* 회원가입 안내: 작은 글씨 · 연한 회색 바탕 · 테두리 (11/18 요청) */
+.auth-sub.auth-guide { font-size: .7rem; line-height: 1.6; color: #5F6B67; background: #F4F6F5; border: 1px solid #E3E8E6;
+  border-radius: 12px; padding: 10px 14px; text-align: left !important; }
 .auth-or { display: flex; align-items: center; gap: .6rem; max-width: 380px; color: #9AA5A1; font-size: .8rem;
   margin: 1rem 0 .3rem; }
 .me-av { margin-bottom: 8px; }
@@ -5034,6 +5142,7 @@ def page_login() -> None:
 
 
 def _login_body() -> None:
+    st.session_state.pop("_auth_err", None)     # 로그인 화면에 오면 지난 간편 로그인 오류는 지운다
     row = _member()
     if row:
         _my_account(row)
@@ -5042,15 +5151,15 @@ def _login_body() -> None:
         mode = st.segmented_control("로그인 또는 회원가입", ["로그인", "회원가입"], default="로그인",
                                     label_visibility="collapsed", key="auth_mode") or "로그인"
     if mode == "로그인":
-        st.markdown('<div class="auth-title">다시 오셨네요</div>'
-                    '<div class="auth-sub">아이디로 가입했다면 아래에, 카카오·네이버로 가입했다면 그 버튼으로 로그인해요.</div>',
+        st.markdown('<div class="auth-title">환영합니다</div>'
+                    '<div class="auth-sub">아이디로 가입했다면 아래에, 카카오·네이버로 가입했다면 간편 로그인 가능해요.</div>',
                     unsafe_allow_html=True)
         _password_login_form()
         st.markdown('<div class="auth-or">또는 간편 로그인</div>', unsafe_allow_html=True)
         verb = "로그인"
     else:
         st.markdown('<div class="auth-title">3초 만에 회원가입</div>'
-                    '<div class="auth-sub"><b>아이디·비밀번호·닉네임</b>만 있으면 가입돼요. 이메일·전화번호는 받지 않아요.<br>'
+                    '<div class="auth-sub auth-guide"><b>아이디·비밀번호·닉네임</b>만 있으면 가입돼요. 이메일·전화번호는 받지 않아요.<br>'
                     '카카오·네이버 계정이 있으면 아래 간편 가입으로 비밀번호 없이도 가입할 수 있어요.<br>'
                     '가입하면 북마크·리뷰가 <b>어느 기기에서나</b> 내 것으로 남고, 손님일 때 해 둔 북마크도 옮겨 와요.</div>',
                     unsafe_allow_html=True)
@@ -5067,8 +5176,7 @@ def _login_body() -> None:
                         f'{label}로 {verb}</a>', unsafe_allow_html=True)
         else:
             st.markdown(f'<span class="auth-btn off">{label} {verb} 준비 중</span>', unsafe_allow_html=True)
-    st.markdown('<div class="auth-note">카카오·네이버 로그인은 <b>새 탭</b>에서 열려요. 그 탭에서 로그인을 마치면 '
-                '이 화면도 자동으로 로그인된 메인으로 넘어가요.</div>', unsafe_allow_html=True)
+
     # 새 탭에서 간편 로그인이 끝나면(로그인 쿠키가 생기면) 이 탭도 메인으로 옮긴다 (11/18: 원래 탭이 로그인 화면에 남던 문제)
     components.html(
         "<script>(function(){const w=window.parent;const val=()=>((w.document.cookie.match(/(?:^|; )" + auth.COOKIE
@@ -5078,10 +5186,11 @@ def _login_body() -> None:
         # 부품 iframe 은 바깥 화면을 직접 옮길 권한이 없어서, 바깥 화면 쪽에서 실행되도록 parent.eval 로 넘긴다
         r"w.eval(`location.replace(location.pathname.replace(/\\/(login|auth)\\/?$/,'/')+location.search)`);}},1500);"
         "setTimeout(()=>clearInterval(iv),600000);})();</script>", height=0)
-    st.markdown('<div class="auth-note">로그인하지 않아도 지금처럼 둘러보고 북마크할 수 있어요.</div>',
-                unsafe_allow_html=True)
-    st.markdown('<div class="auth-note">받는 정보: <b>별명(닉네임)</b>과 계정 고유 번호뿐이에요. 고유 번호는 알아볼 수 없게 '
-                '바꿔서(해시) 저장하고, 이메일·전화번호·실명은 받지도 저장하지도 않아요.</div>', unsafe_allow_html=True)
+    # 안내는 맨 아래에 작게 한 묶음으로 (11/18 요청)
+    st.markdown('<div class="auth-foot">카카오·네이버 로그인은 <b>새 탭</b>에서 열려요. 그 탭에서 로그인을 마치면 '
+                '이 화면도 자동으로 로그인된 메인으로 넘어가요.<br>로그인하지 않아도 팝업은 둘러볼 수 있어요.<br>'
+                '받는 정보: <b>별명(닉네임)</b>과 계정 고유 번호뿐이에요. 고유 번호는 알아볼 수 없게 바꿔서(해시) 저장하고, '
+                '이메일·전화번호·실명은 받지도 저장하지도 않아요.</div>', unsafe_allow_html=True)
     if not (auth.enabled("kakao") or auth.enabled("naver")):
         st.caption("관리자 안내: .env 에 AUTH_SECRET · KAKAO_LOGIN_CLIENT_ID · NAVER_LOGIN_CLIENT_ID/SECRET 을 넣으면 "
                    "버튼이 켜져요 (docs/login.md).")
@@ -5114,7 +5223,7 @@ def _password_login_form() -> None:
         st.warning("아이디나 비밀번호가 맞지 않아요.", icon=":material/error:")   # 어느 쪽이 틀렸는지는 알려 주지 않는다
         return
     ss.pop("_pw_fails", None)
-    _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
+    _login_done(row, f"{row['nickname']}님, 환영합니다!")
     go("map")                                # 로그인하면 메인으로 (11/18)
 
 
@@ -5161,12 +5270,11 @@ def _password_signup_form() -> None:
         pw = st.text_input("비밀번호 (필수)", type="password", max_chars=auth.PW_MAX,
                            placeholder="영문+숫자 8자 이상", autocomplete="new-password")
         pw2 = st.text_input("비밀번호 확인 (필수)", type="password", max_chars=auth.PW_MAX, autocomplete="new-password")
-        nick = st.text_input("닉네임 (필수)", max_chars=auth.MAX_NICK,
-                             placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
-        st.caption("다른 회원과 같은 닉네임, 욕설·음란한 말, 관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
+        nick = st.text_input("닉네임 (선택)", max_chars=auth.MAX_NICK, placeholder=_suggest_nick(), help=NICK_HELP)
         consent = _consent_boxes("local", "pwc")
-        st.caption("이메일·전화번호를 받지 않아서 비밀번호를 잊으면 찾을 수 없어요. 꼭 기억해 두세요. "
-                   "프로필 사진(선택)은 가입한 뒤 마이페이지에서 올릴 수 있어요.")
+        st.markdown('<div class="auth-sub auth-guide">이메일·전화번호를 받지 않아서 <b>비밀번호를 잊으면 찾을 수 없어요.</b> '
+                    '꼭 기억해 두세요. 프로필 사진(선택)은 가입한 뒤 마이페이지에서 올릴 수 있어요.</div>',
+                    unsafe_allow_html=True)
         done = st.form_submit_button("가입하기", type="primary", icon=":material/person_add:", width="stretch")
     if not done:
         return
@@ -5176,7 +5284,7 @@ def _password_signup_form() -> None:
         return
     try:
         if not " ".join(str(nick or "").split()):      # 닉네임을 비워 두면 '꾸밈말 + 캐릭터' 로 자동 (11/18)
-            nick = _auto_nick(str(lid).strip().lower())
+            nick = _suggest_nick(final=True)
         row = auth.register_password(members, lid, pw, pw2, nick)
     except auth.AuthError as e:
         st.warning(str(e), icon=":material/error:")
@@ -5308,21 +5416,32 @@ def _auth_body() -> None:
         st.page_link(PAGES["map"], label="홈으로", icon=":material/home:")
         return
     if qp.get("code") and qp.get("state"):
-        code, state = qp["code"], qp["state"]
+        # 돌아오자마자 화면이 한 번 더 그려진다(쿠키 읽기). 그때 주소의 code 가 이미 지워져 있어도
+        # 결과를 잃지 않게, code 와 교환 결과·오류를 세션에 먼저 담는다 (11/18 배포 오류)
+        st.session_state["_auth_cs"] = (qp["code"], qp["state"])
+        st.session_state.pop("_auth_err", None)
         st.query_params.clear()        # code 는 한 번만 쓸 수 있다. 새로고침해도 다시 쓰지 않게 주소에서 지운다
+    cs = st.session_state.get("_auth_cs")
+    if cs:
         try:
-            ident = auth.exchange(code, state)
+            got = auth.exchange(*cs)
         except auth.AuthError as e:
-            st.warning(str(e), icon=":material/error:")
-            st.page_link(PAGES["login"], label="다시 로그인하기", icon=":material/login:")
-            return
+            st.session_state["_auth_err"] = str(e)
+        else:
+            st.session_state["_pending_ident"] = got
+        st.session_state.pop("_auth_cs", None)
+    if st.session_state.get("_auth_err"):
+        st.warning(st.session_state["_auth_err"], icon=":material/error:")
+        st.page_link(PAGES["login"], label="다시 로그인하기", icon=":material/login:")
+        return
+    ident = st.session_state.get("_pending_ident")
+    if ident:
         row = auth.find(members, ident.member_key)
         if row:
-            _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
+            st.session_state.pop("_pending_ident", None)
+            _login_done(row, f"{row['nickname']}님, 환영합니다!")
             go("map")
             return
-        st.session_state["_pending_ident"] = ident
-    ident = st.session_state.get("_pending_ident")
     if not ident:
         st.info("로그인 화면에서 시작해 주세요.", icon=":material/info:")
         st.page_link(PAGES["login"], label="로그인하기", icon=":material/login:")
@@ -5334,9 +5453,8 @@ def _auth_body() -> None:
                 + (f"{label} 프로필 사진이 있어요. 아래 [선택] 항목에 동의하면 리뷰 옆에 보여요." if ident.avatar
                    else "프로필 사진은 선택이에요. 마이페이지에서 언제든 올릴 수 있어요.") + '</div>', unsafe_allow_html=True)
     with st.form("signup", border=False):
-        nick = st.text_input("닉네임", value=ident.nickname, max_chars=auth.MAX_NICK,
-                             placeholder="2~16자 · 비워 두면 '느긋한 품바' 처럼 자동으로 지어 드려요")
-        st.caption("다른 회원과 같은 닉네임, 욕설·음란한 말, 관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
+        nick = st.text_input("닉네임 (선택)", value=ident.nickname, max_chars=auth.MAX_NICK,
+                             placeholder=_suggest_nick(), help=NICK_HELP)
         consent = _consent_boxes("social", "soc", f"[선택] {label} 프로필 사진을 불러와 리뷰 옆에 보여 줘요 (사진 주소 저장, "
                                  "마이페이지에서 언제든 지울 수 있어요)" if ident.avatar else None)
         done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")
@@ -5349,7 +5467,7 @@ def _auth_body() -> None:
             ident = dataclasses.replace(ident, avatar="none")
         try:
             if not " ".join(str(nick or "").split()):
-                nick = _auto_nick(ident.member_key)
+                nick = _suggest_nick(final=True)
             row = auth.signup(members, ident, nick)
         except auth.AuthError as e:
             st.warning(str(e), icon=":material/error:")
