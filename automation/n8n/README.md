@@ -13,6 +13,7 @@
 
 | 파일 | 내용 |
 | --- | --- |
+| `create_form.gs` | 구글 폼 · 응답 시트 · `정리` 탭을 한 번에 만드는 Apps Script |
 | `survey-form.md` | 구글 폼 문항 (이름 그대로 만들기) |
 | `survey_collect.json` | 워크플로 ① 응답 정리 — n8n 에 가져오기(import) |
 | `survey_report.json` | 워크플로 ② 1차·2차 요약 메일 — n8n 에 가져오기 |
@@ -32,7 +33,9 @@
 ## 설치 (20분)
 
 1. **n8n 계정**: https://n8n.io → 무료 체험(Cloud). (내 컴퓨터에 띄우려면 `npx n8n` 후 http://localhost:5678)
-2. **구글 폼 · 시트**: `survey-form.md` 대로 폼을 만들고 응답을 시트로 연결, `정리` 탭을 만든다.
+2. **구글 폼 · 시트 (자동)**: https://script.google.com → 새 프로젝트 → `create_form.gs` 를 통째로 붙여넣고 저장 → 함수 `createSurveyForm` ▶ 실행 → 권한 허용.
+   실행 로그에 폼 주소 2개와 시트 주소 1개가 나온다. 폼 문항 · 응답 시트 · `설문지 응답 시트1` 탭 · `정리` 탭(제목 줄 포함)이 모두 만들어진다.
+   (손으로 만들려면 `survey-form.md` 대로)
 3. **연결(Credentials)** — n8n 왼쪽 `Credentials → Add`:
    - `Google Sheets OAuth2` · `Google Sheets Trigger OAuth2` · `Gmail OAuth2` (구글 로그인으로 허용)
    - `OpenAI` — API 키 (없으면 건너뛰어도 된다. 메일에 숫자 요약만 `[규칙 기반 대체]` 로 온다)
