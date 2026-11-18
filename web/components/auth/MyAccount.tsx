@@ -1,6 +1,7 @@
 "use client";
 import { submitWith } from "@/lib/submit";
 import { startTransition, useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   avatarDefaultAction,
   avatarUploadAction,
@@ -42,6 +43,7 @@ function Msg({ s }: { s: FormState }) {
 }
 
 export default function MyAccount({ a, suggest }: { a: Account; suggest: string }) {
+  const router = useRouter();       // 사진을 바꾸면 화면(내 계정 카드 · 메뉴바 동그라미)을 바로 새 사진으로 (11/19 요청)
   const [rs, renameForm, renaming] = useActionState(renameAction, null);
   const [ps, pwForm] = useActionState(changePasswordAction, null);
   const [ws, withdrawForm] = useActionState(withdrawAction, null);
@@ -93,11 +95,13 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
             setBusy(true);
             avatarUploadAction(null, fd).then((r) => {
               setBusy(false);
-              setAvs(r);
+              setAvs(r?.ok ? null : r); // 실패만 칸 아래에, 성공은 바로 토스트로
               if (r?.ok) {
+                toast("프로필 사진이 수정되었어요.");
                 setPreview("");
                 setAgree(false);
                 setAvn((n) => n + 1); // 올리기 칸 비우기
+                router.refresh(); // 새로고침하지 않아도 바뀐 사진이 보이게
               }
             });
           })}
@@ -135,7 +139,12 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
               type="button"
               className="btn-line"
               onClick={async () => {
-                setAvs(await avatarDefaultAction());
+                const r = await avatarDefaultAction();
+                setAvs(r?.ok ? null : r);
+                if (r?.ok) {
+                  toast("기본 사진으로 수정되었어요.");
+                  router.refresh();
+                }
               }}
             >
               기본 사진 설정
