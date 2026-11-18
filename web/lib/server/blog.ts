@@ -198,6 +198,12 @@ export async function withThumbs(posts: Post[]): Promise<[Post, string][]> {
 
 // ------------------------------------------------------------------ 호출 한도 (한 달 30,000번에서 완전히 멈춤)
 export const MONTHLY_LIMIT = 30_000;
+// 달마다 다른 한도 (11/19 사용자 결정, common/blog.py MONTH_LIMITS 와 같게): 2026년 11월은 네이버 API HUB
+// 한시적 무료라 크게 열어 둔다. 12월부터는 다시 MONTHLY_LIMIT(30,000번)에서 멈춘다 — 표에 없는 달은 모두 30,000번.
+const MONTH_LIMITS: Record<string, number> = { "2026-11": 1_000_000 };
+export function monthlyLimit(m: string = month()): number {
+  return MONTH_LIMITS[m] ?? MONTHLY_LIMIT;
+}
 const FLUSH_EVERY = 25; // 25번마다 한 줄씩 쌓는다 (저장소가 한 달에 최대 1,200줄 정도)
 let pending = 0;
 let cacheMonth: { at: number; month: string; total: number } | null = null;
@@ -224,7 +230,7 @@ export async function monthCalls(): Promise<number> {
 /** 한도 안이면 true. 호출 수를 읽지 못하면(표가 없거나 연결 실패) 안전하게 false — 부르지 않는다 */
 export async function allowed(): Promise<boolean> {
   try {
-    return (await monthCalls()) < MONTHLY_LIMIT;
+    return (await monthCalls()) < monthlyLimit();
   } catch {
     return false;
   }
