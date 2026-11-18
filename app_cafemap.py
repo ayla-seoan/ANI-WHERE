@@ -6302,10 +6302,17 @@ o.textContent='로그인됐어요. 이 창은 닫고 원래 창으로 돌아가 
 # 원래 창: 간편 로그인 작은 창에서 로그인이 끝났다는 신호를 받으면 작은 창을 닫고 새로고침(로그인 화면이면 홈으로).
 # 앱 창에 직접 붙여서(parent.eval) Streamlit 이 화면을 다시 그려도 남는다 (부품 iframe 은 다시 그리면 사라짐)
 LOGIN_WATCH_JS = r"""if(!window.__awWatch){window.__awWatch=1;
-window.addEventListener('storage',function(e){if(e.key!=='aw_login_done'||!e.newValue)return;
-try{window.__awPop&&window.__awPop.close();}catch(_){}
+var ck=function(){return (document.cookie.match(/(?:^|; )__COOKIE__=([^;]*)/)||[])[1]||'';};
+var first=ck(),done=false;
+var go=function(){if(done)return;done=true;try{window.__awPop&&window.__awPop.close();}catch(_){}
 var p=location.pathname;if(/\/(login|auth)\/?$/.test(p)){location.replace(p.replace(/\/(login|auth)\/?$/,'/')+location.search);}
-else{location.reload();}});}"""
+else{location.reload();}};
+window.addEventListener('storage',function(e){if(e.key==='aw_login_done'&&e.newValue)go();});
+var chk=function(){if(!window.__awPop)return;var v=ck();if(v&&v!==first)go();};
+window.addEventListener('focus',chk);document.addEventListener('visibilitychange',chk);setInterval(chk,1500);}""".replace(
+    "__COOKIE__", auth.COOKIE)
+# ↑ 신호(storage)를 못 받는 브라우저 대비: 이 창이 작은 창을 열었으면(__awPop) 로그인 쿠키가 바뀌었을 때 ·
+#   작은 창이 닫혀 이 창에 다시 초점이 올 때도 새로고침 (11/18 배포: 작은 창은 닫혔는데 원래 창이 그대로)
 
 
 def _set_cookie(value: str, days: int) -> None:
