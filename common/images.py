@@ -8,6 +8,7 @@ static/ 아래에 두어 Streamlit 이 url() 주소로 바로 내보낸다. 화�
 """
 from __future__ import annotations
 
+import io
 import shutil
 import uuid
 from pathlib import Path
@@ -38,15 +39,59 @@ def too_big(data: bytes, limit_mb: int) -> bool:
     return len(data) > limit_mb * 1024 * 1024
 
 
+def strip_metadata(data: bytes, ext: str) -> bytes:
+    """사진 속 위치(GPS) · 기기 · 촬영 시각 같은 메타데이터(EXIF 등)를 지운다 (11/18 개인정보).
+    휴대폰 사진에는 찍은 곳의 좌표가 들어 있을 수 있는데, 올린 사진은 주소만 알면 누구나 받아 볼 수 있다.
+    방향(회전) 정보는 그림에 먼저 적용해 사진이 눕지 않게 하고, 픽셀만 새 파일로 다시 저장한다.
+    움직이는 GIF 는 그대로 둔다 (GIF 는 위치 정보를 담지 않는다). 그림으로 읽을 수 없으면 ValueError."""
+    if ext == "gif":
+        return data
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    try:
+        img = Image.open(io.BytesIO(data))
+        img = ImageOps.exif_transpose(img)
+        fmt = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "webp": "WEBP"}[ext]
+        if fmt == "JPEG" and img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        clean = Image.new(img.mode, img.size)          # 픽셀만 옮긴 새 그림 (info · exif · xmp 를 넘기지 않음)
+        clean.putdata(list(img.getdata())) if img.mode == "P" else clean.paste(img)
+        if img.mode == "P" and img.getpalette():
+            clean.putpalette(img.getpalette())
+        out = io.BytesIO()
+        opts = {"JPEG": {"quality": 92}, "WEBP": {"quality": 90}, "PNG": {"optimize": True}}[fmt]
+        clean.save(out, fmt, **opts)
+        return out.getvalue()
+    except (UnidentifiedImageError, OSError, KeyError, ValueError) as exc:
+        raise ValueError("사진을 읽지 못했어요. 다른 사진으로 다시 올려 주세요.") from exc
+
+
 def save(name: str, data: bytes) -> str:
-    """이미지를 저장하고 파일 이름을 돌려준다. 원래 이름은 쓰지 않는다 (경로 조작 방지)."""
+    """이미지를 저장하고 파일 이름을 돌려준다. 원래 이름은 쓰지 않는다 (경로 조작 방지).
+    저장 전에 위치·기기 정보(EXIF)를 지운다 (strip_metadata)."""
     ext = Path(name).suffix.lower().lstrip(".")
     if ext not in TYPES:
         raise ValueError(f"지원하지 않는 이미지 형식입니다: {name}")
+    data = strip_metadata(data, ext)
     IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4().hex[:12]}.{ext}"
     (IMAGE_DIR / filename).write_bytes(data)
     return filename
+
+
+def remove(names) -> int:
+    """지운 리뷰에 붙어 있던 사진 파일을 실제로 지운다 (11/18 개인정보: 주소를 알아도 더는 열리지 않게).
+    리뷰 사진만 — 카페 포스터는 되돌리기가 옛 그림을 가리킬 수 있어 지우지 않는다. 지운 수를 돌려준다."""
+    n = 0
+    for name in split(names):
+        p = IMAGE_DIR / Path(name).name
+        try:
+            if p.is_file():
+                p.unlink()
+                n += 1
+        except OSError:
+            pass
+    return n
 
 
 def split(value) -> list[str]:

@@ -178,3 +178,37 @@ def _top(c: Counter, label: str, top: int) -> pd.DataFrame:
     if rest:
         head.append(("그 외", sum(n for _, n in rest)))
     return pd.DataFrame(head, columns=[label, "팝업 수"])
+
+
+# ------------------------------------------------------------------ 사용자 테스트 설문 (11/18, n8n 이 쌓은 '정리' 탭)
+SURVEY_TARGET = {"success": 80.0, "t1": 60.0}     # PRD 사용자 지표: 과업 성공률 80% 이상, T1 평균 60초 이하
+SURVEY_TASKS = {"T1": "이번 주말 서울 팝업 찾기", "T2": "주술회전 팝업 북마크", "T3": "내 캘린더에서 확인", "T4": "공식 공지 열기"}
+
+
+def survey_summary(rows: list[dict]) -> dict:
+    """'정리' 탭(참가자 · 버전 · 과업 · 성공 · 소요초 · 막힌 지점) → 1차 · 2차 비교.
+    automation/n8n/code/summarize.js 와 같은 규칙 (성공률 = 성공 줄 / 전체 줄, 평균초 = 성공한 줄만)."""
+    rows = [r for r in rows if str(r.get("참가자") or "").strip() and str(r.get("과업") or "").strip()]
+
+    def num(v):
+        try:
+            return float(str(v).strip())
+        except (TypeError, ValueError):
+            return None
+
+    out = {}
+    for ver in ("1차", "2차"):
+        rs = [r for r in rows if str(r.get("버전")) == ver]
+        ok = [r for r in rs if str(r.get("성공")).strip().upper() == "Y"]
+        tasks = {}
+        for t in SURVEY_TASKS:
+            ts = [r for r in rs if str(r.get("과업")) == t]
+            tok = [r for r in ts if str(r.get("성공")).strip().upper() == "Y"]
+            secs = [num(r.get("소요초")) for r in tok if num(r.get("소요초")) is not None]
+            tasks[t] = {"명": len(ts), "성공률": round(len(tok) / len(ts) * 100, 1) if ts else None,
+                        "평균초": round(sum(secs) / len(secs)) if secs else None}
+        blocks = Counter(str(r.get("막힌 지점") or "").strip() for r in rs if str(r.get("막힌 지점") or "").strip())
+        out[ver] = {"참가자": len({r.get("참가자") for r in rs}), "줄": len(rs),
+                    "성공률": round(len(ok) / len(rs) * 100, 1) if rs else None, "과업별": tasks,
+                    "막힌곳": blocks.most_common(3)}
+    return out

@@ -1156,7 +1156,8 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
                       on_click=lambda: st.session_state.update({open_key: True}))
         else:
             photos = list(st.file_uploader(
-                f"최대 {review.MAX_IMAGES}장 · 한 장 {review.IMAGE_MB}MB", type=images.TYPES,
+                f"최대 {review.MAX_IMAGES}장 · 한 장 {review.IMAGE_MB}MB · 다른 사람 얼굴·영수증·연락처가 보이는 사진은 올리지 말아 주세요 "
+                "(사진 속 위치 정보는 자동으로 지워요)", type=images.TYPES,
                 accept_multiple_files=True, key=f"{slot}_img_{n}") or [])
     if len(photos) > review.MAX_IMAGES:
         st.caption(f":red[사진은 {review.MAX_IMAGES}장까지 올릴 수 있어요. 앞의 {review.MAX_IMAGES}장만 올라갑니다.]")
@@ -1249,6 +1250,7 @@ def confirm_review_delete(entry_id: str, replies: int, as_admin: bool = False) -
                 st.error("삭제 사유를 두 글자 이상 적어 주세요. 쓴 사람에게 알림으로 가요.")
                 return
             reviews.soft_delete(entry_id)       # 저장소는 지우지 않고 '삭제됨' 행을 쌓는다
+            images.remove(row.get("images"))    # 붙은 사진 파일은 실제로 지운다 (11/18 개인정보)
             tag = str(row.get("nickname") or "").rsplit("#", 1)[-1] if "#" in str(row.get("nickname") or "") else ""
             writer = _member_by_tag().get(tag) if tag.startswith("m") else None
             if writer and not mine and _rules().get("rv_del", {}).get("enabled", True):
@@ -1259,6 +1261,7 @@ def confirm_review_delete(entry_id: str, replies: int, as_admin: bool = False) -
             st.session_state["flash"] = "삭제했어요." + (" 쓴 사람에게 사유를 알림으로 보냈어요." if writer and not mine else "")
         elif mine:
             reviews.soft_delete(entry_id)
+            images.remove(row.get("images"))    # 붙은 사진 파일은 실제로 지운다 (11/18 개인정보)
             st.session_state["flash"] = "삭제했어요."
         else:
             st.session_state["flash"] = "내가 쓴 리뷰만 삭제할 수 있어요."
@@ -1774,7 +1777,11 @@ def render_edit(current: dict) -> None:
             v.fail(g.note)
         if v.ok:
             # 새로 올린 파일만 저장한다. 지운 이미지 파일은 남겨 둔다 (되돌리기가 옛 행을 쓸 수 있다)
-            saved = [name if data is None else images.save(name, data) for name, data in new_images]
+            try:
+                saved = [name if data is None else images.save(name, data) for name, data in new_images]
+            except ValueError as err:          # 그림으로 읽을 수 없는 파일 (위치 정보 지우기 단계에서 걸림)
+                st.error(str(err), icon=":material/error:")
+                return
             store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=_keep_notion(g.badge, current), editor=_me(), intro=new_intro,
                                            intro_src=str(current.get("intro_src") or "") if new_intro.strip() else "",
                                            images=saved, tags=new_tags, links=new_links),
@@ -2261,6 +2268,9 @@ def _home_week(df: pd.DataFrame) -> None:
                               on_click=lambda i=i: st.session_state.update({f"wk_open_{i}": True}))
 
 
+RV_KIND_CLASS = {"다녀온 후기": "visit", "기대평": "hope", "기타": "etc"}     # 후기 모음 카드의 종류 칩 (11/18 요청)
+
+
 def _home_reviews(df: pd.DataFrame, limit: int = 12) -> None:
     """꿀팁 가득! 실시간 후기 모음 (11/18 요청): 최신 리뷰 순, 사진 있는 리뷰가 먼저. 답글은 빼고, 지금 있는 팝업 것만.
     카드: 팝업(포스터 · 작품 · 상태 · 지역) + 리뷰(사진 · 닉네임 · 날짜 · 별점 · 본문 · 사진 2장). 누르면 그 팝업 상세."""
@@ -2295,7 +2305,8 @@ def _home_reviews(df: pd.DataFrame, limit: int = 12) -> None:
                     f'<span class="st {color}">{escape(label)}</span>' + (f'<span>{escape(area)}</span>' if area else "")
                     + '</div></div></div><div class="rvbox"><div class="rvme">' + _avatar_img(pic, 34, "rv-av")
                     + f'<div class="rvwho"><b>{escape(_nick_only(who))}</b>{stars}</div><span class="rvdate">{escape(_when(rv.get("updated_at")))}</span></div>'
-                    f'<div class="rvbody">{escape(str(rv.get("body") or ""))}</div>'
+                    + (f'<span class="rvkind {RV_KIND_CLASS.get(str(rv.get("kind")), "etc")}">{escape(str(rv.get("kind")))}</span>' if rv.get("kind") else "")
+                    + f'<div class="rvbody">{escape(str(rv.get("body") or ""))}</div>'
                     + (f'<div class="rvpics">{photos}</div>' if photos else "") + '</div></div>', unsafe_allow_html=True)
                 _open_btn(f"open_hv_{rv['entry_id']}", str(rv["cafe_id"]))
 
@@ -2492,7 +2503,11 @@ HOME_CSS = """
 .rvs { color: #F4B63F; font-size: .72rem; letter-spacing: 0; white-space: nowrap; } .rvs .off { color: #DDE3E1; }
 .rvs b { color: #26302D; margin-left: 4px; letter-spacing: 0; } .rvs .of { color: #9AA5A1; letter-spacing: 0; }
 .rvdate { font-size: .72rem; color: #9AA5A1; align-self: flex-start; }
-.rvbody { margin-top: 10px; font-size: .85rem; line-height: 1.5; color: #3A4542; display: -webkit-box; -webkit-line-clamp: 3;
+.rvkind { display: inline-block; margin-top: 10px; font-size: .68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+.rvkind.visit { color: var(--accent-deep); background: var(--accent-soft); }
+.rvkind.hope { color: #2C5BC5; background: #EAF0FC; }
+.rvkind.etc { color: #5B6663; background: #EEF0EF; }
+.rvbody { margin-top: 6px; font-size: .85rem; line-height: 1.5; color: #3A4542; display: -webkit-box; -webkit-line-clamp: 3;
   -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
 .rvpics { display: flex; gap: 6px; margin-top: 10px; }
 .rvpics .rvp { flex: 1; aspect-ratio: 4/3; border-radius: 8px; background-size: cover; background-position: center; }
@@ -4073,7 +4088,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
   color: #2E9C82 !important; font-size: .88rem !important; }
 .st-key-gnb_right .st-key-admin_btn button span { color: #2E9C82 !important; font-size: 1.1rem !important; }
 .st-key-gnb_right .st-key-login_btn button p { font-family: "NanumSquareRound", sans-serif !important; font-weight: 700 !important;
-  color: #4B5260 !important; font-size: 1.02rem !important; letter-spacing: -.01em; }
+  color: #4B5260 !important; font-size: .88rem !important; letter-spacing: -.01em; }
 .st-key-gnb_tabs button p { font-family: "NanumSquareRound", sans-serif !important; }
 /* 메뉴바 묶음 안의 보이지 않는 칸(스타일·높이 0 iframe·위치 받기)이 간격만 차지하지 않게 */
 .st-key-topbar { gap: 0 !important; }
@@ -4113,7 +4128,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
   background: transparent !important; border: 0 !important; box-shadow: none !important; }
 .st-key-gnb_right [data-testid="stPopover"] button span[data-testid="stIconMaterial"] { font-size: 1.6rem !important; }
 .st-key-gnb_right [data-testid="stPopover"] button svg { display: none; }       /* 펼침 화살표 숨김 */
-.st-key-gnb_right .st-key-login_btn button p { font-size: 1rem !important; }
+.st-key-gnb_right .st-key-login_btn button p { font-size: .88rem !important; }   /* 로그인·닉네임 글자 작게 (11/18 요청) */
 .gnb-tag { color: #6B7672; font-size: .82rem; margin: -2px 0 6px; font-family: "Jua", sans-serif; }
 /* 예전 '지도로 보기 / 리스트로 보기' 버튼은 위 탭이 대신한다. 모바일용 캘린더 아이콘도 PC 에서는 숨김 */
 .st-key-m_cal_btn { display: none !important; }
@@ -4223,7 +4238,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
   .st-key-gnb_tabs > div { width: auto !important; flex: 0 0 auto !important; }
   .st-key-gnb_tabs button { white-space: nowrap; padding: 8px 14px 7px !important; }
   .st-key-gnb_tabs button p { font-size: .95rem !important; }
-  .st-key-gnb_right .st-key-login_btn button p { font-size: .85rem !important; }
+  .st-key-gnb_right .st-key-login_btn button p { font-size: .78rem !important; }
 }</style>
 """
 
@@ -5683,7 +5698,11 @@ def _quick(w: dict) -> None:
             return
         # 첫 장이 포스터. 포스터 없이 추가 이미지만 올리면 그 첫 장이 포스터가 된다 (단계별 등록과 같다)
         files = ([(poster.name, poster.getvalue())] if poster else []) + [(f.name, f.getvalue()) for f in extras]
-        saved = [images.save(name, data) for name, data in files]
+        try:
+            saved = [images.save(name, data) for name, data in files]
+        except ValueError as err:
+            st.error(str(err), icon=":material/error:")
+            return
         store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="간편 등록", editor=_me(),
                                        note=f"{g.badge} ({g.matched})", intro=intro,
                                        images=saved, tags=tags, links=links))
@@ -5905,7 +5924,11 @@ def _step_confirm(w: dict) -> None:
             st.session_state["wiz_err"] = g.note
             return False
         files = [f for f in [w["poster"], *w["extras"]] if f]
-        saved = [images.save(name, data) for name, data in files]
+        try:
+            saved = [images.save(name, data) for name, data in files]
+        except ValueError as err:
+            st.session_state["wiz_err"] = str(err)
+            return False
         store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 등록", editor=_me(),
                                        note=f"{g.badge} ({g.matched})", intro=w["intro"],
                                        images=saved, tags=w["tags"], links=w["links"]))
@@ -6319,7 +6342,7 @@ def _footer() -> None:
     # (꾸밈 <style> 칸은 화면에서 접히게 되어 있어서, 바닥글 글은 따로 그린다)
     st.markdown(
         f'<div class="aw-foot"><div>© {TODAY.year} ANI:WHERE</div>'
-        f'<div>운영: ANI:WHERE · 개인정보 문의: <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a></div>'
+        f'<div>운영: ANI:WHERE · 문의: <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a></div>'
         '<div class="aw-foot-links"><a href="./privacy" target="_self">개인정보처리방침 · 이용약관</a>'
         '<a href="./guide" target="_self">사용자 튜토리얼</a><a href="./design" target="_self">디자인 시스템</a></div></div>', unsafe_allow_html=True)
 
@@ -6739,8 +6762,11 @@ def _my_account(row: dict) -> None:
             if images.too_big(data, 5):
                 st.warning("5MB 이하 사진만 올릴 수 있어요.", icon=":material/error:")
             else:
-                auth.set_avatar(members, row, images.save(up.name, data))
-                _avatar_saved("프로필 사진을 바꿨어요.")
+                try:
+                    auth.set_avatar(members, row, images.save(up.name, data))
+                    _avatar_saved("프로필 사진을 바꿨어요.")
+                except ValueError as err:
+                    st.warning(str(err), icon=":material/error:")
         if c2.button("기본 사진 설정", width="stretch", key="av_default"):
             auth.set_avatar(members, row, "none")
             _avatar_saved("기본 사진으로 바꿨어요.")
@@ -7025,8 +7051,8 @@ a.adm-card.adm-link:hover { border-color: #14B8A6; }
 .adm-metric-h span strong { font-size: 1.1rem; color: #26302D; }
 </style>
 """
-ADMIN_TABS = [("board", "팝업 현황"), ("usage", "이용 지표"), ("requests", "삭제 요청"), ("notices", "알림 관리"),
-              ("members", "회원 정보"), ("raw", "원본 데이터")]
+ADMIN_TABS = [("board", "팝업 현황"), ("usage", "이용 지표"), ("survey", "사용자 테스트"), ("requests", "삭제 요청"),
+              ("notices", "알림 관리"), ("members", "회원 정보"), ("raw", "원본 데이터")]
 ST_COLOR = {"pending": "#D9821B", "approved": "#23866A", "rejected": "#C8352A"}
 ST_LABEL = {"pending": "대기", "approved": "승인", "rejected": "거부"}
 
@@ -7133,6 +7159,75 @@ def _admin_board() -> None:
             st.markdown(f'<div class="adm-col" style="--c:{colors[name]}"><div class="adm-colhead">{name}'
                         f'<small>{len(rows)}곳</small></div>{cards}</div>', unsafe_allow_html=True)
     st.caption("새로 생성 = 그 주에 처음 등록 · 예정 = 그 주가 끝난 뒤 4주 안에 시작 · 진행 = 그 주에 열려 있고 다음 주에도 이어짐 · 종료 = 그 주에 끝남")
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _survey_rows(sheet_id: str) -> tuple[list[dict], str]:
+    """n8n 이 쌓은 구글 시트 '정리' 탭을 CSV 로 읽는다 (1분 기억). (줄들, 오류 글)."""
+    import io
+    import requests
+
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq"
+    try:
+        res = requests.get(url, params={"tqx": "out:csv", "sheet": "정리"}, timeout=10)
+        if res.status_code != 200 or "text/csv" not in res.headers.get("content-type", ""):
+            return [], "시트를 읽지 못했어요 (공유 설정이 '링크가 있는 모든 사용자 · 보기' 인지 확인해 주세요)."
+        df = pd.read_csv(io.StringIO(res.content.decode("utf-8")), dtype=str).fillna("")
+        return df.to_dict("records"), ""
+    except Exception as exc:  # 네트워크 · 형식 오류 — 관리자 화면이 멈추지 않게 안내만
+        return [], f"시트를 읽지 못했어요 ({type(exc).__name__}). 잠시 뒤 다시 열어 주세요."
+
+
+def _admin_survey() -> None:
+    """사용자 테스트 (11/18 요청): n8n 이 구글 폼 응답을 정리해 쌓은 '정리' 탭 → 1차 · 2차 비교 + 원본 표.
+    시트 주소(번호)는 .env / Secrets 의 SURVEY_SHEET_ID. 숫자는 stats.survey_summary (n8n 메일과 같은 규칙)."""
+    sheet_id = (os.getenv("SURVEY_SHEET_ID") or "").strip()
+    if not sheet_id:
+        st.info("설문 시트가 아직 연결되지 않았어요. `.env`(배포는 Streamlit Secrets)에 `SURVEY_SHEET_ID` 를 넣어 주세요 "
+                "(구글 시트 주소의 /d/ 와 /edit 사이 글자). 만드는 법: automation/n8n/README.md", icon=":material/link_off:")
+        return
+    c1, c2 = st.columns([5, 1], vertical_alignment="center")
+    c1.markdown('<div class="adm-panel-h">사용자 테스트 (n8n 설문)</div>', unsafe_allow_html=True)
+    if c2.button("새로고침", icon=":material/refresh:", key="adm_survey_reload", width="stretch"):
+        _survey_rows.clear()
+    rows, err = _survey_rows(sheet_id)
+    if err:
+        st.warning(err, icon=":material/error:")
+        return
+    if not rows:
+        st.info("아직 들어온 응답이 없어요. 1차(11/25) · 2차(11/30) 테스트 때 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
+                icon=":material/hourglass_empty:")
+        return
+    s = stats.survey_summary(rows)
+    tgt = stats.SURVEY_TARGET
+    one, two = s["1차"], s["2차"]
+
+    def fmt(v, unit=""):
+        return "-" if v is None else f"{v:g}{unit}"
+
+    def delta(a, b, unit):
+        return None if a is None or b is None else f"{b - a:+g}{unit}"
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("참가자 (1차 → 2차)", f"{one['참가자']} → {two['참가자']}명")
+    m2.metric("과업 성공률 (2차 · 목표 80% 이상)", fmt(two["성공률"], "%"), delta(one["성공률"], two["성공률"], "%p"))
+    t1a, t1b = one["과업별"]["T1"]["평균초"], two["과업별"]["T1"]["평균초"]
+    m3.metric("T1 평균 (2차 · 목표 60초 이하)", fmt(t1b, "초"), delta(t1a, t1b, "초"), delta_color="inverse")
+    ok_s = two["성공률"] is not None and two["성공률"] >= tgt["success"]
+    ok_t = t1b is not None and t1b <= tgt["t1"]
+    st.caption(("목표 달성: 성공률 " + ("O" if ok_s else "X") + " · T1 " + ("O" if ok_t else "X"))
+               + ("  ·  참가자가 3명보다 적어 참고용이에요" if max(one["참가자"], two["참가자"]) < 3 else ""))
+    table = pd.DataFrame([{"과업": f"{t} · {name}",
+                           "1차 성공률": fmt(one["과업별"][t]["성공률"], "%"), "1차 평균": fmt(one["과업별"][t]["평균초"], "초"),
+                           "2차 성공률": fmt(two["과업별"][t]["성공률"], "%"), "2차 평균": fmt(two["과업별"][t]["평균초"], "초")}
+                          for t, name in stats.SURVEY_TASKS.items()])
+    st.dataframe(table, hide_index=True, width="stretch")
+    st.markdown('<div class="adm-panel-h">자주 막힌 곳</div>', unsafe_allow_html=True)
+    blocks = [f"- ({v}) {b} — {n}번" for v in ("2차", "1차") for b, n in s[v]["막힌곳"]]
+    st.markdown("\n".join(blocks) if blocks else "아직 없어요.")
+    with st.expander(f"원본 응답 ({len(rows)}줄, 참가자는 P 번호로만)"):
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    st.caption("구글 폼 → n8n(내 컴퓨터) → 구글 시트 '정리' 탭 → 여기. 이름 · 연락처는 받지 않고, 자유 답변의 전화번호 · 이메일은 n8n 이 지워요.")
 
 
 def _admin_usage() -> None:
@@ -7467,6 +7562,8 @@ def page_data() -> None:
         _admin_board()
     elif tab == "usage":
         _admin_usage()
+    elif tab == "survey":
+        _admin_survey()
     elif tab == "requests":
         _admin_requests()
     elif tab == "notices":
