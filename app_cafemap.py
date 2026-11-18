@@ -1728,8 +1728,10 @@ def _area_badge(address, cls: str = "abadge") -> str:
     if not area:
         return ""
     color, _ = _area_colors(address)
-    text = "#fff;text-shadow:0 1px 2px rgba(0,0,0,.45)" if cls == "area" else color
-    return (f'<span class="{cls}" style="background:{color}1A;border:1.5px solid {color};color:{text}">'
+    if cls == "area":          # 포스터 위: 사진에 묻히지 않게 시 색을 진하게 채우고 그림자 (11/18 요청)
+        return (f'<span class="{cls}" style="background:{color}E6;border:1.5px solid #ffffffCC;color:#fff;'
+                f'text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 2px 8px rgba(0,0,0,.28)">{escape(area)}</span>')
+    return (f'<span class="{cls}" style="background:{color}1A;border:1.5px solid {color};color:{color}">'
             f'{escape(area)}</span>')
 
 
