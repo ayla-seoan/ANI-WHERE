@@ -5137,6 +5137,7 @@ def page_login() -> None:
 
 
 def _login_body() -> None:
+    st.session_state.pop("_auth_err", None)     # 로그인 화면에 오면 지난 간편 로그인 오류는 지운다
     row = _member()
     if row:
         _my_account(row)
@@ -5410,21 +5411,32 @@ def _auth_body() -> None:
         st.page_link(PAGES["map"], label="홈으로", icon=":material/home:")
         return
     if qp.get("code") and qp.get("state"):
-        code, state = qp["code"], qp["state"]
+        # 돌아오자마자 화면이 한 번 더 그려진다(쿠키 읽기). 그때 주소의 code 가 이미 지워져 있어도
+        # 결과를 잃지 않게, code 와 교환 결과·오류를 세션에 먼저 담는다 (11/18 배포 오류)
+        st.session_state["_auth_cs"] = (qp["code"], qp["state"])
+        st.session_state.pop("_auth_err", None)
         st.query_params.clear()        # code 는 한 번만 쓸 수 있다. 새로고침해도 다시 쓰지 않게 주소에서 지운다
+    cs = st.session_state.get("_auth_cs")
+    if cs:
         try:
-            ident = auth.exchange(code, state)
+            got = auth.exchange(*cs)
         except auth.AuthError as e:
-            st.warning(str(e), icon=":material/error:")
-            st.page_link(PAGES["login"], label="다시 로그인하기", icon=":material/login:")
-            return
+            st.session_state["_auth_err"] = str(e)
+        else:
+            st.session_state["_pending_ident"] = got
+        st.session_state.pop("_auth_cs", None)
+    if st.session_state.get("_auth_err"):
+        st.warning(st.session_state["_auth_err"], icon=":material/error:")
+        st.page_link(PAGES["login"], label="다시 로그인하기", icon=":material/login:")
+        return
+    ident = st.session_state.get("_pending_ident")
+    if ident:
         row = auth.find(members, ident.member_key)
         if row:
+            st.session_state.pop("_pending_ident", None)
             _login_done(row, f"{row['nickname']}님, 환영합니다!")
             go("map")
             return
-        st.session_state["_pending_ident"] = ident
-    ident = st.session_state.get("_pending_ident")
     if not ident:
         st.info("로그인 화면에서 시작해 주세요.", icon=":material/info:")
         st.page_link(PAGES["login"], label="로그인하기", icon=":material/login:")
