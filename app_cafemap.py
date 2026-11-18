@@ -20,7 +20,7 @@ import os
 import re
 import time
 import uuid
-from urllib.parse import quote
+from urllib.parse import urlparse, quote
 from datetime import date, datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
@@ -6082,7 +6082,12 @@ def _admin_members() -> None:
 
 # 관리자 바로가기. 예약 작업 주소는 계정마다 달라서 .env / Streamlit Secrets 의 ADMIN_ROUTINE_URL (없으면 예약 작업 목록)
 ADMIN_ROUTINE_URL = os.getenv("ADMIN_ROUTINE_URL") or "https://claude.ai/code/routines"
-NOTION_TRACKER_URL = f"https://www.notion.so/{notion_sync.DATABASE_ID}"
+def _supabase_dashboard_url() -> str:
+    """Supabase 데이터(표 편집기) 바로가기. 프로젝트 번호는 SUPABASE_URL(https://<번호>.supabase.co)에서 읽는다 (11/18 요청:
+    Notion 트래커 대신 실제 앱 데이터가 있는 Supabase 를 바로 열기). 설정이 없으면 대시보드 첫 화면."""
+    host = urlparse(os.getenv("SUPABASE_URL", "")).hostname or ""
+    ref = host.split(".")[0] if host.endswith(".supabase.co") else ""
+    return f"https://supabase.com/dashboard/project/{ref}/editor" if ref else "https://supabase.com/dashboard/projects"
 ADM_KPIS = [("new", "이번 주 새로 등록", "곳"), ("live", "진행 중", "곳"), ("soon", "예정", "곳"),
             ("members", "회원 (활동)", "명"), ("requests", "삭제 요청 대기", "건")]
 
@@ -6173,10 +6178,10 @@ def page_data() -> None:
     new_week = len(admin.popup_board(store.all_rows(), mon)["새로 생성"])
     pend = sum(1 for r in del_requests.current_rows() if r.get("decision") == "pending")
     n_members = sum(1 for r in members.current_rows())
-    # 바로가기: 매일 수집을 돌리는 Claude 예약 작업 · 수집 결과가 쌓이는 Notion 트래커 (11/18 요청)
+    # 바로가기: 매일 수집을 돌리는 Claude 예약 작업 · 앱 데이터가 있는 Supabase 표 (11/18 요청: Notion 트래커 → Supabase)
     with st.container(horizontal=True, horizontal_alignment="right", key="adm_links"):
         st.link_button("Claude 예약 작업 (매일 08:00 수집)", ADMIN_ROUTINE_URL, icon=":material/schedule:")
-        st.link_button("Notion 팝업 트래커", NOTION_TRACKER_URL, icon=":material/table_view:")
+        st.link_button("Supabase 데이터 보기", _supabase_dashboard_url(), icon=":material/database:")
         # 앱은 Supabase 를 처음에 한 번 불러와 기억한다 (매일 08:45 · 앱에서 저장할 때 자동 갱신).
         # Supabase 화면에서 직접 고쳤을 때만 이 버튼으로 바로 새로 불러온다
         if st.button("데이터 새로 불러오기", icon=":material/refresh:", key="adm_refresh"):

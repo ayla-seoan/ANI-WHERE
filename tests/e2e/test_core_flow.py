@@ -78,7 +78,9 @@ def reveal(page: Page, eid: str) -> None:
         more = page.locator(".st-key-list_more_btn button")
         if not more.count():
             return
+        before = page.locator(CARD).count()
         more.click()
+        expect(page.locator(CARD)).not_to_have_count(before, timeout=LONG)
         wait_idle(page)
 
 
@@ -99,8 +101,7 @@ def test_1_목록이_뜬다(page: Page, app_url):
     assert n == min(total, 24), f"처음 카드 수 {n} (전체 {total})"
     if total > 24:
         page.locator(".st-key-list_more_btn button").click()
-        wait_idle(page)
-        assert page.locator(CARD).count() == min(total, 48)
+        expect(page.locator(CARD)).to_have_count(min(total, 48), timeout=LONG)
 
 
 # ------------------------------------------------------------------ 2. 검색/필터
