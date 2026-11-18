@@ -7,7 +7,7 @@
 //
 // 앱과 다른 점: 북마크 수 · 블로그 글 수는 공개 데이터에 없어서, 그 순서가 필요한 질문은 별점 · 곧 끝나는 순으로 대신하고 그렇게 말한다.
 
-import { APP_URL, type Item } from "./popup";
+import type { Item } from "./popup";
 
 export const MAX_QUESTION = 200;
 export const CARD_MAX = 5;
@@ -478,7 +478,7 @@ const GUIDE_TEXT: Record<string, string> = {
   list: "리스트로 보기는 포스터 카드로 모아 봐요. 위에서 지역·정렬을 고르고, 아래 'N건 더보기'로 더 불러와요. 오른쪽에서 저에게 물어볼 수도 있어요.",
 };
 const guideLink = (key: string): [string, string][] => [
-  [`사용자 튜토리얼 · ${GUIDE_SECTIONS[key]} 보기`, `${APP_URL}/guide#${key}`],
+  [`사용자 튜토리얼 · ${GUIDE_SECTIONS[key]} 보기`, `/guide#${key}`],
 ];
 
 function km(a: LatLng, b: LatLng): number {
@@ -532,11 +532,8 @@ function intentAnswer(question: string, items: Item[], today: string, ctx: AskCt
     return done(
       q,
       intent,
-      "블로그 후기 수는 ANI:WHERE 앱에서만 셀 수 있어요. 앱의 물어보기에서 다시 물어봐 주세요.",
-      [],
-      {
-        links: [["ANI:WHERE 앱 열기", APP_URL]],
-      },
+      // 앱도 블로그 글 수를 못 셀 때(네이버 검색 연결 없음·한도) 이 문구. 웹 물어보기는 브라우저에서 돌아 글 수를 미리 세지 않는다
+      "블로그 후기 수를 지금은 셀 수 없어요 (네이버 검색 연결이 꺼져 있거나 이번 달 검색 한도를 다 썼어요). 팝업 상세의 '블로그 후기' 탭에서 글을 볼 수 있어요.",
     );
   if (intent === "review_rank" || intent === "rating_rank") {
     const low = /적|낮|나쁜|없는|최하|꼴찌/.test(question);
@@ -587,7 +584,7 @@ function intentAnswer(question: string, items: Item[], today: string, ctx: AskCt
       "지도로 보기 · 리스트로 보기 · 내 캘린더 · 등록하기 · 수정하기 · 삭제 요청 방법을 한 페이지에 정리해 뒀어요. 아래 링크를 눌러 보세요.",
       [],
       {
-        links: [["사용자 튜토리얼 열기", `${APP_URL}/guide`]],
+        links: [["사용자 튜토리얼 열기", "/guide"]],
       },
     );
   if (intent.startsWith("guide_")) {
@@ -605,7 +602,7 @@ function intentAnswer(question: string, items: Item[], today: string, ctx: AskCt
       "저는 ANI:WHERE 팝업 도우미예요. 등록된 애니 팝업·카페·굿즈 행사에서 작품·지역·날짜로 찾아 드려요.",
       [],
       {
-        links: [["사용자 튜토리얼 열기", `${APP_URL}/guide`]],
+        links: [["사용자 튜토리얼 열기", "/guide"]],
       },
     );
   if (intent === "thanks") return done(q, intent, "천만에요! 더 궁금한 팝업이 있으면 언제든 물어봐 주세요.");
@@ -613,10 +610,10 @@ function intentAnswer(question: string, items: Item[], today: string, ctx: AskCt
     return done(
       q,
       intent,
-      "문의·신고는 개인정보처리방침의 연락처(10번)로 보내 주세요. 잘못된 글은 앱 상세 화면의 '삭제 요청'으로 관리자에게 바로 알릴 수 있어요.",
+      "문의·신고는 개인정보처리방침의 연락처(10번)로 보내 주세요. 잘못된 글은 상세 화면의 '삭제 요청'으로 관리자에게 바로 알릴 수 있어요.",
       [],
       {
-        links: [["개인정보처리방침 · 연락처 보기", `${APP_URL}/privacy`]],
+        links: [["개인정보처리방침 · 연락처 보기", "/privacy"]],
       },
     );
   if (intent === "count_all" || intent === "my_favs") {

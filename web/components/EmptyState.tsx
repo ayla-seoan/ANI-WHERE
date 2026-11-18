@@ -1,4 +1,4 @@
-import { APP_URL } from "@/lib/popup";
+import Link from "next/link";
 import { AddIcon } from "./Icons";
 
 export default function EmptyState({
@@ -16,7 +16,7 @@ export default function EmptyState({
       <p>
         {hint}
         <br />
-        찾는 팝업이 아직 없다면 앱에서 직접 등록할 수 있어요.
+        없는 팝업이면 오른쪽 아래 + 로 직접 등록할 수 있어요.
       </p>
       <div className="actions">
         {onReset && (
@@ -24,10 +24,10 @@ export default function EmptyState({
             조건 초기화
           </button>
         )}
-        <a className="btn" href={APP_URL} target="_blank" rel="noopener noreferrer">
+        <Link className="btn" href="/add">
           <AddIcon />
-          앱에서 직접 등록
-        </a>
+          직접 등록
+        </Link>
       </div>
     </div>
   );

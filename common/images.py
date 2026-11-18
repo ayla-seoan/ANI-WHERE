@@ -9,6 +9,7 @@ static/ 아래에 두어 Streamlit 이 url() 주소로 바로 내보낸다. 화�
 from __future__ import annotations
 
 import io
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -124,10 +125,29 @@ def split(value) -> list[str]:
     return [p.strip() for p in str(value or "").split(",") if p.strip()]
 
 
+class Remote(str):
+    """공개 웹(Vercel)이 사진 저장소(Supabase Storage 공개 버킷)에 올린 사진의 https 주소 (11/19).
+    파일 경로(Path)처럼 .name 을 쓰는 곳이 있어서 .name 은 주소 전체를 돌려준다 (저장할 때 그대로 남도록)."""
+
+    @property
+    def name(self) -> str:
+        return str(self)
+
+    def is_file(self) -> bool:
+        return True
+
+
+_REMOTE = re.compile(r"^https://[A-Za-z0-9.-]+/storage/v1/object/public/uploads/[0-9a-f]{12}\.(png|jpg|jpeg|webp|gif)$")
+
+
 def paths(value) -> list[Path]:
-    """저장소의 images 칸 → 실제로 있는 파일 경로들. 파일 이름 밖으로 나가는 값은 버린다."""
+    """저장소의 images 칸 → 실제로 있는 파일 경로들. 파일 이름 밖으로 나가는 값은 버린다.
+    공개 웹이 올린 사진(사진 저장소의 https 주소)은 Remote 로 그대로 넣는다."""
     out = []
     for name in split(value):
+        if _REMOTE.match(name):
+            out.append(Remote(name))
+            continue
         p = IMAGE_DIR / Path(name).name
         if p.is_file():
             out.append(p)
@@ -140,7 +160,12 @@ def poster(value) -> Path | None:
 
 
 def url(path: Path) -> str:
-    """static/uploads/ 의 파일 → 화면에서 쓰는 주소 (페이지 기준 상대 주소)."""
+    """static/uploads/ 의 파일 → 화면에서 쓰는 주소 (페이지 기준 상대 주소). 사진 저장소의 사진은 https 주소 그대로."""
+    if isinstance(path, Remote):
+        return str(path)
+    parts = Path(path).parts                 # IMAGE_DIR / "https://…" 처럼 이어 붙인 경우도 주소로 되돌린다
+    if "https:" in parts:
+        return "https://" + "/".join(parts[parts.index("https:") + 1:])
     return f"app/static/uploads/{path.name}"
 
 

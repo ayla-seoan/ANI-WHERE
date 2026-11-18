@@ -112,6 +112,8 @@ export function cleanAvatar(value: unknown): string {
   if (v.startsWith("http://")) v = "https://" + v.slice(7);
   if (v.length <= 500 && AVATAR_URL.test(v)) return v;
   if (AVATAR_FILE.test(v)) return v;
+  // 시험용 local 모드에서 올린 사진 (/uploads/<12자>.webp)
+  if (mode() === "local" && /^\/uploads\/[0-9a-f]{12}\.(png|jpg|jpeg|webp|gif)$/.test(v)) return v;
   return "";
 }
 

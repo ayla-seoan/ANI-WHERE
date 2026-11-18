@@ -1,6 +1,18 @@
 import Link from "next/link";
 import { getPopupData } from "@/lib/data";
-import { addDays, byCode, daysBetween, mondayOf, stateOf, todayKST, toItem, type Item, type Popup } from "@/lib/popup";
+import {
+  addDays,
+  byCode,
+  daysBetween,
+  mondayOf,
+  periodDot,
+  stateOf,
+  todayKST,
+  toItem,
+  type Item,
+  type Popup,
+} from "@/lib/popup";
+import BookmarkPicker from "@/components/member/BookmarkPicker";
 import { HomeCard, posterBg } from "@/components/cards";
 import HScroll from "@/components/HScroll";
 import RankBanner from "@/components/home/RankBanner";
@@ -8,7 +20,7 @@ import NewSection from "@/components/home/NewSection";
 import WeekCalendar from "@/components/home/WeekCalendar";
 import EmptyState from "@/components/EmptyState";
 import { getMe, getMyFavs } from "@/lib/server/session";
-import { AddIcon, EventIcon, HelpIcon, HourglassIcon, NewIcon } from "@/components/Icons";
+import { EventIcon, HelpIcon, HourglassIcon, NewIcon } from "@/components/Icons";
 
 export const revalidate = 600;
 
@@ -108,17 +120,24 @@ export default async function Home() {
             <span className="help" tabIndex={0}>
               <HelpIcon />
               <span className="tip">
-                내가 북마크한 팝업(진행 중 · 오픈 예정)이 여기에 모여요. 동그라미를 누르면 그 팝업으로 가요.
+                내가 북마크한 팝업(진행 중 · 오픈 예정)이 여기에 모여요. 동그라미를 누르면 그 팝업으로 가고, &apos;최애
+                추가하기&apos; 로 팝업을 골라 한 번에 북마크할 수 있어요.
               </span>
             </span>
           </div>
           <HScroll className="story-row" label="북마크 팝업">
-            <Link href="/list" className="story add" prefetch={false}>
-              <span className="ring">
-                <AddIcon />
-              </span>
-              <span className="nm">최애 추가하기</span>
-            </Link>
+            <BookmarkPicker
+              items={live.map((p) => ({
+                id: p.id,
+                work: p.work,
+                name: p.name,
+                chars: p.characters,
+                poster: p.images[0] ?? "",
+                period: periodDot(p),
+                rank: stateOf(p, today).rank,
+                start: p.start,
+              }))}
+            />
             {!marked.length && <span className="story-empty">팝업을 북마크하면 여기에 모여요.</span>}
             {marked.map((p) => (
               <Link key={p.id} href={`/popup/${p.id}`} className="story mark" prefetch={false}>

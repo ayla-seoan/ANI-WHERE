@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/sync_docs.mjs",
     "build": "next build",
+    "sync:docs": "node scripts/sync_docs.mjs",
     "start": "next start",
     "lint": "eslint",
     "test:ask": "tsc lib/ask.ts lib/popup.ts scripts/ask_check.ts --outDir .ask-check --module commonjs --target es2020 --esModuleInterop --skipLibCheck --types node && node .ask-check/scripts/ask_check.js",
@@ -14,7 +16,8 @@
     "next": "15.5.29",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

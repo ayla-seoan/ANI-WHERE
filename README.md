@@ -58,7 +58,7 @@
 | DB·RLS | Claude Code 서브에이전트 | — | 손님은 IP 해시, 회원은 계정 번호 해시로 '내 글' 구분. 이메일·전화번호는 받지 않음 |
 | 로그인·관리자 | Claude Code | — | 회원만 쓰기, 관리자 1명 지정, 일반 회원은 '삭제 요청'만 (승인/거부는 관리자) |
 | 테스트 | Claude Code 서브에이전트 (Playwright) | — | 어떤 흐름을 '핵심'으로 볼지 |
-| 공개 웹·PWA | Claude Code 서브에이전트 | — | 편집은 Streamlit, 웹은 읽기 전용 |
+| 공개 웹·PWA | Claude Code 서브에이전트 | — | Streamlit 과 같은 화면·기능을 웹 안에서 (Streamlit 으로 넘기지 않음), 쓰기는 서버 코드에서만 |
 | 리뷰 | `po-reviewer` 서브에이전트 | `.claude/agents/po-reviewer.md` | 최종 머지 여부 |
 | AI 실수 기록 | — | [`docs/ai-mistakes.md`](docs/ai-mistakes.md) | 무엇을 실수로 볼지, 고칠 방법 |
 
@@ -66,13 +66,13 @@
 
 | | Streamlit 앱 (`app_cafemap.py`) | 공개 웹 (`web/`, Next.js + PWA) |
 | --- | --- | --- |
-| 역할 | **참여**: 등록·수정·리뷰·북마크·로그인·물어보기·지표·관리자 | **찾기·판단**: 빠른 목록·상세·이번 주, 폰에 설치 |
-| 쓰기 | O (append-only) | X (읽기 전용) |
+| 역할 | **참여**: 등록·수정·리뷰·북마크·로그인·물어보기·지표·관리자 | 같은 기능 전부 (등록·수정·되돌리기·삭제 요청·리뷰·사진·북마크·종 알림·물어보기·지표·관리자) + 폰에 설치 |
+| 쓰기 | O (append-only) | O (서버 액션에서만, anon 키, append-only · 사진은 Supabase Storage `uploads`) |
 | 배포 | Streamlit Community Cloud — https://ani-where.streamlit.app | Vercel — https://ani-where.vercel.app (Root Directory = `web`) |
 | 로컬 | `streamlit run app_cafemap.py` → http://localhost:8501 | `cd web && npm run dev` → http://localhost:3000 |
 | 데이터 | 같은 저장소 (`STORAGE_MODE`: local / supabase) | Supabase `popups_current` 뷰, 없으면 GitHub 의 `data/cafes.json` |
 
-두 서비스는 같은 데이터를 본다. 공개 웹 상세의 '리뷰·수정은 앱에서' 링크가 Streamlit 앱 상세(`?cafe=<id>`)로 이어진다.
+두 서비스는 같은 데이터·같은 계정(`aw_session`)·같은 알림 읽음 쿠키 모양을 쓴다. 웹은 Streamlit 으로 넘어가는 링크가 없다 — 웹에서 올린 사진은 https 주소로 저장돼 Streamlit 에서도 보인다 (`supabase/migrations/011_storage.sql` 을 먼저 적용).
 
 ### 2차에서 새로 생긴 것 실행해 보기
 

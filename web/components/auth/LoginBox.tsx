@@ -111,8 +111,7 @@ export default function LoginBox({
             <br />
             카카오·네이버 계정이 있으면 아래 간편 가입으로 비밀번호 없이도 가입할 수 있어요.
             <br />
-            가입하면 북마크·리뷰가 <b>어느 기기에서나</b> 내 것으로 남아요. Streamlit 앱(ani-where.streamlit.app)과 같은
-            계정이에요.
+            가입하면 북마크·리뷰가 <b>어느 기기에서나</b> 내 것으로 남아요.
           </div>
           <form onSubmit={submitWith(joinForm)} className="auth-form">
             <label className="fl">
@@ -152,7 +151,7 @@ export default function LoginBox({
             <Consent kind="local" />
             <div className="auth-sub auth-guide">
               이메일·전화번호를 받지 않아서 <b>비밀번호를 잊으면 찾을 수 없어요.</b> 꼭 기억해 두세요. 프로필
-              사진(선택)은 가입한 뒤 ANI:WHERE 앱 마이페이지에서 올릴 수 있어요.
+              사진(선택)은 가입한 뒤 마이페이지에서 올릴 수 있어요.
             </div>
             <Err s={js} />
             <button type="submit" className="btn-main" disabled={joining}>

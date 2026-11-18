@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     const row = await findMember(ident.memberKey);
     if (row) {
       await startSession(String(row.entry_id), String(row.provider));
-      await setFlash(`${row.nickname}님, 환영합니다!`);
+      await setFlash(`${row.nickname}님, 환영합니다!`, "wave");
       return to("/");
     }
     await setPending(ident);

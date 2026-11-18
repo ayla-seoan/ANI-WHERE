@@ -2,6 +2,7 @@ import "server-only";
 import { scan } from "../guard";
 import { allMembers, WITHDRAWN } from "./auth";
 import { append, current, latest, rows, type Row } from "./store";
+import { esc, inboxId, markId, ntfName } from "./ntf";
 
 // 북마크 · 리뷰 · 알림 — common/favorite.py · review.py · admin.py 규칙 그대로 (append-only).
 
@@ -51,6 +52,7 @@ export function toReviewRow(
   kind: string,
   parentId: string,
   rating: number | null,
+  images: string[] = [],
 ): Row {
   const k = parentId ? "" : (KINDS as readonly string[]).includes(kind) ? kind : KINDS[0];
   const ok = k === RATED_KIND && rating !== null && Number.isInteger(rating) && rating >= 1 && rating <= 5;
@@ -61,7 +63,7 @@ export function toReviewRow(
     nickname: nickname.trim() || "익명",
     body: body.trim(),
     rating: ok ? String(rating) : "",
-    images: "",
+    images: images.join(","),
   };
 }
 
@@ -125,7 +127,13 @@ export async function threadsFor(cafeId: string, myName: string): Promise<Thread
       images: String(r.images || "")
         .split(",")
         .map((x) => x.trim())
-        .filter((x) => /^[\w.-]+\.(png|jpe?g|webp|gif)$/i.test(x)),
+        // 예전 파일 이름(앱 static/uploads) · https 주소(Supabase Storage) · 시험용 /uploads/
+        .filter(
+          (x) =>
+            /^[\w.-]+\.(png|jpe?g|webp|gif)$/i.test(x) ||
+            /^https:\/\/[^\s"'<>]+$/.test(x) ||
+            /^\/uploads\/[0-9a-f]{12}\.(png|jpe?g|webp|gif)$/.test(x),
+        ),
       when: String(r.updated_at || ""),
       edited: Number(r.revision || 1) > 1,
       mine: canEdit(r, myName),
@@ -225,7 +233,7 @@ export async function inbox(key: string, rules: RuleSet, todayYmd: string): Prom
       if (++nNotice > (rules.notice.max ?? 5)) continue;
     }
     out.push({
-      id: `i${r.row_id}`,
+      id: inboxId(String(r.row_id)), // 앱과 같은 알림 번호 (읽음 쿠키를 같이 쓴다)
       title: String(r.title || ""),
       body: String(r.body || ""),
       why: whyOf(rk, rules),
@@ -250,25 +258,20 @@ export function bookmarkMarks(
   const marks: BellItem[] = [];
   for (const p of pops) {
     if (!favs.has(p.id)) continue;
-    const name = [p.work, p.name].filter(Boolean).join(" · ");
+    const name = ntfName(p.work, p.name);
     const ds = p.start ? diff(today, p.start) : NaN;
     const de = p.end ? diff(today, p.end) : NaN;
     if (rules.open.enabled && ds >= 0 && ds <= od) {
       const label = ds === 0 ? "오늘 오픈" : `오픈 D-${ds}`;
-      marks.push({
-        id: `m${today}${p.id}${label}`,
-        label,
-        name,
-        why: whyOf("open", rules),
-        cafeId: p.id,
-        kind: "open",
-      });
+      const why = whyOf("open", rules);
+      marks.push({ id: markId(today, p.id, label, name, why), label, name, why, cafeId: p.id, kind: "open" });
     } else if (rules.end.enabled && p.start && p.start <= today && de >= 0 && de <= ed) {
       const label = de === 0 ? "오늘 종료" : `종료 D-${de}`;
-      marks.push({ id: `m${today}${p.id}${label}`, label, name, why: whyOf("end", rules), cafeId: p.id, kind: "end" });
+      const why = whyOf("end", rules);
+      marks.push({ id: markId(today, p.id, label, name, why), label, name, why, cafeId: p.id, kind: "end" });
     }
   }
-  const key = (m: BellItem) => `${m.label} · ${m.name}`;
+  const key = (m: BellItem) => `<b>${m.label}</b> · ${esc(m.name)}`; // 앱은 그리는 HTML 글로 정렬한다
   marks.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
   const opens = marks.filter((m) => m.kind === "open").slice(0, rules.open.max ?? 8);
   const ends = marks.filter((m) => m.kind === "end").slice(0, rules.end.max ?? 8);

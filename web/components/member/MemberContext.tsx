@@ -13,7 +13,7 @@ const MemberCtx = createContext<Ctx>({ me: null, favs: new Set(), toggle: () => 
 /** 손님이 회원 기능을 누름 → 로그인 화면으로 (앱 _need_login 처럼 안내를 함께) */
 export function goLogin(router: ReturnType<typeof useRouter>, msg: string, next: string) {
   try {
-    document.cookie = `aw_flash=${encodeURIComponent(msg)}; path=/; max-age=30; SameSite=Lax`;
+    document.cookie = `aw_flash=${encodeURIComponent(`login|${msg}`)}; path=/; max-age=30; SameSite=Lax`;
   } catch {
     /* 무시 */
   }

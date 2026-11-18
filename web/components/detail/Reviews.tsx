@@ -5,14 +5,16 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { reviewCreateAction, reviewDeleteAction, reviewEditAction, type FormState } from "@/app/actions";
 import { avatarUrl, uploadUrl } from "@/lib/avatar";
 import { sensitiveWarning } from "@/lib/guard";
-import { APP_URL } from "@/lib/popup";
-import { goLogin } from "../member/MemberContext";
+import { goLogin, useMember } from "../member/MemberContext";
 import { toast } from "../member/Toast";
-import { ChatIcon, EditIcon, StarIcon } from "../Icons";
+import { StarIcon } from "../Icons";
+import BlogTab, { useBlogCount } from "./BlogTab";
 
-// 상세 오른쪽 '리뷰' (앱 render_detail_tabs · render_reviews · _review_card): 맨 위 리뷰 쓰기(회원만),
-// 그 아래 '리뷰 후기 / 블로그 후기', 평균 별점, 종류별 보기, 원글 + 답글. 내 글만 ⋯ 로 수정·삭제.
-// '수정하기'(팝업 정보 고치기) · 사진 첨부 · 블로그 후기는 ANI:WHERE 앱에서.
+// 상세 오른쪽 '리뷰' 탭 내용 (앱 render_reviews · _review_card): 맨 위 리뷰 쓰기(회원만, 사진 첨부 4장까지),
+// 그 아래 '리뷰 후기 / 블로그 후기', 평균 별점, 종류별 보기, 원글 + 답글. 내 글은 ⋯ 로 수정·삭제,
+// 관리자는 모든 글을 사유를 적고 삭제 (쓴 회원에게 알림). '리뷰 n / 수정하기' 탭 머리는 SideTabs 가 그린다.
+const MAX_IMAGES = 4; // review.MAX_IMAGES
+const IMAGE_MB = 10; // review.IMAGE_MB
 
 export type RView = {
   id: string;
@@ -109,20 +111,29 @@ function WriteBox({
   const [body, setBody] = useState("");
   const [focus, setFocus] = useState(false);
   const [n, setN] = useState(0);
+  const [picOpen, setPicOpen] = useState(false);
+  const [pics, setPics] = useState<File[]>([]);
   const [s, action, busy] = useActionState(reviewCreateAction, null);
   useDone(s, () => {
     setBody("");
     setRating(null);
     setFocus(false);
+    setPicOpen(false);
+    setPics([]);
     setN((k) => k + 1);
   });
   const warn = sensitiveWarning(body);
-  const allowEmpty = !parentId && kind === RATED && rating !== null;
+  const heavy = pics.filter((p) => p.size > IMAGE_MB * 1024 * 1024).map((p) => p.name);
+  const allowEmpty = !parentId && kind === RATED && (rating !== null || pics.length > 0);
   const reply = !!parentId;
   return (
     <form
-      onSubmit={submitWith(action)}
-      className={`write${reply ? " reply" : ""}${focus || body ? " open" : ""}`}
+      onSubmit={submitWith((fd) => {
+        fd.delete("photos");
+        for (const p of pics.slice(0, MAX_IMAGES)) fd.append("photos", p);
+        action(fd);
+      })}
+      className={`write${reply ? " reply" : ""}${focus || body || pics.length ? " open" : ""}`}
       key={n}
     >
       <input type="hidden" name="cafe_id" value={cafeId} />
@@ -173,17 +184,30 @@ function WriteBox({
           {s.error}
         </div>
       )}
-      {!reply && (
-        <p className="cap pic-note">
-          + 사진 첨부는{" "}
-          <a href={`${APP_URL}/?cafe=${encodeURIComponent(cafeId)}`} target="_blank" rel="noopener noreferrer">
-            ANI:WHERE 앱
-          </a>
-          에서 할 수 있어요.
+      {!reply &&
+        (!picOpen ? (
+          <button type="button" className="pic-btn" onClick={() => setPicOpen(true)}>
+            + 사진 첨부
+          </button>
+        ) : (
+          <PicPicker
+            label={`최대 ${MAX_IMAGES}장 · 한 장 ${IMAGE_MB}MB · 다른 사람 얼굴·영수증·연락처가 보이는 사진은 올리지 말아 주세요 (사진 속 위치 정보는 자동으로 지워요)`}
+            room={MAX_IMAGES}
+            files={pics}
+            onChange={setPics}
+          />
+        ))}
+      {heavy.length > 0 && (
+        <p className="cap pic-err">
+          {IMAGE_MB}MB 를 넘는 사진은 올릴 수 없어요: {heavy.join(", ")}
         </p>
       )}
       <div className={reply ? "two" : ""}>
-        <button type="submit" className="btn-main" disabled={busy || !!warn || (!body.trim() && !allowEmpty)}>
+        <button
+          type="submit"
+          className="btn-main"
+          disabled={busy || !!warn || heavy.length > 0 || (!body.trim() && !allowEmpty)}
+        >
           {reply ? "답글 등록" : "리뷰 등록"}
         </button>
         {reply && (
@@ -203,15 +227,83 @@ function WriteBox({
   );
 }
 
+/** 사진 고르기 칸 (앱 st.file_uploader 여러 장): 고른 사진은 작은 그림으로 보이고 하나씩 뺄 수 있다 */
+function PicPicker({
+  label,
+  room,
+  files,
+  onChange,
+}: {
+  label: string;
+  room: number;
+  files: File[];
+  onChange: (f: File[]) => void;
+}) {
+  const [urls, setUrls] = useState<string[]>([]);
+  useEffect(() => {
+    const u = files.map((f) => URL.createObjectURL(f));
+    setUrls(u);
+    return () => u.forEach((x) => URL.revokeObjectURL(x));
+  }, [files]);
+  return (
+    <div className="pic-pick">
+      <label className="pic-drop">
+        <span className="pic-label">{label}</span>
+        <input
+          type="file"
+          multiple
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          onChange={(e) => {
+            const add = Array.from(e.target.files || []);
+            e.target.value = "";
+            onChange([...files, ...add]);
+          }}
+        />
+        <span className="pic-go">사진 고르기</span>
+      </label>
+      {files.length > room && (
+        <p className="cap pic-err">
+          사진은 {room}장까지 올릴 수 있어요. 앞의 {room}장만 올라갑니다.
+        </p>
+      )}
+      {files.length > 0 && (
+        <div className="pic-list">
+          {files.map((f, i) => (
+            <span key={`${f.name}-${i}`} className="pic-one">
+              {urls[i] && <img src={urls[i]} alt="" />}
+              <button type="button" aria-label={`${f.name} 빼기`} onClick={() => onChange(files.filter((_, j) => j !== i))}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EditBox({ r, isReply, onClose }: { r: RView; isReply: boolean; onClose: () => void }) {
   const [kind, setKind] = useState(r.kind || KINDS[0]);
   const [rating, setRating] = useState<number | null>(r.rating);
   const [body, setBody] = useState(r.body);
+  const [keep, setKeep] = useState<string[]>(r.images);
+  const [pics, setPics] = useState<File[]>([]);
   const [s, action, busy] = useActionState(reviewEditAction, null);
   useDone(s, onClose);
   const warn = sensitiveWarning(body);
+  const room = MAX_IMAGES - keep.length;
+  const heavy = pics.filter((p) => p.size > IMAGE_MB * 1024 * 1024).map((p) => p.name);
   return (
-    <form onSubmit={submitWith(action)} className="write edit">
+    <form
+      onSubmit={submitWith((fd) => {
+        fd.delete("photos");
+        fd.delete("keep");
+        for (const k of keep) fd.append("keep", k);
+        for (const p of pics.slice(0, Math.max(0, room))) fd.append("photos", p);
+        action(fd);
+      })}
+      className="write edit"
+    >
       <input type="hidden" name="entry_id" value={r.id} />
       <input type="hidden" name="kind" value={isReply ? "" : kind} />
       <input type="hidden" name="rating" value={rating ?? ""} />
@@ -234,12 +326,40 @@ function EditBox({ r, isReply, onClose }: { r: RView; isReply: boolean; onClose:
         aria-label="고칠 내용"
       />
       {warn && <div className="auth-warn">{warn}</div>}
+      {!isReply && r.images.length > 0 && (
+        <>
+          <p className="cap">붙어 있는 사진 (뺄 사진은 체크를 풀어요)</p>
+          <div className="rv-keep">
+            {r.images.map((x) => (
+              <label key={x} className="rv-keep-one">
+                <img src={uploadUrl(x)} alt="" loading="lazy" />
+                <span className="ck">
+                  <input
+                    type="checkbox"
+                    checked={keep.includes(x)}
+                    onChange={(e) => setKeep((cur) => (e.target.checked ? [...cur, x] : cur.filter((y) => y !== x)))}
+                  />
+                  <span>남기기</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+      {!isReply && room > 0 && (
+        <PicPicker label={`사진 추가 (최대 ${room}장 · 한 장 ${IMAGE_MB}MB)`} room={room} files={pics} onChange={setPics} />
+      )}
+      {heavy.length > 0 && (
+        <p className="cap pic-err">
+          {IMAGE_MB}MB 가 넘는 사진은 올릴 수 없어요: {heavy.join(", ")}
+        </p>
+      )}
       {s?.error && <div className="auth-warn">{s.error}</div>}
       <div className="two">
         <button type="button" className="btn-line" onClick={onClose}>
           취소
         </button>
-        <button type="submit" className="btn-main" disabled={busy || !!warn}>
+        <button type="submit" className="btn-main" disabled={busy || !!warn || heavy.length > 0}>
           저장
         </button>
       </div>
@@ -249,9 +369,12 @@ function EditBox({ r, isReply, onClose }: { r: RView; isReply: boolean; onClose:
 
 function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; replies?: number }) {
   const router = useRouter();
+  const { me } = useMember();
+  const admin = !!me?.admin && !r.mine; // 관리자가 남의 글을 지울 땐 사유를 적는다
   const [menu, setMenu] = useState(false);
   const [editing, setEditing] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState("");
   return (
     <div className={`rv-card${reply ? " is-reply" : ""}`}>
       <div className="rv-head">
@@ -263,22 +386,24 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
           · {whenText(r.when)}
           {r.edited ? " (수정됨)" : ""}
         </span>
-        {r.mine && (
+        {(r.mine || admin) && (
           <span className="rv-more">
-            <button type="button" aria-label="내 글 수정·삭제" onClick={() => setMenu((m) => !m)}>
+            <button type="button" aria-label={r.mine ? "내 글 수정·삭제" : "글 삭제 (관리자)"} onClick={() => setMenu((m) => !m)}>
               ⋯
             </button>
             {menu && (
               <span className="rv-menu">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditing(true);
-                    setMenu(false);
-                  }}
-                >
-                  수정
-                </button>
+                {r.mine && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(true);
+                      setMenu(false);
+                    }}
+                  >
+                    수정
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -286,7 +411,7 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
                     setMenu(false);
                   }}
                 >
-                  삭제
+                  {r.mine ? "삭제" : "삭제 (관리자)"}
                 </button>
               </span>
             )}
@@ -318,6 +443,18 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
               이 글을 삭제할까요? 삭제하면 다시 볼 수 없어요.
               {replies ? ` 달린 답글 ${replies}개도 함께 안 보이게 돼요.` : ""}
             </p>
+            {admin && (
+              <label className="fl">
+                <span>삭제 사유 (쓴 사람에게 알림으로 가요)</span>
+                <textarea
+                  value={reason}
+                  maxLength={200}
+                  rows={3}
+                  placeholder="예: 다른 팝업과 관계없는 광고 글이에요"
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </label>
+            )}
             <div className="two">
               <button type="button" className="btn-line" onClick={() => setAsking(false)}>
                 취소
@@ -326,8 +463,12 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
                 type="button"
                 className="btn-main"
                 onClick={async () => {
+                  if (admin && reason.split(/\s+/).join(" ").trim().length < 2) {
+                    toast("삭제 사유를 두 글자 이상 적어 주세요. 쓴 사람에게 알림으로 가요.", "error");
+                    return;
+                  }
                   setAsking(false);
-                  const res = await reviewDeleteAction(r.id);
+                  const res = await reviewDeleteAction(r.id, admin ? reason : "");
                   toast(res?.ok || res?.error || "", res?.ok ? "ok" : "error");
                   router.refresh();
                 }}
@@ -354,6 +495,7 @@ export default function Reviews({
   const router = useRouter();
   const [sub, setSub] = useState<"review" | "blog">("review");
   const [pick, setPick] = useState("전체");
+  const blogN = useBlogCount(cafeId); // 앱처럼 탭 이름에 글 수 (모르면 0)
   const n = threads.reduce((a, t) => a + 1 + t.replies.length, 0);
   const rated = threads.filter((t) => t.post.kind === RATED && t.post.rating).map((t) => t.post.rating as number);
   const avg = rated.length ? Math.round((rated.reduce((a, b) => a + b, 0) / rated.length) * 10) / 10 : 0;
@@ -361,17 +503,7 @@ export default function Reviews({
   const shown = threads.filter((t) => pick === "전체" || t.post.kind === pick);
 
   return (
-    <aside className="detail-side" aria-label="리뷰">
-      <div className="side-tabs">
-        <span className="on">
-          <ChatIcon />
-          리뷰 {n}
-        </span>
-        <a href={`${APP_URL}/?cafe=${encodeURIComponent(cafeId)}`} target="_blank" rel="noopener noreferrer">
-          <EditIcon />
-          수정하기
-        </a>
-      </div>
+    <div className="rv-pane">
       <div className="side-box rvbox">
         {me ? (
           <WriteBox cafeId={cafeId} me={me} />
@@ -405,17 +537,11 @@ export default function Reviews({
           className={sub === "blog" ? "on" : ""}
           onClick={() => setSub("blog")}
         >
-          블로그 후기
+          블로그 후기 ({blogN ?? 0})
         </button>
       </div>
       {sub === "blog" ? (
-        <div className="blog-empty">
-          네이버 블로그 후기는{" "}
-          <a href={`${APP_URL}/?cafe=${encodeURIComponent(cafeId)}`} target="_blank" rel="noopener noreferrer">
-            ANI:WHERE 앱
-          </a>
-          에서 볼 수 있어요.
-        </div>
+        <BlogTab cafeId={cafeId} />
       ) : !threads.length ? (
         <p className="rv-none">아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</p>
       ) : (
@@ -462,6 +588,6 @@ export default function Reviews({
           ))}
         </>
       )}
-    </aside>
+    </div>
   );
 }

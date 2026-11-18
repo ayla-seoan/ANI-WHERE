@@ -87,12 +87,20 @@
 }
 .ntf-all {
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 0;
   background: none;
   color: var(--accent-deep);
   font-weight: 700;
   font-size: 0.82rem;
   padding: 0;
+  cursor: pointer;
+}
+.ntf-all svg {
+  width: 16px;
+  height: 16px;
 }
 .ntf-item {
   display: block;
@@ -217,12 +225,14 @@ a.ntf-item:hover {
 }
 
 /* ---------- 가운데 토스트 (앱 _toast) ---------- */
+/* 앱(_TOAST_JS)과 같은 모양 · 시간. 지도(Leaflet)·종 알림·대화상자·모바일 시트보다 늘 위 (앱은 3000번대) */
 .ani-toast {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 300;
+  transform: translate(-50%, -50%) scale(0.96);
+  opacity: 0;
+  z-index: 3001;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -233,8 +243,15 @@ a.ntf-item:hover {
   padding: 12px 18px;
   max-width: min(90vw, 420px);
   width: max-content;
+  box-sizing: border-box;
   pointer-events: none;
-  animation: toastIn 0.18s ease;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+.ani-toast.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
 .ani-toast svg {
   width: 22px;
@@ -243,16 +260,14 @@ a.ntf-item:hover {
   flex: none;
 }
 .ani-toast .tx {
+  font-family: "NanumSquareRound", "Pretendard", sans-serif;
   font-weight: 700;
   font-size: 0.95rem;
+  line-height: 1.4;
   color: #1f2a27;
   word-break: keep-all;
-}
-@keyframes toastIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.96);
-  }
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 /* ---------- 북마크 버튼 (앱 _heart) ---------- */
@@ -1571,4 +1586,377 @@ a.ntf-item:hover {
   color: #7b8784;
   padding-top: 26px;
   white-space: nowrap;
+}
+
+/* ---------- 프로필 사진 올리기 (앱 _my_account) ---------- */
+.av-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 10px;
+}
+.av-preview img {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent-soft);
+  flex: none;
+}
+.av-preview span {
+  font-size: 0.8rem;
+  color: #6b7672;
+}
+.fl input[type="file"] {
+  height: auto;
+  max-width: 100%;
+  font-size: 0.85rem;
+  padding: 8px;
+  border: 1px dashed #c9d6d2;
+  border-radius: 10px;
+  background: #fafcfb;
+}
+
+/* ---------- 리뷰 사진 첨부 (앱 render_reviews '+ 사진 첨부' · _review_edit_box) ---------- */
+.pic-btn {
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: #0f766e;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.pic-pick {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.pic-drop {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  border: 1px dashed #c9d6d2;
+  border-radius: 12px;
+  background: #fafcfb;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.pic-drop input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.pic-label {
+  font-size: 0.78rem;
+  color: #6b7672;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+.pic-go {
+  justify-self: start;
+  border: 1px solid #d5dedb;
+  border-radius: 10px;
+  background: #fff;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #26302d;
+}
+.pic-drop:focus-within .pic-go {
+  outline: 2px solid #14b8a6;
+}
+.pic-list,
+.rv-keep {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pic-one {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #eef2f1;
+  flex: none;
+}
+.pic-one img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pic-one button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(31, 42, 39, 0.72);
+  color: #fff;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.pic-err {
+  color: #d93025 !important;
+}
+.rv-keep-one {
+  display: grid;
+  gap: 4px;
+  width: calc(25% - 6px);
+  min-width: 64px;
+}
+.rv-keep-one img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.rv-keep-one .ck {
+  font-size: 0.8rem;
+}
+.dlg textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #f0f2f6;
+  padding: 8px 12px;
+  font: inherit;
+  resize: vertical;
+}
+.ntf-loc {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent-deep);
+  font-weight: 700;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---------- 최애 추가하기 (앱 bookmark_pick_dialog, st.dialog width="large") ---------- */
+button.story {
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding-top: 0;
+}
+.fw-bg {
+  z-index: 250;
+}
+.dlg.fw-dlg {
+  max-width: 740px;
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px 14px;
+  box-sizing: border-box;
+}
+.fw-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.fw-x {
+  border: 0;
+  background: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #6b7672;
+}
+.fw-x svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+}
+.fw-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  text-align: center;
+}
+.fw-sub {
+  text-align: center;
+  color: #7b8784;
+  font-size: 0.88rem;
+  margin-top: 4px;
+  word-break: keep-all;
+}
+.fw-count {
+  margin: 10px auto 2px;
+  width: fit-content;
+  padding: 4px 14px;
+  border: 1px solid #dde5e3;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: #7b8784;
+}
+.fw-count b {
+  color: var(--accent-deep);
+  font-size: 1rem;
+  margin-right: 2px;
+}
+.fw-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  border-radius: 14px;
+  background: #f0f2f6;
+  padding: 0 12px;
+  margin: 8px 0 6px;
+}
+.fw-search svg {
+  width: 18px;
+  height: 18px;
+  stroke: #8a9592;
+  stroke-width: 2;
+  fill: none;
+  flex: none;
+}
+.fw-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  outline: none;
+}
+.fw-none {
+  padding: 18px 2px;
+}
+.fw-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 2px;
+}
+.fwc {
+  border: 0;
+  background: none;
+  padding: 0 0 16px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fwc .fwp {
+  position: relative;
+  display: block;
+  aspect-ratio: 3/4;
+  border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  background-color: #eef3f1;
+  border: 3px solid transparent;
+  box-sizing: border-box;
+}
+.fwc.on .fwp {
+  border-color: var(--accent);
+}
+.fwc.on .fwp::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 184, 166, 0.18);
+  border-radius: 7px;
+}
+.fwc .fwchk {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fwc .fwchk svg {
+  width: 16px;
+  height: 16px;
+  stroke: #fff;
+  stroke-width: 2.6;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fwc .fwn {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.fwc .fwm {
+  font-size: 0.74rem;
+  color: #7b8784;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fw-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+.fw-skip {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: #6b7672;
+  cursor: pointer;
+  padding: 8px 4px;
+}
+.fw-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: 0 22px;
+}
+.fw-save svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (max-width: 640px) {
+  .fw-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .dlg.fw-dlg {
+    padding: 16px 14px 12px;
+  }
 }

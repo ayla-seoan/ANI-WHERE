@@ -19,11 +19,18 @@ import { SimCard } from "@/components/cards";
 import HScroll from "@/components/HScroll";
 import { BagIcon, GiftIcon, PartyIcon, PinIcon, SparkleIcon } from "@/components/Icons";
 import Reviews from "@/components/detail/Reviews";
+import SideTabs from "@/components/detail/SideTabs";
+import EditPanel, { type EditData } from "@/components/detail/EditPanel";
+import ShareButtons from "@/components/detail/ShareButtons";
 import BookmarkButton from "@/components/member/BookmarkButton";
 import RememberRecent from "@/components/member/RememberRecent";
 import { displayName } from "@/lib/server/auth";
 import { threadsFor } from "@/lib/server/member";
 import { getMe } from "@/lib/server/session";
+import { charactersByWork, currentCafes, cafeHistory, historyCards, type HistoryCard } from "@/lib/server/cafe";
+import { parseLinks, rawFromNote, split, splitImages, TAG_CHECK, EVENT_TAGS } from "@/lib/cafe-rules";
+import { PLACEHOLDER_POSTER } from "@/lib/popup";
+import type { Row } from "@/lib/server/store";
 
 // 회원 리뷰·북마크가 있어 요청마다 그린다 (팝업 데이터는 lib/data.ts 가 10분 캐시)
 export const dynamic = "force-dynamic";
@@ -99,6 +106,11 @@ function kmText(d: number): string {
   return `거리 ${d < 1 ? `${Math.round(d * 1000)}m` : `${d.toFixed(1)}km`}`;
 }
 
+/** 저장된 참고 웹사이트 → 수정하기 입력칸 (한 줄에 하나, cafe.parse_links 의 쓸 수 있는 주소만) */
+function parseLinksText(v: string): string {
+  return parseLinks(v)[0].join("\n");
+}
+
 /** 소개 글: 줄바꿈 그대로, 줄 맨 앞 '[배경]' 같은 소제목은 굵게 (앱 _intro_body) */
 function IntroBody({ text }: { text: string }) {
   return (
@@ -145,6 +157,42 @@ export default async function PopupPage({ params }: Props) {
   } catch (e) {
     console.error("[detail] 리뷰를 읽지 못함", e instanceof Error ? e.message : e);
   }
+  // 수정하기 탭 (회원만): 이 팝업의 최신 기록 · 작품별 캐릭터 · 수정 이력
+  let edit: EditData | null = null;
+  let byWork: Record<string, string[]> = {};
+  let history: HistoryCard[] = [];
+  if (me) {
+    try {
+      const all = await cafeHistory(p.id);
+      const cur: Row | undefined = all[all.length - 1];
+      if (cur && cur.status !== "deleted") {
+        const tags = split(cur.tags);
+        edit = {
+          entryId: p.id,
+          revision: Number(cur.revision),
+          work: String(cur.work || ""),
+          characters: split(cur.characters),
+          cafeName: String(cur.cafe_name || ""),
+          address: String(cur.address || ""),
+          start: String(cur.start_date || "").slice(0, 10),
+          end: String(cur.end_date || "").slice(0, 10),
+          tags: tags.filter((t) => EVENT_TAGS.includes(t)),
+          perks: String(cur.perks || ""),
+          goods: String(cur.goods || ""),
+          links: parseLinksText(String(cur.links || "")),
+          intro: String(cur.intro || ""),
+          images: splitImages(cur.images),
+          check: tags.includes(TAG_CHECK) ? { raw: rawFromNote(cur.note) } : null,
+          title: `${cur.work || ""} · ${cur.cafe_name || ""}`,
+        };
+        byWork = charactersByWork(await currentCafes());
+        history = await historyCards(all);
+      }
+    } catch (e) {
+      console.error("[detail] 수정하기 기록을 읽지 못함", e instanceof Error ? e.message : e);
+    }
+  }
+  const reviewCount = threads.reduce((a, t) => a + 1 + t.replies.length, 0);
   const sims = similar(p, popups, today);
   const near = nearby(p, popups, today);
 
@@ -168,6 +216,12 @@ export default async function PopupPage({ params }: Props) {
           </div>
           <div className="dtitle-row">
             <h1 className="dtitle">{p.work}</h1>
+            <ShareButtons
+              id={p.id}
+              title={`${p.work} · ${p.name}`}
+              text={`${p.start} ~ ${p.end} · ${p.address}`}
+              image={p.images[0] || PLACEHOLDER_POSTER}
+            />
             <BookmarkButton cafeId={p.id} variant="detail" />
           </div>
           {p.characters && (
@@ -245,10 +299,16 @@ export default async function PopupPage({ params }: Props) {
           )}
         </div>
 
-        <Reviews
-          cafeId={p.id}
-          threads={threads}
-          me={me ? { nick: String(me.row.nickname || ""), avatar: String(me.row.avatar || "") } : null}
+        <SideTabs
+          reviewCount={reviewCount}
+          review={
+            <Reviews
+              cafeId={p.id}
+              threads={threads}
+              me={me ? { nick: String(me.row.nickname || ""), avatar: String(me.row.avatar || "") } : null}
+            />
+          }
+          edit={<EditPanel entryId={p.id} data={edit} byWork={byWork} history={history} />}
         />
       </div>
 
