@@ -83,7 +83,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <div className="page">
             <Gnb bell={bell} />
             <main className="main">{children}</main>
-            <Footer sourceLabel={data.sourceLabel} note={data.note} />
+            <Footer />
           </div>
           {me && (
             // 오른쪽 아래 코랄색 + (등록): 등록하기는 사진 올리기가 있어 앱(Streamlit)에서 (회원에게만 보인다, 앱과 같게)
