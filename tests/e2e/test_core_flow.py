@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import os
 import re
 from datetime import date
@@ -328,18 +329,13 @@ def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_
     dlg.get_by_role("button", name="저장하기").click()
     expect(dlg).to_have_count(0, timeout=LONG)
     wait_idle(page)
-    expect(page.locator(".st-key-stories .story.mark .nm")).to_have_text([pick], timeout=LONG)   # 북마크한 것만
+    expect(page.locator(".st-key-stories .story.mark .nm")).to_have_text([pick], timeout=LONG)   # 북마크한 팝업 하나 = 동그라미 하나
     if os.getenv("E2E_SHOTS"):
         page.locator(".st-key-stories").screenshot(path=os.path.join(os.getenv("E2E_SHOTS"), "stories.png"))
-    # 스토리를 누르면 그 작품 팝업만 걸러진 리스트 보기로
+    # 동그라미를 누르면 그 팝업 상세로 (11/18), 상세의 북마크 버튼이 '켜짐'
     page.locator(".st-key-open_story_0 button").click()
-    expect(page.locator(".st-key-home")).to_have_count(0, timeout=LONG)
-    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
-    wait_idle(page)
-    # 고른 팝업은 정말 북마크됐다 (카드의 북마크 버튼이 '켜짐')
-    expect(page.locator(f".st-key-fav_on_w_{eid}")).to_be_attached(timeout=LONG)
-    works = page.locator(f"{CARD} .pcard .t").all_inner_texts()
-    assert works and all(pick in w or w in pick for w in works), works
+    expect(page.locator(".dtitle")).to_have_text(pick, timeout=LONG)
+    expect(page.locator(f".st-key-fav_on_d_{eid}")).to_be_attached(timeout=LONG)
 
 
 # ------------------------------------------------------------------ 12. 홈 (11/18)
@@ -347,7 +343,7 @@ def test_12_로고를_누르면_홈이_열리고_랭킹_카드로_상세에_간�
     open_list(page, app_url)
     page.locator(".st-key-home_brand button").click()
     expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
-    expect(page.locator(".story-head")).to_have_text("내 최애 팝업")
+    expect(page.locator(".story-head")).to_have_text("북마크 팝업")
     expect(page.locator(".hbtitle").first).to_contain_text("실시간 인기 급상승 랭킹")   # 배너 안 왼쪽 위
     for title in ("따끈따끈 신규 등록 팝업", "이번 주에 끝나는 팝업", "사전예약 팝업", "꿀팁 가득! 실시간 후기 모음"):
         expect(page.locator(".home-h", has_text=title)).to_be_visible(timeout=LONG)
@@ -369,3 +365,49 @@ def test_12_로고를_누르면_홈이_열리고_랭킹_카드로_상세에_간�
     page.locator('[class*="st-key-gnbtab_"][class*="list"] button').click()
     expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
     expect(page.locator(".st-key-home")).to_have_count(0)
+
+
+# ------------------------------------------------------------------ 13. 내 리뷰: 고칠 때 사진 추가 · 내가 삭제 (11/18)
+def test_13_내_리뷰는_고칠때_사진을_붙이고_직접_지울_수_있다(page: Page, app_url, data_dir):
+    sign_up(page, app_url)
+    open_list(page, app_url)
+    target = pick_cafe(data_dir)
+    open_detail(page, target["entry_id"])
+    text = "e2e 사진 추가 확인용 리뷰"
+    send = page.get_by_role("button", name="리뷰 등록")
+    # 상세가 막 열린 직후엔 입력칸이 다시 그려지며 넣은 글이 사라질 때가 있다 → 등록 버튼이 켜질 때까지 다시 넣는다
+    for _ in range(3):
+        wait_idle(page)
+        body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
+        body.fill(text)
+        body.press("Tab")
+        wait_idle(page)
+        try:
+            expect(send).to_have_count(1, timeout=8000)      # 다시 그리는 동안 예전 탭이 잠깐 남는다
+            expect(send).to_be_enabled(timeout=8000)
+            break
+        except AssertionError:
+            continue
+    send.click()
+    expect(page.get_by_text(text).first).to_be_visible(timeout=LONG)
+    wait_idle(page)
+
+    card = page.locator('[class*="st-key-rv_more_"]').first
+    card.locator("button").first.click()
+    page.get_by_role("button", name="수정").first.click()
+    wait_idle(page)
+    page.locator('[class*="st-key-rv_edit_img_"] input[type="file"]').set_input_files(
+        str(Path(__file__).resolve().parents[2] / "static" / "default_poster.png"))
+    wait_idle(page)
+    page.get_by_role("button", name="저장").first.click()
+    expect(page.locator(".rv-pics img").first).to_be_visible(timeout=LONG)
+    wait_idle(page)
+
+    # 내가 쓴 글은 내가 지울 수 있다 (관리자가 아니어도)
+    page.locator('[class*="st-key-rv_more_"]').first.locator("button").first.click()
+    page.get_by_role("button", name="삭제", exact=True).first.click()
+    dlg = page.get_by_test_id("stDialog")           # ('⋯' 칸도 role=dialog 라서 확인 창만 집는다)
+    expect(dlg).to_be_visible(timeout=LONG)
+    dlg.get_by_role("button", name="삭제", exact=True).click()
+    wait_idle(page)
+    expect(page.get_by_text(text)).to_have_count(0, timeout=LONG)

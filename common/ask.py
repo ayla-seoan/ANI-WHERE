@@ -648,7 +648,7 @@ _GUIDE_TEXT = {
 
 
 def _guide_link(key: str) -> list:
-    return [(f"사용법 안내 · {GUIDE_SECTIONS[key]} 보기", f"./guide#{key}")]
+    return [(f"사용자 튜토리얼 · {GUIDE_SECTIONS[key]} 보기", f"./guide#{key}")]
 
 
 def _me_answer(intent: str, query: Query, rows: list[dict], today: date, ctx: dict) -> "Answer | None":
@@ -692,7 +692,7 @@ def _me_answer(intent: str, query: Query, rows: list[dict], today: date, ctx: di
         return say(f"현재 위치는 {region} 근처예요. '내 주변 가까운 팝업'이라고 물어보면 가까운 순으로 찾아 드려요.")
     if intent == "usage":
         return say("지도로 보기 · 리스트로 보기 · 내 캘린더 · 등록하기 · 수정하기 · 삭제 요청 방법을 한 페이지에 정리해 뒀어요. "
-                   "아래 링크를 눌러 보세요.", [("사용법 안내 페이지 열기", "./guide")])
+                   "아래 링크를 눌러 보세요.", [("사용자 튜토리얼 열기", "./guide")])
     if intent.startswith("guide_"):
         key = intent.removeprefix("guide_")
         return say(_GUIDE_TEXT[key], _guide_link(key))
@@ -700,7 +700,7 @@ def _me_answer(intent: str, query: Query, rows: list[dict], today: date, ctx: di
         return say(f"오늘은 {today.year}년 {today.month}월 {today.day}일 {_WEEK_KO[today.weekday()]}요일이에요.")
     if intent == "who":
         return say("저는 ANI:WHERE 팝업 도우미예요. 등록된 애니 팝업·카페·굿즈 행사에서 작품·지역·날짜로 찾아 드려요.",
-                   [("사용법 안내 페이지 열기", "./guide")])
+                   [("사용자 튜토리얼 열기", "./guide")])
     if intent == "thanks":
         return say("천만에요! 더 궁금한 팝업이 있으면 언제든 물어봐 주세요.")
     if intent == "contact":

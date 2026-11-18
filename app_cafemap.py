@@ -1223,21 +1223,45 @@ def delete_request_dialog(target_type: str, target_id: str, title: str) -> None:
         st.rerun()
 
 
-@st.dialog("리뷰 삭제")
-def confirm_review_delete(entry_id: str, replies: int) -> None:
+@st.dialog("리뷰 삭제", on_dismiss=lambda: st.session_state.pop("_rv_del", None))
+def confirm_review_delete(entry_id: str, replies: int, as_admin: bool = False) -> None:
+    """리뷰 삭제 (11/18 권한): 쓴 사람은 내 글만, 관리자는 모든 글. 관리자가 지울 땐 사유를 적고, 쓴 회원에게 알림이 간다."""
     st.write("이 글을 삭제할까요? 삭제하면 다시 볼 수 없어요."
              + (f" 달린 답글 {replies}개도 함께 안 보이게 돼요." if replies else ""))
+    reason = ""
+    if as_admin:
+        reason = st.text_area("삭제 사유 (쓴 사람에게 알림으로 가요)", key=f"rv_del_reason_{entry_id}", height=80, max_chars=200,
+                              placeholder="예: 다른 팝업과 관계없는 광고 글이에요")
     c1, c2 = st.columns(2)
     if c1.button("취소", width="stretch", key=f"rv_del_no_{entry_id}"):
+        st.session_state.pop("_rv_del", None)
         st.rerun()
     if c2.button("삭제", type="primary", width="stretch", key=f"rv_del_ok_{entry_id}"):
-        # 버튼이 보였더라도 지우는 순간 한 번 더 확인한다 (내 닉네임과 같은 글만)
+        st.session_state.pop("_rv_del", None)
+        # 버튼이 보였더라도 지우는 순간 한 번 더 확인한다
         row = next((r for r in reviews.current_rows() if str(r["entry_id"]) == entry_id), None)
-        if row and _is_admin():
+        if not row:
+            st.session_state["flash"] = "이미 지워진 글이에요."
+            st.rerun()
+        mine = bool(_member()) and review.can_delete(row, _me())
+        if as_admin and _is_admin():
+            if len(" ".join(reason.split())) < 2:
+                st.error("삭제 사유를 두 글자 이상 적어 주세요. 쓴 사람에게 알림으로 가요.")
+                return
             reviews.soft_delete(entry_id)       # 저장소는 지우지 않고 '삭제됨' 행을 쌓는다
-            st.session_state["flash"] = "삭제했습니다."
+            tag = str(row.get("nickname") or "").rsplit("#", 1)[-1] if "#" in str(row.get("nickname") or "") else ""
+            writer = _member_by_tag().get(tag) if tag.startswith("m") else None
+            if writer and not mine and _rules().get("rv_del", {}).get("enabled", True):
+                try:
+                    admin.review_removed(notices_store, str(writer["entry_id"]), str(row.get("body") or row.get("kind") or "")[:30], reason)
+                except StorageWriteError:
+                    pass
+            st.session_state["flash"] = "삭제했어요." + (" 쓴 사람에게 사유를 알림으로 보냈어요." if writer and not mine else "")
+        elif mine:
+            reviews.soft_delete(entry_id)
+            st.session_state["flash"] = "삭제했어요."
         else:
-            st.session_state["flash"] = "게시글 삭제는 관리자만 할 수 있어요."
+            st.session_state["flash"] = "내가 쓴 리뷰만 삭제할 수 있어요."
         st.rerun()
 
 
@@ -1255,19 +1279,24 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     # 내가 쓴 글(접속 IP 로 정해진 닉네임이 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
     mine = bool(_member()) and review.can_delete(r, _me())
     is_admin = _is_admin()
-    member = bool(_member())
-    if mine or is_admin or member:
-        # 수정은 쓴 사람(회원)만, 삭제는 관리자만 (11/18 권한)
+    if mine or is_admin:
+        # 권한 (11/18 요청): 수정·삭제는 내가 쓴 글만. 관리자는 모든 글을 삭제할 수 있고, 사유를 적으면 쓴 사람에게 알림
         t, b = st.columns([6, 1], vertical_alignment="center")
         t.markdown(head + when, unsafe_allow_html=True)
         with b.popover("⋯", key=f"rv_more_{eid}", type="tertiary"):
             if mine and st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
                 st.session_state["rv_editing"] = eid
                 st.rerun()
-            if is_admin and st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch"):
-                confirm_review_delete(eid, replies)
-            if member and not is_admin and st.button("삭제 요청", key=f"rv_req_{eid}", width="stretch"):
-                delete_request_dialog("review", eid, str(r.get("body") or r.get("kind") or "리뷰")[:40])
+            # 창은 '⋯' 칸 밖에서 연다 (칸 안 버튼으로 열면 창 안의 '삭제' 누름이 다음 그리기에서 사라졌다)
+            if mine:
+                st.button("삭제", key=f"rv_delmine_{eid}", width="stretch",
+                          on_click=lambda: st.session_state.update(_rv_del=(eid, replies, False)))
+            if is_admin and not mine:
+                st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch",
+                          on_click=lambda: st.session_state.update(_rv_del=(eid, replies, True)))
+        pend = st.session_state.get("_rv_del")
+        if pend and pend[0] == eid:
+            confirm_review_delete(eid, pend[1], as_admin=pend[2])
     else:
         st.markdown(head + when, unsafe_allow_html=True)
     # 다녀온 후기 별점: 머리 줄 다음 줄에, 내용보다 위에 크게
@@ -1305,6 +1334,30 @@ def _review_edit_box(r: dict) -> None:
     body = st.text_area("내용", value=str(r.get("body") or ""), key=f"rv_edit_body_{eid}", height=90,
                         max_chars=review.MAX_BODY, label_visibility="collapsed")
     bad = _block_sensitive(body)
+    # 사진 (11/18 요청): 원래 사진이 없었어도 고칠 때 새로 붙일 수 있다. 있던 사진은 '빼기' 로 뺄 수 있다 (원글만)
+    keep: list[str] = []
+    photos = []
+    if not str(r.get("parent_id") or ""):
+        old = [x.name for x in images.paths(r.get("images"))]
+        if old:
+            st.caption("붙어 있는 사진 (뺄 사진은 체크를 풀어요)")
+            cols = st.columns(min(len(old), 4))
+            for i, name in enumerate(old):
+                with cols[i % len(cols)]:
+                    st.image(images.url(images.IMAGE_DIR / name), width="stretch")
+                    if st.checkbox("남기기", value=True, key=f"rv_edit_keep_{eid}_{i}"):
+                        keep.append(name)
+        room = review.MAX_IMAGES - len(keep)
+        if room > 0:
+            photos = list(st.file_uploader(f"사진 추가 (최대 {room}장 · 한 장 {review.IMAGE_MB}MB)", type=images.TYPES,
+                                           accept_multiple_files=True, key=f"rv_edit_img_{eid}") or [])
+            if len(photos) > room:
+                st.caption(f":red[사진은 모두 {review.MAX_IMAGES}장까지예요. 앞의 {room}장만 올라가요.]")
+                photos = photos[:room]
+            heavy = [x.name for x in photos if images.too_big(x.getvalue(), review.IMAGE_MB)]
+            if heavy:
+                st.caption(f":red[{review.IMAGE_MB}MB 가 넘는 사진은 올릴 수 없어요: {', '.join(heavy)}]")
+                bad = True
     c1, c2 = st.columns(2)
     if c1.button("취소", width="stretch", key=f"rv_edit_no_{eid}"):
         st.session_state.pop("rv_editing", None)
@@ -1325,6 +1378,12 @@ def _review_edit_box(r: dict) -> None:
                    if k not in ("row_id", "entry_id", "revision", "status", "updated_at")}
         payload["body"] = body.strip()
         if not str(current.get("parent_id") or ""):
+            try:
+                added = [images.save(x.name, x.getvalue()) for x in photos]
+            except ValueError as err:
+                st.error(str(err))
+                return
+            payload["images"] = ",".join(keep + added)
             payload["kind"] = kind if kind in review.KINDS else review.KINDS[0]
             # 별점은 다녀온 후기일 때만 남기고, 종류를 바꾸면 비운다
             payload["rating"] = rating if payload["kind"] == review.RATED_KIND and rating else ""
@@ -2500,37 +2559,39 @@ def _story_add() -> None:
     st.session_state["_bm_open"] = True
 
 
+def _story_open(eid: str) -> None:
+    """동그라미를 누르면 그 북마크한 팝업 상세로 (11/18 요청)."""
+    st.session_state.update(selected=eid, scroll_top=True)
+
+
 def render_stories(df: pd.DataFrame) -> None:
-    """'내가 관심있는 작품' (11/18 요청): 인스타 스토리처럼 동그란 작품 포스터 줄.
-    내가 북마크한 (진행 중·예정) 팝업의 작품만. 숫자는 그 작품에서 북마크한 팝업 수.
-    맨 앞 '최애 추가하기' 를 누르면 팝업을 골라 북마크하는 창이 열린다."""
+    """홈 '북마크 팝업' (11/18 요청): 인스타 스토리처럼 동그란 포스터 줄. 내가 북마크한 (진행 중·예정) 팝업 하나에 동그라미 하나,
+    위에는 지역, 아래는 작품 이름. 누르면 그 팝업 상세. 맨 앞 '최애 추가하기' 로 팝업을 골라 한 번에 북마크한다."""
     rows = _live_rows(df)
     _, mine, _ = _fav_state()
-    # 내가 북마크한 팝업의 작품만 (11/18 요청). 숫자는 그 작품에서 내가 북마크한 팝업 수
-    marked = [r for r in rows if str(r.get("entry_id")) in mine] if _member() else []
-    items = favwork.story_works(marked)
-    posters = _work_posters(marked)
-    picked = st.session_state.get("f_work", "전체")
+    marked = sorted([r for r in rows if str(r.get("entry_id")) in mine], key=lambda r: (_status(r)[2], str(r.get("end_date")))) \
+        if _member() else []
     with st.container(key="stories"):
-        # 제목 옆 ? 에 설명 (11/18 요청)
-        st.markdown('<div class="story-head">내 최애 팝업</div>', unsafe_allow_html=True,
-                    help="내가 북마크한 팝업(진행 중·오픈 예정)의 작품이 여기에 보여요. 동그라미를 누르면 그 작품 팝업만 모아 보고, "
-                         "'북마크 추가' 로 팝업을 골라 한 번에 북마크할 수 있어요.")
+        st.markdown('<div class="story-head">북마크 팝업</div>', unsafe_allow_html=True,
+                    help="내가 북마크한 팝업(진행 중 · 오픈 예정)이 여기에 모여요. 동그라미를 누르면 그 팝업으로 가고, "
+                         "'최애 추가하기' 로 팝업을 골라 한 번에 북마크할 수 있어요.")
         with st.container(horizontal=True, key="story_row"):
             # 맨 앞에 두어 줄이 길어도 늘 보이게 (인스타 '내 스토리' 자리)
             with st.container(key="card_story_add"):
                 st.markdown(f'<div class="story add"><div class="ring">{_mi("add")}</div><div class="nm">최애 추가하기</div></div>',
                             unsafe_allow_html=True)
                 st.button("최애 추가하기", key="open_story_add", on_click=_story_add)
-            if not items:
-                st.markdown('<div class="story-empty">팝업을 북마크하면 그 작품이 여기에 모여요.</div>', unsafe_allow_html=True)
-            for i, (w, n) in enumerate(items):
-                cls = "story mark" + (" on" if picked == w else "")
+            if not marked:
+                st.markdown('<div class="story-empty">팝업을 북마크하면 여기에 모여요.</div>', unsafe_allow_html=True)
+            for i, r in enumerate(marked):
+                eid = str(r["entry_id"])
+                rg = geo.area_name(str(r.get("address") or ""))
                 with st.container(key=f"card_story_{i}"):
                     st.markdown(
-                        f'<div class="{cls}"><div class="ring"><div class="pic" style="background-image:url(\'{posters.get(w, images.DEFAULT_POSTER_URL)}\')"></div>'
-                        + f'</div><div class="nm">{escape(w)}</div></div>', unsafe_allow_html=True)
-                    st.button("보기", key=f"open_story_{i}", on_click=_story_pick, args=(w,))
+                        '<div class="story mark"><div class="ring">' + (f'<span class="rg">{escape(rg)}</span>' if rg else "")
+                        + f'<div class="pic" style="background-image:url(&quot;{_poster_url(r.get("images"))}&quot;)"></div>'
+                        + f'</div><div class="nm">{escape(str(r.get("work") or ""))}</div></div>', unsafe_allow_html=True)
+                    st.button("보기", key=f"open_story_{i}", on_click=_story_open, args=(eid,))
     if st.session_state.pop("_bm_open", False):
         bookmark_pick_dialog(df)
 
@@ -2617,6 +2678,10 @@ STORY_CSS = """
 .story { display: flex; flex-direction: column; align-items: center; padding-bottom: 16px; }
 .story .ring { position: relative; width: 72px; height: 72px; border-radius: 50%; padding: 3px; box-sizing: border-box;
   background: conic-gradient(from 210deg, #14b8a6, #7FE0CF, #FFD66B, #14b8a6); transition: transform .18s ease; }
+.story .rg { position: absolute; left: 50%; top: -7px; transform: translateX(-50%); z-index: 2; white-space: nowrap;
+  font-size: .62rem; font-weight: 800; color: #fff; background: var(--accent-deep); padding: 1px 7px; border-radius: 999px;
+  border: 1.5px solid #fff; }
+.st-key-story_row { padding-top: 10px !important; }
 .story.mark .ring { background: conic-gradient(from 210deg, #FF7A8A, #FFB86B, #FFD66B, #FF7A8A); }
 .story .pic { width: 100%; height: 100%; border-radius: 50%; border: 3px solid #fff; box-sizing: border-box;
   background-size: cover; background-position: center; background-color: #EEF3F1; }
@@ -3099,11 +3164,7 @@ iframe[src*="kakao_map"] {{
 .chip.tag {{ background:{MINT}; color:#fff; border-color:{MINT}; }}
 .upd {{ color:#8A9592; font-size:.7rem; margin:-4px 0 6px; display:flex; align-items:center; gap:4px; }}
 .upd .mi {{ font-size:.95rem; }}
-.aw-foot {{ margin-top:48px; padding:22px 0 8px; border-top:1px solid #E6ECEA; color:#9AA5A1; font-size:.75rem; line-height:1.8;
-  text-align:center; }}   /* PC·모바일 모두 가운데 (11/18 요청) */
-.aw-foot a {{ color:#7B8784 !important; text-decoration:none; }}
-.aw-foot a:hover {{ text-decoration:underline; }}
-.aw-foot-links {{ display:flex; gap:14px; margin-top:2px; justify-content:center; flex-wrap:wrap; }}
+
 @media (min-width: 641px) {{ .st-key-map_row {{ margin-top:5px; }}   /* 지도 칸 위 선 = 물어보기 창 위 선 */
   [data-testid="stElementContainer"]:has(.upd) {{ margin-bottom:8px; }}
   .st-key-listtools {{ margin-bottom:10px; }} }}   /* 리스트 보기: 마지막 업데이트 · 팝업 카페 N곳 · 카드 사이 여백 (11/18 요청) */   /* 지도 보기: 마지막 업데이트와 지도 칸 사이 (11/18) */
@@ -3459,7 +3520,7 @@ def _pin_view_icon() -> None:
 _DRAG_JS = """
 (function () {
   if (window.__awDrag) return; window.__awDrag = true;
-  const SEL = '.st-key-story_row, [class*="st-key-sim_row_"], [class*="st-key-home_row_"], .st-key-home_banner, .st-key-home_week';
+  const SEL = '.st-key-story_row, [class*="st-key-sim_row_"], [class*="st-key-home_row_"], .st-key-home_banner, .st-key-home_week, .g-slides';
   function arrows(row) {
     const box = row.parentElement; if (!box) return;
     if (getComputedStyle(box).position === 'static') box.style.position = 'relative';
@@ -3485,8 +3546,10 @@ _DRAG_JS = """
     const place = row.__awPlace = () => {
       const l = box.querySelector(':scope > .aw-arrow.l'), r = box.querySelector(':scope > .aw-arrow.r');
       if (!l || !r) return;
-      const mid = row.classList.contains('st-key-home_banner') ? row.clientHeight / 2 : Math.min(row.clientHeight / 2, 60);
-      const top = row.offsetTop + mid - (l.offsetHeight || 28) / 2;
+      const mid = row.classList.contains('st-key-home_banner') ? row.clientHeight / 2
+        : row.classList.contains('g-slides') ? 140 : Math.min(row.clientHeight / 2, 60);
+      // 화면 위치 차이로 잰다 (offsetTop 은 감싼 칸에 따라 기준이 달라져 화살표가 엉뚱한 곳에 갔다)
+      const top = row.getBoundingClientRect().top - box.getBoundingClientRect().top + mid - (l.offsetHeight || 28) / 2;
       l.style.top = r.style.top = top + 'px';
       l.classList.toggle('show', row.scrollLeft > 4);
       r.classList.toggle('show', row.scrollLeft + row.clientWidth < row.scrollWidth - 4);
@@ -3530,7 +3593,7 @@ _DRAG_JS = """
       }
       box.appendChild(dots);
     }
-    dots.style.top = (row.offsetTop + row.clientHeight - 34) + 'px';
+    dots.style.top = (row.getBoundingClientRect().top - box.getBoundingClientRect().top + row.clientHeight - 34) + 'px';
     const cur = Math.round(row.scrollLeft / Math.max(row.clientWidth, 1));
     [...dots.children].forEach((b, i) => b.classList.toggle('on', i === cur));
     document.querySelectorAll('.hls-wrap .hl').forEach((h) => h.classList.toggle('on', +h.dataset.i === cur));
@@ -4377,17 +4440,18 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
         if not _member():   # 알림은 로그인한 사람만: 손님이면 알림 칸(과 그것을 감싼 칸)을 숨긴다
             st.markdown("<style>.st-key-bell_guest, .st-key-gnb_right > *:has(.st-key-bell_guest) "
                         "{ display: none !important; }</style>", unsafe_allow_html=True)
-        if on_map and not current and (st.session_state.get("home_view") or st.session_state.get("cal_view")):
-            # 모바일 홈·내 캘린더: 검색 아이콘을 숨긴다 (11/18 요청 — 걸러 볼 목록이 없는 화면)
-            st.markdown("<style>@media (max-width: 640px) { [class*='st-key-gnb_search_'] { display: none !important; } }</style>",
-                        unsafe_allow_html=True)
+        # 검색 아이콘은 '지도로 보기' · '리스트로 보기' 탭에서만 (PC·모바일, 11/18 요청).
+        # 홈 · 내 캘린더 · 상세 · 등록 · 로그인 · 마이페이지 · 회원가입 등에서는 그리지 않는다
+        ss_ = st.session_state
+        show_search = on_map and not current and not ss_.get("home_view") and not ss_.get("cal_view") and not ss_.get("box_view")
         with st.container(horizontal=True, key="gnb_right"):
             # 검색 아이콘: 누르면 아래 검색 필터 줄(검색·작품·캐릭터·진행여부·날짜)을 펼치고 접는다.
             # 걸어 둔 조건이 있으면 아이콘 옆에 그 수. 모바일에서는 필터 시트를 연다
-            n_on = _active_filters()
-            opened = bool(st.session_state.get("pc_filters"))
-            st.button(str(n_on) if n_on and not opened else "", icon=":material/close:" if opened else ":material/search:",
-                      key=f"gnb_search_{'on' if opened else 'off'}", on_click=_toggle_search)
+            if show_search:
+                n_on = _active_filters()
+                opened = bool(st.session_state.get("pc_filters"))
+                st.button(str(n_on) if n_on and not opened else "", icon=":material/close:" if opened else ":material/search:",
+                          key=f"gnb_search_{'on' if opened else 'off'}", on_click=_toggle_search)
             marks, near = _notices() if _member() else ([], [])
             inbox = _inbox(str(_member()["entry_id"])) if _member() else []
             # 알림마다 번호 (같은 날 같은 글이면 같은 번호 → 읽음 유지). 종 아이콘에는 숫자 대신 안 읽은 게 있을 때만 빨간 점
@@ -4898,7 +4962,6 @@ def page_map() -> None:
     df["entry_id"] = df["entry_id"].astype(str)
     if st.session_state.get("home_view") and not current:
         render_home(df)
-        _footer()
         return
     # '스파이패밀리' 와 '스파이 패밀리' 가 따로 걸리지 않게 목록의 작품명으로 맞춘다
     df["work"] = df["work"].fillna("").astype(str).map(catalog.canonical_work)
@@ -5049,7 +5112,6 @@ def page_map() -> None:
     if wide:
         with chat, st.container(key="ask_panel"):
             render_ask_panel()
-        _footer()
         return
 
     def draw_map() -> None:
@@ -5103,8 +5165,6 @@ def page_map() -> None:
         with map_right, st.container(key="ask_panel"):   # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
             render_ask_panel()
 
-    if current:
-        _footer()          # 상세 맨 아래 (지도 보기는 화면 높이에 맞춘 화면이라 바닥글을 두지 않는다)
     # 지도에서 고른 게 이번 실행에서 바뀌었으면 왼쪽 패널·강조를 다시 그린다
     if st.session_state.get("selected") != selected:
         st.rerun()
@@ -6196,25 +6256,40 @@ def page_privacy() -> None:
             st.markdown(PRIVACY_FILE.read_text(encoding="utf-8"))
         except OSError:
             st.warning("개인정보처리방침을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.", icon=":material/error:")
-    _footer()
 
 
 GUIDE_FILE = Path(__file__).resolve().parent / "docs" / "guide.md"
+GUIDE_CSS_FILE = Path(__file__).resolve().parent / "static" / "guide" / "guide.css"   # 튜토리얼 꾸밈 (11/18)
 CONTACT_EMAIL = "tjtek888@gmail.com"      # docs/privacy-policy.md 10절 연락처와 같게
 
 
 def _footer() -> None:
     """페이지 맨 아래 바닥글 (11/18 요청): © 연도 ANI:WHERE · 운영 · 개인정보 문의 + 개인정보처리방침 · 사용법 링크."""
+    # 꾸밈을 바닥글과 함께 넣어 어느 화면(홈·리스트·상세·사용자 튜토리얼·개인정보처리방침)에서도 같게: 가운데 · 작은 회색 글씨 (11/18 요청)
+    st.markdown(
+        '<style>.aw-foot { margin-top: 48px; padding: 22px 0 8px; border-top: 1px solid #E6ECEA; color: #9AA5A1 !important;'
+        ' font-size: .75rem !important; line-height: 1.8; text-align: center; }'
+        ' .aw-foot div { font-size: .75rem !important; color: #9AA5A1 !important; }'
+        ' .aw-foot a { color: #7B8784 !important; text-decoration: none; font-size: .75rem !important; }'
+        ' .aw-foot a:hover { text-decoration: underline; }'
+        ' .aw-foot .aw-foot-links { display: flex; gap: 14px; margin-top: 2px; justify-content: center; flex-wrap: wrap; }</style>',
+        unsafe_allow_html=True)
+    # (꾸밈 <style> 칸은 화면에서 접히게 되어 있어서, 바닥글 글은 따로 그린다)
     st.markdown(
         f'<div class="aw-foot"><div>© {TODAY.year} ANI:WHERE</div>'
         f'<div>운영: ANI:WHERE · 개인정보 문의: <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a></div>'
         '<div class="aw-foot-links"><a href="./privacy" target="_self">개인정보처리방침 · 이용약관</a>'
-        '<a href="./guide" target="_self">사용법 안내</a></div></div>', unsafe_allow_html=True)
+        '<a href="./guide" target="_self">사용자 튜토리얼</a></div></div>', unsafe_allow_html=True)
 
 
 def page_guide() -> None:
-    """사용법 안내 (/guide). 물어보기에서 '사용법 알려줘' 하면 이 페이지로 안내한다 (11/18). 칸마다 #map #list … 바로가기."""
-    st.markdown(GLOBAL_CSS + AUTH_CSS, unsafe_allow_html=True)
+    """사용자 튜토리얼 (/guide). 물어보기에서 '사용법 알려줘' 하면 이 페이지로 안내한다 (11/18). 칸마다 #map #list … 바로가기.
+    내용은 docs/guide.md, 꾸밈은 static/guide/guide.css, 그림은 static/guide/*.png (임시 데이터로 찍은 화면)."""
+    try:
+        guide_css = "<style>" + GUIDE_CSS_FILE.read_text(encoding="utf-8") + "</style>"
+    except OSError:
+        guide_css = ""
+    st.markdown(GLOBAL_CSS + AUTH_CSS + guide_css, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
         _gnb(None, on_map=False)
@@ -6222,10 +6297,16 @@ def page_guide() -> None:
         try:
             st.markdown(GUIDE_FILE.read_text(encoding="utf-8"), unsafe_allow_html=True)
         except OSError:
-            st.warning("사용법 안내를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.", icon=":material/error:")
-    _footer()
+            st.warning("사용자 튜토리얼을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.", icon=":material/error:")
+    # 처음 3단계 배너: 끌어서 넘기기 + 양옆 ‹ › (11/18 요청, 리스트·홈 줄과 같은 _DRAG_JS)
+    components.html(f"<script>window.parent.eval({json.dumps(_DRAG_JS)});</script>", height=0)
     # 주소 끝 #add 같은 칸으로 바로 내려간다 (화면이 다 그려진 뒤라 브라우저 기본 이동이 안 먹어서 몇 번 다시 시도)
-    components.html("<script>(function(){const P=window.parent,id=decodeURIComponent((P.location.hash||'').slice(1));"
+    components.html("<script>(function(){const P=window.parent,D=P.document;"
+                    # 위 바로가기(#home 등)를 누르면 그 칸으로 부드럽게 (Streamlit 은 스크롤 칸이 따로라 직접 옮긴다)
+                    "if(!P.__awGuideNav){P.__awGuideNav=1;D.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('.g-nav a');"
+                    "if(!a)return;const t=D.getElementById(a.getAttribute('href').slice(1));if(t){e.preventDefault();"
+                    "t.scrollIntoView({behavior:'smooth',block:'start'});P.history.replaceState(null,'',a.getAttribute('href'));}});}"
+                    "const id=decodeURIComponent((P.location.hash||'').slice(1));"
                     "if(!id)return;let n=0;const t=setInterval(()=>{const e=P.document.getElementById(id);"
                     "if(e){e.scrollIntoView({block:'start'});clearInterval(t);}if(++n>40)clearInterval(t);},150);})();</script>",
                     height=0)
@@ -7797,10 +7878,11 @@ PAGES = {
     "auth": st.Page(page_auth, title="가입 · ANI:WHERE", icon=":material/person_add:", url_path="auth"),
     "data": st.Page(page_data, title="데이터 보기 · ANI:WHERE", icon=":material/database:", url_path="data"),
     "privacy": st.Page(page_privacy, title="개인정보처리방침 · ANI:WHERE", icon=":material/policy:", url_path="privacy"),
-    "guide": st.Page(page_guide, title="사용법 안내 · ANI:WHERE", icon=":material/help:", url_path="guide"),
+    "guide": st.Page(page_guide, title="사용자 튜토리얼 · ANI:WHERE", icon=":material/help:", url_path="guide"),
 }
 try:
     st.navigation(list(PAGES.values()), position="hidden").run()
+    _footer()          # 바닥글은 모든 페이지 맨 아래에 (11/18 요청)
 except StorageWriteError as exc:
     # Supabase 가 쓰기를 거절함 (RLS: 남의 리뷰 수정·민감정보·동시 수정 충돌, 또는 연결 끊김). 화면이 멈추지 않게 안내만
     st.error("저장하지 못했어요. 잠시 뒤 다시 시도해 주세요. 내가 쓴 글이 아니거나 개인정보가 들어 있으면 저장되지 않아요.",
