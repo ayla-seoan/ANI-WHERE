@@ -2136,7 +2136,7 @@ def _home_slide(r: dict, rank: int, total: int) -> None:
         st.markdown(
             f'<div class="hb"><div class="hbbg" style="background-image:url(&quot;{url}&quot;)"></div>'
             f'<div class="hbpic" style="background-image:url(&quot;{url}&quot;), url(&quot;{images.DEFAULT_POSTER_URL}&quot;)"></div>'
-            f'<div class="hbtitle">{_mi("trending_up")}실시간 인기 급상승 랭킹</div>'
+            f'<div class="hbtitle">{_mi("local_fire_department")}실시간 인기 급상승 랭킹</div>'
             f'<div class="hbtxt"><div class="hbrank">{rank}<small>위</small></div>'
             f'<div class="hbt">{escape(str(r.get("work") or ""))}</div>'
             f'<div class="hbd">{escape(str(r.get("cafe_name") or ""))} · {escape(period)}</div>'
@@ -2319,10 +2319,10 @@ HOME_CSS = """
 .hb .hbtxt { position: absolute; left: 56px; bottom: 32px; right: 300px; color: #fff; }
 .hb .hbrank { font-size: 4rem; font-weight: 900; font-style: italic; line-height: 1; letter-spacing: -2px; }
 .hb .hbrank small { font-size: 1.2rem; font-style: normal; margin-left: 4px; }
-/* 배너 제목 (11/18 요청): 크게, 흰 테두리 글씨 + 안은 50% 투명, '‹' 버튼 왼쪽 선(10px)에서 시작 */
-.hb .hbtitle { position: absolute; left: 10px; top: 18px; font-size: 2.3rem; font-weight: 900; letter-spacing: -.5px;
-  color: rgba(255,255,255,.5); -webkit-text-stroke: 1.5px #fff; display: flex; align-items: center; gap: 8px; line-height: 1.1; }
-.hb .hbtitle .mi { display: none; }
+/* 배너 제목 (11/18 요청): 왼쪽 위 작은 어두운 알약 (불꽃 아이콘 + 글씨) */
+.hb .hbtitle { position: absolute; left: 14px; top: 14px; display: flex; align-items: center; gap: 5px; padding: 5px 12px 5px 9px;
+  border-radius: 10px; background: rgba(20,24,23,.62); color: #fff; font-size: .9rem; font-weight: 800; backdrop-filter: blur(4px); }
+.hb .hbtitle .mi { color: #8F7BFF; font-size: 1.1rem; font-variation-settings: 'FILL' 1; }
 .hb .hbt { font-size: 1.9rem; font-weight: 900; line-height: 1.2; margin-top: 12px; display: -webkit-box; -webkit-line-clamp: 2;
   -webkit-box-orient: vertical; overflow: hidden; }
 .hb .hbd { font-size: .9rem; opacity: .9; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2423,7 +2423,7 @@ HOME_CSS = """
 @media (max-width: 640px) {
   .hb { height: 240px; } .hb .hbpic { right: 14px; top: 16px; bottom: 16px; }
   .hb .hbtxt { left: 18px; right: 150px; bottom: 18px; }
-  .hb .hbtitle { left: 10px; top: 12px; font-size: 1.35rem; -webkit-text-stroke: 1px #fff; } .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
+  .hb .hbtitle { left: 10px; top: 10px; font-size: .78rem; padding: 4px 10px 4px 7px; } .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
   .st-key-home_ranklist { height: auto; }
   .st-key-home_banner, .st-key-home_banner [class*="st-key-card_hb_"] { height: 240px !important; min-height: 240px; }
   [class*="st-key-home_row_"] > div { flex-basis: 150px !important; width: 150px !important; min-width: 150px !important; }
@@ -2431,8 +2431,13 @@ HOME_CSS = """
   /* 모바일 이번 주: 월~일을 위에서 아래로 한 줄씩, 카드는 작은 그림 + 옆 글자 (11/18 요청) */
   .st-key-home_week { flex-direction: column !important; overflow-x: visible; border-top: 1px solid #E3E9E7; }
   .st-key-home_week > div { flex: none !important; width: 100% !important; min-width: 0 !important; }
-  [class*="st-key-wk_"] { border-right: 0; border-bottom: 1px solid #EEF2F1; padding: 10px 8px 2px; gap: 8px !important; }
-  .wkh { margin-bottom: 6px; }
+  [class*="st-key-wk_"] { border-right: 0; border-bottom: 1px solid #EEF2F1; padding: 8px 8px; gap: 8px !important; }
+  /* 머리 줄: 요일·수는 작게 (오늘만 그대로), 줄 가운데 정렬 (11/18 요청) */
+  .wkh { margin-bottom: 0; font-size: .8rem; min-height: 22px; align-items: center; }
+  .wkh .wkd { font-size: .68rem; } .wkh .wkn { font-size: .72rem; }
+  .wkh.today { font-size: 1rem; } .wkh.today .wkd { font-size: .75rem; } .wkh.today .wkn { font-size: .9rem; }
+  [class*="st-key-wk_"] [data-testid="stElementContainer"]:has(.wkh) { margin-bottom: 0 !important; }
+  [class*="st-key-wk_"] [data-testid="stMarkdownContainer"]:has(.wkh) { margin-bottom: 0 !important; }
   .hc.tall { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; }
   .hc.tall .hcp { width: 64px; flex: none; aspect-ratio: 1/1; border-radius: 10px; }
   .hc.tall .hcbadge { font-size: .58rem; padding: 2px 5px; border-radius: 10px 0 8px 0; }
