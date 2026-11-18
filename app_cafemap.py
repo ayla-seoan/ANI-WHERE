@@ -1626,9 +1626,9 @@ def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]],
         cols = st.columns(4)
         for i, (name, _) in enumerate(keep):
             with cols[i % 4]:
-                path = images.IMAGE_DIR / Path(name).name
-                if path.is_file():
-                    st.image(str(path), width="stretch")
+                found = images.paths(name)      # 사진 저장소(https) 주소도 받는다 (공개 웹 · 11/19 부터 앱에서 올린 사진)
+                if found:
+                    st.image(images.url(found[0]), width="stretch")
                 else:
                     st.caption("(파일 없음)")
                 if st.button("삭제", key=f"img_del_{k}_{name}", width="stretch"):
