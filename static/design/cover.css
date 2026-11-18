@@ -1,0 +1,10 @@
+/* 표지 꾸밈 (docs/design/components/Cover.html) */
+.cv { position: relative; width: 960px; height: 300px; background: var(--surface); overflow: hidden; }
+    .cv svg { position: absolute; inset: 0; }
+    .cv .accent { fill: var(--accent); } .cv .deep { fill: var(--mint-deep); } .cv .coral { fill: var(--coral); }
+    .cv .tint { fill: var(--gnb); } .cv .line { fill: var(--mint-line); } .cv .soft { fill: var(--accent-soft); }
+    .cv .ring { fill: none; stroke: var(--surface); stroke-width: 3; }
+    .cv .slab { rx: var(--radius-lg); } .cv .pill { rx: 30px; }
+    .cv .txt { position: absolute; left: 48px; bottom: 44px; max-width: 440px; }
+    .cv .name { font-family: var(--font-display); font-size: 80px; line-height: .95; color: var(--ink); }
+    .cv .tag { margin-top: 12px; font-family: var(--font-body); font-size: 14px; color: var(--muted); }
