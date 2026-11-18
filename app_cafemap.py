@@ -5038,6 +5038,11 @@ AUTH_CSS = """
 .auth-foot { color: #9AA5A1; font-size: .7rem; line-height: 1.6; text-align: center; margin: 22px auto 0; padding-top: 12px;
   border-top: 1px solid #EEF1F0; max-width: 100%; }
 .auth-foot b { color: #6B7672; }
+/* 로그인·가입 화면: 입력칸 이름 옆 ? 를 오른쪽 끝이 아니라 이름 바로 옆에 (11/18 요청) */
+.st-key-auth_wrap [data-testid="stWidgetLabel"], [data-testid="stForm"] [data-testid="stWidgetLabel"] {
+  justify-content: flex-start !important; gap: 4px !important; }
+.st-key-auth_wrap [data-testid="stWidgetLabel"] > div, [data-testid="stForm"] [data-testid="stWidgetLabel"] > div {
+  flex: 0 0 auto !important; width: auto !important; margin-left: 0 !important; }
 /* 회원가입 안내: 작은 글씨 · 연한 회색 바탕 · 테두리 (11/18 요청) */
 .auth-sub.auth-guide { font-size: .7rem; line-height: 1.6; color: #5F6B67; background: #F4F6F5; border: 1px solid #E3E8E6;
   border-radius: 12px; padding: 10px 14px; text-align: left !important; }
@@ -5135,7 +5140,7 @@ def _login_body() -> None:
         mode = st.segmented_control("로그인 또는 회원가입", ["로그인", "회원가입"], default="로그인",
                                     label_visibility="collapsed", key="auth_mode") or "로그인"
     if mode == "로그인":
-        st.markdown('<div class="auth-title">다시 오셨네요</div>'
+        st.markdown('<div class="auth-title">환영합니다</div>'
                     '<div class="auth-sub">아이디로 가입했다면 아래에, 카카오·네이버로 가입했다면 간편 로그인 가능해요.</div>',
                     unsafe_allow_html=True)
         _password_login_form()
@@ -5207,7 +5212,7 @@ def _password_login_form() -> None:
         st.warning("아이디나 비밀번호가 맞지 않아요.", icon=":material/error:")   # 어느 쪽이 틀렸는지는 알려 주지 않는다
         return
     ss.pop("_pw_fails", None)
-    _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
+    _login_done(row, f"{row['nickname']}님, 환영합니다!")
     go("map")                                # 로그인하면 메인으로 (11/18)
 
 
@@ -5410,7 +5415,7 @@ def _auth_body() -> None:
             return
         row = auth.find(members, ident.member_key)
         if row:
-            _login_done(row, f"{row['nickname']}님, 다시 오셨네요!")
+            _login_done(row, f"{row['nickname']}님, 환영합니다!")
             go("map")
             return
         st.session_state["_pending_ident"] = ident
