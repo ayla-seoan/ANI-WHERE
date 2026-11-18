@@ -6280,6 +6280,34 @@ AUTH_CSS = """
 """
 
 
+# 로그인이 끝났을 때 (앱 창 = 부품 iframe 의 parent 에서 실행).
+# ① 다른 창에 '로그인 끝' 신호(localStorage aw_login_done) → 원래 창이 새로고침 (LOGIN_WATCH_JS)
+# ② 이 창이 간편 로그인 작은 창이면 스스로 닫는다. 창 이름(aw_login)은 카카오 · 네이버를 거치면 크롬이 지워서(11/18 배포에서
+#    창이 안 닫힘), 열 때 sessionStorage 에 남긴 표시(aw_popup — 새 창은 연 창의 sessionStorage 를 물려받음)와 opener 도 본다
+# ③ 브라우저가 닫기를 막으면 '닫아도 돼요' 안내를 덮어 보여 준다
+LOGIN_DONE_JS = """setTimeout(function(){
+try{localStorage.setItem('aw_login_done',String(Date.now()));}catch(e){}
+var pop=false;
+try{pop=sessionStorage.getItem('aw_popup')==='1';}catch(e){}
+try{pop=pop||!!window.top.opener;}catch(e){}
+try{pop=pop||window.top.name==='aw_login';}catch(e){}
+if(!pop)return;
+try{sessionStorage.removeItem('aw_popup');}catch(e){}
+try{window.top.close();}catch(e){}
+setTimeout(function(){var d=document;if(!d.body||d.getElementById('aw-done'))return;var o=d.createElement('div');o.id='aw-done';
+o.style.cssText='position:fixed;inset:0;z-index:999999;background:rgba(255,255,255,.97);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font:700 18px/1.6 sans-serif;color:#0d9488';
+o.textContent='로그인됐어요. 이 창은 닫고 원래 창으로 돌아가 주세요.';d.body.appendChild(o);},900);
+},700);"""
+
+# 원래 창: 간편 로그인 작은 창에서 로그인이 끝났다는 신호를 받으면 작은 창을 닫고 새로고침(로그인 화면이면 홈으로).
+# 앱 창에 직접 붙여서(parent.eval) Streamlit 이 화면을 다시 그려도 남는다 (부품 iframe 은 다시 그리면 사라짐)
+LOGIN_WATCH_JS = r"""if(!window.__awWatch){window.__awWatch=1;
+window.addEventListener('storage',function(e){if(e.key!=='aw_login_done'||!e.newValue)return;
+try{window.__awPop&&window.__awPop.close();}catch(_){}
+var p=location.pathname;if(/\/(login|auth)\/?$/.test(p)){location.replace(p.replace(/\/(login|auth)\/?$/,'/')+location.search);}
+else{location.reload();}});}"""
+
+
 def _set_cookie(value: str, days: int) -> None:
     """로그인 쿠키를 브라우저에 심는다 (다음에 열어도 로그인 유지). 서버는 st.context.cookies 로 읽는다."""
     secure = "; Secure" if auth.base_url().startswith("https") else ""
@@ -6290,7 +6318,7 @@ def _set_cookie(value: str, days: int) -> None:
         # 간편 로그인 창(로그인 화면이 window.open 으로 연 'aw_login' 창)에서 로그인이 끝났으면 쿠키를 심은 뒤 그 창을 닫는다.
         # 원래 창은 쿠키가 생긴 걸 알아채고 새로고침해 로그인된 화면이 된다 (11/18 요청). 보통 창이면 아무 일도 없다
         # 타이머는 바깥 창(parent.eval)에 건다 — 로그인 뒤 화면을 다시 그리면 이 부품 iframe 이 사라져 타이머도 같이 사라졌다
-        js += ("window.parent.eval(\"setTimeout(function(){try{if(window.top.name==='aw_login'){window.top.close();}}catch(e){}},700)\");")
+        js += f"window.parent.eval({json.dumps(LOGIN_DONE_JS)});"
     components.html(f"<script>{js}</script>", height=0)
 
 
@@ -6587,10 +6615,15 @@ def _login_body() -> None:
         "<script>(function(){const w=window.parent,d=w.document;let n=0;const f=()=>{"
         "if(w.top!==w){d.querySelectorAll('a.auth-btn').forEach(a=>{if(a.dataset.awPop)return;a.dataset.awPop='1';"
         "a.addEventListener('click',e=>{const x=Math.max(0,(w.screen.width-480)/2),y=Math.max(0,(w.screen.height-720)/2);"
+        # 새 창은 연 창의 sessionStorage 를 물려받는다 → 작은 창 표시(aw_popup)를 남겼다가 4초 뒤 이 창에서는 지운다
+        "try{w.sessionStorage.setItem('aw_popup','1');}catch(_){}"
         "const pop=w.open(a.href,'aw_login','popup=yes,width=480,height=720,left='+x+',top='+y);"
-        "if(pop){e.preventDefault();pop.focus();}});});return;}"   # 창이 막히면(팝업 차단) 원래대로 새 탭
+        "w.eval(\"setTimeout(function(){try{sessionStorage.removeItem('aw_popup');}catch(e){}},4000)\");"
+        "if(pop){w.__awPop=pop;e.preventDefault();pop.focus();}});});return;}"   # 창이 막히면(팝업 차단) 원래대로 새 탭
         "d.querySelectorAll('a.auth-btn').forEach(a=>{a.target='_self';a.removeAttribute('rel');});"
-        "d.documentElement.classList.add('aw-top');};f();const iv=setInterval(()=>{f();if(++n>10)clearInterval(iv);},400);})();</script>",
+        "d.documentElement.classList.add('aw-top');};f();const iv=setInterval(()=>{f();if(++n>10)clearInterval(iv);},400);"
+        f"w.eval({json.dumps(LOGIN_WATCH_JS)});"
+        "})();</script>",
         height=0)
     # 새 탭에서 간편 로그인이 끝나면(로그인 쿠키가 생기면) 이 탭도 메인으로 옮긴다 (11/18: 원래 탭이 로그인 화면에 남던 문제)
     components.html(
