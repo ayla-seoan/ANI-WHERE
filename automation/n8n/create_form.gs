@@ -5,7 +5,7 @@
  * 쓰는 법: https://script.google.com → 프로젝트 → 이 파일 내용을 통째로 붙여넣기 → 저장
  *        → 함수 rebuildSurveyForm ▶ 실행 (2차 폼) · buildV1SurveyForm ▶ 실행 (1차 폼) → '실행 로그' 의 주소를 확인.
  *
- * 응답은 한 스프레드시트에 모은다: 2차 = '설문지 응답 시트1' 탭, 1차 = '1차 응답' 탭. n8n 이 둘 다 읽어 '정리' 탭에 버전과 함께 쌓는다.
+ * 응답은 한 스프레드시트에 모은다: 2차 = '2차 응답' 탭, 1차 = '1차 응답' 탭. n8n 이 둘 다 읽어 '정리' 탭에 버전과 함께 쌓는다.
  *   - rebuildSurveyForm: 지금 있는 2차 폼(FORM_ID)의 문항 · 응답을 지우고 새로 만든다 (폼 · 시트 주소는 그대로). '정리' 탭도 비운다
  *   - buildV1SurveyForm: 1차 폼을 처음엔 새로 만들고(번호를 스크립트 속성 V1_FORM_ID 에 기억), 다음부터는 같은 폼을 다시 만든다
  *
@@ -16,7 +16,7 @@
  */
 var FORM_ID = '1P1TZjlF-YR-80fa4s2-ABUFRJfiSU0b4aQo_raosceg';     // 2차 폼
 var SHEET_ID = '1OHB1_wSWowI-lVi-AOWXICUz-wH32Y1uG9YH_McnkrA';    // 응답 시트 (1차 · 2차 같이)
-var TAB = { '2차': '설문지 응답 시트1', '1차': '1차 응답' };        // n8n '폼 응답 들어옴' 노드들이 읽는 탭 이름
+var TAB = { '2차': '2차 응답', '1차': '1차 응답' };        // n8n '폼 응답 들어옴' 노드들이 읽는 탭 이름
 
 var TASKS = {
   '2차': [
