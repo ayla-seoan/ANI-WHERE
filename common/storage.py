@@ -11,14 +11,41 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-LOCAL_DIR = Path(os.getenv("ANIWHERE_DATA_DIR") or ROOT / "data")   # 테스트는 임시 복사본을 가리킨다
+LOCAL_DIR = Path(os.getenv("ANIWHERE_DATA_DIR") or ROOT / "data")
+# 원격 저장소(Supabase) 읽기를 서버에 기억해 두는 방식 (11/18 요청: 처음에 한 번 불러오고, 매일 아침 수집 뒤 · 저장했을 때만 다시)
+#  - 이 서버에서 등록·수정·리뷰·북마크를 저장하면 그 표의 기억을 바로 고친다 (append)
+#  - 매일 REFRESH_AT(한국 시간, 08:40 Notion 매일 가져오기가 끝난 뒤) 이후 첫 읽기에서 새로 불러온다
+#  - 혹시 다른 곳(Supabase 화면에서 직접 고침 등)에서 바뀐 것은 CACHE_SECONDS 뒤에 보인다. 0 이면 기억하지 않음
+CACHE_SECONDS = float(os.getenv("STORAGE_CACHE_SECONDS", "1800"))
+REFRESH_AT = os.getenv("STORAGE_REFRESH_AT", "08:45")
+_READ_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_CACHE_LOCK = threading.Lock()
+_PROBED: dict[tuple[str, str], float] = {}     # 확인을 마친 Supabase 표 (서버마다 한 번)   # 테스트는 임시 복사본을 가리킨다
+
+
+def _past_refresh(cached_at: float, now: float) -> bool:
+    """기억한 뒤에 오늘(한국 시간) REFRESH_AT 이 지났으면 True → 매일 아침 수집 뒤 한 번 새로 불러온다."""
+    kst = timezone(timedelta(hours=9))
+    try:
+        hh, mm = (int(x) for x in REFRESH_AT.split(":"))
+    except ValueError:
+        return False
+    today = datetime.fromtimestamp(now, kst).replace(hour=hh, minute=mm, second=0, microsecond=0)
+    return cached_at < today.timestamp() <= now
+
+
+def refresh_all() -> None:
+    """기억한 것을 모두 버린다 (다음 읽기에서 새로 불러옴). 관리자 화면의 '데이터 새로 불러오기'가 쓴다."""
+    with _CACHE_LOCK:
+        _READ_CACHE.clear()
 
 HEADERS = [
     "row_id", "entry_id", "revision", "status", "updated_at",
@@ -108,11 +135,20 @@ class Storage:
             # 새 형식 키(sb_publishable_…)는 apikey 머리말에만, 옛 형식(anon JWT, eyJ…)은 Authorization 에도 넣는다
             "headers": {"apikey": key, **({"Authorization": f"Bearer {key}"} if key.startswith("eyJ") else {})},
         }
+        # 표가 있는지 확인하는 요청은 서버(프로세스)마다 표당 한 번만 (11/18 속도 개선: 화면을 다시 그릴 때마다
+        # 저장소 13개를 새로 만들며 확인 요청을 13번 보내 클릭마다 2~3초씩 걸렸다)
+        probe_key = (url, self.worksheet)
+        with _CACHE_LOCK:
+            ok = _PROBED.get(probe_key)
+        if ok and time.time() - ok < 3600:
+            return conn
         res = requests.get(conn["endpoint"], headers=conn["headers"],
                            params={"select": "row_id", "limit": "1"}, timeout=10)
         if res.status_code != 200:
             raise RuntimeError(f"Supabase '{self.worksheet}' 표를 읽지 못했습니다 "
                                f"({res.status_code}): {res.text[:200]}")
+        with _CACHE_LOCK:
+            _PROBED[probe_key] = time.time()
         return conn
 
     def _sb_read(self) -> list[dict]:
@@ -201,12 +237,36 @@ class Storage:
         )
 
     # -------------------------------------------------------------- API
-    def all_rows(self) -> list[dict]:
+    def _fresh_rows(self) -> list[dict]:
         if self.mode == "sheets" and self._ws is not None:
             return self._ws.get_all_records()
         if self.mode == "supabase" and self._sb is not None:
             return self._sb_read()
         return self._read_local()
+
+    def _cache_key(self) -> str | None:
+        """원격 저장소(Supabase·Sheets)만 잠깐 기억한다. 로컬 파일은 빨라서 늘 새로 읽는다."""
+        if self.mode == "supabase" and self._sb is not None:
+            return f"sb:{self.worksheet}"
+        if self.mode == "sheets" and self._ws is not None:
+            return f"sh:{self.worksheet}"
+        return None
+
+    def all_rows(self) -> list[dict]:
+        """모든 기록. 원격 저장소는 CACHE_SECONDS 동안 한 번 읽은 것을 다시 쓴다 (11/18 속도 개선:
+        화면 한 번에 같은 표를 수십 번 읽어 몇 초씩 걸렸다). 이 서버에서 쓰면 바로 반영된다."""
+        key = self._cache_key()
+        if key is None:
+            return self._fresh_rows()
+        now = time.time()
+        with _CACHE_LOCK:
+            hit = _READ_CACHE.get(key)
+        if hit and now - hit[0] < CACHE_SECONDS and not _past_refresh(hit[0], now):
+            return [dict(r) for r in hit[1]]
+        rows = self._fresh_rows()
+        with _CACHE_LOCK:
+            _READ_CACHE[key] = (now, rows)
+        return [dict(r) for r in rows]
 
     def current_rows(self) -> list[dict]:
         """entry_id 별로 가장 최신 revision 만, 삭제된 건 제외."""
@@ -221,7 +281,7 @@ class Storage:
     def append(self, payload: dict[str, Any], entry_id: str | None = None,
                status: str = "active") -> dict:
         """새 등록 또는 수정. 항상 새 행이 쌓인다."""
-        rows = self.all_rows()
+        rows = self._fresh_rows()          # 번호(revision)는 늘 새로 읽어서 매긴다 (기억한 값으로 매기면 겹칠 수 있음)
         entry_id = entry_id or uuid.uuid4().hex[:10]
         revision = max(
             [int(r.get("revision", 0)) for r in rows if str(r.get("entry_id")) == entry_id],
@@ -248,6 +308,10 @@ class Storage:
         else:
             rows.append(record)
             self._write_local(rows)
+        key = self._cache_key()
+        if key is not None:                # 방금 읽은 것 + 이번 기록으로 기억을 바로 고친다
+            with _CACHE_LOCK:
+                _READ_CACHE[key] = (time.time(), rows + [record])
         return record
 
     def revert(self, entry_id: str, extra: dict | None = None) -> dict | None:

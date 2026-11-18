@@ -139,6 +139,7 @@ const abs = (u) => new URL(u, window.parent.location.href).href;
 let ALL = [];
 const sameSpot = (p) => ALL.filter((q) => q.lat === p.lat && q.lng === p.lng);
 
+let lastPinAt = 0;      // 마지막으로 핀을 누른 시각 (지도 '빈 곳 클릭'과 구분)
 function closeSpot() { document.getElementById("spot").classList.remove("open"); spotOf = null; }
 
 // 점을 눌렀을 때: 하나든 여럿이든 먼저 지도 안에 목록 창으로 미리 보여 준다.
@@ -242,7 +243,8 @@ const Kakao = {
       if (lat !== c.getLat() || lng !== c.getLng()) this.map.setCenter(new K.LatLng(lat, lng));
     };
     K.event.addListener(this.map, "dragend", clamp);
-    K.event.addListener(this.map, "click", closeSpot);
+    // 핀을 누르면 카카오 지도도 '빈 곳 클릭'으로 받아 방금 연 목록 창을 바로 닫아 버렸다 (11/18) → 핀을 누른 직후의 지도 클릭은 무시
+    K.event.addListener(this.map, "click", () => { if (Date.now() - lastPinAt > 400) closeSpot(); });
     window.addEventListener("resize", () => this.map.relayout());
     K.event.addListener(this.map, "zoom_changed", clamp);
   },
@@ -268,12 +270,17 @@ const Kakao = {
       const pos = new K.LatLng(p.lat, p.lng);
       const el = document.createElement("div");
       el.className = "pin" + (p.id === selected ? " sel" : "");
-      el.onclick = () => onPick(p);
+      el.onclick = (e) => { lastPinAt = Date.now(); if (e) e.stopPropagation(); onPick(p); };
+      el.onmousedown = () => { lastPinAt = Date.now(); };
       el.onmouseenter = () => {
         const t = tipCard(p);
         t.classList.add("kcard");
-        this.tip = new K.CustomOverlay({ position: pos, content: t, yAnchor: 1, zIndex: 3 });
+        if (this.tip) { this.tip.setMap(null); this.tip = null; }
+        this.tip = new K.CustomOverlay({ position: pos, content: t, yAnchor: 1, zIndex: 3, clickable: false });
         this.tip.setMap(this.map);
+        // 카드는 위로 올려 그리지만 카카오가 만든 바깥 상자는 핀 위에 남아 마우스를 가로챘다 → 핀에서 벗어난 것으로
+        // 처리돼 카드가 켜졌다 꺼졌다(깜빡임)하고 클릭이 핀에 닿지 않았다 (11/18). 바깥 상자도 마우스를 무시하게
+        if (t.parentElement) t.parentElement.style.pointerEvents = "none";
       };
       el.onmouseleave = () => { if (this.tip) { this.tip.setMap(null); this.tip = null; } };
       // 물방울 핀은 아래 뾰족한 끝이 카페 자리에 오도록 아래 가운데를 기준점으로 둔다

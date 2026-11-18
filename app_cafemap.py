@@ -36,6 +36,7 @@ from common import links as links_check   # 참고 웹사이트 확인 (11/18 �
 from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
 from common.schema import CafeEntry
+from common import storage as storage_mod
 from common.storage import Storage, StorageWriteError
 
 load_dotenv()
@@ -1672,15 +1673,18 @@ def _poster_url(value) -> str:
 
 
 def _chips(r, full: bool = False) -> str:
-    """이벤트 정보는 민트로 채운 칩, 굿즈는 민트 테두리 칩. full 이 아니면 몇 개만 보이고 나머지는 +N 으로 줄인다."""
+    """이벤트 정보는 민트로 채운 칩, 굿즈는 민트 테두리 칩. full 이 아니면 몇 개만 보이고 나머지는 +N 으로 줄인다.
+    카드(full 아님)에서는 칩 글자가 12자를 넘으면 '…' 로 줄인다 — 카드 밖으로 잘려 보였다 (11/18)."""
+    cut = (lambda t: t if full or len(t) <= 12 else t[:11].rstrip() + "…")
     all_tags, goods = _split(r.get("tags") or ""), _split(r.get("goods") or "")
     flags = [t for t in all_tags if t in (pdates.TAG_ALWAYS, pdates.TAG_CHECK)]
     all_tags = [t for t in all_tags if t not in flags]
     tags = [f'<span class="chip {"warn" if t == pdates.TAG_CHECK else "tag"}">{escape(t)}</span>' for t in flags] if full else []
-    tags += [f'<span class="chip tag">{escape(t)}</span>' for t in (all_tags if full else all_tags[:2])]
-    shown = [f'<span class="chip">{escape(g)}</span>' for g in (goods if full else goods[:3])]
-    more = [f'<span class="chip">+{len(goods) - 3}</span>'] if not full and len(goods) > 3 else []
-    return "".join(tags + shown + more)
+    tags += [f'<span class="chip tag">{escape(cut(t))}</span>' for t in (all_tags if full else all_tags[:2])]
+    shown = [f'<span class="chip">{escape(cut(g))}</span>' for g in (goods if full else goods[:3])]
+    if not full:               # 카드 위에는 첫 번째 칩 하나만 (11/18 요청). 전부는 커서 올림·상세에서
+        return "".join((tags + shown)[:1])
+    return "".join(tags + shown)
 
 
 def _card_more(r) -> str:
@@ -1727,8 +1731,10 @@ def _area_badge(address, cls: str = "abadge") -> str:
     if not area:
         return ""
     color, _ = _area_colors(address)
-    text = "#fff;text-shadow:0 1px 2px rgba(0,0,0,.45)" if cls == "area" else color
-    return (f'<span class="{cls}" style="background:{color}1A;border:1.5px solid {color};color:{text}">'
+    if cls == "area":          # 포스터 위: 사진에 묻히지 않게 시 색을 진하게 채우고 그림자 (11/18 요청)
+        return (f'<span class="{cls}" style="background:{color}E6;border:1.5px solid #ffffffCC;color:#fff;'
+                f'text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 2px 8px rgba(0,0,0,.28)">{escape(area)}</span>')
+    return (f'<span class="{cls}" style="background:{color}1A;border:1.5px solid {color};color:{color}">'
             f'{escape(area)}</span>')
 
 
@@ -2079,7 +2085,7 @@ iframe[src*="kakao_map"] {{
   .st-key-wide_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] {{
     display: contents !important; }}
   .st-key-wide_grid .pcard {{ border-radius: 12px; margin-bottom: 0; }}
-  .st-key-wide_grid .pcard .info {{ height: 90px; padding: 8px 9px 14px 11px; }}   /* 아래·왼쪽 여백을 조금 더 */
+  .st-key-wide_grid .pcard .info {{ height: 90px; padding: 8px 9px 9px 11px; }}   /* 아래 여백 줄임 (11/18) */
   .st-key-wide_grid .pcard .t {{ font-size: 14.5px; }}
   .st-key-wide_grid .pcard .s {{ font-size: 11.5px; }}
   .st-key-wide_grid .pcard .d {{ font-size: 12px; margin: 2px 0 0; white-space: nowrap; }}
@@ -2091,10 +2097,13 @@ iframe[src*="kakao_map"] {{
   .st-key-wide_grid .pcard .more ul {{ padding-left: .9em; }}
   .st-key-wide_grid .pcard .more .chip {{ font-size: 9.5px; padding: 1px 6px; }}
   .st-key-wide_grid .pcard .d-short {{ display: inline; }}
-  .st-key-wide_grid .pcard .chips {{ display: none; }}
+  /* 모바일도 이벤트·굿즈 칩을 한 줄로 작게 (11/18 요청: PC 처럼 보이게) */
+  .st-key-wide_grid .pcard .chips {{ display: flex; height: 19px; gap: 3px; margin: 3px 0 0; }}
+  .st-key-wide_grid .pcard .chips .chip {{ font-size: 9.5px; padding: 1px 6px; line-height: 1.5; }}
+  .st-key-wide_grid .pcard .info {{ height: 108px; }}
   .st-key-wide_grid .pcard .area {{ top: 6px; left: 6px; font-size: 10.5px; padding: 2px 6px; }}
   .st-key-wide_grid .pcard .state {{ top: 6px; right: 6px; font-size: 10.5px; padding: 2px 7px; }}
-  .st-key-wide_grid [class*="st-key-fav_"] {{ top: auto !important; bottom: 8px !important; right: 12px !important; }}
+  .st-key-wide_grid [class*="st-key-fav_"] {{ top: auto !important; bottom: -6px !important; right: 10px !important; }}   /* 기간 줄과 같은 높이로 (11/18) */
   .st-key-wide_grid .pcard .info {{ padding-right: 40px; }}
   .st-key-wide_grid [class*="st-key-fav_"] button {{ width: 26px; height: 26px; padding: 0 !important; }}
   .st-key-wide_grid [class*="st-key-fav_"] button span {{ font-size: 1.1rem !important; }}
@@ -2217,6 +2226,8 @@ iframe[src*="kakao_map"] {{
           border-radius:.5rem; margin-right:.2rem; vertical-align:middle; }}
 .chips {{ display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 4px; }}
 /* 칩: 이벤트 정보는 민트로 채우고, 굿즈는 민트 테두리 + 진한 민트 글자 */
+.chips .chip {{ max-width:100%; min-width:0; flex-shrink:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.chips .chip.tag, .chips .chip.warn {{ flex-shrink:0; }}   /* 이벤트 칩(짧음)은 그대로, 긴 굿즈 칩만 줄어든다 */
 .chip {{ font-size:12.5px; font-weight:600; padding:3px 10px; border-radius:999px; background:{MINT_SOFT};
         color:{MINT_DEEP}; border:1px solid {MINT}; white-space:nowrap; }}
 .chip.tag {{ background:{MINT}; color:#fff; border-color:{MINT}; }}
@@ -2396,12 +2407,16 @@ iframe[src*="kakao_map"] {{
                  background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.72) 60%);
                  pointer-events:none; }}
 .pcard .chips {{ height:26px; overflow:hidden; flex-wrap:nowrap; margin:0; }}
+/* 이벤트·굿즈 칩이 없으면 그 자리를 비워 두지 않고 글자를 카드 아래쪽에 붙인다 (11/18 요청) */
+.pcard .info {{ display:flex; flex-direction:column; justify-content:flex-end; }}
+.pcard .chips.short:empty {{ display:none; }}
+[class*="st-key-card_w_"]:hover .pcard .info {{ justify-content:flex-start; }}
 
-.pcard .t {{ font-family:"Jua", sans-serif; font-size:21px; line-height:1.25; margin-bottom:2px;
+.pcard .t {{ font-family:"Jua", sans-serif; font-size:17px; line-height:1.25; margin-bottom:2px;
              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
-.pcard .s {{ font-size:14.5px; opacity:.92; font-weight:600; overflow:hidden; text-overflow:ellipsis;
+.pcard .s {{ font-size:12.5px; opacity:.92; font-weight:600; overflow:hidden; text-overflow:ellipsis;
              white-space:nowrap; }}
-.pcard .d {{ font-size:16.5px; font-weight:700; opacity:1; margin:3px 0 7px; }}
+.pcard .d {{ font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:700; opacity:1; margin:3px 0 7px; }}
 /* 기간: PC 는 '10월 30일 - 11월 22일', 모바일 리스트는 짧게 '10/30-11/22' (아래 모바일 규칙) */
 .pcard .d-short {{ display:none; }}
 .pcard .chip {{ background:#fff; }}
@@ -3339,7 +3354,9 @@ MYCAL_CSS = """
 .nh-name { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 /* 알림 받은 내역 = 데일리 팝업 노트 모양: 둥근 포스터 · 작은 태그 · 굵은 이름 한 줄, 점선으로 잇기 */
 .st-key-ntf_box { padding: 12px 12px !important; }
-.st-key-ntf_box .mc-title { font-family: inherit; text-align: center; color: #6B7672; font-size: .78rem; font-weight: 700; margin: 0 0 2px; }
+.st-key-ntf_box .mc-title { font-family: inherit; text-align: center; color: var(--accent-deep, #0d9488); font-size: .82rem;
+  font-weight: 800; margin: 0 auto 4px; display: table; border: 1.5px solid var(--accent); border-radius: 999px;
+  padding: 3px 12px; background: #fff; }   /* 글자만 감싸는 포인트 색 테두리 (11/18 요청) */
 .st-key-ntf_box .mc-sub { text-align: center; font-size: .7rem; line-height: 1.4; margin-bottom: 6px; }
 .st-key-ntf_box .nh-day { font-size: .7rem; margin: 12px 0 6px; }
 .st-key-ntf_box .nh-item { background: transparent; padding: 0 0 12px; gap: 10px; border-radius: 0; position: relative; }
@@ -3441,7 +3458,12 @@ def render_my_calendar_view() -> None:
     # 캘린더는 지도 보기 오른쪽 캘린더와 같은 크기, 알림은 데일리 팝업 노트와 같은 폭·모양
     left, mid, right = st.columns([1.55, 2.3, 1.5], gap="medium")      # 찜 줄이고 알림 내역 키움 (11/18)
     with right, st.container(key="ntf_box"):
-        st.markdown('<div class="mc-title">알림 받은 내역</div>', unsafe_allow_html=True)
+        # 긴 설명은 제목 옆 ? 에 (11/18 요청: 문구가 길어 줄이 어색했음)
+        r_ = _rules()
+        st.markdown('<div class="mc-title">알림 받은 내역 <span class="nh-help" tabindex="0">?<span class="nh-tip">'
+                    f'북마크한 팝업의 <b>오픈 {r_["open"]["days"]}일 전</b>, <b>종료 {r_["end"]["days"]}일 전</b>부터 당일까지 '
+                    '알려 드려요. 최근 3일 알림만 보여요.<br>관리자 공지와 삭제 요청 결과도 여기에 와요.</span></span></div>',
+                    unsafe_allow_html=True)
         _render_notice_history()
     with left, st.container(key="mycal_box"):
         render_calendar()
@@ -3469,8 +3491,6 @@ def _render_notice_history() -> None:
         _ntf_cell(_ntf_id("i" + str(r.get("row_id"))),
                   f'<b>{escape(str(r.get("title") or ""))}</b><br>{escape(str(r.get("body") or ""))}'
                   + _why_html(admin.KIND_RULE.get(str(r.get("kind")), "notice")), None, kp="h")
-    st.markdown(f'<div class="mc-sub">북마크한 팝업의 오픈 {rules["open"]["days"]}일 전 · 종료 {rules["end"]["days"]}일 전부터 '
-                '당일까지 알림 (최근 3일)</div>', unsafe_allow_html=True)
     hist = _notice_history()
     if not hist:
         st.markdown('<div class="ntf-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
@@ -3545,7 +3565,7 @@ def _render_near_picks() -> None:
 BOX_CSS = """
 <style>
 .bx-title { font-family: "Jua", sans-serif; font-size: 1.7rem; color: #26302D; margin: 6px 0 4px; }
-.st-key-box_tabs { gap: 0 !important; border-bottom: 1.5px solid #E3E8E6; margin-bottom: 14px; }
+.st-key-box_tabs { gap: 0 !important; border-bottom: 1.5px solid #E3E8E6; margin-bottom: 0; }   /* 아래 안내와 간격 반으로 (11/18) */
 .st-key-box_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
   padding: 8px 16px 9px !important; border-bottom: 3px solid transparent !important; margin-bottom: -1.5px; }
 .st-key-box_tabs button p { font-size: 1.1rem !important; font-weight: 700 !important; color: #9AA5A1 !important; }
@@ -3573,6 +3593,10 @@ BOX_CSS = """
 .nh-tip b { color: #7BE3CF; }
 .nh-help:hover .nh-tip, .nh-help:focus .nh-tip { display: block; }
 .st-key-ntf_box [class*="ntfc_"], .st-key-ntf_box .ntf-item.plain { margin-bottom: 8px; }
+/* 알림 받은 내역: 흰 카드 + 테두리 (안 읽은 알림은 민트 테두리) — 11/18 요청 */
+.st-key-ntf_box .ntf-item { background: #fff; border: 1.5px solid #E3E8E6; border-radius: 14px; }
+.st-key-ntf_box .ntf-item:not(.read) { border-color: var(--accent); }
+.st-key-ntf_box [class*="ntfc_"]:hover .ntf-item { outline: none; border-color: var(--accent-deep); box-shadow: 0 4px 14px rgba(20,184,166,.14); }
 .st-key-keep_box [data-testid="stMarkdownContainer"]:has(.bxr) { margin-bottom: 4px !important; }
 .bxc { display: flex; gap: 12px; background: #fff; border: 1.5px solid #E3E8E6; border-radius: 16px; padding: 10px; }
 .bxc img.pst { width: 82px; height: 110px; object-fit: cover; border-radius: 10px; flex: 0 0 82px; }
@@ -5043,6 +5067,17 @@ def _login_body() -> None:
                         f'{label}로 {verb}</a>', unsafe_allow_html=True)
         else:
             st.markdown(f'<span class="auth-btn off">{label} {verb} 준비 중</span>', unsafe_allow_html=True)
+    st.markdown('<div class="auth-note">카카오·네이버 로그인은 <b>새 탭</b>에서 열려요. 그 탭에서 로그인을 마치면 '
+                '이 화면도 자동으로 로그인된 메인으로 넘어가요.</div>', unsafe_allow_html=True)
+    # 새 탭에서 간편 로그인이 끝나면(로그인 쿠키가 생기면) 이 탭도 메인으로 옮긴다 (11/18: 원래 탭이 로그인 화면에 남던 문제)
+    components.html(
+        "<script>(function(){const w=window.parent;const val=()=>((w.document.cookie.match(/(?:^|; )" + auth.COOKIE
+        + "=([^;]*)/)||[])[1]||'');const first=val();"
+        # 처음 값과 달라진 '빈 값이 아닌' 로그인 쿠키가 생기면 (예전 쿠키가 남아 있어도 새 로그인을 알아챈다)
+        "const iv=setInterval(()=>{const v=val();if(v&&v!==first){clearInterval(iv);"
+        # 부품 iframe 은 바깥 화면을 직접 옮길 권한이 없어서, 바깥 화면 쪽에서 실행되도록 parent.eval 로 넘긴다
+        r"w.eval(`location.replace(location.pathname.replace(/\\/(login|auth)\\/?$/,'/')+location.search)`);}},1500);"
+        "setTimeout(()=>clearInterval(iv),600000);})();</script>", height=0)
     st.markdown('<div class="auth-note">로그인하지 않아도 지금처럼 둘러보고 북마크할 수 있어요.</div>',
                 unsafe_allow_html=True)
     st.markdown('<div class="auth-note">받는 정보: <b>별명(닉네임)</b>과 계정 고유 번호뿐이에요. 고유 번호는 알아볼 수 없게 '
@@ -5369,6 +5404,23 @@ ADMIN_CSS = """
 .adm-kpi em { font-style: normal; font-size: .72rem; color: #9AA5A1; }
 .adm-kpi.alert b { color: #E05555; }
 .st-key-adm_kpis { gap: 10px !important; flex-wrap: wrap; margin-bottom: 14px; }
+/* 숫자 카드가 담는 칸보다 커서 아래 줄과 겹쳤다 (모바일, 11/18) → 칸 높이를 카드에 맞춤 */
+[class*="st-key-admk_"] { height: auto !important; }
+[class*="st-key-admk_"] [data-testid="stMarkdownContainer"], [class*="st-key-admk_"] [data-testid="stMarkdown"] {
+  margin-bottom: 0 !important; }
+[class*="st-key-admk_"] [data-testid="stElementContainer"]:has(.adm-kpi) { margin-bottom: 0 !important; height: auto !important; }
+@media (max-width: 640px) {
+  .adm-title { font-size: 1.45rem; }
+  .adm-sub { font-size: .76rem; margin-bottom: 8px; }
+  .adm-eyebrow { font-size: .64rem; }
+  .st-key-adm_kpis { gap: 8px !important; }
+  .st-key-adm_kpis > * { flex: 1 1 140px !important; }
+  .adm-kpi { padding: 9px 11px; }
+  .adm-kpi span { font-size: .7rem; }
+  .adm-kpi b { font-size: 1.25rem; }
+  .adm-kpi b small { font-size: .78rem; }
+  .st-key-adm_links a p, .st-key-adm_links button p { font-size: .72rem !important; }
+}
 .st-key-adm_kpis > * { flex: 1 1 150px !important; min-width: 0; }
 [class*="st-key-admk_"] { position: relative; }
 [class*="st-key-admk_"] .adm-kpi { cursor: pointer; transition: border-color .15s; }
@@ -5864,6 +5916,12 @@ def page_data() -> None:
     with st.container(horizontal=True, horizontal_alignment="right", key="adm_links"):
         st.link_button("Claude 예약 작업 (매일 08:00 수집)", ADMIN_ROUTINE_URL, icon=":material/schedule:")
         st.link_button("Notion 팝업 트래커", NOTION_TRACKER_URL, icon=":material/table_view:")
+        # 앱은 Supabase 를 처음에 한 번 불러와 기억한다 (매일 08:45 · 앱에서 저장할 때 자동 갱신).
+        # Supabase 화면에서 직접 고쳤을 때만 이 버튼으로 바로 새로 불러온다
+        if st.button("데이터 새로 불러오기", icon=":material/refresh:", key="adm_refresh"):
+            storage_mod.refresh_all()
+            st.session_state["flash"] = ("Supabase 에서 새로 불러왔어요.", ":material/check_circle:")
+            st.rerun()
     st.markdown(f'<div class="adm-eyebrow">ANI:WHERE ADMIN · {TODAY:%Y.%m.%d}</div>'
                 '<div class="adm-title">관리자 대시보드</div>'
                 f'<div class="adm-sub">저장소: {escape(store.mode)} · 모든 기록은 지우지 않고 쌓여요 (append-only)</div>'
@@ -5931,10 +5989,17 @@ ASK_PANEL_CSS = """
 /* 위 고정줄(메뉴·검색 필터) 아래에 붙고, 대화창 전체가 화면 안에 들어오게:
    대화창 = 세로 flex, 높이는 (화면 - 위 고정줄 - 여백)까지. 대화 기록만 남는 공간을 쓰고 넘치면 그 안에서 스크롤 */
 .st-key-ask_panel { display: flex !important; flex-direction: column !important;
-  max-height: calc(100vh - var(--apn-top, 172px) - 16px); }
+  height: calc(100vh - var(--apn-top, 172px) - 112px) !important; max-height: calc(100vh - var(--apn-top, 172px) - 16px);
+  flex: 0 0 auto !important; }   /* Streamlit 기본 flex:1 1 0% 이면 높이가 무시돼 대화창이 내용만큼 줄어든다 */
 .st-key-ask_panel > * { flex: 0 0 auto; }
 .st-key-ask_panel > *:has(.st-key-apn_log), .st-key-ask_panel > .st-key-apn_log {
   flex: 1 1 auto !important; min-height: 0 !important; display: flex; flex-direction: column; }
+/* 대화창을 따로 다시 그리는 칸(fragment)으로 바꾸며 감싸는 상자가 한 겹 늘었다 (11/18):
+   대화 기록까지 이어지는 상자를 모두 세로 flex 로 → 대화 기록이 남는 높이만 쓰고, 추천 칩·입력칸은 늘 보인다 */
+.st-key-ask_panel :has(.st-key-apn_log):not(.st-key-apn_log) { display: flex !important; flex-direction: column !important;
+  flex: 1 1 auto !important; min-height: 0 !important; height: auto !important; }
+.st-key-ask_panel :has(.st-key-apn_log):not(.st-key-apn_log) > :not(:has(.st-key-apn_log)):not(.st-key-apn_log) {
+  flex: 0 0 auto !important; }
 .st-key-apn_log { flex: 1 1 auto !important; height: auto !important; max-height: none !important;
   min-height: 90px !important; overflow-y: auto !important; }
 .st-key-ask_panel { border: 1.5px solid #E3E8E6; border-radius: 16px; background: #fff;
@@ -6181,11 +6246,15 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                             _ask_panel_open(cid)
                             st.rerun()
                     else:
-                        st.button(f"{card['work']} 상세 보기", key=key, on_click=_ask_panel_open, args=(cid,))
+                        # 대화창은 따로 다시 그려지는 칸(fragment)이라, 상세로 갈 때만 화면 전체를 다시 그린다
+                        if st.button(f"{card['work']} 상세 보기", key=key):
+                            _ask_panel_open(cid)
+                            st.rerun(scope="app")
     # 새 답이 생기면 대화창을 마지막 대화의 처음(방금 한 질문)이 맨 위에 오게 내린다 (11/18 요청). 대화 수가 바뀔 때만
     n_chat = len(st.session_state.get("ask_chat", []))
-    if st.session_state.get(f"_{prefix}_seen") != n_chat:
-        st.session_state[f"_{prefix}_seen"] = n_chat
+    # 지도 ↔ 리스트로 옮겨 대화창을 새로 그릴 때도 마지막 대화로 (11/18 요청). 같은 화면에서 대화 수가 그대로면
+    # 같은 내용의 스크립트라 다시 실행되지 않아, 읽던 자리가 튀지 않는다
+    if True:
         components.html(
             "<script>(function(){const d=window.parent.document;let t=0;"
             "const go=()=>{const box=d.querySelector('.st-key-" + prefix + "_log');if(!box)return;"
@@ -6210,6 +6279,12 @@ def render_ask_panel() -> None:
     """PC 리스트 옆 대화창 (모바일에서는 숨기고 플로팅 버튼 → 팝업으로)."""
     st.markdown(ASK_PANEL_CSS, unsafe_allow_html=True)
     st.markdown('<div class="apn-head"><span class="apn-title">ANI:WHERE에게 물어보기</span></div>', unsafe_allow_html=True)
+    _ask_panel_live()
+
+
+@st.fragment
+def _ask_panel_live() -> None:
+    """질문을 보내면 대화창만 다시 그린다 (11/18: 화면 전체가 다시 그려져 느렸음). 카드의 '상세 보기'만 전체를 다시 그림."""
     _ask_chat_body("apn", 430)
 
 
