@@ -182,6 +182,8 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .st-key-listtools [data-testid="stColumn"]:has([class*="st-key-folsw_"]) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
 /* 보기 전환·필터 아이콘 묶음: 정렬 칸 위 오른쪽 끝. 떠 있어도 원래 자리 높이는 남긴다 */
 [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ min-height: 32px; }}
+/* PC 에서는 이 아이콘 묶음이 비어 있다(필터·보기 전환은 모바일 전용) → 자리도 없애서 '팝업 카페 N곳' 줄이 위로 붙게 (11/18 요청) */
+@media (min-width: 641px) {{ [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools), .st-key-view_tools {{ display: none !important; }} }}
 .st-key-view_tools {{ justify-content: flex-end !important; align-items: center; gap: 6px !important; flex-wrap: nowrap !important; }}
 .st-key-view_tools > div {{ width: auto !important; flex: 0 0 auto !important; }}
 .st-key-view_tools.pinned button {{ box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }}
@@ -2571,7 +2573,19 @@ _PIN_ICON_JS = """
 (function () {
   if (window.__aniPinIcon) return;
   window.__aniPinIcon = true;
+  // PC 물어보기 창: 지도·리스트 보기 똑같은 규칙 — 메뉴바 아래에 붙어 따라오고, 아래는 화면 아래에서 19px 위까지 (11/18 요청)
+  const fitAsk = () => {
+    const pn = document.querySelector('.st-key-ask_panel');
+    if (!pn || window.innerWidth <= 640) return;
+    if (!pn.offsetParent) return;
+    // 붙는 선(메뉴바 아래)보다 위로 밀려 올라가도 높이는 그대로 (위로 밀릴수록 커지던 문제)
+    const stick = parseFloat(getComputedStyle(pn.closest('[data-testid="stColumn"]') || pn).top) || 96;
+    const t = Math.max(pn.getBoundingClientRect().top, stick);
+    const h = Math.max(520, Math.round(window.innerHeight - t - 19)) + 'px';
+    if (pn.style.height !== h) pn.style.setProperty('height', h, 'important');
+  };
   const update = () => {
+    fitAsk();
     const btn = document.querySelector('.st-key-view_tools');      // 필터·보기 전환 아이콘 묶음
     const box = btn && btn.parentElement;                          // 원래 자리 (높이를 남겨 둔다)
     if (!btn || !box) return;
@@ -3287,10 +3301,16 @@ def _ntf_id(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
 
 
+def _ntf_cookie() -> str:
+    """읽은 알림 쿠키 이름: 회원마다 따로 (11/18 — 한 브라우저에서 계정을 바꾸면 읽음 표시가 섞이던 문제)."""
+    key = str(st.session_state.get("member_key") or "guest")
+    return f"{NTF_COOKIE}_{hashlib.sha1(key.encode()).hexdigest()[:8]}"
+
+
 def _ntf_read() -> set[str]:
-    """읽은 알림 번호들 (브라우저 쿠키에 남겨 다시 열어도 읽음으로 보인다)."""
+    """읽은 알림 번호들 (브라우저 쿠키에 남겨 다시 열어도 읽음으로 보인다). 회원마다 따로."""
     if "_ntf_read" not in st.session_state:
-        raw = str(st.context.cookies.get(NTF_COOKIE) or "")
+        raw = str(st.context.cookies.get(_ntf_cookie()) or "")
         st.session_state["_ntf_read"] = {x for x in raw.split(".") if len(x) == 8}
     return st.session_state["_ntf_read"]
 
@@ -3325,6 +3345,8 @@ def _ntf_cell(nid: str, html: str, cafe_id: str | None, poster: str | None = Non
 
 
 def _gnb(current: dict | None, on_map: bool = True) -> None:
+    if st.session_state.pop("_cookie_clear", None):     # 방금 로그아웃·탈퇴 → 로그인 쿠키를 지운다
+        _set_cookie("", 0)
     if st.session_state.get("_cookie_pending"):     # 방금 로그인했으면 쿠키를 심는다 (메인으로 옮긴 뒤에도)
         _set_cookie(st.session_state.pop("_cookie_pending"), auth.SESSION_DAYS)
     msg = st.session_state.pop("_need_login", None)
@@ -3386,7 +3408,7 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
             all_items = items_inbox + items_marks + items_near
             unread = [nid for nid, _, _ in all_items if nid not in _ntf_read()]
             if st.session_state.pop("_ntf_cookie", False):
-                js = (f"window.parent.document.cookie = {json.dumps(NTF_COOKIE + '=' + '.'.join(sorted(_ntf_read())[-200:]))}"
+                js = (f"window.parent.document.cookie = {json.dumps(_ntf_cookie() + '=' + '.'.join(sorted(_ntf_read())[-200:]))}"
                       " + '; path=/; max-age=5184000; SameSite=Lax';")
                 components.html(f"<script>{js}</script>", height=0)
             if unread:
@@ -3990,6 +4012,8 @@ def page_map() -> None:
     note = (f"조건에 맞는 카페 {len(view)}곳 · 지도에 표시 가능 {len(mapped)}곳"
             + (f" · 좌표 없음 {len(view) - len(mapped)}곳" if len(view) > len(mapped) else "")
             + " · 카드나 지도의 점을 누르면 상세를 보고 리뷰를 남기거나 수정할 수 있습니다.")
+    if wide:
+        _update_note()      # 리스트로 보기: '마지막 업데이트' 를 '팝업 카페 N곳' 위로 (11/18 요청)
     # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
     with st.container(key="listtools"):
         # 정렬 칸 위에 보기 전환 아이콘이 있어서, 팔로우·지역 고르기는 아래(정렬과 같은 줄)에 맞춘다
@@ -4006,11 +4030,12 @@ def page_map() -> None:
         _view_icon_button(wide, active, m_open)
         st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
 
-    _update_note()
+    if not wide:
+        _update_note()
     # '리스트 전체보기' 를 누르면 지도 없이 리스트만 크게 본다. '지도보기' 를 누르면 다시 반반으로
     if wide:
         # 리스트 전체보기: 왼쪽 목록 + 오른쪽 '팝업에게 물어보기' 대화창 (PC). 모바일은 대화창을 숨기고 위 '물어보기' 버튼으로
-        lst, chat = st.columns([3.3, 1.35], gap="medium")
+        lst, chat = st.columns([3.3, 1.165], gap="medium")   # 물어보기 폭 = 지도보기와 같게 (11/18 요청)
         with lst:
             render_list(view, wide=True, df_all=df, fcond=fcond)
         with chat, st.container(key="ask_panel"):
@@ -4056,7 +4081,10 @@ def page_map() -> None:
             draw_map()
         # PC 지도: 화면 높이에 맞춰 늘린다 (메뉴바·여백만 빼고, 페이지 스크롤이 생기지 않을 만큼, 11/18 요청)
         st.markdown("<style>@media (min-width: 641px) { .st-key-map_frame iframe { height: calc(100vh - 140px) !important;"
-                    " min-height: 520px; } }</style>", unsafe_allow_html=True)
+                    " min-height: 520px; }"
+                    # 옆 물어보기 창도 지도와 같은 위·아래 선으로 (11/18 요청)
+                    " .st-key-ask_panel { height: calc(100vh - 140px) !important; min-height: 520px; max-height: none !important; } }</style>",
+                    unsafe_allow_html=True)
         with col_cal, st.container(key="ask_panel"):     # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
             render_ask_panel()
 
@@ -5063,6 +5091,12 @@ AUTH_CSS = """
 .me-card .me-av { margin: 0; flex: 0 0 auto; }
 .me-card .me-info { min-width: 0; text-align: left; }
 .me-card .me-info b { font-size: 1.05rem; }
+/* 약관 전체 동의: 굵게, 아래 항목들과 얇은 선으로 나눈다 */
+/* 간편 가입 버튼: 가운데 (11/18 요청) */
+.st-key-soc_join { display: flex !important; justify-content: center !important; width: 100% !important; }
+.st-key-soc_join .stButton { width: auto !important; }
+.st-key-soc_allbox { border-bottom: 1px solid #E3E8E6; padding-bottom: 6px; margin-bottom: 2px; }
+.st-key-soc_allbox label p { font-weight: 800 !important; }
 .consent-box { background: #F4F8F6; border-radius: 12px; padding: 10px 12px; margin: 6px 0 8px; font-size: .82rem; color: #3A4542; }
 .consent-box table { width: 100%; border-collapse: collapse; margin: 6px 0; }
 .consent-box th { width: 44px; text-align: left; color: #2E9C82; font-weight: 800; padding: 3px 6px 3px 0; vertical-align: top; border: 0; }
@@ -5070,6 +5104,8 @@ AUTH_CSS = """
 .consent-box span { color: #7A8582; font-size: .76rem; }
 .consent-link { font-size: .76rem; color: #8A9592; margin: 2px 0 8px; }
 .consent-link a { color: #2E9C82 !important; font-weight: 700; }
+/* 가입 화면의 전문 보기·만 14세 안내: 가운데 정렬 + 얇은 테두리 상자 (11/18 요청) */
+.consent-note { text-align: center; border: 1px solid #E3E8E6; border-radius: 10px; padding: 8px 12px; margin: 6px 0 10px; line-height: 1.6; }
 .st-key-privacy_wrap { max-width: 860px; margin: 0 auto; }
 .st-key-privacy_wrap table { font-size: .88rem; }
 .me-avimg { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #DDF3EC; background: #DDF3EC; }
@@ -5094,11 +5130,22 @@ def _set_cookie(value: str, days: int) -> None:
     """로그인 쿠키를 브라우저에 심는다 (다음에 열어도 로그인 유지). 서버는 st.context.cookies 로 읽는다."""
     secure = "; Secure" if auth.base_url().startswith("https") else ""
     js = (f"window.parent.document.cookie = {json.dumps(auth.COOKIE + '=' + value)} + "
-          f"'; path=/; max-age={days * 86400}; SameSite=Lax{secure}';")
+          f"'; path=/; max-age={days * 86400}; SameSite=Lax{secure}"
+          + ("; expires=Thu, 01 Jan 1970 00:00:00 GMT" if days <= 0 else "") + "';")
     components.html(f"<script>{js}</script>", height=0)
 
 
+_USER_STATE = ("_ntf_read", "_ntf_cookie", "recent_seen", "box_tab", "_fav_cache", "_member_cache", "_avatar_cache")
+
+
+def _clear_user_state() -> None:
+    """계정이 바뀌면 이전 사람의 알림 읽음·최근 본·북마크 기억을 버린다 (11/18: 네이버 → 카카오로 바꿨더니 섞임)."""
+    for k in _USER_STATE:
+        st.session_state.pop(k, None)
+
+
 def _login_done(row: dict, msg: str) -> None:
+    _clear_user_state()
     st.session_state["member_key"] = str(row["entry_id"])
     st.session_state.pop("_logged_out", None)
     st.session_state.pop("_member_cache", None)
@@ -5233,7 +5280,23 @@ PRIVACY_TABLE = {
 }
 
 
-def _consent_boxes(kind: str, key: str, photo_label: str | None = None) -> dict:
+def _consent_keys(key: str, photo: bool) -> list[str]:
+    return [f"{key}_age", f"{key}_terms", f"{key}_priv"] + ([f"{key}_photo"] if photo else [])
+
+
+def _consent_all(key: str, photo: bool) -> None:
+    """'약관 전체 동의' 를 누르면 아래 항목(선택 포함)을 모두 같은 값으로."""
+    on = bool(st.session_state.get(f"{key}_all"))
+    for k in _consent_keys(key, photo):
+        st.session_state[k] = on
+
+
+def _consent_sync(key: str, photo: bool) -> None:
+    """항목을 하나씩 바꾸면 '전체 동의' 표시도 맞춘다 (모두 켜졌을 때만 켜짐)."""
+    st.session_state[f"{key}_all"] = all(st.session_state.get(k) for k in _consent_keys(key, photo))
+
+
+def _consent_boxes(kind: str, key: str, photo_label: str | None = None, all_toggle: bool = False) -> dict:
     """가입 동의: 필수(만 14세 이상 · 이용약관 · 개인정보 수집·이용)와 선택(프로필 사진)을 따로 받는다.
     무엇을·왜·얼마나 보관하는지 바로 보이게 표로 고지한다 (11/18 개인정보 설계)."""
     st.markdown(
@@ -5243,13 +5306,21 @@ def _consent_boxes(kind: str, key: str, photo_label: str | None = None) -> dict:
         '<tr><th>보관</th><td><b>탈퇴할 때까지</b> (탈퇴하면 지난 기록까지 바로 지워요)</td></tr></table>'
         '<span>이메일·전화번호·실명은 받지 않아요. 동의하지 않으면 가입할 수 없지만, 로그인 없이도 둘러볼 수 있어요.</span></div>',
         unsafe_allow_html=True)
+    # 폼 밖에서만(all_toggle) '약관 전체 동의' — 폼 안의 칸은 서로를 바꿀 수 없다 (11/18 요청: 안내 상자 바로 아래)
+    kw = {}
+    if all_toggle:
+        args = (key, bool(photo_label))
+        with st.container(key=f"{key}_allbox"):
+            st.checkbox("약관 전체 동의" + (" (선택 항목 포함)" if photo_label else ""), key=f"{key}_all",
+                        on_change=_consent_all, args=args)
+        kw = {"on_change": _consent_sync, "args": args}
     out = {
-        "age": st.checkbox("[필수] 만 14세 이상이에요", key=f"{key}_age"),
-        "terms": st.checkbox("[필수] 이용약관에 동의해요", key=f"{key}_terms"),
-        "privacy": st.checkbox("[필수] 위 개인정보 수집·이용에 동의해요", key=f"{key}_priv"),
-        "photo": st.checkbox(photo_label, key=f"{key}_photo") if photo_label else False,
+        "age": st.checkbox("[필수] 만 14세 이상이에요", key=f"{key}_age", **kw),
+        "terms": st.checkbox("[필수] 이용약관에 동의해요", key=f"{key}_terms", **kw),
+        "privacy": st.checkbox("[필수] 위 개인정보 수집·이용에 동의해요", key=f"{key}_priv", **kw),
+        "photo": st.checkbox(photo_label, key=f"{key}_photo", **kw) if photo_label else False,
     }
-    st.markdown(f'<div class="consent-link">전문 보기: <a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
+    st.markdown(f'<div class="consent-link consent-note">전문 보기: <a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
                 ' · 만 14세 미만은 가입할 수 없어요 (법정대리인 동의 절차를 갖추지 않았어요)</div>', unsafe_allow_html=True)
     return out
 
@@ -5289,22 +5360,18 @@ def _password_signup_form() -> None:
     except auth.AuthError as e:
         st.warning(str(e), icon=":material/error:")
         return
-    moved = _move_guest_favs(row)
-    _login_done(row, "가입했어요!" + (f" 북마크 {moved}개도 옮겼어요." if moved else ""))
+    # 손님 북마크는 옮기지 않는다: 손님 북마크는 IP 로 묶여 있어 같은 와이파이·같은 컴퓨터의 다른 사람 것까지
+    # 새 계정에 들어갔다 (11/18). 북마크는 이제 회원만 할 수 있다
+    _login_done(row, "가입했어요!")
     go("map")
 
 
-def _move_guest_favs(row: dict) -> int:
-    """손님일 때 해 둔 북마크를 회원 계정으로 옮긴다 (지우지 않고 회원 쪽에 새로 쌓음)."""
-    guest = favorite.user_key(st.context.ip_address)
-    moved = sorted(favorite.mine(favs.current_rows(), guest))
-    for cid in moved:
-        favorite.toggle(favs, cid, f"m:{row['entry_id']}", True)
-    return len(moved)
-
-
 def _logout() -> None:
-    _set_cookie("", 0)
+    # 여기서 바로 쿠키 지우는 스크립트를 그리면 뒤따르는 st.rerun() 에 묻혀 브라우저에 닿지 않는다 →
+    # 새로고침하면 남은 쿠키로 다시 로그인됐다 (11/18). 다시 그린 화면의 메뉴바(_gnb)에서 지운다
+    st.session_state["_cookie_clear"] = True
+    st.session_state.pop("_cookie_pending", None)
+    _clear_user_state()
     st.session_state.update({"member_key": "", "_logged_out": True})
     st.session_state.pop("_member_cache", None)
     st.session_state.pop("_fav_cache", None)
@@ -5452,12 +5519,13 @@ def _auth_body() -> None:
     st.markdown(f'<div class="auth-av">{_avatar_img(ident.avatar, 48, "")}'
                 + (f"{label} 프로필 사진이 있어요. 아래 [선택] 항목에 동의하면 리뷰 옆에 보여요." if ident.avatar
                    else "프로필 사진은 선택이에요. 마이페이지에서 언제든 올릴 수 있어요.") + '</div>', unsafe_allow_html=True)
-    with st.form("signup", border=False):
+    # 폼으로 묶지 않는다: '약관 전체 동의' 가 아래 항목을 바로 바꿔야 해서 (11/18)
+    with st.container(key="soc_signup"):
         nick = st.text_input("닉네임 (선택)", value=ident.nickname, max_chars=auth.MAX_NICK,
-                             placeholder=_suggest_nick(), help=NICK_HELP)
+                             placeholder=_suggest_nick(), help=NICK_HELP, key="soc_nick")
         consent = _consent_boxes("social", "soc", f"[선택] {label} 프로필 사진을 불러와 리뷰 옆에 보여 줘요 (사진 주소 저장, "
-                                 "마이페이지에서 언제든 지울 수 있어요)" if ident.avatar else None)
-        done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")
+                                 "마이페이지에서 언제든 지울 수 있어요)" if ident.avatar else None, all_toggle=True)
+        done = st.button("가입하고 시작하기", type="primary", icon=":material/check_circle:", key="soc_join")
     if done:
         err = _consent_error(consent)
         if err:
@@ -5472,13 +5540,8 @@ def _auth_body() -> None:
         except auth.AuthError as e:
             st.warning(str(e), icon=":material/error:")
             return
-        # 손님일 때 해 둔 북마크를 회원 계정으로 옮긴다 (지우지 않고 회원 쪽에 새로 쌓음)
-        guest = favorite.user_key(st.context.ip_address)
-        moved = sorted(favorite.mine(favs.current_rows(), guest))
-        for cid in moved:
-            favorite.toggle(favs, cid, f"m:{row['entry_id']}", True)
         st.session_state.pop("_pending_ident", None)
-        _login_done(row, "가입했어요!" + (f" 북마크 {len(moved)}개도 옮겼어요." if moved else ""))
+        _login_done(row, "가입했어요!")         # 손님 북마크는 옮기지 않는다 (위 아이디 가입과 같은 이유)
         go("map")
 
 
@@ -6110,6 +6173,9 @@ ASK_PANEL_CSS = """
   height: calc(100vh - var(--apn-top, 172px) - 112px) !important; max-height: calc(100vh - var(--apn-top, 172px) - 16px);
   flex: 0 0 auto !important; }   /* Streamlit 기본 flex:1 1 0% 이면 높이가 무시돼 대화창이 내용만큼 줄어든다 */
 .st-key-ask_panel > * { flex: 0 0 auto; }
+.apn-num { color: var(--accent); font-weight: 800; }
+/* 페이지 맨 아래까지 내려도 물어보기 창이 같은 자리에 붙어 있게: 창이 든 줄이 페이지 끝까지 닿도록 아래 기본 여백(96px)을 줄인다 (11/18 요청) */
+@media (min-width: 641px) { [data-testid="stMainBlockContainer"]:has(.st-key-ask_panel) { padding-bottom: 19px !important; } }
 .st-key-ask_panel > *:has(.st-key-apn_log), .st-key-ask_panel > .st-key-apn_log {
   flex: 1 1 auto !important; min-height: 0 !important; display: flex; flex-direction: column; }
 /* 대화창을 따로 다시 그리는 칸(fragment)으로 바꾸며 감싸는 상자가 한 겹 늘었다 (11/18):
@@ -6177,7 +6243,16 @@ ASK_PANEL_CSS = """
   min-height: 0; padding: 4px 10px; border-radius: 10px; }
 .st-key-apn_chips, .st-key-apd_chips { padding-top: 10px; border-top: 1px solid #EEF1F0; gap: 6px !important; flex-wrap: wrap; }
 .st-key-apn_chips button, .st-key-apd_chips button { border-radius: 999px !important; font-size: .78rem; min-height: 0; padding: 4px 12px; }
+/* 추천 질문 칩 글자를 한 단계 작게 (11/18 요청) — 버튼 안 p 가 자기 글자 크기를 따로 가져서 p 에 준다 */
+.st-key-apn_chips button p, .st-key-apd_chips button p { font-size: .78rem !important; line-height: 1.3; display: block; }
+/* 글자를 담는 칸도 같은 글자 크기·줄 높이로 → 칩 안에서 위아래 가운데 */
+.st-key-apn_chips button [data-testid="stMarkdownContainer"], .st-key-apd_chips button [data-testid="stMarkdownContainer"] {
+  font-size: .78rem !important; line-height: 1.3 !important; }
+.st-key-apn_chips button, .st-key-apd_chips button { padding: 3px 10px !important; }
 .st-key-apn_form [data-testid="stForm"], .st-key-apd_form [data-testid="stForm"] { padding: 10px 0 14px; }
+/* 추천 칩 ↔ 입력칸 간격을 반으로 (28px → 14px, 11/18 요청) */
+.st-key-apn_form [data-testid="stForm"], .st-key-apd_form [data-testid="stForm"] { padding-top: 0 !important; }
+.st-key-apn_form, .st-key-apd_form { margin-top: -4px !important; }
 .st-key-apn_form [data-testid="stFormSubmitButton"] button, .st-key-apd_form [data-testid="stFormSubmitButton"] button { background: #E0895A !important; border-color: #E0895A !important;
   color: #fff !important; font-weight: 800; }
 @media (max-width: 640px) { .st-key-ask_panel { display: none !important; } }
@@ -6212,7 +6287,9 @@ def _ask_panel_send(question: str) -> None:
             # 검색 질문은 '네, N건 있어요' 를 말풍선으로 (규칙(의도) 질문은 그 안내 문장)
             say = res.summary if not res.query.intent else (res.text or "")
             chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards, "say": say,
-                         "head": "" if not res.query.intent else (res.summary or _ASK_HEADS.get(res.query.intent, ""))})
+                         "head": "" if not res.query.intent else (res.summary or _ASK_HEADS.get(res.query.intent, ""))
+                         # 내 주변: '· 내 위치에서 가까운 순 N건 팝업이에요' 처럼 몇 건인지 붙인다 (11/18 요청)
+                         + (f" {len(res.hits)}건 팝업이에요" if res.query.intent == "near" and not res.summary else "")})
             _ask_log(q)
     del chat[:-20]                 # 너무 길어지지 않게 최근 20개만
 
@@ -6317,8 +6394,19 @@ def _ask_panel_open(cafe_id: str) -> None:
 ASK_AVATAR = "app/static/ask_avatar.png"      # 로고의 토끼를 동그랗게 자른 그림
 
 
+_ASK_SPLIT = re.compile(r"(<[^>]+>|&[#\w]+;)")       # 태그·글자 참조(&#x27; 등)는 건드리지 않는다
+_ASK_NUM = re.compile(r"\d[\d,./:]*\d|\d")   # 1,234 · 12/04 · 11:39 는 한 덩어리
+
+
+def _ask_nums(html: str) -> str:
+    """답변 속 숫자만 굵은 포인트 민트로 (11/18 요청). 태그 안·글자 참조 안의 숫자는 그대로."""
+    return "".join(part if _ASK_SPLIT.fullmatch(part) else _ASK_NUM.sub(r'<b class="apn-num">\g<0></b>', part)
+                   for part in _ASK_SPLIT.split(html))
+
+
 def _ask_bot(html: str) -> str:
     """ANI:WHERE 말풍선: 왼쪽에 동그란 로고 캐릭터, 오른쪽에 둥근 회색 말풍선 (11/18 요청)."""
+    html = _ask_nums(html)
     return (f'<div class="apn-row"><img class="apn-ava" src="{ASK_AVATAR}" alt="ANI:WHERE">'
             f'<div class="apn-col"><div class="apn-name">ANI:WHERE</div><div class="apn-bot">{html}</div></div></div>')
 
@@ -6326,8 +6414,13 @@ def _ask_bot(html: str) -> str:
 def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> None:
     """대화 기록 · 예시 칩 · 입력칸. PC 옆 대화창(apn)과 모바일 팝업(apd)이 같은 기록(ask_chat)을 쓴다."""
     with st.container(height=log_height, border=False, key=f"{prefix}_log"):
-        st.markdown(_ask_bot('안녕하세요. 지금 등록된 팝업에서 찾아 드릴게요. <b>작품 · 지역 · 날짜</b>로 물어보면 더 정확해요.'),
-                    unsafe_allow_html=True)
+        # 첫 인사: 회원이면 닉네임을 불러 준다 (손님은 이름 없이, 11/18 요청)
+        me = _member()
+        # 닉네임 속 숫자는 '답변 숫자 민트' 에 걸리지 않게 글자 참조(&#57;)로 바꿔 둔다
+        nick = "".join(f"&#{ord(c)};" if c.isdigit() else c for c in escape(str((me or {}).get("nickname") or "")))
+        who = f' <b>{nick}</b>님' if nick else ""
+        st.markdown(_ask_bot(f'안녕하세요{who} 궁금하신 팝업에서 찾아 드릴게요 ! <b>작품 · 지역 · 날짜</b>로 물어보면 '
+                             '더 정확하게 찾을 수 있어요!'), unsafe_allow_html=True)
         for n, m in enumerate(st.session_state.get("ask_chat", [])):
             if m["role"] == "me":
                 st.markdown(f'<div class="apn-me"><span>{escape(m["text"])}</span></div>', unsafe_allow_html=True)

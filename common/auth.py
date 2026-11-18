@@ -26,7 +26,9 @@ import hashlib
 import hmac
 import json
 import os
+import sys
 import secrets
+import threading
 import time
 from dataclasses import dataclass
 from urllib.parse import urlencode
@@ -56,6 +58,9 @@ PROVIDERS = {
         # scope 를 콕 집어 요청하지 않는다: 카카오 앱에 '닉네임' 동의항목이 켜져 있지 않으면 로그인 뒤
         # "서비스 관리자에게 문의하세요(KOE205)" 로 막힌다. 비워 두면 켜 둔 동의항목만 묻고, 닉네임은 가입 화면에서 정한다
         "scope": "",
+        # 로그아웃한 뒤 다시 누르면 카카오가 브라우저에 남은 카카오 로그인으로 예전 계정을 바로 통과시킨다.
+        # 계정 고르는 화면을 늘 보여 줘서 다른 계정으로 가입·로그인할 수 있게 한다 (11/18 요청)
+        "extra": {"prompt": "select_account"},
     },
     "naver": {
         "label": "네이버",
@@ -65,6 +70,7 @@ PROVIDERS = {
         "id_env": "NAVER_LOGIN_CLIENT_ID",
         "secret_env": "NAVER_LOGIN_CLIENT_SECRET",
         "scope": "",                                 # 네이버는 개발자센터에서 '별명'만 체크
+        "extra": {"auth_type": "reauthenticate"},    # 같은 이유로 네이버 로그인을 다시 확인한다
     },
 }
 
@@ -164,6 +170,7 @@ def authorize_url(provider: str) -> str:
          "redirect_uri": redirect_uri(), "state": make_state(provider)}
     if p["scope"]:
         q["scope"] = p["scope"]
+    q.update(p.get("extra", {}))
     return f'{p["authorize"]}?{urlencode(q)}'
 
 
@@ -172,9 +179,31 @@ def member_key(provider: str, uid: str) -> str:
     return hashlib.sha256(f"{salt}:member:{provider}:{uid}".encode()).hexdigest()[:16]
 
 
+_EXCHANGED: dict[str, tuple[float, Identity]] = {}     # code 해시 → (시각, 결과). 같은 code 를 두 번 내지 않게
+_EX_LOCK = threading.Lock()
+
+
 def exchange(code: str, state: str, timeout: float = 10.0) -> Identity:
-    """돌아온 code 로 토큰을 받고 프로필에서 고유 번호·별명만 읽는다."""
+    """돌아온 code 로 토큰을 받는다. code 는 한 번만 쓸 수 있는데, 돌아온 화면이 두 번 그려지면(새로고침·다시 연결)
+    두 번째에 카카오가 KOE320 으로 거절했다 (11/18). 같은 code 면 10분 동안 첫 결과를 그대로 돌려준다."""
     provider = check_state(state)
+    ck = hashlib.sha256(code.encode()).hexdigest()
+    with _EX_LOCK:
+        now = time.time()
+        for k in [k for k, (t, _) in _EXCHANGED.items() if now - t > STATE_MAX_AGE]:
+            _EXCHANGED.pop(k, None)
+        hit = _EXCHANGED.get(ck)
+        if hit:
+            print(f"[auth] {provider} code {ck[:8]} 다시 옴 → 첫 결과 사용", file=sys.stderr)
+            return hit[1]
+        ident = _exchange(provider, code, state, timeout)
+        _EXCHANGED[ck] = (now, ident)
+        print(f"[auth] {provider} code {ck[:8]} 로그인 확인 성공", file=sys.stderr)
+        return ident
+
+
+def _exchange(provider: str, code: str, state: str, timeout: float) -> Identity:
+    """돌아온 code 로 토큰을 받고 프로필에서 고유 번호·별명만 읽는다."""
     p = PROVIDERS[provider]
     data = {"grant_type": "authorization_code", "client_id": os.getenv(p["id_env"], ""),
             "redirect_uri": redirect_uri(), "code": code}
@@ -186,7 +215,10 @@ def exchange(code: str, state: str, timeout: float = 10.0) -> Identity:
         tok = requests.post(p["token"], data=data, timeout=timeout).json()
         access = tok.get("access_token")
         if not access:
-            raise AuthError(f'{p["label"]} 로그인 확인에 실패했어요. 다시 시도해 주세요.')
+            # 왜 거절됐는지(카카오 KOE000 · 네이버 error) 화면과 서버 기록에 남긴다. 토큰·비밀값은 들어 있지 않다
+            why = str(tok.get("error_code") or tok.get("error") or "?")
+            print(f"[auth] {provider} token 실패: {why} {str(tok.get('error_description') or '')[:120]}", file=sys.stderr)
+            raise AuthError(f'{p["label"]} 로그인 확인에 실패했어요 ({why}). 다시 시도해 주세요.')
         prof = requests.get(p["profile"], headers={"Authorization": f"Bearer {access}"}, timeout=timeout).json()
     except requests.RequestException:
         raise AuthError(f'{p["label"]} 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.') from None
