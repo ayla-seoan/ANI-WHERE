@@ -68,7 +68,10 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
 - 공개 웹(`web/`, Vercel)도 회원 기능(로그인·북마크·리뷰·닉네임)을 쓴다. 회원 데이터 쓰기는 **서버 코드(서버 액션·route handler)에서만**, Supabase **anon 키**로만 한다 (service_role 금지). Streamlit 과 같은 표·같은 규칙(append-only, `common/auth.py` · `review.py` · `guard.py` 를 옮긴 `web/lib/server/`)을 지킨다.
   - 비밀값(`SUPABASE_ANON_KEY` · `AUTH_SECRET` · 카카오/네이버 client secret)은 서버 환경변수에만. `NEXT_PUBLIC_` 은 카카오 지도 JS 키 하나뿐이다.
   - 로그인 쿠키(`aw_session`) 모양을 바꾸면 Streamlit 쪽도 같이 바꾸고 `cd web && npm run test:auth` 로 두 쪽이 서로 읽히는지 확인한다.
-  - 회원 기능 시험은 실제 DB 가 아니라 `WEB_STORAGE=local` 로 (`web/scripts/e2e_member.py`). 등록하기 · 사진 올리기 · 관리자는 Streamlit 앱에만 있다 (웹은 링크).
+  - 회원 기능 시험은 실제 DB 가 아니라 `WEB_STORAGE=local` 로 (`web/scripts/e2e_member.py` · `e2e_extra.py` · `e2e_admin.py` · `e2e_popup.py` · `e2e_pages.py`).
+  - 웹은 Streamlit 으로 넘어가는 링크를 두지 않는다 (등록하기 · 수정하기 · 되돌리기 · 삭제 요청 · 관리자 `/data` · `/stats` · 블로그 후기 · 사진 올리기 · `/privacy` `/guide` `/design` `/ask` 모두 웹 안에서). Streamlit 화면을 바꾸면 웹도 같이 바꾼다.
+  - 웹에서 올린 사진은 Supabase Storage 공개 버킷 `uploads` (`supabase/migrations/011_storage.sql`) 에 서버가 EXIF 를 지우고 올리고, 저장소 칸에는 https 주소를 넣는다 (`common/images.py` 의 `Remote` 가 그 주소를 Streamlit 에서도 보여 준다).
+  - 종 알림 읽음 표시는 앱과 같은 쿠키(`aw_ntf_read_<sha1(회원 번호)[:8]>`, 알림 번호 = `sha1(글)[:8]`)를 쓴다. 앱의 알림 글(`_notices` · `_why_html`)을 바꾸면 `web/lib/server/ntf.ts` 도 같이 바꾼다.
 - MCP 서버(`mcp_server/`)는 읽기 전용. 쓰기 도구를 만들지 않고, `note`·`editor`·`source`·리뷰 본문·닉네임은 내보내지 않는다. stdout 에 print 하지 않는다.
 - 테스트·로컬 실행은 실제 `data/` 를 바꿀 수 있다 (앱을 켜면 Notion 동기화·기간 종료 처리가 돈다). 시험할 때는 `ANIWHERE_DATA_DIR` 로 임시 복사본을 쓴다 (`tests/e2e/conftest.py` 참고).
 - `.claude/hooks/` 가 커밋 전 검사(키·민감정보·코드 속 프롬프트)와 프롬프트 덮어쓰기 차단을 한다. 훅에 걸리면 우회하지 말고 원인을 고친다.

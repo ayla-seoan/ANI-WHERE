@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { APP_URL } from "@/lib/popup";
 
 // 가입 동의 (앱 _consent_boxes): 필수(만 14세 이상 · 이용약관 · 개인정보 수집·이용)와 선택(프로필 사진)을 따로.
 // 무엇을·왜·얼마나 보관하는지 표로 먼저 보여 주고, '약관 전체 동의' 로 한 번에 켤 수 있다.
@@ -62,7 +61,7 @@ export default function Consent({ kind, photoLabel }: { kind: "local" | "social"
       {photoLabel && box("photo", photoLabel)}
       <div className="consent-link consent-note">
         전문 보기:{" "}
-        <a href={`${APP_URL}/privacy`} target="_blank" rel="noopener noreferrer">
+        <a href="/privacy" target="_blank" rel="noopener">
           개인정보처리방침 · 이용약관
         </a>{" "}
         · 만 14세 미만은 가입할 수 없어요 (법정대리인 동의 절차를 갖추지 않았어요)

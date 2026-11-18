@@ -3,7 +3,7 @@
  * - 화면(HTML): 네트워크 먼저, 실패하면 저장된 화면 → 그것도 없으면 /offline
  * - 바꿀 때는 VERSION 을 올린다. activate 때 예전 캐시를 지운다.
  */
-const VERSION = "v3"; // v3: 회원 기능 — 로그인·내 캘린더 화면은 저장하지 않는다 (v2: 앱과 같은 화면, 기본 포스터·로고 바뀜)
+const VERSION = "v4"; // v4: 관리자·등록하기도 저장하지 않는다 (v3: 회원 기능 — 로그인·내 캘린더 화면은 저장하지 않는다, v2: 앱과 같은 화면)
 const STATIC_CACHE = `aniwhere-static-${VERSION}`;
 const PAGE_CACHE = `aniwhere-pages-${VERSION}`;
 const IMAGE_CACHE = `aniwhere-images-${VERSION}`;
@@ -89,8 +89,10 @@ self.addEventListener("fetch", (event) => {
   }
   if (url.origin !== self.location.origin) return;
 
-  // 로그인 · 가입 · 내 캘린더는 회원 개인 화면이라 저장하지 않는다 (공용 기기에서 오프라인으로 남지 않게)
-  if (request.mode === "navigate" && /^\/(login|auth|calendar)(\/|$)/.test(url.pathname)) return;
+  // 로그인 · 가입 · 내 캘린더 · 관리자 · 등록하기는 회원 개인 화면이라 저장하지 않는다 (공용 기기에서 오프라인으로 남지 않게)
+  if (request.mode === "navigate" && /^\/(login|auth|calendar|data|add)(\/|$)/.test(url.pathname)) return;
+  // 서버에 묻는 주소(내 주변 추천 · 블로그 후기)와 시험용 올린 사진은 저장하지 않는다
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/uploads/")) return;
 
   // 화면 이동 (주소창·링크로 새 페이지 열기)
   if (request.mode === "navigate") {

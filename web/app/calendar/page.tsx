@@ -9,6 +9,8 @@ import { displayName } from "@/lib/server/auth";
 import { inbox, myVisited, ruleSettings, whyOf } from "@/lib/server/member";
 import { calColor, calStatus, monthWeeks, noticeHistory, upcoming, type CalEvent } from "@/lib/server/mycal";
 import { getMe, getMyFavs } from "@/lib/server/session";
+import { histId, markId, ntfCookieName, ntfName, ntfRead } from "@/lib/server/ntf";
+import NtfHistory, { type HistItem } from "@/components/member/NtfHistory";
 
 // 내 캘린더 (회원만, 앱 render_my_calendar_view): 왼쪽 = 북마크한 팝업 달력 + 곧 있는 팝업,
 // 가운데 = 북마크 · 다녀온 팝업 · 최근 본 팝업, 오른쪽 = 알림 받은 내역 (최근 3일).
@@ -86,10 +88,30 @@ export default async function CalendarPage({ searchParams }: Props) {
     rules.open.enabled ? (rules.open.days ?? 3) : -1,
     rules.end.enabled ? (rules.end.days ?? 3) : -1,
   );
-  const box = (await inbox(me.key, rules, today)).filter(
-    (x) => x.when.slice(0, 10) >= new Date(Date.parse(today) - 2 * 86400000).toISOString().slice(0, 10),
-  );
+  // 받은 알림은 최근 3일만, 20개까지 (앱 _render_notice_history)
+  const box = (await inbox(me.key, rules, today))
+    .filter((x) => x.when.slice(0, 10) >= new Date(Date.parse(today) - 2 * 86400000).toISOString().slice(0, 10))
+    .slice(0, 20)
+    .map(({ id, title, body, why }) => ({ id, title, body, why }));
+  // 오늘 알림은 종과 같은 번호(읽음 공유), 지난 날 알림은 'h' 번호로 '지난 알림'
   let lastDay = "";
+  const histItems: HistItem[] = hist.slice(0, 40).map((h) => {
+    const head =
+      h.day !== lastDay ? (h.day === today ? "오늘" : `${Number(h.day.slice(5, 7))}월 ${Number(h.day.slice(8, 10))}일`) : "";
+    lastDay = h.day;
+    const why = whyOf(h.kind, rules);
+    return {
+      id: h.day === today ? markId(today, h.e.cafeId, h.label, ntfName(h.e.work, h.e.cafeName), why) : histId(h.day, h.e.cafeId, h.label),
+      head,
+      past: h.day !== today,
+      label: h.label,
+      work: h.e.work,
+      cafe: h.e.cafeName,
+      cafeId: h.e.cafeId,
+      poster: h.e.poster,
+      why,
+    };
+  });
 
   return (
     <div className="mycal">
@@ -198,46 +220,13 @@ export default async function CalendarPage({ searchParams }: Props) {
             </span>
           </span>
         </div>
-        {box.length > 0 && <div className="nh-day">받은 알림</div>}
-        {box.map((x) => (
-          <div key={x.id} className="ntf-item plain">
-            <b>{x.title}</b>
-            <br />
-            {x.body}
-            <div className="ntf-why">{x.why}</div>
-          </div>
-        ))}
-        {!hist.length && (
-          <div className="ntf-empty">
-            아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 여기에 쌓여요.
-          </div>
-        )}
-        {hist.slice(0, 40).map((h) => {
-          const head =
-            h.day !== lastDay
-              ? h.day === today
-                ? "오늘"
-                : `${Number(h.day.slice(5, 7))}월 ${Number(h.day.slice(8, 10))}일`
-              : "";
-          lastDay = h.day;
-          return (
-            <div key={`${h.day}-${h.e.cafeId}-${h.label}`}>
-              {head && <div className="nh-day">{head}</div>}
-              <Link href={`/popup/${h.e.cafeId}`} className={`ntf-item has-pst${h.day !== today ? " read" : ""}`}>
-                <span className="ntf-pst" style={posterBg(h.e.poster)} />
-                <span className="ntf-body">
-                  <span className="ntf-st">{h.day === today ? "새 알림" : "지난 알림"}</span>
-                  <b>{h.label}</b>
-                  <br />
-                  {h.e.work}
-                  <br />
-                  <span className="ntf-cafe">{h.e.cafeName}</span>
-                  <span className="ntf-why">{whyOf(h.kind, rules)}</span>
-                </span>
-              </Link>
-            </div>
-          );
-        })}
+        <NtfHistory
+          cookie={ntfCookieName(me.key)}
+          initial={await ntfRead(me.key)}
+          inbox={box}
+          hist={histItems}
+          nearKm={20}
+        />
       </section>
     </div>
   );

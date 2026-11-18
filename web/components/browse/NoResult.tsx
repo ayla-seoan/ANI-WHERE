@@ -1,5 +1,6 @@
 "use client";
-import { APP_URL, type Item } from "@/lib/popup";
+import Link from "next/link";
+import type { Item } from "@/lib/popup";
 import { applyCond, EMPTY, type Cond } from "./filters";
 import { SearchIcon } from "../Icons";
 
@@ -33,7 +34,7 @@ export default function NoResult({
         <SearchIcon />
       </div>
       <div className="empty-t">조건에 맞는 팝업이 없어요</div>
-      <div className="empty-s">조건을 하나씩 풀어 보거나, 찾는 팝업이 없다면 앱에서 직접 등록할 수 있어요.</div>
+      <div className="empty-s">조건을 하나씩 풀어 보거나, 찾는 팝업이 없다면 직접 등록할 수 있어요.</div>
       <div className="empty-relax">
         {counted.map((t) => (
           <button key={t.label} type="button" className="pill" onClick={() => set(t.patch)}>
@@ -45,9 +46,9 @@ export default function NoResult({
             조건 초기화
           </button>
         )}
-        <a className="pill" href={APP_URL} target="_blank" rel="noopener noreferrer">
-          앱에서 직접 등록
-        </a>
+        <Link className="pill" href="/add">
+          직접 등록
+        </Link>
       </div>
     </div>
   );

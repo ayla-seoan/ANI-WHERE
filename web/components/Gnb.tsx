@@ -3,7 +3,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { avatarUrl } from "@/lib/avatar";
-import { APP_URL } from "@/lib/popup";
 import { CloseIcon, SearchIcon } from "./Icons";
 import Bell, { type BellData } from "./member/Bell";
 import { useMember } from "./member/MemberContext";
@@ -69,9 +68,9 @@ export default function Gnb({ bell }: { bell: BellData | null }) {
               {filters ? <CloseIcon /> : <SearchIcon />}
             </button>
           )}
-          {me && bell && <Bell data={bell} owner={me.key4} />}
+          {me && bell && <Bell data={bell} />}
           {me?.admin && (
-            <a href={`${APP_URL}/data`} target="_blank" rel="noopener noreferrer" className="gnb-admin">
+            <Link href="/data" className="gnb-admin">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -85,7 +84,7 @@ export default function Gnb({ bell }: { bell: BellData | null }) {
                 <path d="M9 12l2 2 4-4" />
               </svg>
               관리자
-            </a>
+            </Link>
           )}
           {me ? (
             // 회원: 닉네임 글자 대신 프로필 사진 동그라미 → 마이페이지 (앱과 같게)

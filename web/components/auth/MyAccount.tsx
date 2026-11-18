@@ -1,8 +1,9 @@
 "use client";
 import { submitWith } from "@/lib/submit";
-import { startTransition, useActionState, useState } from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import {
   avatarDefaultAction,
+  avatarUploadAction,
   changePasswordAction,
   logoutAction,
   renameAction,
@@ -10,11 +11,11 @@ import {
   type FormState,
 } from "@/app/actions";
 import { avatarUrl } from "@/lib/avatar";
-import { APP_URL } from "@/lib/popup";
+import { toast } from "@/components/member/Toast";
 
 // 마이페이지 '내 계정' (앱 _my_account): 프로필 사진 · 닉네임 · 로그인 수단 · 가입일 · 회원 번호,
 // 닉네임 바꾸기 + 로그아웃, (아이디 가입) 비밀번호 바꾸기, 개인정보처리방침, 탈퇴하기.
-// 사진 올리기는 파일 저장소가 있는 ANI:WHERE 앱에서 (이 웹 서버에는 파일을 둘 곳이 없다).
+// 사진은 서버가 줄이고 위치 정보를 지운 뒤 사진 저장소(Supabase Storage)에 올린다. 잘 되면 앱처럼 가운데 토스트로 알린다.
 
 export type Account = {
   nick: string;
@@ -26,17 +27,15 @@ export type Account = {
   admin: boolean;
 };
 
+/** 실패는 칸 아래에, 성공은 앱(_avatar_saved · flash)처럼 가운데 토스트로 */
 function Msg({ s }: { s: FormState }) {
+  useEffect(() => {
+    if (s?.ok) toast(s.ok);
+  }, [s]);
   if (s?.error)
     return (
       <div className="auth-warn" role="alert">
         {s.error}
-      </div>
-    );
-  if (s?.ok)
-    return (
-      <div className="auth-ok" role="status">
-        {s.ok}
       </div>
     );
   return null;
@@ -48,6 +47,10 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
   const [ws, withdrawForm] = useActionState(withdrawAction, null);
   const [avs, setAvs] = useState<FormState>(null);
   const [openPhoto, setOpenPhoto] = useState(false);
+  const [preview, setPreview] = useState("");
+  const [agree, setAgree] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [avn, setAvn] = useState(0);
   const [openPw, setOpenPw] = useState(false);
   const [openOut, setOpenOut] = useState(false);
   const local = a.provider === "local";
@@ -83,24 +86,65 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
         <p className="cap">
           리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.
         </p>
-        <p className="cap">
-          사진 올리기는 ANI:WHERE 앱에서 할 수 있어요 (이 웹에는 사진 파일을 저장할 곳이 없어요). 같은 계정이라 올린
-          사진이 여기에도 보여요.
-        </p>
-        <div className="two">
-          <a className="btn-line" href={`${APP_URL}/login`} target="_blank" rel="noopener noreferrer">
-            앱에서 사진 올리기
-          </a>
-          <button
-            type="button"
-            className="btn-line"
-            onClick={async () => {
-              setAvs(await avatarDefaultAction());
-            }}
-          >
-            기본 사진 설정
-          </button>
-        </div>
+        <form
+          key={avn}
+          className="auth-form"
+          onSubmit={submitWith((fd) => {
+            setBusy(true);
+            avatarUploadAction(null, fd).then((r) => {
+              setBusy(false);
+              setAvs(r);
+              if (r?.ok) {
+                setPreview("");
+                setAgree(false);
+                setAvn((n) => n + 1); // 올리기 칸 비우기
+              }
+            });
+          })}
+        >
+          <label className="fl">
+            <span>사진 올리기 (png·jpg·webp, 5MB까지)</span>
+            <input
+              type="file"
+              name="photo"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                setPreview((old) => {
+                  if (old) URL.revokeObjectURL(old);
+                  return f ? URL.createObjectURL(f) : "";
+                });
+              }}
+            />
+          </label>
+          {preview && (
+            <div className="av-preview">
+              <img src={preview} alt="" />
+              <span>이 사진으로 바뀌어요 — 가운데를 동그랗게 잘라요</span>
+            </div>
+          )}
+          <label className="ck">
+            <input type="checkbox" name="agree" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+            <span>[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, &apos;기본 사진 설정&apos;을 누르면 바로 지워요</span>
+          </label>
+          <div className="two">
+            <button type="submit" className="btn-main" disabled={!preview || !agree || busy}>
+              {busy ? "사진을 줄여서 저장하는 중…" : "이 사진으로 저장"}
+            </button>
+            <button
+              type="button"
+              className="btn-line"
+              onClick={async () => {
+                setAvs(await avatarDefaultAction());
+              }}
+            >
+              기본 사진 설정
+            </button>
+          </div>
+        </form>
+        {(a.provider === "kakao" || a.provider === "naver") && (
+          <p className="cap">{a.providerLabel} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.</p>
+        )}
         <Msg s={avs} />
       </details>
 
@@ -156,9 +200,7 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
       )}
 
       <div className="consent-link">
-        <a href={`${APP_URL}/privacy`} target="_blank" rel="noopener noreferrer">
-          개인정보처리방침 · 이용약관
-        </a>
+        <a href="/privacy">개인정보처리방침 · 이용약관</a>
       </div>
       <div className="withdraw">
         <button type="button" className="withdraw-btn" onClick={() => setOpenOut((o) => !o)}>

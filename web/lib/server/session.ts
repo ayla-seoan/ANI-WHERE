@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { findMember, isAdmin, logVisit } from "./auth";
 import { myFavIds } from "./member";
-import { COOKIE, makeSession, readSession, SESSION_DAYS, signed, verified } from "./sign";
+import { AuthError, COOKIE, makeSession, readSession, SESSION_DAYS, signed, verified } from "./sign";
 import type { Row } from "./store";
 
 // 로그인 쿠키(aw_session): 서버가 HttpOnly · Secure · SameSite=Lax 로 심는다 (브라우저 스크립트는 못 읽는다).
@@ -31,6 +31,13 @@ export const getMe = cache(async (): Promise<Me | null> => {
   if (!row) return null;
   return { key: sess.k, provider: sess.p, row, admin: isAdmin(sess.k) };
 });
+
+/** 관리자만: 관리자가 아니면 AuthError (모든 관리자 읽기·쓰기 앞에서 서버가 다시 확인한다) */
+export async function requireAdmin(): Promise<Me> {
+  const me = await getMe();
+  if (!me || !me.admin) throw new AuthError("관리자만 볼 수 있어요.");
+  return me;
+}
 
 /** 내 북마크 팝업 id (한 요청에 한 번만). 손님이면 빈 목록 */
 export const getMyFavs = cache(async (): Promise<string[]> => {
@@ -99,7 +106,10 @@ export async function clearPending(): Promise<void> {
 
 // ---- 한 번 보이는 안내 (토스트) ----
 const FLASH = "aw_flash";
-export async function setFlash(msg: string): Promise<void> {
+/** 아이콘 종류 (앱 _toast 의 material 아이콘: check_circle · waving_hand · logout · login · error) */
+export type FlashKind = "ok" | "wave" | "logout" | "login" | "error";
+export async function setFlash(msg: string, kind: FlashKind = "ok"): Promise<void> {
   const jar = await cookies();
-  jar.set(FLASH, encodeURIComponent(msg.slice(0, 120)), { path: "/", maxAge: 30, sameSite: "lax" });
+  // 값은 Next 가 쿠키에 넣을 때 한 번 인코딩한다 (여기서 또 인코딩하면 화면에 %EB%… 가 그대로 보였다)
+  jar.set(FLASH, `${kind}|${msg.slice(0, 120)}`, { path: "/", maxAge: 30, sameSite: "lax" });
 }

@@ -31,7 +31,6 @@ export type Popup = {
 
 export type DataSource = "supabase" | "github" | "none";
 
-export const APP_URL = "https://ani-where.streamlit.app";
 /** 앱(Streamlit)의 static/default_poster.png 를 작게 줄인 것 */
 export const PLACEHOLDER_POSTER = "/default_poster.webp";
 

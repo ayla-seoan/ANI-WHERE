@@ -9,6 +9,13 @@
 흐름: 아이디 가입 → 로그아웃 → 틀린 비밀번호 → 로그인 → 북마크 → 내 캘린더에 보임 → 전화번호 든 리뷰 거절(화면·서버 둘 다)
 → 다녀온 후기(별점) 등록 → 수정 → 답글 → 삭제 → 닉네임 바꾸기 → 로그아웃 → 카카오(가짜) 처음 가입 → 다시 로그인 → 로그아웃.
 마지막에 local 파일이 append-only 로 쌓였는지(지운 행 없음, revision 이 1씩 늘어남) 확인한다.
+
+이어서 볼 것 (같은 서버, ADMIN_MEMBER_KEYS=e9b3081fcb7d7356 로 띄웠을 때):
+    e2e_extra.py  — 토스트(글자·아이콘·위치·z-index) · 리뷰/프로필 사진 올리기(EXIF 지움, 256px webp) · 종 알림(앱과 같은 번호·읽음 쿠키,
+                    내 주변 추천) · 최애 추가하기 · 관리자 리뷰 삭제 → 받은 알림
+    e2e_admin.py  — 관리자 대시보드 /data (삭제 요청 승인·거부 → 알림, 공지·알림 규칙)
+    e2e_popup.py  — 상세 수정하기 · 수정 이력 · 되돌리기 · 포스터 올리기 · 지도에서 내리기 · /add 등록하기
+    e2e_pages.py  — /privacy · /guide · /design · /ask · 블로그 후기 · 공유 버튼
 """
 import json
 import sys
@@ -132,7 +139,7 @@ def run(page, tag):
     newnick = f"테스트{tag}닉"
     page.fill("input[name=nickname]", newnick)
     page.get_by_role("button", name="저장", exact=True).click()
-    expect(page.locator(".auth-ok")).to_contain_text(newnick)
+    toast_has(page, newnick)  # 앱처럼 가운데 토스트로 알린다
     shot(page, f"web_{tag}_mypage")
     page.goto(f"{BASE}/")
     shot(page, f"web_{tag}_home_member")

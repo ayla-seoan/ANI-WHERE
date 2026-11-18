@@ -61,6 +61,7 @@ function imageUrls(v: unknown): string[] {
     const name = raw.trim();
     if (!name) continue;
     if (/^https:\/\//i.test(name)) out.push(name);
+    else if (/^\/uploads\/[0-9a-f]{12}\.(png|jpe?g|webp|gif)$/.test(name) && process.env.WEB_STORAGE === "local") out.push(name);
     else if (/^[\w.-]+\.(png|jpe?g|webp|gif|avif)$/i.test(name)) out.push(UPLOADS + encodeURIComponent(name));
   }
   return Array.from(new Set(out));
@@ -179,7 +180,8 @@ function attachRatings(popups: Popup[], ratings: Ratings): Popup[] {
 async function getJSON(url: string, headers?: Record<string, string>): Promise<unknown> {
   const res = await fetch(url, {
     headers,
-    next: { revalidate: REVALIDATE },
+    // 'popups' 꼬리표: 등록·수정하기·되돌리기를 저장하면 revalidateTag("popups") 로 바로 새로 읽는다
+    next: { revalidate: REVALIDATE, tags: ["popups"] },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -241,8 +243,29 @@ async function fromGitHub(): Promise<Popup[]> {
   return attachRatings(popups, ratings);
 }
 
+/** 시험용 local 모드 (WEB_STORAGE=local): GitHub 공개 기록 + 이 컴퓨터에 쌓은 시험 기록 (실제 DB 는 읽지도 쓰지도 않는다) */
+async function fromLocal(): Promise<Popup[]> {
+  const { rows } = await import("./server/store");
+  const all = (await rows("cafes")) as Row[];
+  const popups = attachCreated(toPopups(latestActive(all)), firstSeen(all));
+  const ratings: Ratings = new Map();
+  const sums = new Map<string, { s: number; n: number }>();
+  for (const r of latestActive((await rows("reviews")) as Row[])) {
+    const rating = num(r.rating);
+    if (str(r.parent_id) || rating === null || rating < 1 || rating > 5) continue;
+    const k = str(r.cafe_id);
+    const cur = sums.get(k) ?? { s: 0, n: 0 };
+    sums.set(k, { s: cur.s + rating, n: cur.n + 1 });
+  }
+  for (const [k, v] of sums) ratings.set(k, { avg: Math.round((v.s / v.n) * 10) / 10, n: v.n });
+  return attachRatings(popups, ratings);
+}
+
 /** 한 요청 안에서는 한 번만 읽는다 (React cache). 요청 사이는 fetch 캐시(10분)가 맡는다. */
 export const getPopupData = cache(async (): Promise<PopupData> => {
+  if ((process.env.WEB_STORAGE || "").toLowerCase() === "local") {
+    return { popups: await fromLocal(), source: "github", sourceLabel: "데이터: 시험용 로컬 저장소", note: "" };
+  }
   const url = process.env.SUPABASE_URL?.trim();
   const key = process.env.SUPABASE_ANON_KEY?.trim();
   let note = "";

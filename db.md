@@ -153,7 +153,7 @@ Supabase popups_current ──▶ Next.js 공개 웹 (ISR 10분) · MCP 서버 �
 | Automatically expose new tables | **끔** (Supabase 권장) | 권한을 `004_grants.sql` 로 필요한 만큼만 직접 준다 |
 | Enable automatic RLS | **켬** | 마이그레이션에서도 켜지만, 새 표를 만들 때 잊어도 RLS 가 걸리게 한 겹 더 |
 
-SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009 → 010` 순서로 돌린다. (005 = 아이디·비밀번호 가입, `docs/login.md` · 006·007 = 관리자 표, 10절)
+SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009 → 010 → 011` 순서로 돌린다. (005 = 아이디·비밀번호 가입, `docs/login.md` · 006·007 = 관리자 표, 10절)
 
 ## 10. 관리자 표 (006, 11/18)
 
@@ -199,3 +199,13 @@ SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 �
 - 한 줄 = 25번 호출 묶음 (`api='blog'`, `month='2026-11'`, `calls=25`). 이번 달 합계 = `calls` 의 합 + 아직 안 적은 수.
 - 합계가 30,000 이상이면 부르지 않는다. 표를 못 읽으면(010 전·연결 실패) 안전하게 부르지 않는다.
 - append-only (anon 은 SELECT·INSERT 만).
+
+## 14. 사진 저장소 (011, 11/19)
+
+공개 웹(Vercel)에는 파일을 둘 곳이 없어서, 웹에서 올리는 프로필 · 리뷰 · 포스터 사진은 **Supabase Storage 공개 버킷 `uploads`** 에 둔다.
+
+- 서버(Next.js 서버 액션)가 **anon 키로만** 올린다. 올리기 전에 위치·기기 정보(EXIF)를 지우고 픽셀만 다시 저장한다 (`web/lib/server/upload.ts`, `common/images.py` 와 같은 규칙. 프로필은 가운데 256px webp).
+- 이름은 무작위 12자 + 확장자. 정책은 **새 파일 넣기(insert) 하나뿐** — 이 버킷 · 이름 모양만. 종류(png·jpg·webp·gif)와 크기(20MB)는 버킷 설정으로 막는다. 고치기·지우기 정책은 없어서 anon 으로는 남의 사진을 바꾸거나 지울 수 없다.
+- 저장 칸(`members.avatar` · `reviews.images` · `cafes.images`)에는 공개 주소 `https://<프로젝트>.supabase.co/storage/v1/object/public/uploads/<이름>` 을 그대로 넣는다. Streamlit 은 `common/images.py` 의 `Remote` 로 이 주소를 보여 준다.
+- 한계: 리뷰를 지워도 Storage 의 사진 파일은 남는다 (지우기 정책을 열면 아무나 지울 수 있어서). 주소는 무작위라 추측하기 어렵지만, 꼭 지워야 하면 관리자가 Supabase 대시보드 Storage 에서 지운다.
+

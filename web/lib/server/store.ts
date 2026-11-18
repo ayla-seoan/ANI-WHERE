@@ -23,7 +23,23 @@ export const HEADERS: Record<string, string[]> = {
   notices: [...BASE, "target", "kind", "title", "body"],
   alert_rules: [...BASE, "rule", "enabled", "days", "max_items"],
   visits: [...BASE, "member", "day"],
+  // storage.HEADERS (팝업). 등록 · 수정하기 · 되돌리기 · 지도에서 내리기가 새 행을 쌓는다
+  cafes: [
+    ...BASE,
+    "cafe_name", "work", "characters", "address", "lat", "lng", "start_date", "end_date", "perks", "goods", "source",
+    "note", "images", "tags", "links", "editor", "intro", "intro_src",
+  ],
+  // admin.REQ_HEADERS (삭제 요청)
+  del_requests: [
+    ...BASE,
+    "target_type", "target_id", "target_title", "reason", "requester", "requester_nick", "decision", "admin_reason",
+    "decided_at",
+  ],
+  // 010_api_usage (외부 API 호출 수 — 블로그 검색 한 달 한도)
+  api_usage: [...BASE, "api", "month", "calls"],
 };
+const FLOATS = new Set(["lat", "lng"]); // DB 는 double precision (빈칸 ↔ null)
+const INTS = new Set(["revision", "calls"]); // DB 는 integer
 export type Table = keyof typeof HEADERS;
 
 export function mode(): Mode {
@@ -51,22 +67,53 @@ function fromDb(table: Table, r: Record<string, unknown>): Row {
   const out: Row = {};
   for (const h of HEADERS[table]) {
     const v = r[h];
-    out[h] = h === "revision" ? Number(v || 0) : v === null || v === undefined ? "" : String(v);
+    out[h] = INTS.has(h) ? Number(v || 0) : v === null || v === undefined ? "" : String(v);
   }
   return out;
 }
 
-function toDb(table: Table, r: Row): Record<string, string | number> {
-  const out: Record<string, string | number> = {};
+function toDb(table: Table, r: Row): Record<string, string | number | null> {
+  const out: Record<string, string | number | null> = {};
   for (const h of HEADERS[table]) {
     const v = r[h];
-    out[h] = h === "revision" ? Number(v || 0) : v === null || v === undefined ? "" : String(v);
+    if (FLOATS.has(h)) out[h] = v === "" || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v);
+    else out[h] = INTS.has(h) ? Number(v || 0) : v === null || v === undefined ? "" : String(v);
   }
   return out;
 }
 
 // ---------- local ----------
+let githubCafes: Row[] | null = null;
+/** local 모드의 팝업 표 = GitHub 공개 data/cafes.json (읽기만) + 이 폴더에 쌓은 시험 기록. revision 번호가 이어지게 */
+async function baseCafes(): Promise<Row[]> {
+  if (githubCafes) return githubCafes;
+  try {
+    const res = await fetch("https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/data/cafes.json", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    const raw = (await res.json()) as Record<string, unknown>[];
+    const got = Array.isArray(raw) ? raw.map((r) => fromDb("cafes", r)) : [];
+    if (got.length) githubCafes = got; // 받은 것만 기억한다 (한 번 실패해도 다음에 다시 받는다)
+    return got;
+  } catch {
+    return [];
+  }
+}
+
 async function readLocal(table: Table): Promise<Row[]> {
+  let mine: Row[] = [];
+  try {
+    const raw = JSON.parse(await fs.readFile(path.join(localDir(), `${table}.json`), "utf8"));
+    mine = Array.isArray(raw) ? raw.map((r) => fromDb(table, r)) : [];
+  } catch {
+    mine = [];
+  }
+  return table === "cafes" ? [...(await baseCafes()), ...mine] : mine;
+}
+
+/** local 모드: 이 폴더에 직접 쌓은 행만 (팝업 표에서 GitHub 분을 빼고) */
+async function readLocalOwn(table: Table): Promise<Row[]> {
   try {
     const raw = JSON.parse(await fs.readFile(path.join(localDir(), `${table}.json`), "utf8"));
     return Array.isArray(raw) ? raw.map((r) => fromDb(table, r)) : [];
@@ -160,9 +207,9 @@ export async function append(
     updated_at: nowIso(),
   });
   if (m === "local") {
-    const all = await readLocal(table);
-    all.push(record);
-    await writeLocal(table, all);
+    const own = await readLocalOwn(table);
+    own.push(record);
+    await writeLocal(table, own);
     return record;
   }
   const { root, headers } = sb();

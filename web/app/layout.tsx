@@ -1,6 +1,10 @@
+import Link from "next/link";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./member.css";
+import "./admin.css";
+import "./edit.css";
+import "./pages.css";
 import { getPopupData } from "@/lib/data";
 import Gnb from "@/components/Gnb";
 import Footer from "@/components/Footer";
@@ -10,9 +14,10 @@ import ScrollTop from "@/components/ScrollTop";
 import Toast from "@/components/member/Toast";
 import { MemberProvider, type MeLite } from "@/components/member/MemberContext";
 import type { BellData } from "@/components/member/Bell";
-import { bookmarkMarks, inbox, ruleSettings } from "@/lib/server/member";
+import { bookmarkMarks, inbox, ruleSettings, whyOf } from "@/lib/server/member";
+import { ntfCookieName, ntfRead } from "@/lib/server/ntf";
 import { getMe, getMyFavs } from "@/lib/server/session";
-import { APP_URL, todayKST } from "@/lib/popup";
+import { todayKST } from "@/lib/popup";
 
 const siteUrl =
   process.env.SITE_URL ||
@@ -50,6 +55,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     bell = {
       inbox: (await inbox(me.key, rules, today)).slice(0, 10),
       marks: bookmarkMarks(data.popups, new Set(favIds), rules, today),
+      cookie: ntfCookieName(me.key),
+      read: await ntfRead(me.key),
+      near: { on: rules.near.enabled, why: whyOf("near", rules) },
     };
   }
   const meLite: MeLite = me
@@ -86,18 +94,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             <Footer />
           </div>
           {me && (
-            // 오른쪽 아래 코랄색 + (등록): 등록하기는 사진 올리기가 있어 앱(Streamlit)에서 (회원에게만 보인다, 앱과 같게)
-            <a
-              className="add-fab"
-              href={`${APP_URL}/add`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="새 팝업 등록 (ANI:WHERE 앱에서)"
-            >
+            // 오른쪽 아래 코랄색 + (등록하기 /add, 회원에게만 보인다, 앱과 같게)
+            <Link className="add-fab" href="/add" aria-label="새 팝업 등록">
               <svg viewBox="0 0 24 24" aria-hidden>
                 <path d="M12 5v14M5 12h14" />
               </svg>
-            </a>
+            </Link>
           )}
           <Toast />
         </MemberProvider>

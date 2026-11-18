@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { APP_URL } from "@/lib/popup";
 
 export default function NotFound() {
   return (
@@ -9,15 +8,15 @@ export default function NotFound() {
       <p>
         끝나서 내려갔거나 주소가 바뀌었을 수 있어요.
         <br />
-        목록에서 다시 찾아보거나, 없는 팝업이면 앱에서 등록해 주세요.
+        목록에서 다시 찾아보거나, 없는 팝업이면 직접 등록해 주세요.
       </p>
       <div className="actions">
         <Link className="btn" href="/">
           팝업 찾기
         </Link>
-        <a className="btn ghost" href={APP_URL} target="_blank" rel="noopener noreferrer">
-          앱에서 등록
-        </a>
+        <Link className="btn ghost" href="/add">
+          등록하기
+        </Link>
       </div>
     </div>
   );
