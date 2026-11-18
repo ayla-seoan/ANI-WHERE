@@ -206,6 +206,8 @@ def test_5_리뷰에_전화번호를_넣으면_막힌다(page: Page, app_url, da
 
     expect(page.get_by_text(re.compile(r"민감한 개인정보\(.*전화번호.*\)는 입력할 수 없습니다"))).to_be_visible(timeout=LONG)
     send = page.get_by_role("button", name="리뷰 등록")
+    # 다시 그리는 동안 예전 탭의 버튼이 잠깐 같이 남아 있을 수 있다 → 하나만 남을 때까지 기다린다
+    expect(send).to_have_count(1, timeout=LONG)
     expect(send).to_be_disabled()
     send.click(force=True)             # 눌러도 저장되지 않아야 한다
     wait_idle(page)
@@ -275,38 +277,44 @@ def test_10_새로_가입하면_북마크가_비어_있다(page: Page, app_url, 
     expect(page.locator('[class*="st-key-fav_on_w_"]')).to_have_count(0)
 
 
-# ------------------------------------------------------------------ 11. 스토리 줄 · 최애 추가 (11/18)
-def test_11_최애를_고르면_스토리_맨_앞에_온다(page: Page, app_url, data_dir):
+# ------------------------------------------------------------------ 11. 스토리 줄 · 팝업 북마크 추가 (11/18)
+def test_11_팝업_북마크_추가로_고르면_관심있는_작품_맨_앞에_온다(page: Page, app_url, data_dir):
     open_list(page, app_url)
-    expect(page.locator(".st-key-stories .story").first).to_be_visible(timeout=LONG)
-    # 손님이 '최애 추가' 를 누르면 로그인 화면으로
+    expect(page.locator(".st-key-stories .story.add")).to_be_visible(timeout=LONG)
+    # 손님은 북마크가 없어 작품 없이 안내만
+    expect(page.locator(".st-key-stories .story.mark")).to_have_count(0)
+    # 손님이 '팝업 북마크 추가' 를 누르면 로그인 화면으로
     page.locator(".st-key-open_story_add button").click()
     expect(page).to_have_url(re.compile(r"/login"), timeout=LONG)
 
     sign_up(page, app_url)
     open_list(page, app_url)
-    first_before = page.locator(".st-key-stories .story .nm").first.inner_text()
+    expect(page.locator(".st-key-stories .story-empty")).to_be_visible(timeout=LONG)     # 새 회원도 아직 없음
     page.locator(".st-key-open_story_add button").click()
     dlg = page.locator('[role="dialog"]')
-    expect(dlg.get_by_text("놓치고 싶지 않은 작품을 골라 주세요")).to_be_visible(timeout=LONG)
-    # 맨 앞이 아닌 작품 하나를 고른다 (마지막 카드)
+    expect(dlg.get_by_text("놓치고 싶지 않은 팝업을 골라 주세요")).to_be_visible(timeout=LONG)
+    # 팝업 하나 (마지막 카드)
+    cards = dlg.locator('[class*="st-key-card_fw_"]')
     names = dlg.locator(".fwn").all_inner_texts()
-    pick = next(n for n in reversed(names) if n != first_before)
-    idx = names.index(pick)
-    dlg.locator(f".st-key-open_fw_{idx} button").click()
+    idx = len(names) - 1
+    pick = names[idx]
+    eid = next(c.split("st-key-card_fw_")[1].split()[0] for c in [cards.nth(idx).get_attribute("class")])
+    dlg.locator(f".st-key-open_fw_{eid} button").click()
     expect(dlg.locator(".fw-count b")).to_have_text("1", timeout=LONG)
     if os.getenv("E2E_SHOTS"):
         page.screenshot(path=os.path.join(os.getenv("E2E_SHOTS"), "fw_dialog.png"))
     dlg.get_by_role("button", name="저장하기").click()
     expect(dlg).to_have_count(0, timeout=LONG)
     wait_idle(page)
-    expect(page.locator(".st-key-stories .story.fav .nm").first).to_have_text(pick, timeout=LONG)
+    expect(page.locator(".st-key-stories .story.mark .nm")).to_have_text([pick], timeout=LONG)   # 북마크한 것만
+    # 고른 팝업은 정말 북마크됐다 (카드의 북마크 버튼이 '켜짐')
+    reveal(page, eid)
+    expect(page.locator(f".st-key-fav_on_w_{eid}")).to_be_attached(timeout=LONG)
     if os.getenv("E2E_SHOTS"):
         page.locator(".st-key-stories").screenshot(path=os.path.join(os.getenv("E2E_SHOTS"), "stories.png"))
     # 스토리를 누르면 그 작품 팝업만 보인다
     page.locator(".st-key-open_story_0 button").click()
     expect(page.locator(".st-key-stories .story.on .nm")).to_have_text(pick, timeout=LONG)
     wait_idle(page)
-    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
     works = page.locator(f"{CARD} .pcard .t").all_inner_texts()
     assert works and all(pick in w or w in pick for w in works), works
