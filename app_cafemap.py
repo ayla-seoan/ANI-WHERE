@@ -597,6 +597,12 @@ def _nick_only(name) -> str:
     return _author(name)[0]
 
 
+# 닉네임 칸 옆 ? 안내 (11/18 요청: 닉네임은 선택, 안 쓰면 자동)
+NICK_HELP = ("입력하지 않으면 칸에 흐리게 보이는 닉네임(꾸밈말 + 애니 캐릭터 이름)으로 자동으로 정해져요. "
+             "2~16자, 다른 회원과 같은 닉네임 · 욕설·음란한 말 · 관리자·운영자처럼 보이는 이름은 쓸 수 없어요. "
+             "가입한 뒤 마이페이지에서 언제든 바꿀 수 있어요.")
+
+
 def _suggest_nick(final: bool = False) -> str:
     """가입 화면 닉네임 칸에 흐리게 보여 줄 랜덤 닉네임 (이 화면에서는 늘 같은 것).
     칸을 비워 두고 가입하면 바로 이 닉네임으로 정한다 — 그사이 누가 먼저 썼으면 새로 짓는다 (11/18 요청)."""
@@ -5130,7 +5136,7 @@ def _login_body() -> None:
                                     label_visibility="collapsed", key="auth_mode") or "로그인"
     if mode == "로그인":
         st.markdown('<div class="auth-title">다시 오셨네요</div>'
-                    '<div class="auth-sub">아이디로 가입했다면 아래에, 카카오·네이버로 가입했다면 그 버튼으로 로그인해요.</div>',
+                    '<div class="auth-sub">아이디로 가입했다면 아래에, 카카오·네이버로 가입했다면 간편 로그인 가능해요.</div>',
                     unsafe_allow_html=True)
         _password_login_form()
         st.markdown('<div class="auth-or">또는 간편 로그인</div>', unsafe_allow_html=True)
@@ -5248,10 +5254,7 @@ def _password_signup_form() -> None:
         pw = st.text_input("비밀번호 (필수)", type="password", max_chars=auth.PW_MAX,
                            placeholder="영문+숫자 8자 이상", autocomplete="new-password")
         pw2 = st.text_input("비밀번호 확인 (필수)", type="password", max_chars=auth.PW_MAX, autocomplete="new-password")
-        nick = st.text_input("닉네임 (필수)", max_chars=auth.MAX_NICK,
-                             placeholder=_suggest_nick())
-        st.caption("비워 두면 칸에 흐리게 보이는 닉네임으로 정해져요. 다른 회원과 같은 닉네임, 욕설·음란한 말, "
-                   "관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
+        nick = st.text_input("닉네임 (선택)", max_chars=auth.MAX_NICK, placeholder=_suggest_nick(), help=NICK_HELP)
         consent = _consent_boxes("local", "pwc")
         st.markdown('<div class="auth-sub auth-guide">이메일·전화번호를 받지 않아서 <b>비밀번호를 잊으면 찾을 수 없어요.</b> '
                     '꼭 기억해 두세요. 프로필 사진(선택)은 가입한 뒤 마이페이지에서 올릴 수 있어요.</div>',
@@ -5423,10 +5426,8 @@ def _auth_body() -> None:
                 + (f"{label} 프로필 사진이 있어요. 아래 [선택] 항목에 동의하면 리뷰 옆에 보여요." if ident.avatar
                    else "프로필 사진은 선택이에요. 마이페이지에서 언제든 올릴 수 있어요.") + '</div>', unsafe_allow_html=True)
     with st.form("signup", border=False):
-        nick = st.text_input("닉네임", value=ident.nickname, max_chars=auth.MAX_NICK,
-                             placeholder=_suggest_nick())
-        st.caption("비워 두면 칸에 흐리게 보이는 닉네임으로 정해져요. 다른 회원과 같은 닉네임, 욕설·음란한 말, "
-                   "관리자·운영자처럼 보이는 이름은 쓸 수 없어요.")
+        nick = st.text_input("닉네임 (선택)", value=ident.nickname, max_chars=auth.MAX_NICK,
+                             placeholder=_suggest_nick(), help=NICK_HELP)
         consent = _consent_boxes("social", "soc", f"[선택] {label} 프로필 사진을 불러와 리뷰 옆에 보여 줘요 (사진 주소 저장, "
                                  "마이페이지에서 언제든 지울 수 있어요)" if ident.avatar else None)
         done = st.form_submit_button("가입하고 시작하기", type="primary", icon=":material/check:")

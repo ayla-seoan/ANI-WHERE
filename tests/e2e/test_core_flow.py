@@ -35,7 +35,7 @@ def sign_up(page: Page, url: str) -> None:
     f.get_by_label("아이디 (필수)").fill("qa_" + uuid.uuid4().hex[:8])
     f.get_by_label("비밀번호 (필수)").fill("qatest1234")
     f.get_by_label("비밀번호 확인 (필수)").fill("qatest1234")
-    f.get_by_label("닉네임 (필수)").fill("테스트봇" + uuid.uuid4().hex[:4])   # 닉네임 중복 가입 금지 (11/18)
+    f.get_by_role("textbox", name="닉네임 (선택)").fill("테스트봇" + uuid.uuid4().hex[:4])   # 중복 금지 · 칸 옆 ? 가 있어 역할로 찾음
     # 필수 동의 3개 (만 14세 이상 · 이용약관 · 개인정보 수집·이용) — 11/18 개인정보 설계
     for i in range(3):
         f.locator('[data-testid="stCheckbox"] label').nth(i).click()
