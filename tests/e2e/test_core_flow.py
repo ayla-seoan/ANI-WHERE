@@ -70,8 +70,21 @@ def pick_cafe(data_dir, with_links: bool = False) -> dict:
     return rows[0]
 
 
+def reveal(page: Page, eid: str) -> None:
+    """리스트는 처음 24장만 그린다 (11/18 속도). 그 카드가 보일 때까지 '더 보기' 를 누른다."""
+    for _ in range(20):
+        if page.locator(f".st-key-card_w_{eid}").count():
+            return
+        more = page.locator(".st-key-list_more_btn button")
+        if not more.count():
+            return
+        more.click()
+        wait_idle(page)
+
+
 def open_detail(page: Page, eid: str) -> None:
     """카드 전체를 덮는 '자세히 보기' 버튼을 눌러 상세를 연다."""
+    reveal(page, eid)
     page.locator(f".st-key-open_{eid} button").click(force=True)
     expect(page.locator(".dtitle")).to_be_visible(timeout=LONG)
     wait_idle(page)
@@ -81,8 +94,13 @@ def open_detail(page: Page, eid: str) -> None:
 def test_1_목록이_뜬다(page: Page, app_url):
     n = open_list(page, app_url)
     assert n > 0, "팝업 카드가 하나도 없습니다"
-    # 머리글 '팝업 카페 N곳' 의 숫자와 실제 카드 수가 같아야 한다
-    expect(page.get_by_text(re.compile(rf"팝업 카페\s*{n}\s*곳"))).to_be_visible()
+    # 머리글 '팝업 카페 N곳' 의 N 은 전체 수, 카드는 처음 24장까지만 그리고 나머지는 '더 보기' (11/18 속도)
+    total = int(re.search(r"팝업 카페\s*(\d+)\s*곳", page.locator(".st-key-listbar").inner_text()).group(1))
+    assert n == min(total, 24), f"처음 카드 수 {n} (전체 {total})"
+    if total > 24:
+        page.locator(".st-key-list_more_btn button").click()
+        wait_idle(page)
+        assert page.locator(CARD).count() == min(total, 48)
 
 
 # ------------------------------------------------------------------ 2. 검색/필터

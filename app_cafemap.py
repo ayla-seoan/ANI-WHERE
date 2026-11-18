@@ -177,6 +177,12 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   .st-key-listtools .st-key-regions [data-testid="stMultiSelectTagsContainer"] {{ min-height: 30px !important; padding-top: 0 !important;
     padding-bottom: 0 !important; }}
   .st-key-listtools .st-key-regions input {{ height: 26px !important; font-size: .88rem !important; }}
+  /* 고른 지역 칩이 칸(32px)보다 커서 위로 삐져나왔다 → 칩을 칸 안에 맞추고 위아래 가운데로 (11/18 요청) */
+  .st-key-listtools .st-key-regions [data-testid="stMultiSelectTagsContainer"] {{ align-items: center !important; }}
+  .st-key-listtools .st-key-regions [role="group"] {{ align-items: center !important; }}
+  .st-key-listtools .st-key-regions [data-tag] {{ height: 24px !important; margin-top: 0 !important; margin-bottom: 0 !important;
+    padding-top: 0 !important; padding-bottom: 0 !important; font-size: .8rem !important; display: inline-flex !important; align-items: center !important; }}
+  .st-key-listtools .st-key-regions [data-tag] span {{ line-height: 24px !important; }}
 }}
 /* 목록 위 '팔로우' 스위치는 칸 오른쪽 끝, 바로 옆 '지역 고르기' 에 붙인다 */
 .st-key-listtools [data-testid="stColumn"]:has([class*="st-key-folsw_"]) [data-testid="stVerticalBlock"] {{ align-items: flex-end; }}
@@ -184,6 +190,32 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ min-height: 32px; }}
 /* PC 에서는 이 아이콘 묶음이 비어 있다(필터·보기 전환은 모바일 전용) → 자리도 없애서 '팝업 카페 N곳' 줄이 위로 붙게 (11/18 요청) */
 @media (min-width: 641px) {{ [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools), .st-key-view_tools {{ display: none !important; }} }}
+/* PC 리스트 위: 정렬 칸은 글자 수(최대 6자)에 맞게, 지역 고르기도 짧게 — 남는 폭은 '팝업 카페 N곳' 쪽으로 (11/18 요청) */
+@media (min-width: 641px) {{
+  .st-key-listtools [data-testid="stColumn"]:has(.st-key-sort) {{ flex: 0 0 150px !important; width: 150px !important; min-width: 0 !important; }}
+  /* 지역 고르기: 처음엔 240px, 지역을 더 고르면 왼쪽으로 늘어난다 (북마크 버튼도 함께 밀림) — 최대 '팝업 카페 N곳' 바로 옆까지 */
+  .st-key-listtools [data-testid="stHorizontalBlock"]:has(.st-key-regions) {{ flex-wrap: nowrap !important; }}
+  .st-key-listtools [data-testid="stColumn"]:has(.st-key-regions) {{ flex: 0 1 auto !important; width: auto !important; min-width: 240px !important; }}
+  .st-key-listtools .st-key-regions, .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] {{ width: max-content !important;
+    min-width: 240px !important; max-width: 100% !important; margin-left: auto; }}
+  .st-key-listtools .st-key-regions [data-testid="stMultiSelectTagsContainer"] {{ flex-wrap: wrap !important; }}
+  /* 지역을 고른 뒤 입력 커서 칸이 다음 줄로 내려가 칩이 위로 뜨지 않게: 커서 칸은 남는 폭만 쓴다 */
+  .st-key-listtools .st-key-regions [data-testid="stMultiSelectTagsContainer"]:has([data-tag]) > input {{ flex: 1 1 0 !important; min-width: 4px !important; width: 4px !important; }}
+  .st-key-listtools [data-testid="stColumn"]:has(.st-key-listbar) {{ flex: 0 0 auto !important; min-width: max-content !important; width: auto !important; }}
+  .st-key-listtools .st-key-listbar h4 {{ white-space: nowrap !important; }}
+  .st-key-listtools [data-testid="stColumn"]:has([class*="st-key-folsw_"]) {{ flex: 0 0 auto !important; width: auto !important; margin-left: auto !important; }}
+}}
+/* 리스트 '더 보기': 카드 아래 여백 두고 가운데. 모바일은 아이콘만 (11/18 요청) */
+.st-key-list_more {{ width: 100% !important; justify-content: center !important; justify-items: center !important;
+  grid-template-columns: 1fr !important; margin-top: 18px !important; }}
+[data-testid="stLayoutWrapper"]:has(> .st-key-list_more) {{ width: 100% !important; flex: 1 1 100% !important; }}
+.st-key-list_more button {{ border-radius: 999px !important; }}
+@media (max-width: 640px) {{
+  .st-key-list_more button {{ width: 44px !important; min-width: 44px !important; height: 44px !important; padding: 0 !important;
+    justify-content: center !important; border: 1.5px solid var(--accent) !important; background: #fff !important; }}
+  .st-key-list_more button p, .st-key-list_more button [data-testid="stMarkdownContainer"] {{ display: none !important; }}
+  .st-key-list_more button span {{ margin: 0 !important; font-size: 1.6rem !important; color: var(--accent-deep) !important; }}
+}}
 .st-key-view_tools {{ justify-content: flex-end !important; align-items: center; gap: 6px !important; flex-wrap: nowrap !important; }}
 .st-key-view_tools > div {{ width: auto !important; flex: 0 0 auto !important; }}
 .st-key-view_tools.pinned button {{ box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }}
@@ -793,6 +825,9 @@ def _blog_posts(entry_id: str, work: str, cafe_name: str, start_date: str, addre
     return [{**p.__dict__, "thumb": th} for p, th in blog.with_thumbs(posts)], err
 
 
+_BLOG_COUNT: dict[str, int] = {}     # 이 서버에서 한 번 검색한 팝업의 블로그 글 수 (탭 이름에 쓰려고)
+
+
 def _blog_list(current: dict) -> list[dict]:
     if not blog.enabled():
         return []
@@ -802,6 +837,7 @@ def _blog_list(current: dict) -> list[dict]:
                                str(current.get("address") or ""))
     except Exception:
         return []
+    _BLOG_COUNT[str(current.get("entry_id"))] = len(posts)
     return posts
 
 
@@ -899,13 +935,16 @@ def render_detail_tabs(current: dict) -> None:
     tab_review, tab_edit = st.tabs([f":material/chat_bubble: 리뷰 {n}", ":material/edit: 수정하기"], key=f"detail_tabs_{entry_id}",
                                    on_change="rerun")
     with tab_review:
-        posts = _blog_list(current)
         sub = st.session_state.get(f"rvsub_{entry_id}", "review")
+        # 속도 (11/18): 블로그 검색(네이버, 0.5초 넘게)은 '블로그 후기' 탭을 열 때만. 그 전엔 아는 개수만 탭 이름에
+        posts = _blog_list(current) if sub == "blog" else None
+        n_blog = len(posts) if posts is not None else _BLOG_COUNT.get(entry_id)
 
         def subtabs() -> bool:
             # 리뷰 쓰기 칸 아래에 '리뷰 후기 / 블로그 후기' (11/18 요청)
             with st.container(horizontal=True, key="rv_subtabs"):
-                for k, label in (("review", f"리뷰 후기 ({n})"), ("blog", f"블로그 후기 ({len(posts)})")):
+                for k, label in (("review", f"리뷰 후기 ({n})"),
+                                 ("blog", "블로그 후기" + (f" ({n_blog})" if n_blog is not None else ""))):
                     st.button(label, key=f"rvsub_{'on_' if sub == k else ''}{k}_{entry_id}",
                               on_click=lambda k=k: st.session_state.update({f"rvsub_{entry_id}": k}))
             if sub == "blog":
@@ -1874,6 +1913,9 @@ def _view_switch(wide: bool) -> None:
         st.rerun()
 
 
+LIST_PAGE = 24         # 리스트 보기에서 처음 보여 줄 카드 수 (4열 × 6줄). '더 보기' 로 24장씩 더
+
+
 def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | None = None,
                 fcond: dict | None = None) -> None:
     """카페 카드 목록. wide 면 지도 없이 화면 전체에 4열로 깐다."""
@@ -1904,12 +1946,22 @@ def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | N
                             for i, (_, r) in enumerate(view.iterrows()))
         st.markdown(f"<style>@media (max-width: 640px) {{ {order_css} }}</style>", unsafe_allow_html=True)
         with st.container(key="wide_grid"):
+            # 속도 (11/18): 카드를 한꺼번에 100장 넘게 그리면 클릭마다 화면 조각 400여 개·150KB 를 다시 보낸다 →
+            # 처음엔 LIST_PAGE 장만, 아래 '더 보기' 로 더. 조건(검색·지역·정렬)이 바뀌면 다시 처음 장수로
+            sig = hash(tuple(view["entry_id"]))
+            if st.session_state.get("_list_sig") != sig:
+                st.session_state.update(_list_sig=sig, list_n=LIST_PAGE)
+            n_show = int(st.session_state.get("list_n", LIST_PAGE))
             grid = st.columns(4, gap="small")
-            for i, (_, r) in enumerate(view.iterrows()):
+            for i, (_, r) in enumerate(view.head(n_show).iterrows()):
                 with grid[i % 4], st.container(key=f"card_w_{r['entry_id']}"):
                     st.markdown(_poster_card(r, _status(r)[0]), unsafe_allow_html=True)
                     open_button(r)
                     _heart(r["entry_id"], "w")
+            if len(view) > n_show:
+                with st.container(horizontal=True, horizontal_alignment="center", key="list_more"):
+                    st.button(f"더 보기 ({len(view) - n_show}곳 더)", icon=":material/expand_more:", key="list_more_btn",
+                              on_click=lambda: st.session_state.update(list_n=n_show + LIST_PAGE))
         return
 
     # 반반 보기: 페이지를 스크롤하면 리스트만 내려가고 지도는 화면에 붙어 있다 (LIST_CSS 의 sticky)
@@ -2337,9 +2389,9 @@ iframe[src*="kakao_map"] {{
 .dcafe {{ font-weight:800; font-size:1.1rem; color:#1F2A27; line-height:1.6; }}
 .daddr {{ color:#3F4A47; font-size:1rem; }}
 /* 지도에서 확인하기: 위치 줄 오른쪽 끝에 붙는 작은 흰 알약 버튼 (줄 맨 위에 맞춘다) */
-.dbtn {{ flex:0 0 auto; align-self:flex-start; margin-left:auto; padding:.3rem .85rem; border:1px solid #DDE2E0;
+.dbtn {{ flex:0 0 auto; align-self:flex-start; margin-left:auto; padding:.18rem .65rem; border:1px solid #DDE2E0;
         border-radius:999px; background:#fff; color:#26302D !important; text-decoration:none !important;
-        font-size:.92rem; font-weight:700; white-space:nowrap; }}
+        font-size:.78rem; font-weight:700; white-space:nowrap; }}   /* 작게 (11/18 요청) */
 .dbtn:hover {{ border-color:{MINT}; color:{MINT_DEEP} !important; }}
 /* 모바일: 지도에서 확인하기는 주소 바로 아래, 주소와 같은 왼쪽 선에 (11/18 요청) */
 @media (max-width: 640px) {{
@@ -3072,7 +3124,8 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
   border-radius: 50%; border: 1.5px solid var(--accent); background: #fff; color: var(--accent-deep); align-items: center;
   justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.16); cursor: pointer; padding: 0; }
 #aw-top .material-symbols-rounded { font-size: 28px; line-height: 1; }
-@media (min-width: 641px) { #aw-top { display: none !important; } }
+/* PC 에서도 스크롤하면 화면 아래 가운데에 '맨 위로' (11/18 요청) */
+@media (min-width: 641px) { html.aw-top-on body #aw-top { display: flex; } }
 @media (max-width: 640px) {
   /* 모바일: 메뉴바의 글자 탭은 숨기고, 필터 아이콘 옆 '보기 전환 아이콘'(지도 ↔ 리스트)으로 — 위에 늘 붙어 있다 (11/18 요청) */
   .st-key-gnb > *:has(.st-key-gnb_tabs), html body .st-key-gnb .st-key-gnb_tabs { display: none !important; }
@@ -3999,7 +4052,7 @@ def page_map() -> None:
     ss["regions_m"] = [r for r in ss.get("regions", []) if r in areas]
     with fbox, st.container(key="m_only"):
         _follow_switch("folswm")
-        st.multiselect("지역", areas, key="regions_m", placeholder="지역 고르기 (여러 곳 가능)",
+        st.multiselect("지역", areas, key="regions_m", placeholder="지역 고르기 (여러 곳 가능)", select_all=False,
                        on_change=lambda: ss.update(regions=ss["regions_m"]))
 
     # 띄어쓰기는 보지 않는다 · '아냐' 는 '아냐 포저' 로도 찾힌다 (_filter_view)
@@ -4044,7 +4097,7 @@ def page_map() -> None:
     with region:
         # 지금 등록된 카페가 있는 지역만, 카드 배지와 같은 이름으로. 여러 곳을 함께 고를 수 있다
         st.multiselect("지역", areas, key="regions", label_visibility="collapsed",
-                       placeholder="지역 고르기 (여러 곳 가능)")
+                       placeholder="지역 고르기 (여러 곳 가능)", select_all=False)   # 기본이 전체라 '전체 선택' 은 뺌 (11/18)
     with sort:
         _view_icon_button(wide, active, m_open)
         st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
@@ -5528,6 +5581,10 @@ def _auth_body() -> None:
             _login_done(row, f"{row['nickname']}님, 환영합니다!")
             go("map")
             return
+    if not ident and _member():
+        # 이미 로그인됨: 로그인을 마친 뒤 이 화면이 한 번 더 그려지면 안내 대신 메인으로 (11/18)
+        go("map")
+        return
     if not ident:
         st.info("로그인 화면에서 시작해 주세요.", icon=":material/info:")
         st.page_link(PAGES["login"], label="로그인하기", icon=":material/login:")
@@ -6193,6 +6250,8 @@ ASK_PANEL_CSS = """
   flex: 0 0 auto !important; }   /* Streamlit 기본 flex:1 1 0% 이면 높이가 무시돼 대화창이 내용만큼 줄어든다 */
 .st-key-ask_panel > * { flex: 0 0 auto; }
 .apn-num { color: var(--accent); font-weight: 800; }
+/* 답변 속 굵은 글자(작품·지역·날짜, 닉네임, 건수 등)는 모두 포인트 민트로 (11/18 요청) */
+.apn-bot b, .apn-bot strong { color: var(--accent); font-weight: 800; }
 /* 페이지 맨 아래까지 내려도 물어보기 창이 같은 자리에 붙어 있게: 창이 든 줄이 페이지 끝까지 닿도록 아래 기본 여백(96px)을 줄인다 (11/18 요청) */
 @media (min-width: 641px) { [data-testid="stMainBlockContainer"]:has(.st-key-ask_panel) { padding-bottom: 19px !important; } }
 .st-key-ask_panel > *:has(.st-key-apn_log), .st-key-ask_panel > .st-key-apn_log {
@@ -6423,6 +6482,12 @@ def _ask_nums(html: str) -> str:
                    for part in _ASK_SPLIT.split(html))
 
 
+def _guide_head() -> str:
+    """못 알아들음 안내: '작품 이름 · 장소 · 날짜' 를 굵은 포인트 색으로 (11/18 요청, .apn-bot b)."""
+    key = "작품 이름 · 장소 · 날짜"
+    return escape(ask.GUIDE_HEAD).replace(key, f"<b>{key}</b>", 1)
+
+
 def _ask_bot(html: str) -> str:
     """ANI:WHERE 말풍선: 왼쪽에 동그란 로고 캐릭터, 오른쪽에 둥근 회색 말풍선 (11/18 요청)."""
     html = _ask_nums(html)
@@ -6438,7 +6503,7 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
         # 닉네임 속 숫자는 '답변 숫자 민트' 에 걸리지 않게 글자 참조(&#57;)로 바꿔 둔다
         nick = "".join(f"&#{ord(c)};" if c.isdigit() else c for c in escape(str((me or {}).get("nickname") or "")))
         who = f' <b>{nick}</b>님' if nick else ""
-        st.markdown(_ask_bot(f'안녕하세요{who} 궁금하신 팝업에서 찾아 드릴게요 ! <b>작품 · 지역 · 날짜</b>로 물어보면 '
+        st.markdown(_ask_bot(f'안녕하세요{who} 궁금하신 팝업에서 찾아 드릴게요!<br><b>작품 · 지역 · 날짜</b>로 물어보면 '
                              '더 정확하게 찾을 수 있어요!'), unsafe_allow_html=True)
         for n, m in enumerate(st.session_state.get("ask_chat", [])):
             if m["role"] == "me":
@@ -6453,7 +6518,7 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
             else:
                 if m.get("guide"):           # 못 알아들음: 안내 한 줄 + 예시는 작은 민트 테두리 상자 (11/18 요청)
                     ex = "".join(f'<span class="apn-ex">{escape(x)}</span>' for x in ask.GUIDE_EXAMPLES)
-                    st.markdown(_ask_bot(f'{escape(ask.GUIDE_HEAD)}<div class="apn-exbox"><b>이렇게 물어보세요</b>{ex}</div>'),
+                    st.markdown(_ask_bot(f'{_guide_head()}<div class="apn-exbox"><b>이렇게 물어보세요</b>{ex}</div>'),
                                 unsafe_allow_html=True)
                 else:
                     st.markdown(_ask_bot(escape(m["text"]).replace(chr(10), "<br>")), unsafe_allow_html=True)
