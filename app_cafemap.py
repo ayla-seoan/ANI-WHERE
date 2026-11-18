@@ -3339,7 +3339,8 @@ MYCAL_CSS = """
 .nh-name { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 /* 알림 받은 내역 = 데일리 팝업 노트 모양: 둥근 포스터 · 작은 태그 · 굵은 이름 한 줄, 점선으로 잇기 */
 .st-key-ntf_box { padding: 12px 12px !important; }
-.st-key-ntf_box .mc-title { font-family: inherit; text-align: center; color: #6B7672; font-size: .78rem; font-weight: 700; margin: 0 0 2px; }
+.st-key-ntf_box .mc-title { font-family: inherit; text-align: center; color: var(--accent-deep, #0d9488); font-size: .82rem;
+  font-weight: 800; margin: 0 0 2px; }   /* 포인트 색 (11/18 요청) */
 .st-key-ntf_box .mc-sub { text-align: center; font-size: .7rem; line-height: 1.4; margin-bottom: 6px; }
 .st-key-ntf_box .nh-day { font-size: .7rem; margin: 12px 0 6px; }
 .st-key-ntf_box .nh-item { background: transparent; padding: 0 0 12px; gap: 10px; border-radius: 0; position: relative; }
@@ -3573,6 +3574,10 @@ BOX_CSS = """
 .nh-tip b { color: #7BE3CF; }
 .nh-help:hover .nh-tip, .nh-help:focus .nh-tip { display: block; }
 .st-key-ntf_box [class*="ntfc_"], .st-key-ntf_box .ntf-item.plain { margin-bottom: 8px; }
+/* 알림 받은 내역: 흰 카드 + 테두리 (안 읽은 알림은 민트 테두리) — 11/18 요청 */
+.st-key-ntf_box .ntf-item { background: #fff; border: 1.5px solid #E3E8E6; border-radius: 14px; }
+.st-key-ntf_box .ntf-item:not(.read) { border-color: var(--accent); }
+.st-key-ntf_box [class*="ntfc_"]:hover .ntf-item { outline: none; border-color: var(--accent-deep); box-shadow: 0 4px 14px rgba(20,184,166,.14); }
 .st-key-keep_box [data-testid="stMarkdownContainer"]:has(.bxr) { margin-bottom: 4px !important; }
 .bxc { display: flex; gap: 12px; background: #fff; border: 1.5px solid #E3E8E6; border-radius: 16px; padding: 10px; }
 .bxc img.pst { width: 82px; height: 110px; object-fit: cover; border-radius: 10px; flex: 0 0 82px; }
@@ -6192,7 +6197,10 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                             _ask_panel_open(cid)
                             st.rerun()
                     else:
-                        st.button(f"{card['work']} 상세 보기", key=key, on_click=_ask_panel_open, args=(cid,))
+                        # 대화창은 따로 다시 그려지는 칸(fragment)이라, 상세로 갈 때만 화면 전체를 다시 그린다
+                        if st.button(f"{card['work']} 상세 보기", key=key):
+                            _ask_panel_open(cid)
+                            st.rerun(scope="app")
     # 새 답이 생기면 대화창을 마지막 대화의 처음(방금 한 질문)이 맨 위에 오게 내린다 (11/18 요청). 대화 수가 바뀔 때만
     n_chat = len(st.session_state.get("ask_chat", []))
     if st.session_state.get(f"_{prefix}_seen") != n_chat:
@@ -6221,6 +6229,12 @@ def render_ask_panel() -> None:
     """PC 리스트 옆 대화창 (모바일에서는 숨기고 플로팅 버튼 → 팝업으로)."""
     st.markdown(ASK_PANEL_CSS, unsafe_allow_html=True)
     st.markdown('<div class="apn-head"><span class="apn-title">ANI:WHERE에게 물어보기</span></div>', unsafe_allow_html=True)
+    _ask_panel_live()
+
+
+@st.fragment
+def _ask_panel_live() -> None:
+    """질문을 보내면 대화창만 다시 그린다 (11/18: 화면 전체가 다시 그려져 느렸음). 카드의 '상세 보기'만 전체를 다시 그림."""
     _ask_chat_body("apn", 430)
 
 
