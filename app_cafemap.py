@@ -3567,6 +3567,8 @@ BOX_CSS = """
 [class*="st-key-bx_"]:hover .bxc { background: #F1FAF7; border-color: var(--accent); box-shadow: 0 4px 14px rgba(20,184,166,.14); }
 /* 다녀온 후기 상자가 칸 아래 테두리에 겹치지 않게 아래 여백 (11/18) */
 .st-key-keep_box, .st-key-ntf_box { padding-bottom: 22px !important; }
+/* 알림 받은 내역 칸: 포인트 색 테두리 (11/18 요청) */
+.st-key-ntf_box { border: 2px solid var(--accent) !important; box-shadow: 0 4px 16px rgba(20,184,166,.10); }
 /* '내 주변 추천' 옆 회색 ? : 커서를 올리면 추천 기준 안내 */
 .nh-help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px;
   border-radius: 50%; background: #E3E8E6; color: #6B7672; font-size: .66rem; font-weight: 900; cursor: help; margin-left: 4px;
