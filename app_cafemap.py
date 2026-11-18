@@ -246,7 +246,9 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
   .stMain:has(.st-key-map_row) [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) {{ margin-top: -9px; }}
   [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: -11px; }}
   /* 관심 작품 줄 아래 '마지막 업데이트' 가 지도 칸 위에 겹치지 않게 (11/18) */
-  .stMain:has(.st-key-stories) [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: 4px; }}
+  /* 모바일 지도 보기: 지도 칸을 탭 바로 아래로 올리고, 필터 아이콘은 지도 위에 겹쳐 띄운다 (11/18 요청) */
+  .stMain:has(.st-key-m_filter_btn) [data-testid="stLayoutWrapper"]:has(> .st-key-map_row) {{ margin-top: -57px; }}
+  .st-key-view_tools {{ position: relative; z-index: 20; }}
 }}
 .st-key-map_icon {{ display: flex !important; justify-content: flex-end; width: 100% !important; min-height: 32px; }}
 .st-key-map_icon .stButton {{ width: 100% !important; display: flex !important; justify-content: flex-end !important; }}
@@ -550,7 +552,7 @@ def address_field(value: str, key: str, on_pick, placeholder: str = "") -> str:
 
 # ================================================================ 카페 상세
 _WEEKDAYS = "월화수목금토일"
-WEEK_MAX = 3
+WEEK_MAX = 2     # 요일마다 2곳까지, 나머지는 더보기 (11/18 요청)
 
 
 def _member() -> dict | None:
@@ -2031,6 +2033,10 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
         st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: var(--aw-map-fgap, 21px) !important; }"
                     " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }</style>",
                     unsafe_allow_html=True)
+    if wide:
+        # 모바일 리스트 보기: 필터 아이콘을 지도로 보기와 같은 높이로 ('팝업 카페 N곳' 줄 오른쪽, 11/18 요청)
+        st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: -53px !important; } }</style>",
+                    unsafe_allow_html=True)
     tools = st.container(horizontal=True, key="view_tools")
     with tools:
         if st.button(str(active) if active else "", icon=":material/close:" if m_open else ":material/tune:",
@@ -2320,7 +2326,7 @@ HOME_CSS = """
 .hb .hbrank { font-size: 4rem; font-weight: 900; font-style: italic; line-height: 1; letter-spacing: -2px; }
 .hb .hbrank small { font-size: 1.2rem; font-style: normal; margin-left: 4px; }
 /* 배너 제목 (11/18 요청): 왼쪽 위 작은 어두운 알약 (불꽃 아이콘 + 글씨) */
-.hb .hbtitle { position: absolute; left: 14px; top: 14px; display: flex; align-items: center; gap: 5px; padding: 5px 12px 5px 9px;
+.hb .hbtitle { position: absolute; left: 46px; top: 14px; display: flex; align-items: center; gap: 5px; padding: 5px 12px 5px 9px;
   border-radius: 10px; background: rgba(20,24,23,.62); color: #fff; font-size: .9rem; font-weight: 800; backdrop-filter: blur(4px); }
 .hb .hbtitle .mi { color: #8F7BFF; font-size: 1.1rem; font-variation-settings: 'FILL' 1; }
 .hb .hbt { font-size: 1.9rem; font-weight: 900; line-height: 1.2; margin-top: 12px; display: -webkit-box; -webkit-line-clamp: 2;
@@ -2423,7 +2429,7 @@ HOME_CSS = """
 @media (max-width: 640px) {
   .hb { height: 240px; } .hb .hbpic { right: 14px; top: 16px; bottom: 16px; }
   .hb .hbtxt { left: 18px; right: 150px; bottom: 18px; }
-  .hb .hbtitle { left: 10px; top: 10px; font-size: .78rem; padding: 4px 10px 4px 7px; } .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
+  .hb .hbtitle { left: 18px; top: 10px; font-size: .78rem; padding: 4px 10px 4px 7px; }   /* 모바일: 아래 글자와 같은 시작점 (11/18) */ .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
   .st-key-home_ranklist { height: auto; }
   .st-key-home_banner, .st-key-home_banner [class*="st-key-card_hb_"] { height: 240px !important; min-height: 240px; }
   [class*="st-key-home_row_"] > div { flex-basis: 150px !important; width: 150px !important; min-width: 150px !important; }
@@ -3086,7 +3092,7 @@ iframe[src*="kakao_map"] {{
 .aw-foot a {{ color:#7B8784 !important; text-decoration:none; }}
 .aw-foot a:hover {{ text-decoration:underline; }}
 .aw-foot-links {{ display:flex; gap:14px; margin-top:2px; }}
-@media (min-width: 641px) {{ .stMain:has(.upd) .st-key-map_row {{ margin-top:12px; }}
+@media (min-width: 641px) {{ .st-key-map_row {{ margin-top:5px; }}   /* 지도 칸 위 선 = 물어보기 창 위 선 */
   [data-testid="stElementContainer"]:has(.upd) {{ margin-bottom:8px; }}
   .st-key-listtools {{ margin-bottom:10px; }} }}   /* 리스트 보기: 마지막 업데이트 · 팝업 카페 N곳 · 카드 사이 여백 (11/18 요청) */   /* 지도 보기: 마지막 업데이트와 지도 칸 사이 (11/18) */
 .upd.warn {{ color:#C2560C; background:#FFF4EA; border-radius:10px; padding:6px 10px; margin:0 0 8px; }}
@@ -3974,7 +3980,8 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .st-key-gnb_tabs { gap: 28px !important; width: auto !important; flex: 0 0 auto; position: absolute !important;
   left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
 .st-key-gnb_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important;
-  box-shadow: none !important; padding: 10px 16px 9px !important; border-bottom: 3px solid transparent !important; }
+  box-shadow: none !important; padding: 10px 16px 3px !important; border-bottom: 3px solid transparent !important;
+  min-height: 0 !important; }   /* 글자와 밑줄 사이 반으로 (12px → 6px, 11/18 요청) */
 .st-key-gnb_tabs button p { font-size: .92rem !important; font-weight: 600 !important; color: #8A9592 !important; }
 .st-key-gnb_tabs button:hover p { color: #26302D !important; }
 .st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: #26302D !important; }
@@ -4058,7 +4065,7 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
     width: 100% !important; }
   html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs { display: flex !important; position: static !important; transform: none !important;
     order: 3; flex: 1 1 100% !important; width: 100% !important; justify-content: center !important; gap: 14px !important; margin-top: 2px; }
-  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button { padding: 6px 4px 6px !important; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button { padding: 6px 4px 3px !important; }
   html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button p { font-size: .84rem !important; white-space: nowrap; }
   /* 맨 위에서는 지도·캘린더 아이콘을 숨기고(글자 탭이 대신) 필터 버튼만 둔다 (11/18 요청: 필터는 늘 보이게) */
   html:not(.aw-scrolled) body .st-key-view_tools .st-key-map_icon,
@@ -5001,8 +5008,6 @@ def page_map() -> None:
     else:
         left = contextlib.nullcontext()
     with left:
-        if wide:
-            _update_note()      # '마지막 업데이트' 는 관심 작품 아래, '팝업 카페 N곳' 위 (11/18 요청)
         # '팝업 카페 N곳' 과 찜·지역·정렬을 목록 바로 위 한 줄에 (상단 고정 묶음에는 넣지 않고 목록과 함께 스크롤한다)
         with st.container(key="listtools"):
             # 정렬 칸 위에 보기 전환 아이콘이 있어서, 팔로우·지역 고르기는 아래(정렬과 같은 줄)에 맞춘다
@@ -5019,9 +5024,8 @@ def page_map() -> None:
             _view_icon_button(wide, active, m_open)
             st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
 
-        if not wide:
-            _update_note()           # ('내가 관심있는 작품' 줄은 홈에만, 11/18 요청)           # 마지막 업데이트는 관심 작품 아래 (11/18 요청)
-        else:
+        # ('마지막 업데이트' 줄은 11/18 요청으로 모든 화면에서 뺐다 — _update_note 는 남겨 둠)
+        if wide:
             if st.session_state.get("res_only"):
                 st.button("사전예약 팝업만 보는 중", icon=":material/close:", key="res_only_chip",
                           on_click=lambda: st.session_state.update(res_only=False))
@@ -5078,7 +5082,7 @@ def page_map() -> None:
                     " .st-key-ask_panel { height: calc(100vh - 115px) !important; min-height: 520px; max-height: none !important; }"
                     # 위에 '내가 관심있는 작품' 줄이 있으면 지도는 그만큼 줄여 물어보기 창과 아래 선을 맞춘다 (11/18)
                     # 지도는 물어보기 창과 아래 선을 맞춘다 (위에 '마지막 업데이트' 줄만큼 짧게, 11/18)
-                    " .st-key-map_frame iframe { height: calc(100vh - 134px) !important; } }</style>",
+                    " .st-key-map_frame iframe { height: calc(100vh - 115px) !important; } }</style>",
                     unsafe_allow_html=True)
         with map_right, st.container(key="ask_panel"):   # 내 캘린더 자리 → 물어보기 (캘린더는 '내 캘린더' 탭으로)
             render_ask_panel()
