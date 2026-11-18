@@ -56,6 +56,9 @@ PROVIDERS = {
         # scope 를 콕 집어 요청하지 않는다: 카카오 앱에 '닉네임' 동의항목이 켜져 있지 않으면 로그인 뒤
         # "서비스 관리자에게 문의하세요(KOE205)" 로 막힌다. 비워 두면 켜 둔 동의항목만 묻고, 닉네임은 가입 화면에서 정한다
         "scope": "",
+        # 로그아웃한 뒤 다시 누르면 카카오가 브라우저에 남은 카카오 로그인으로 예전 계정을 바로 통과시킨다.
+        # 계정 고르는 화면을 늘 보여 줘서 다른 계정으로 가입·로그인할 수 있게 한다 (11/18 요청)
+        "extra": {"prompt": "select_account"},
     },
     "naver": {
         "label": "네이버",
@@ -65,6 +68,7 @@ PROVIDERS = {
         "id_env": "NAVER_LOGIN_CLIENT_ID",
         "secret_env": "NAVER_LOGIN_CLIENT_SECRET",
         "scope": "",                                 # 네이버는 개발자센터에서 '별명'만 체크
+        "extra": {"auth_type": "reauthenticate"},    # 같은 이유로 네이버 로그인을 다시 확인한다
     },
 }
 
@@ -164,6 +168,7 @@ def authorize_url(provider: str) -> str:
          "redirect_uri": redirect_uri(), "state": make_state(provider)}
     if p["scope"]:
         q["scope"] = p["scope"]
+    q.update(p.get("extra", {}))
     return f'{p["authorize"]}?{urlencode(q)}'
 
 
