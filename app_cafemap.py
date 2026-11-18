@@ -2339,6 +2339,11 @@ iframe[src*="kakao_map"] {{
         border-radius:999px; background:#fff; color:#26302D !important; text-decoration:none !important;
         font-size:.92rem; font-weight:700; white-space:nowrap; }}
 .dbtn:hover {{ border-color:{MINT}; color:{MINT_DEEP} !important; }}
+/* 모바일: 지도에서 확인하기는 주소 바로 아래, 주소와 같은 왼쪽 선에 (11/18 요청) */
+@media (max-width: 640px) {{
+  .dval {{ flex-basis: calc(100% - 90px); }}
+  .dbtn {{ margin-left: 90px; }}
+}}
 /* '방문 전 확인' 상자와 혜택 사이 여백 (상자가 회색이라 따로 띠는 두지 않는다) */
 .dband {{ height:0; margin:0 0 22px; }}
 /* 혜택 · 참고 웹사이트 묶음: 굵은 제목, 검은 알약 라벨, 연회색 상자 목록 */
