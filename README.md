@@ -42,7 +42,7 @@
 | Next.js + Vercel | 읽기 전용 공개 웹 — 목록·상세·이번 주 (`web/`) | 김서안 |
 | PWA | 공개 웹을 폰에 설치, 오프라인 페이지 — 현장에 가는 서비스라서 (`web/`) | 김서안 |
 | 서브에이전트·훅·스킬 | 커밋 전 검사 훅, 프롬프트 덮어쓰기 차단 훅, `/metrics-snapshot`·`/user-test-report` 스킬, `po-reviewer` 서브에이전트 (`.claude/`) | 김서안 |
-| Playwright QA | 핵심 흐름 6개 자동 테스트 (`tests/e2e/`) | 김서안 |
+| Playwright QA | 핵심 흐름 13개 자동 테스트 — 가입·검색·상세·북마크·리뷰 개인정보 차단·모바일·회원 제한·로그아웃·홈·리뷰 사진·삭제 (`tests/e2e/`, 결과 `docs/qa-results.md`) | 김서안 |
 | Apps Script | 월요일 주간 팝업 브리핑 메일 (`automation/`) | 김서안 |
 
 ### AI 사용 지도
