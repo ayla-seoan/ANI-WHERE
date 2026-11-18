@@ -18,8 +18,12 @@ LONG = 30_000                               # 첫 화면은 지도·포스터를
 
 # ------------------------------------------------------------------ 도움 함수
 def open_list(page: Page, url: str) -> int:
-    """첫 화면(리스트)을 열고 카드가 다 그려질 때까지 기다린 뒤 카드 수를 돌려준다."""
+    """첫 화면(홈)을 열고 '리스트로 보기' 탭으로 가서, 카드가 다 그려질 때까지 기다린 뒤 카드 수를 돌려준다.
+    (11/18: 새로 열면 첫 화면은 늘 홈)"""
     page.goto(url + "/")
+    expect(page.locator(".st-key-home")).to_be_visible(timeout=LONG)
+    wait_idle(page)
+    page.locator('[class*="st-key-gnbtab_"][class*="list"] button').click()
     expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
     wait_idle(page)
     return page.locator(CARD).count()
@@ -43,7 +47,7 @@ def sign_up(page: Page, url: str) -> None:
     f.get_by_role("button", name="가입하기").click()
     # 가입하면 메인으로 가고, 메뉴바의 '로그인' 자리에 닉네임이 보인다
     expect(page).to_have_url(re.compile(r"/$"), timeout=LONG)          # 메인으로 옮겨졌는지 먼저
-    expect(page.locator(CARD).first).to_be_visible(timeout=LONG)
+    expect(page.locator(f"{CARD}, .st-key-home").first).to_be_visible(timeout=LONG)   # 첫 화면은 홈 (11/18)
     wait_idle(page)
     expect(page.locator(".st-key-login_btn button").last).to_contain_text("테스트봇", timeout=LONG)
 

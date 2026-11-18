@@ -2319,9 +2319,10 @@ HOME_CSS = """
 .hb .hbtxt { position: absolute; left: 56px; bottom: 32px; right: 300px; color: #fff; }
 .hb .hbrank { font-size: 4rem; font-weight: 900; font-style: italic; line-height: 1; letter-spacing: -2px; }
 .hb .hbrank small { font-size: 1.2rem; font-style: normal; margin-left: 4px; }
-.hb .hbtitle { position: absolute; left: 56px; top: 26px; color: #fff; font-size: 1.45rem; font-weight: 900;
-  display: flex; align-items: center; gap: 8px; text-shadow: 0 2px 8px rgba(0,0,0,.3); }
-.hb .hbtitle .mi { color: #7FE0CF; font-size: 1.6rem; }
+/* 배너 제목 (11/18 요청): 크게, 흰 테두리 글씨 + 안은 50% 투명, '‹' 버튼 왼쪽 선(10px)에서 시작 */
+.hb .hbtitle { position: absolute; left: 10px; top: 18px; font-size: 2.3rem; font-weight: 900; letter-spacing: -.5px;
+  color: rgba(255,255,255,.5); -webkit-text-stroke: 1.5px #fff; display: flex; align-items: center; gap: 8px; line-height: 1.1; }
+.hb .hbtitle .mi { display: none; }
 .hb .hbt { font-size: 1.9rem; font-weight: 900; line-height: 1.2; margin-top: 12px; display: -webkit-box; -webkit-line-clamp: 2;
   -webkit-box-orient: vertical; overflow: hidden; }
 .hb .hbd { font-size: .9rem; opacity: .9; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2422,7 +2423,7 @@ HOME_CSS = """
 @media (max-width: 640px) {
   .hb { height: 240px; } .hb .hbpic { right: 14px; top: 16px; bottom: 16px; }
   .hb .hbtxt { left: 18px; right: 150px; bottom: 18px; }
-  .hb .hbtitle { left: 18px; top: 16px; font-size: 1.05rem; } .hb .hbtitle .mi { font-size: 1.2rem; } .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
+  .hb .hbtitle { left: 10px; top: 12px; font-size: 1.35rem; -webkit-text-stroke: 1px #fff; } .hb .hbrank { font-size: 2.6rem; } .hb .hbt { font-size: 1.15rem; }
   .st-key-home_ranklist { height: auto; }
   .st-key-home_banner, .st-key-home_banner [class*="st-key-card_hb_"] { height: 240px !important; min-height: 240px; }
   [class*="st-key-home_row_"] > div { flex-basis: 150px !important; width: 150px !important; min-width: 150px !important; }
@@ -4807,6 +4808,7 @@ def page_map() -> None:
     _live_send()
     # 처음 들어오면 기본은 리스트 전체보기 (지도보기는 버튼으로)
     st.session_state.setdefault("list_only", True)
+    st.session_state.setdefault("home_view", True)     # 새로 열거나 새로고침하면 첫 화면은 늘 홈 (11/18 요청)
     # 공유받은 링크(?cafe=<id>)로 들어오면 그 카페 상세를 연다. 한 번 쓰고 주소창에서 지운다
     shared = st.query_params.get("cafe")
     if shared:
