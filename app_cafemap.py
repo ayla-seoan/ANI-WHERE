@@ -2082,7 +2082,7 @@ iframe[src*="kakao_map"] {{
   .st-key-wide_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] {{
     display: contents !important; }}
   .st-key-wide_grid .pcard {{ border-radius: 12px; margin-bottom: 0; }}
-  .st-key-wide_grid .pcard .info {{ height: 90px; padding: 8px 9px 14px 11px; }}   /* 아래·왼쪽 여백을 조금 더 */
+  .st-key-wide_grid .pcard .info {{ height: 90px; padding: 8px 9px 9px 11px; }}   /* 아래 여백 줄임 (11/18) */
   .st-key-wide_grid .pcard .t {{ font-size: 14.5px; }}
   .st-key-wide_grid .pcard .s {{ font-size: 11.5px; }}
   .st-key-wide_grid .pcard .d {{ font-size: 12px; margin: 2px 0 0; white-space: nowrap; }}
@@ -2097,7 +2097,7 @@ iframe[src*="kakao_map"] {{
   .st-key-wide_grid .pcard .chips {{ display: none; }}
   .st-key-wide_grid .pcard .area {{ top: 6px; left: 6px; font-size: 10.5px; padding: 2px 6px; }}
   .st-key-wide_grid .pcard .state {{ top: 6px; right: 6px; font-size: 10.5px; padding: 2px 7px; }}
-  .st-key-wide_grid [class*="st-key-fav_"] {{ top: auto !important; bottom: 8px !important; right: 12px !important; }}
+  .st-key-wide_grid [class*="st-key-fav_"] {{ top: auto !important; bottom: -6px !important; right: 10px !important; }}   /* 기간 줄과 같은 높이로 (11/18) */
   .st-key-wide_grid .pcard .info {{ padding-right: 40px; }}
   .st-key-wide_grid [class*="st-key-fav_"] button {{ width: 26px; height: 26px; padding: 0 !important; }}
   .st-key-wide_grid [class*="st-key-fav_"] button span {{ font-size: 1.1rem !important; }}
@@ -2399,6 +2399,10 @@ iframe[src*="kakao_map"] {{
                  background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.72) 60%);
                  pointer-events:none; }}
 .pcard .chips {{ height:26px; overflow:hidden; flex-wrap:nowrap; margin:0; }}
+/* 이벤트·굿즈 칩이 없으면 그 자리를 비워 두지 않고 글자를 카드 아래쪽에 붙인다 (11/18 요청) */
+.pcard .info {{ display:flex; flex-direction:column; justify-content:flex-end; }}
+.pcard .chips.short:empty {{ display:none; }}
+[class*="st-key-card_w_"]:hover .pcard .info {{ justify-content:flex-start; }}
 
 .pcard .t {{ font-family:"Jua", sans-serif; font-size:17px; line-height:1.25; margin-bottom:2px;
              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
@@ -5389,6 +5393,23 @@ ADMIN_CSS = """
 .adm-kpi em { font-style: normal; font-size: .72rem; color: #9AA5A1; }
 .adm-kpi.alert b { color: #E05555; }
 .st-key-adm_kpis { gap: 10px !important; flex-wrap: wrap; margin-bottom: 14px; }
+/* 숫자 카드가 담는 칸보다 커서 아래 줄과 겹쳤다 (모바일, 11/18) → 칸 높이를 카드에 맞춤 */
+[class*="st-key-admk_"] { height: auto !important; }
+[class*="st-key-admk_"] [data-testid="stMarkdownContainer"], [class*="st-key-admk_"] [data-testid="stMarkdown"] {
+  margin-bottom: 0 !important; }
+[class*="st-key-admk_"] [data-testid="stElementContainer"]:has(.adm-kpi) { margin-bottom: 0 !important; height: auto !important; }
+@media (max-width: 640px) {
+  .adm-title { font-size: 1.45rem; }
+  .adm-sub { font-size: .76rem; margin-bottom: 8px; }
+  .adm-eyebrow { font-size: .64rem; }
+  .st-key-adm_kpis { gap: 8px !important; }
+  .st-key-adm_kpis > * { flex: 1 1 140px !important; }
+  .adm-kpi { padding: 9px 11px; }
+  .adm-kpi span { font-size: .7rem; }
+  .adm-kpi b { font-size: 1.25rem; }
+  .adm-kpi b small { font-size: .78rem; }
+  .st-key-adm_links a p, .st-key-adm_links button p { font-size: .72rem !important; }
+}
 .st-key-adm_kpis > * { flex: 1 1 150px !important; min-width: 0; }
 [class*="st-key-admk_"] { position: relative; }
 [class*="st-key-admk_"] .adm-kpi { cursor: pointer; transition: border-color .15s; }
