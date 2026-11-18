@@ -5043,6 +5043,17 @@ def _login_body() -> None:
                         f'{label}로 {verb}</a>', unsafe_allow_html=True)
         else:
             st.markdown(f'<span class="auth-btn off">{label} {verb} 준비 중</span>', unsafe_allow_html=True)
+    st.markdown('<div class="auth-note">카카오·네이버 로그인은 <b>새 탭</b>에서 열려요. 그 탭에서 로그인을 마치면 '
+                '이 화면도 자동으로 로그인된 메인으로 넘어가요.</div>', unsafe_allow_html=True)
+    # 새 탭에서 간편 로그인이 끝나면(로그인 쿠키가 생기면) 이 탭도 메인으로 옮긴다 (11/18: 원래 탭이 로그인 화면에 남던 문제)
+    components.html(
+        "<script>(function(){const w=window.parent;const val=()=>((w.document.cookie.match(/(?:^|; )" + auth.COOKIE
+        + "=([^;]*)/)||[])[1]||'');const first=val();"
+        # 처음 값과 달라진 '빈 값이 아닌' 로그인 쿠키가 생기면 (예전 쿠키가 남아 있어도 새 로그인을 알아챈다)
+        "const iv=setInterval(()=>{const v=val();if(v&&v!==first){clearInterval(iv);"
+        # 부품 iframe 은 바깥 화면을 직접 옮길 권한이 없어서, 바깥 화면 쪽에서 실행되도록 parent.eval 로 넘긴다
+        r"w.eval(`location.replace(location.pathname.replace(/\\/(login|auth)\\/?$/,'/')+location.search)`);}},1500);"
+        "setTimeout(()=>clearInterval(iv),600000);})();</script>", height=0)
     st.markdown('<div class="auth-note">로그인하지 않아도 지금처럼 둘러보고 북마크할 수 있어요.</div>',
                 unsafe_allow_html=True)
     st.markdown('<div class="auth-note">받는 정보: <b>별명(닉네임)</b>과 계정 고유 번호뿐이에요. 고유 번호는 알아볼 수 없게 '
