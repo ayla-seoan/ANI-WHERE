@@ -11,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     orientation: "portrait",
     background_color: "#ffffff",
-    theme_color: "#56C2A7",
+    theme_color: "#E9F7F2",
     lang: "ko",
     dir: "ltr",
     categories: ["entertainment", "lifestyle", "travel"],
@@ -20,6 +20,10 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
-    shortcuts: [{ name: "이번 주 팝업", short_name: "이번 주", url: "/this-week" }],
+    shortcuts: [
+      { name: "지도로 보기", short_name: "지도", url: "/map" },
+      { name: "리스트로 보기", short_name: "리스트", url: "/list" },
+      { name: "이번 주 팝업", short_name: "이번 주", url: "/this-week" },
+    ],
   };
 }

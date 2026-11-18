@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { regionOf, type DataSource, type Popup } from "./popup";
+import { areaName, cityName, regionOf, type DataSource, type Popup } from "./popup";
 
 // 데이터를 읽는 곳은 이 파일 하나뿐이다. 서버에서만 실행되므로 SUPABASE_ANON_KEY 는 브라우저로 내려가지 않는다.
 // (NEXT_PUBLIC_ 접두사를 붙이지 않는다.)
@@ -106,6 +106,8 @@ function normalize(row: Row): Popup | null {
     characters: str(row.characters),
     address,
     region: regionOf(address),
+    area: areaName(address),
+    city: cityName(address),
     lat: coordsOk ? lat : null,
     lng: coordsOk ? lng : null,
     start,
@@ -117,6 +119,7 @@ function normalize(row: Row): Popup | null {
     links: linkUrls(row.links),
     intro: str(row.intro),
     updatedAt: str(row.updated_at),
+    createdAt: str(row.updated_at),
     rating: null,
   };
 }
@@ -149,6 +152,24 @@ function toPopups(rows: Row[]): Popup[] {
 
 type Ratings = Map<string, { avg: number; n: number }>;
 
+/** entry_id 별 처음 기록 시각 (append-only 표의 가장 이른 updated_at). 홈 '신규 등록' 순서에 쓴다 */
+function firstSeen(rows: Row[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    if (!r || typeof r !== "object") continue;
+    const id = str(r.entry_id);
+    const at = str(r.updated_at);
+    if (!id || !at) continue;
+    const prev = out.get(id);
+    if (!prev || at < prev) out.set(id, at);
+  }
+  return out;
+}
+
+function attachCreated(popups: Popup[], first: Map<string, string>): Popup[] {
+  return popups.map((p) => ({ ...p, createdAt: first.get(p.id) || p.updatedAt }));
+}
+
 function attachRatings(popups: Popup[], ratings: Ratings): Popup[] {
   return popups.map((p) => ({ ...p, rating: ratings.get(p.id) ?? null }));
 }
@@ -172,7 +193,14 @@ async function fromSupabase(base: string, key: string): Promise<Popup[]> {
   const rows = await getJSON(`${root}/rest/v1/popups_current?select=*`, headers);
   if (!Array.isArray(rows)) throw new Error("popups_current 응답이 목록이 아님");
   // 뷰가 이미 최신·active 만 주지만, 같은 함수로 한 번 더 걸러도 결과는 같다
-  const popups = toPopups(latestActive(rows.map((r) => ({ status: "active", ...r }))));
+  let popups = toPopups(latestActive(rows.map((r) => ({ status: "active", ...r }))));
+  try {
+    // 처음 등록 시각: 모든 revision 의 entry_id·updated_at 두 칸만 읽는다 (운영용 칸은 읽지 않음)
+    const all = await getJSON(`${root}/rest/v1/cafes?select=entry_id,updated_at`, headers);
+    if (Array.isArray(all)) popups = attachCreated(popups, firstSeen(all as Row[]));
+  } catch {
+    /* 못 읽으면 최신 수정 시각으로 대신한다 */
+  }
   const ratings: Ratings = new Map();
   try {
     const rs = await getJSON(`${root}/rest/v1/popup_ratings?select=*`, headers);
@@ -192,7 +220,7 @@ async function fromSupabase(base: string, key: string): Promise<Popup[]> {
 async function fromGitHub(): Promise<Popup[]> {
   const rows = await getJSON(CAFES_JSON);
   if (!Array.isArray(rows)) throw new Error("cafes.json 이 목록이 아님");
-  const popups = toPopups(latestActive(rows as Row[]));
+  const popups = attachCreated(toPopups(latestActive(rows as Row[])), firstSeen(rows as Row[]));
   const ratings: Ratings = new Map();
   try {
     const rs = await getJSON(REVIEWS_JSON);
