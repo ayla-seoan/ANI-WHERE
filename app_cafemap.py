@@ -82,10 +82,21 @@ img.av-wait {{ background: linear-gradient(100deg, #DDF3EC 20%, #F4FBF8 45%, #DD
 .av-preview img {{ width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-soft); }}
 .av-preview span {{ font-size: .8rem; color: #6B7672; }}
 /* 물어보기 '더보기' 로 온 리스트: 위에 결과 표시 (11/18) */
-.st-key-ask_only_bar {{ background: var(--accent-soft); border: 1px solid #BFEDE3; border-radius: 12px; padding: 6px 12px; margin: 4px 0 8px; }}
-.ask-only {{ font-size: .9rem; color: #26302D; display: flex; align-items: center; gap: 6px; }}
+.st-key-ask_only_bar {{ background: var(--accent-soft); border: 1px solid #BFEDE3; border-radius: 12px; padding: 6px 10px 6px 16px;
+  margin: 4px 0 8px; align-items: center !important; flex-wrap: nowrap !important; gap: 8px !important; min-height: 0 !important; }}
+.st-key-ask_only_bar > div {{ width: auto !important; flex: 0 1 auto !important; }}
+.st-key-ask_only_bar > div:first-child {{ flex: 1 1 auto !important; min-width: 0; }}
+.st-key-ask_only_bar > .st-key-ask_only_clear, .st-key-ask_only_bar > div:has(.st-key-ask_only_clear) {{ margin-left: auto !important; flex: 0 0 auto !important; }}
+.st-key-ask_only_bar [data-testid="stMarkdownContainer"], .st-key-ask_only_bar [data-testid="stMarkdownContainer"] > div,
+.st-key-ask_only_bar [data-testid="stMarkdownContainer"] p {{ margin: 0 !important; padding: 0 !important; }}
+.ask-only {{ font-size: .9rem; color: #26302D; display: flex; align-items: center; gap: 6px; line-height: 1.4; margin: 0; }}
 .ask-only .mi {{ color: var(--accent-deep); font-size: 1.1rem; }}
-.ask-only span {{ color: var(--accent-deep); font-weight: 800; }}
+.ask-only b {{ font-weight: 800; }}
+.ask-only span {{ color: var(--accent-deep); font-weight: 800; margin-left: 4px; }}
+.st-key-ask_only_clear button {{ min-height: 0 !important; padding: 4px 8px !important; white-space: nowrap; }}
+.st-key-ask_only_clear button p {{ font-weight: 800 !important; color: #26302D !important; font-size: .9rem !important; }}
+.st-key-ask_only_clear button span[data-testid="stIconMaterial"] {{ color: #26302D !important; }}
+@media (max-width: 640px) {{ .ask-only {{ font-size: .8rem; flex-wrap: wrap; }} .st-key-ask_only_clear button p {{ font-size: .8rem !important; }} }}
 /* 긴 행사명(「○○○」 팝업스토어 in 홍대 2호점 …)이 모바일에서 화면 밖으로 나가지 않게 */
 .dtitle, .dcafe, .daddr, .nh-name, .apc-cafe, .apc-addr {{ overflow-wrap: anywhere; }}
 /* 포인트 컬러 변수 (map-template.html 과 같은 값). 지도·등록하기 버튼 등이 쓴다 */
@@ -8066,12 +8077,15 @@ def _ask_panel_send(question: str) -> None:
                          "guide": res.query.intent == "unknown", "links": list(res.links)})
         else:
             limit = min(len(res.hits), ask.RANK_MAX) if res.query.intent in ("blog_rank", "review_rank", "rating_rank") else 5
-            used = [i for i in res.used_ids] or [str(h.row.get("entry_id")) for h in res.hits[:limit]]
+            # 답이 고른 팝업을 앞에, 모자라면 검색 순서대로 채워 '5건까지' 를 지킨다 (11/19: AI 가 3건만 골라 3장만 보였다)
+            hit_ids = [str(h.row.get("entry_id")) for h in res.hits]
+            used = list(dict.fromkeys([i for i in res.used_ids if i in hit_ids] + hit_ids))
             rows = {str(h.row.get("entry_id")): h.row for h in res.hits}
             cards = [_ask_card(i, rows[i], res.distances.get(i)) for i in used[:limit] if i in rows]
             # 검색 질문은 '네, N건 있어요' 를 말풍선으로 (규칙(의도) 질문은 그 안내 문장)
             say = res.summary if not res.query.intent else (res.text or "")
-            all_ids = [str(h.row.get("entry_id")) for h in res.hits]
+            # '더보기' 는 조건에 맞는 팝업 전부 (검색은 상위 6건만 넘겨서 '+3건' 으로 보였다, 11/19)
+            all_ids = list(res.all_ids) or hit_ids
             more = {"ids": all_ids, "label": q[:40]} if len(all_ids) > len(cards) else None
             chat.append({"role": "bot", "text": res.text, "badge": res.badge, "ids": cards, "say": say, "links": list(res.links),
                          "more": more,

@@ -72,6 +72,7 @@ class Answer:
     summary: str = ""                                 # by_region 의도: '서울 41곳 · 부산 7곳 …'
     total: int = 0                                    # 조건에 모두 맞는 팝업 수 (카드는 일부만 보여 줌)
     links: list = field(default_factory=list)         # 답 아래 바로가기 [(글자, 주소)] — 사용법 안내 등 (11/18)
+    all_ids: list = field(default_factory=list)       # 조건에 모두 맞는 팝업 번호 전부 (카드는 5건까지, 나머지는 '더보기' → 리스트, 11/19)
 
 
 # ------------------------------------------------------------- 입력 검사
@@ -403,6 +404,7 @@ def answer(question: str, rows: list[dict], today: date, version: str | None = N
                  query=query, dropped_ids=dropped, confidence=data.confidence, error=res.error)
     out.summary = head
     out.total = len(all_hits)
+    out.all_ids = [str(h.row.get("entry_id")) for h in all_hits]
     return out
 
 
