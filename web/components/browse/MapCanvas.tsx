@@ -123,6 +123,8 @@ type Engine = {
   focus: (p: Item) => void;
   /** 내 위치: 그 둘레로 화면을 옮기고 파란 점을 찍는다 (11/19, 앱 home_box). b 가 없으면 내 자리로 확대 */
   showMe: (me: { lat: number; lng: number }, b?: Bounds) => void;
+  /** 확대(+1) · 축소(-1). 지도 기본 확대 버튼 대신 우리 버튼 묶음(+ − 내 위치)을 쓴다 (11/19 요청) */
+  zoomBy: (d: number) => void;
   destroy: () => void;
 };
 
@@ -139,7 +141,6 @@ function kakaoEngine(
   map.setBounds(box(MAINLAND_JEJU), 0, 0, 0, 0);
   map.setMaxLevel(map.getLevel());
   if (home) map.setBounds(box(home), 20, 20, 20, 20);
-  map.addControl(new K.ZoomControl(), K.ControlPosition.RIGHT);
   let overlays: any[] = [];
   let tip: any = null;
   let meDot: any = null;
@@ -198,6 +199,9 @@ function kakaoEngine(
       if (map.getLevel() > 5) map.setLevel(5);
       map.panTo(new K.LatLng(p.lat, p.lng));
     },
+    zoomBy(d) {
+      map.setLevel(map.getLevel() - d, { animate: true });
+    },
     showMe(me, b) {
       const pos = new K.LatLng(me.lat, me.lng);
       if (b) map.setBounds(box(b), 20, 20, 20, 20);
@@ -242,7 +246,6 @@ function leafletEngine(
     [b.south, b.west],
     [b.north, b.east],
   ]);
-  L.control.zoom({ position: "topright" }).addTo(map);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap",
     maxZoom: 19,
@@ -289,6 +292,10 @@ function leafletEngine(
     },
     focus(p) {
       map.setView([p.lat, p.lng], Math.max(map.getZoom(), 14));
+    },
+    zoomBy(d) {
+      if (d > 0) map.zoomIn();
+      else map.zoomOut();
     },
     showMe(me, b) {
       if (b)
@@ -437,19 +444,30 @@ export default function MapCanvas({
     <div className="map-box">
       <div ref={el} className="map-canvas" />
       {(kind === "kakao" || kind === "leaflet") && (
-        <button
-          type="button"
-          className={`map-me${locating ? " busy" : ""}${kind === "leaflet" ? " leaf" : ""}`}
-          aria-label="내 현재 위치로"
-          onClick={goMe}
-          disabled={locating}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-            <circle cx="12" cy="12" r="8" />
-          </svg>
-        </button>
+        // 오른쪽 가운데: 확대 · 축소, 그 바로 아래 '내 위치' (11/19 요청)
+        <div className="map-ctrl">
+          <div className="map-zoom">
+            <button type="button" aria-label="확대" onClick={() => engine.current?.zoomBy(1)}>
+              +
+            </button>
+            <button type="button" aria-label="축소" onClick={() => engine.current?.zoomBy(-1)}>
+              −
+            </button>
+          </div>
+          <button
+            type="button"
+            className={`map-me${locating ? " busy" : ""}`}
+            aria-label="내 현재 위치로"
+            onClick={goMe}
+            disabled={locating}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+              <circle cx="12" cy="12" r="8" />
+            </svg>
+          </button>
+        </div>
       )}
       {kind === "loading" && <div className="map-msg">지도를 불러오는 중…</div>}
       {kind === "error" && (
