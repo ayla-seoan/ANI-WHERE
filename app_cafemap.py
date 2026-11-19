@@ -4265,13 +4265,13 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 /* 탭은 메뉴바 정가운데 (로고·오른쪽 아이콘 폭과 상관없이) */
 .st-key-gnb_tabs { gap: 28px !important; width: auto !important; flex: 0 0 auto; position: absolute !important;
   left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
-/* 탭은 알약 모양 — 고른 탭만 포인트 색 동그라미 테두리 (11/19 요청: 밑줄 대신). 모든 탭에 투명 테두리를 깔아 글자가 흔들리지 않게 */
-.st-key-gnb_tabs button { background: transparent !important; border: 1.5px solid transparent !important; border-radius: 999px !important;
-  box-shadow: none !important; padding: 7px 16px !important; min-height: 0 !important; }
+.st-key-gnb_tabs button { background: transparent !important; border: 0 !important; border-radius: 0 !important;
+  box-shadow: none !important; padding: 10px 16px 3px !important; border-bottom: 3px solid transparent !important;
+  min-height: 0 !important; }   /* 글자와 밑줄 사이 반으로 (12px → 6px, 11/18 요청) */
 .st-key-gnb_tabs button p { font-size: .92rem !important; font-weight: 600 !important; color: #8A9592 !important; }
 .st-key-gnb_tabs button:hover p { color: #26302D !important; }
 /* 고른 탭: 아래 밑줄 없이 글자만 진한 포인트 색 · 굵게 (11/19 요청) */
-.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-color: var(--accent) !important; }
+.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: transparent !important; }
 .st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: var(--accent-deep) !important; font-weight: 800 !important; }
 /* 고른 탭은 조금 더 크게 (11/19 요청). 모바일 · 스크롤 규칙보다 앞서게 선택자를 세게 */
 html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button p { font-size: 1.02rem !important; }
@@ -4356,8 +4356,8 @@ html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-k
   html:not(.aw-scrolled) body .st-key-gnb > *:has(.st-key-gnb_tabs) { display: flex !important; order: 3; flex: 1 1 100% !important;
     width: 100% !important; }
   html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs { display: flex !important; position: static !important; transform: none !important;
-    order: 3; flex: 1 1 100% !important; width: 100% !important; justify-content: center !important; gap: 6px !important; margin-top: 2px; }
-  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button { padding: 4px 10px !important; }
+    order: 3; flex: 1 1 100% !important; width: 100% !important; justify-content: center !important; gap: 14px !important; margin-top: 2px; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button { padding: 6px 4px 3px !important; }
   html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button p { font-size: .84rem !important; white-space: nowrap; }
   /* 맨 위에서는 지도·캘린더 아이콘을 숨기고(글자 탭이 대신) 필터 버튼만 둔다 (11/18 요청: 필터는 늘 보이게) */
   html:not(.aw-scrolled) body .st-key-view_tools .st-key-map_icon,
@@ -4396,7 +4396,7 @@ html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-k
   .st-key-gnb_tabs { order: 3; flex: 1 1 100% !important; width: 100% !important; justify-content: center !important;
     flex-wrap: nowrap !important; position: static !important; transform: none !important; }
   .st-key-gnb_tabs > div { width: auto !important; flex: 0 0 auto !important; }
-  .st-key-gnb_tabs button { white-space: nowrap; padding: 6px 14px !important; }
+  .st-key-gnb_tabs button { white-space: nowrap; padding: 8px 14px 7px !important; }
   .st-key-gnb_tabs button p { font-size: .95rem !important; }
   .st-key-gnb_right .st-key-login_btn button p { font-size: .78rem !important; }
 }</style>
