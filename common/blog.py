@@ -82,9 +82,10 @@ def _place_words(row: dict) -> list[str]:
     return list(dict.fromkeys(words))
 
 
-def search(row: dict, limit: int = 5, usage=None) -> tuple[list[Post], str]:
+def search(row: dict, limit: int = 5, usage=None, sort: str = "sim") -> tuple[list[Post], str]:
     """(글 목록, 오류 이유). 팝업 시작 30일 전부터 쓴 글만, 최신순. 키가 없으면 ([], 'off').
-    usage(호출 수 저장소)를 주면 이번 달 MONTHLY_LIMIT 번을 넘으면 부르지 않는다 ([], 'limit')."""
+    usage(호출 수 저장소)를 주면 이번 달 MONTHLY_LIMIT 번을 넘으면 부르지 않는다 ([], 'limit').
+    sort: 'sim'(정확도순, 처음 찾을 때) · 'date'(최신순, 저장해 둔 뒤 새 글만 더할 때)."""
     if not enabled():
         return [], "off"
     if blocked(usage):
@@ -96,7 +97,8 @@ def search(row: dict, limit: int = 5, usage=None) -> tuple[list[Post], str]:
     url = os.getenv("NAVER_BLOG_URL") or HUB_URL
     try:
         res = requests.get(url, headers=_headers(), timeout=TIMEOUT,
-                           params={"query": query_for(row), "display": 30, "sort": "sim", "format": "json"})
+                           params={"query": query_for(row), "display": 30, "sort": "date" if sort == "date" else "sim",
+                                   "format": "json"})
     except requests.RequestException:
         return [], "연결 실패"
     if res.status_code == 429:
@@ -292,3 +294,80 @@ def total(row: dict, usage=None) -> int | None:
         return int(res.json().get("total") or 0) if res.status_code == 200 else None
     except (requests.RequestException, ValueError, TypeError):
         return None
+
+
+# ------------------------------------------------------------------ 찾은 글 저장 (11/19 요청, supabase 013)
+# "불러온 거 저장해 놓고 보이게 하고 추가된 것만 새로 불러오면 되잖아" — 찾은 글은 blog_posts 에 쌓고 화면은 거기서 읽는다.
+# 네이버는 팝업마다 하루 한 번만 묻는다 (blog_checks 에 그날 표시). 처음엔 정확도순, 그다음부터는 최신순으로 새 글만 더한다.
+import hashlib
+from collections import Counter
+
+POST_HEADERS = ["row_id", "entry_id", "revision", "status", "updated_at",
+                "cafe_id", "link", "title", "descr", "blogger", "day", "thumb"]
+CHECK_HEADERS = ["row_id", "entry_id", "revision", "status", "updated_at", "cafe_id", "day", "found"]
+SHOW_MAX = 30          # 한 팝업에 보여 주는 글 수 (최신순)
+
+
+def _post_id(cafe_id: str, link: str) -> str:
+    return f"{cafe_id}:{hashlib.sha1(link.encode('utf-8')).hexdigest()[:12]}"
+
+
+def stored(posts_store, cafe_id: str) -> list[dict]:
+    """저장해 둔 이 팝업의 글 (같은 글은 마지막 기록 하나, 최신순). {'title','link','desc','blogger','day','thumb'}"""
+    latest: dict[str, dict] = {}
+    for r in posts_store.all_rows():
+        if str(r.get("cafe_id")) != str(cafe_id):
+            continue
+        k = str(r.get("entry_id"))
+        if k not in latest or int(r.get("revision") or 0) >= int(latest[k].get("revision") or 0):
+            latest[k] = r
+    out = []
+    for r in latest.values():
+        if r.get("status") == "deleted":
+            continue
+        try:
+            day = date.fromisoformat(str(r.get("day") or "")[:10])
+        except ValueError:
+            day = None
+        out.append({"title": str(r.get("title") or ""), "link": str(r.get("link") or ""), "desc": str(r.get("descr") or ""),
+                    "blogger": str(r.get("blogger") or ""), "day": day, "thumb": str(r.get("thumb") or "")})
+    out.sort(key=lambda p: p["day"] or date.min, reverse=True)
+    return out[:SHOW_MAX]
+
+
+def counts(posts_store) -> Counter:
+    """팝업별 저장해 둔 글 수 ('블로그 후기 (N)' 탭 이름). 네이버를 부르지 않는다."""
+    seen = {(str(r.get("cafe_id")), str(r.get("entry_id"))) for r in posts_store.all_rows() if r.get("status") != "deleted"}
+    return Counter(c for c, _ in seen)
+
+
+def checked_today(checks_store, cafe_id: str) -> bool:
+    today = _day()
+    return any(str(r.get("cafe_id")) == str(cafe_id) and str(r.get("day")) == today for r in checks_store.all_rows())
+
+
+def refresh(row: dict, cafe_id: str, posts_store, checks_store, usage=None, thumbs: bool = True) -> tuple[list[dict], str]:
+    """저장해 둔 글 + (오늘 아직 안 물어봤으면) 네이버에서 새 글만 더해 돌려준다. (글 목록, 오류 이유)
+    오류(한도 · 연결 실패)여도 저장해 둔 글은 그대로 돌려준다 — 화면은 '찾지 못했어요' 대신 저장된 글을 보여 준다."""
+    have = stored(posts_store, cafe_id)
+    if not enabled() or checked_today(checks_store, cafe_id):
+        return have, ""
+    found, err = search(row, limit=SHOW_MAX, usage=usage, sort="date" if have else "sim")
+    if err:
+        return have, err
+    known = {p["link"] for p in have}
+    new = [p for p in found if p.link not in known]
+    pics = dict((p.link, th) for p, th in with_thumbs(new)) if (thumbs and new) else {}
+    for p in new:
+        try:
+            posts_store.append({"cafe_id": str(cafe_id), "link": p.link[:500], "title": p.title[:200], "descr": p.desc[:300],
+                                "blogger": p.blogger[:60], "day": p.day.isoformat() if p.day else "",
+                                "thumb": (pics.get(p.link) or "")[:600]}, entry_id=_post_id(str(cafe_id), p.link))
+        except Exception:
+            pass
+    try:
+        checks_store.append({"cafe_id": str(cafe_id), "day": _day(), "found": str(len(new))},
+                            entry_id=f"{cafe_id}:{_day()}")
+    except Exception:
+        pass
+    return stored(posts_store, cafe_id) if new else have, ""

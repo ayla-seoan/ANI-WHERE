@@ -1563,7 +1563,7 @@ a.ntf-item:hover {
   font-size: 0.62rem;
   font-weight: 800;
   color: #fff;
-  background: var(--accent-deep);
+  background: #56c2a7; /* 지역 배지: 민트 (11/19 요청, 앱과 같게) */
   padding: 1px 7px;
   border-radius: 999px;
   border: 1.5px solid #fff;
