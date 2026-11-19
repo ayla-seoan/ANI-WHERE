@@ -163,9 +163,11 @@ svg {
   gap: 28px;
   z-index: 2;
 }
+/* 탭은 알약 모양 — 고른 탭만 포인트 색 동그라미 테두리 (11/19 요청: 밑줄 대신). 모든 탭에 투명 테두리를 깔아 글자가 흔들리지 않게 */
 .gnb-tabs a {
-  padding: 10px 16px 3px;
-  border-bottom: 3px solid transparent;
+  padding: 7px 16px;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
   font-size: 0.92rem;
   font-weight: 600;
   color: #8a9592;
@@ -177,7 +179,7 @@ svg {
 }
 /* 고른 탭: 아래 밑줄 없이 글자만 진한 포인트 색 · 굵게 (11/19 요청) */
 .gnb-tabs a.on {
-  border-bottom-color: transparent;
+  border-color: var(--accent);
   color: var(--accent-deep);
   font-weight: 800;
   font-size: 1.02rem; /* 고른 탭은 조금 더 크게 (11/19 요청) */
@@ -254,7 +256,7 @@ svg {
     margin-top: 2px;
   }
   .gnb-tabs a {
-    padding: 6px 4px 3px;
+    padding: 4px 10px;
     font-size: 0.84rem;
   }
   .gnb-right {
@@ -3142,7 +3144,7 @@ svg {
     gap: 6px;
   }
   .gnb-tabs a {
-    padding: 10px 8px 3px;
+    padding: 6px 10px;
   }
 }
 @media (max-width: 1100px) and (min-width: 641px) {
