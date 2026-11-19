@@ -13,6 +13,7 @@ import AskPanel from "../ask/AskPanel";
 import BookmarkButton from "../member/BookmarkButton";
 import AskFab from "../ask/AskFab";
 import { activeCount, applyCond, sortItems, useAreas, useCond, useFilterToggle } from "./filters";
+import { useMyLocation } from "@/lib/locate";
 
 /** 지도 처음 화면: 팝업이 가장 많은 시의 점들을 감싸는 범위 (앱 _busiest_area). 너무 확대되지 않게 최소 폭 */
 function busiest(pts: Item[]): Bounds | null {
@@ -43,6 +44,8 @@ export default function MapView({ items, today }: { items: Item[]; today: string
     [items, today],
   );
   const act = activeCount(cond);
+  // 위치 기반 (앱과 같게, 11/19 요청): 허용하면 지도 처음 화면을 내 주변으로, 데일리 노트는 가까운 지역부터
+  const me = useMyLocation();
   // 목록은 24곳씩 (모바일에서 지도 아래로 116장이 한꺼번에 길게 늘어지지 않게, 리스트로 보기와 같은 '더보기')
   const [n, setN] = useState(24);
   const sig = view.map((p) => p.id).join(",");
@@ -85,21 +88,17 @@ export default function MapView({ items, today }: { items: Item[]; today: string
         <div className="map-left">
           <div className="map-row">
             <div className="daily-col">
-              <DailyNote items={view} today={today} onPick={pick} />
+              <DailyNote items={view} today={today} onPick={pick} me={me} />
             </div>
             <div className="map-col">
               {mapped.length || view.length ? (
-                <MapCanvas points={mapped} home={home} focus={focus} />
+                <MapCanvas points={mapped} home={home} focus={focus} me={me} />
               ) : (
                 <NoResult items={items} cond={cond} set={set} reset={reset} today={today} />
               )}
             </div>
           </div>
           <section className="maplist" aria-label="팝업 목록">
-            <div className="maplist-head">
-              팝업 카페 <b>{view.length}</b>곳
-              {view.length > mapped.length && <small> · 지도에 표시 {mapped.length}곳</small>}
-            </div>
             <div className="maplist-body">
               {view.slice(0, n).map((p) => {
                 const s = stateOf(p, today);

@@ -20,7 +20,7 @@ export default function NoResult({
 }) {
   const tries: { label: string; patch: Partial<Cond> }[] = [];
   if (cond.q.trim()) tries.push({ label: "검색어 지우기", patch: { q: "" } });
-  if (cond.area) tries.push({ label: `지역(${cond.area}) 풀기`, patch: { area: "" } });
+  if (cond.area) tries.push({ label: `지역(${cond.area.split(",").join(", ")}) 풀기`, patch: { area: "" } });
   if (cond.day) tries.push({ label: "날짜 풀기", patch: { day: "" } });
   if (cond.span !== EMPTY.span) tries.push({ label: "진행중 + 예정 보기", patch: { span: EMPTY.span } });
   if (cond.work) tries.push({ label: "작품 풀기", patch: { work: "" } });

@@ -9,6 +9,8 @@ import { CloseIcon } from "../Icons";
 // 카카오 지도 JS 키(NEXT_PUBLIC_KAKAO_JS_KEY, 브라우저용 공개 키)가 있으면 카카오맵, 없거나 6초 안에 못 불러오면
 // Leaflet + OpenStreetMap 으로 대신 그린다. 둘 다 실패해도 화면은 멈추지 않고 안내 글만 보인다.
 
+import { homeBox } from "@/lib/locate";
+
 export type Bounds = { south: number; west: number; north: number; east: number };
 
 const KAKAO_KEY = process.env.NEXT_PUBLIC_KAKAO_JS_KEY || "";
@@ -118,6 +120,8 @@ function tipCard(list: Item[]): HTMLElement {
 type Engine = {
   draw: (pts: Item[], selected: string) => void;
   focus: (p: Item) => void;
+  /** 내 위치: 그 둘레로 화면을 옮기고 파란 점을 찍는다 (11/19, 앱 home_box) */
+  showMe: (me: { lat: number; lng: number }, b: Bounds) => void;
   destroy: () => void;
 };
 
@@ -191,6 +195,15 @@ function kakaoEngine(
     focus(p) {
       if (map.getLevel() > 5) map.setLevel(5);
       map.panTo(new K.LatLng(p.lat, p.lng));
+    },
+    showMe(me, b) {
+      map.setBounds(box(b), 20, 20, 20, 20);
+      const dot = document.createElement("div");
+      dot.className = "me-dot";
+      dot.setAttribute("aria-label", "내 위치");
+      new K.CustomOverlay({ position: new K.LatLng(me.lat, me.lng), content: dot, zIndex: 4, clickable: false }).setMap(
+        map,
+      );
     },
     destroy() {
       window.removeEventListener("resize", onResize);
@@ -267,6 +280,18 @@ function leafletEngine(
     focus(p) {
       map.setView([p.lat, p.lng], Math.max(map.getZoom(), 14));
     },
+    showMe(me, b) {
+      map.fitBounds([
+        [b.south, b.west],
+        [b.north, b.east],
+      ]);
+      L.marker([me.lat, me.lng], {
+        icon: L.divIcon({ className: "me-wrap", html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
+        keyboard: false,
+        interactive: false,
+        zIndexOffset: 2000,
+      }).addTo(map);
+    },
     destroy() {
       ro.disconnect();
       map.remove();
@@ -278,9 +303,12 @@ export default function MapCanvas({
   points,
   home,
   focus,
+  me = null,
 }: {
   points: Item[];
   home: Bounds | null;
+  /** 내 위치 (허용했을 때만). 처음 한 번 그 둘레로 화면을 옮긴다 */
+  me?: { lat: number; lng: number } | null;
   /** 바깥(데일리 노트·목록)에서 고른 팝업: 그 자리로 옮기고 미리보기 창을 연다. n 이 바뀔 때마다 다시 */
   focus: { id: string; n: number } | null;
 }) {
@@ -339,6 +367,14 @@ export default function MapCanvas({
     // 지도는 처음 한 번만 만든다 (home 은 처음 화면 범위)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 내 위치가 오면 한 번만 그 둘레로 (앱: 지도 처음 화면을 내 주변으로, 가까운 팝업 3곳이 들어오게)
+  const meDone = useRef(false);
+  useEffect(() => {
+    if (!me || meDone.current || !engine.current) return;
+    meDone.current = true;
+    engine.current.showMe(me, homeBox(me, ptsRef.current as { lat: number; lng: number }[]));
+  }, [me, kind]);
 
   // 점 다시 그리기
   const sig = pts.map((p) => p.id).join(",");

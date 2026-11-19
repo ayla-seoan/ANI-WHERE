@@ -1,4 +1,5 @@
 "use client";
+import AreaPicker from "./AreaPicker";
 import { useEffect, useRef } from "react";
 import { SPANS, type Cond } from "./filters";
 import { CloseIcon, SearchIcon } from "../Icons";
@@ -69,18 +70,10 @@ export default function FilterBar({
               )}
             </span>
           </label>
-          <label className="fld">
+          <div className="fld">
             <span className="flabel">지역</span>
-            <select value={cond.area} onChange={(e) => set({ area: e.target.value })}>
-              <option value="">전체</option>
-              {areas.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-              {cond.area && !areas.includes(cond.area) && <option value={cond.area}>{cond.area}</option>}
-            </select>
-          </label>
+            <AreaPicker value={cond.area} areas={areas} onChange={(v) => set({ area: v })} />
+          </div>
           <label className="fld">
             <span className="flabel">진행여부</span>
             <select value={cond.span} onChange={(e) => set({ span: e.target.value as Cond["span"] })}>

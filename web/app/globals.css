@@ -3502,3 +3502,93 @@ svg {
     transform: scaleX(0.6);
   }
 }
+
+/* 지도의 내 위치 점 (11/19, 위치를 허용했을 때만) */
+.me-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2c7be5;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 6px rgba(44, 123, 229, 0.22), 0 1px 4px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+}
+.me-wrap .me-dot {
+  transform: none;
+}
+
+/* 지역 고르기 — 여러 곳 (AreaPicker, 앱 multiselect, 11/19) */
+.area-pick {
+  position: relative;
+  flex: none;
+}
+.area-pick-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 240px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: #f0f2f6;
+  color: #6b7280;
+  font-size: 0.88rem;
+  text-align: left;
+}
+.area-pick-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.area-pick-btn.on {
+  color: var(--accent-deep);
+  font-weight: 700;
+  background: var(--accent-soft);
+  border-color: #9eddcc;
+}
+.area-pick-btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.area-pick-pop {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.area-opt {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+.area-opt.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+.fld .area-pick,
+.fld .area-pick-btn {
+  width: 100%;
+}
+.fld .area-pick-pop {
+  width: 100%;
+  min-width: 240px;
+}

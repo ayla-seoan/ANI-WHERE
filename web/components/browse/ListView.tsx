@@ -6,6 +6,7 @@ import type { Item } from "@/lib/popup";
 import { PosterCard } from "../cards";
 import { BookmarkIcon, ChatIcon, CloseIcon, ExpandMore, HelpIcon, TuneIcon } from "../Icons";
 import FilterBar from "./FilterBar";
+import AreaPicker from "./AreaPicker";
 import AskPanel from "../ask/AskPanel";
 import AskFab from "../ask/AskFab";
 import NoResult from "./NoResult";
@@ -123,19 +124,7 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
               북마크
             </button>
             {/* 앱 목록 위 '지역 고르기' 칸 (PC). 필터 상자의 지역과 같은 값 */}
-            <select
-              className="region-pick pc-only"
-              value={cond.area}
-              aria-label="지역 고르기"
-              onChange={(e) => set({ area: e.target.value })}
-            >
-              <option value="">지역 고르기 (전체)</option>
-              {areas.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
+            <AreaPicker className="pc-only" value={cond.area} areas={areas} onChange={(v) => set({ area: v })} />
             <select
               className="sort"
               value={cond.sort}
