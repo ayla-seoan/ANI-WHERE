@@ -422,6 +422,8 @@ members = Storage(worksheet="members", headers=auth.HEADERS)
 del_requests = Storage(worksheet="del_requests", headers=admin.REQ_HEADERS)      # 일반 회원의 삭제 요청
 alert_rules = Storage(worksheet="alert_rules", headers=admin.RULE_HEADERS)       # 자동 알림 규칙 (관리자가 고침)
 api_usage = Storage(worksheet="api_usage", headers=blog.USAGE_HEADERS)            # 블로그 검색 호출 수 (한 달 한도)
+blog_posts_store = Storage(worksheet="blog_posts", headers=blog.POST_HEADERS)     # 찾아 둔 블로그 후기 (013, 11/19)
+blog_checks_store = Storage(worksheet="blog_checks", headers=blog.CHECK_HEADERS)  # 팝업마다 네이버에 물어본 날
 notices_store = Storage(worksheet="notices", headers=admin.NOTICE_HEADERS)       # 회원에게 가는 알림·공지
 visits = Storage(worksheet="visits", headers=admin.VISIT_HEADERS)                # 회원이 접속한 날
 # 실행 번호: 찜 정보를 한 번 그릴 때 한 번만 읽고, 다음 실행에서는 새로 읽게 한다
@@ -876,49 +878,55 @@ def _detail_info_html(current: dict) -> str:
     return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
-def _blog_posts(entry_id: str, work: str, cafe_name: str, start_date: str, address: str = "") -> tuple[list, str]:
-    """팝업별 네이버 블로그 후기 (하루 동안 기억 → 같은 팝업은 하루 한 번만 검색)."""
-    posts, err = blog.search({"work": work, "cafe_name": cafe_name, "start_date": start_date, "address": address}, limit=15,
-                             usage=api_usage)        # 한 달 30,000번이 넘으면 부르지 않음
-    return [{**p.__dict__, "thumb": th} for p, th in blog.with_thumbs(posts)], err
+def _blog_row(current: dict) -> dict:
+    return {"work": str(current.get("work") or ""), "cafe_name": str(current.get("cafe_name") or ""),
+            "start_date": str(current.get("start_date") or "")[:10], "address": str(current.get("address") or "")}
 
 
-_BLOG_COUNT: dict[str, int] = {}     # 팝업별 블로그 글 수 (탭 이름 '블로그 후기 (N)' 에 씀)
-_BLOG_WARM = {"day": None}            # 미리 세기를 한 날 (서버마다 하루 한 번)
+def _show_pic(pic) -> None:
+    """수정 화면의 사진 미리보기. st.image 는 https 주소나 실제 파일 경로만 받는다 — 화면용 상대 주소(app/static/…)를
+    넘기면 파일을 못 찾아 앱이 멈췄다 (11/19 MediaFileStorageError). 사진이 없거나 못 열면 멈추지 않고 '(파일 없음)'."""
+    try:
+        if pic is None:
+            raise FileNotFoundError
+        s_ = str(pic)
+        st.image(s_ if s_.startswith("https://") else str(Path(pic)), width="stretch")
+    except Exception:
+        st.caption("(파일 없음)")
 
 
-def _row_key(r: dict) -> tuple:
-    return (str(r.get("entry_id")), str(r.get("work") or ""), str(r.get("cafe_name") or ""),
-            str(r.get("start_date") or "")[:10], str(r.get("address") or ""))
+_BLOG_WARM = {"day": None}            # 미리 채우기를 한 날 (서버마다 하루 한 번)
+
+
+def _blog_counts() -> dict[str, int]:
+    """팝업별 저장해 둔 블로그 글 수 ('블로그 후기 (N)' 탭). 네이버를 부르지 않는다 (11/19, supabase 013)."""
+    try:
+        return dict(blog.counts(blog_posts_store))
+    except Exception:
+        return {}
 
 
 def _warm_blog_counts(rows: list[dict]) -> None:
-    """속도 (11/18): 상세를 열 때 블로그 검색을 기다리지 않게, 지금 열린·예정 팝업의 블로그 글 수를 뒤에서 미리 센다.
-    팝업마다 검색 1번(대표 사진은 탭을 열 때). 하루 한 번, 한 달 호출 한도(blog.MONTHLY_LIMIT) 안에서만."""
+    """지금 열린·예정 팝업의 블로그 글을 뒤에서 미리 저장해 둔다 (상세를 열 때 기다리지 않게).
+    11/19: 찾은 글은 blog_posts 에 쌓고, 팝업마다 하루 한 번만 네이버에 물어 새 글만 더한다 (blog.refresh).
+    서버마다 하루 한 번 + 저장소에 오늘 표시(warm_claim) — 여러 서버 · 재시작이 겹쳐도 하루 한 바퀴만."""
     import threading
 
     if not blog.enabled() or _BLOG_WARM["day"] == TODAY:
         return
     _BLOG_WARM["day"] = TODAY
-    # 서버가 다시 켜질 때마다 다시 세지 않게, 하루에 한 번만 (저장소에 오늘 표시, 11/19 — 배포가 잦은 날 네이버 하루 한도를 다 썼다)
     if blog.blocked(api_usage) or not blog.warm_claim(api_usage):
         return
-    todo = [_row_key(r) for r in rows if str(r.get("end_date") or "")[:10] >= TODAY.isoformat()]
+    todo = [(str(r.get("entry_id")), _blog_row(r)) for r in rows if str(r.get("end_date") or "")[:10] >= TODAY.isoformat()]
 
     def run() -> None:
-        for eid, work, cafe_name, start, addr in todo:
-            if eid in _BLOG_COUNT:
-                continue
+        for eid, row in todo:
             try:
-                posts, err = blog.search({"work": work, "cafe_name": cafe_name, "start_date": start, "address": addr},
-                                         limit=15, usage=api_usage)
+                _, err = blog.refresh(row, eid, blog_posts_store, blog_checks_store, usage=api_usage)
             except Exception:
                 continue
             if err in ("limit", "daily"):     # 한 달 한도 · 네이버 하루 한도에 걸리면 바로 멈춘다
                 break
-            if not err:
-                _BLOG_COUNT[eid] = len(posts)
 
     threading.Thread(target=run, daemon=True, name="blog-warm").start()
 
@@ -927,23 +935,16 @@ _BLOG_ERR: dict[str, str] = {}       # 팝업별 마지막 블로그 검색 실�
 
 
 def _blog_list(current: dict) -> list[dict]:
+    """저장해 둔 글 + (오늘 아직 안 물어봤으면) 새 글만 더한 목록 (11/19 요청: 불러온 건 저장해 두고 추가된 것만)."""
     if not blog.enabled():
         return []
     eid = str(current.get("entry_id"))
-    args = (eid, str(current.get("work") or ""), str(current.get("cafe_name") or ""),
-            str(current.get("start_date") or "")[:10], str(current.get("address") or ""))
     try:
-        posts, err = _blog_posts(*args)
+        posts, err = blog.refresh(_blog_row(current), eid, blog_posts_store, blog_checks_store, usage=api_usage)
     except Exception:
         _BLOG_ERR[eid] = "연결 실패"
         return []
-    if err:                 # 실패(한도 · 연결 실패)는 하루 동안 기억하지 않고 다음에 다시 해 본다 (성공만 하루 기억)
-        try:
-            _blog_posts.clear(*args)
-        except Exception:
-            pass
     _BLOG_ERR[eid] = err or ""
-    _BLOG_COUNT[eid] = len(posts)
     return posts
 
 
@@ -1144,10 +1145,11 @@ def render_detail_tabs(current: dict) -> None:
                                    on_change="rerun")
     with tab_review:
         sub = st.session_state.get(f"rvsub_{entry_id}", "review")
-        # 블로그 글 목록(대표 사진 포함)은 '블로그 후기' 탭을 열 때만. 건수는 미리 센 값(_warm_blog_counts)을 쓰고,
-        # 아직 못 셌으면 그 자리에서 검색해서라도 늘 보여 준다 (11/18 요청: 건수가 안 보임)
-        posts = _blog_list(current) if sub == "blog" or entry_id not in _BLOG_COUNT else None
-        n_blog = len(posts) if posts is not None else _BLOG_COUNT.get(entry_id)
+        # 블로그 글은 저장해 둔 것(blog_posts)에서 바로 읽는다. 건수도 저장된 글 수 (11/19 요청: 불러온 건 저장해 두고
+        # 추가된 것만 새로). 아직 저장된 게 없거나 '블로그 후기' 탭을 열면 그 자리에서 오늘 새 글을 확인한다
+        saved_n = _blog_counts().get(entry_id)
+        posts = _blog_list(current) if sub == "blog" or not saved_n else None
+        n_blog = len(posts) if posts is not None else saved_n
 
         def subtabs() -> bool:
             # 리뷰 쓰기 칸 아래에 '리뷰 후기 / 블로그 후기' (11/18 요청)
@@ -1410,13 +1412,14 @@ def _review_edit_box(r: dict) -> None:
     keep: list[str] = []
     photos = []
     if not str(r.get("parent_id") or ""):
-        old = [x.name for x in images.paths(r.get("images"))]
+        old_pics = images.paths(r.get("images"))
+        old = [x.name for x in old_pics]
         if old:
             st.caption("붙어 있는 사진 (뺄 사진은 체크를 풀어요)")
             cols = st.columns(min(len(old), 4))
             for i, name in enumerate(old):
                 with cols[i % len(cols)]:
-                    st.image(images.url(images.IMAGE_DIR / name), width="stretch")
+                    _show_pic(old_pics[i])
                     if st.checkbox("남기기", value=True, key=f"rv_edit_keep_{eid}_{i}"):
                         keep.append(name)
         room = review.MAX_IMAGES - len(keep)
@@ -1659,10 +1662,7 @@ def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]],
         for i, (name, _) in enumerate(keep):
             with cols[i % 4]:
                 found = images.paths(name)      # 사진 저장소(https) 주소도 받는다 (공개 웹 · 11/19 부터 앱에서 올린 사진)
-                if found:
-                    st.image(images.url(found[0]), width="stretch")
-                else:
-                    st.caption("(파일 없음)")
+                _show_pic(found[0] if found else None)
                 if st.button("삭제", key=f"img_del_{k}_{name}", width="stretch"):
                     removed.add(name)
                     st.rerun()
@@ -2791,8 +2791,8 @@ STORY_CSS = """
 .story .ring { position: relative; width: 72px; height: 72px; border-radius: 50%; padding: 3px; box-sizing: border-box;
   background: conic-gradient(from 210deg, #14b8a6, #7FE0CF, #FFD66B, #14b8a6); transition: transform .18s ease; }
 .story .rg { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); z-index: 2; white-space: nowrap;
-  font-size: .62rem; font-weight: 800; color: #fff; background: var(--accent-deep); padding: 1px 7px; border-radius: 999px;
-  border: 1.5px solid #fff; }
+  font-size: .62rem; font-weight: 800; color: #fff; background: #56C2A7; padding: 1px 7px; border-radius: 999px;
+  border: 1.5px solid #fff; }   /* 지역 배지: 민트 (11/19 요청) */
 .st-key-story_row { padding-top: 10px !important; }
 .story.hot .ring { background: conic-gradient(from 210deg, var(--accent-deep), var(--accent), #ffd66b, var(--accent-deep)); }
 .story .cnt { position: absolute; right: -2px; bottom: -2px; min-width: 24px; height: 24px; padding: 0 5px; box-sizing: border-box;

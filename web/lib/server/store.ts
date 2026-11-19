@@ -37,6 +37,9 @@ export const HEADERS: Record<string, string[]> = {
   ],
   // 010_api_usage (외부 API 호출 수 — 블로그 검색 한 달 한도)
   api_usage: [...BASE, "api", "month", "calls"],
+  // 013_blog_posts (찾아 둔 블로그 후기 · 팝업마다 네이버에 물어본 날, 11/19). common/blog.py POST_HEADERS · CHECK_HEADERS
+  blog_posts: [...BASE, "cafe_id", "link", "title", "descr", "blogger", "day", "thumb"],
+  blog_checks: [...BASE, "cafe_id", "day", "found"],
 };
 const FLOATS = new Set(["lat", "lng"]); // DB 는 double precision (빈칸 ↔ null)
 const INTS = new Set(["revision", "calls"]); // DB 는 integer

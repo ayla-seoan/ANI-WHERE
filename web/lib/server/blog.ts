@@ -143,14 +143,19 @@ async function markBlocked(): Promise<void> {
   }
 }
 
-export async function search(row: BlogRow, limit = 5, usage?: Usage): Promise<[Post[], string]> {
+export async function search(
+  row: BlogRow,
+  limit = 5,
+  usage?: Usage,
+  sort: "sim" | "date" = "sim",
+): Promise<[Post[], string]> {
   if (!enabled()) return [[], "off"];
   if (await blocked()) return [[], "daily"];
   if (usage) {
     if (!(await allowed())) return [[], "limit"];
     await record();
   }
-  const qs = new URLSearchParams({ query: queryFor(row), display: "30", sort: "sim", format: "json" });
+  const qs = new URLSearchParams({ query: queryFor(row), display: "30", sort, format: "json" });
   let res: Response;
   try {
     res = await fetch(`${hubUrl()}?${qs}`, {
@@ -311,4 +316,80 @@ export async function total(row: BlogRow, usage?: Usage): Promise<number | null>
   } catch {
     return null;
   }
+}
+
+// ------------------------------------------------------------------ 찾은 글 저장 (11/19 요청, supabase 013 · common/blog.py 와 같게)
+// "불러온 거 저장해 놓고 보이게 하고 추가된 것만 새로 불러오면 되잖아" — 찾은 글은 blog_posts 에 쌓고 화면은 거기서 읽는다.
+// 네이버는 팝업마다 하루 한 번만 묻는다 (blog_checks 에 그날 표시). 처음엔 정확도순, 그다음부터는 최신순으로 새 글만 더한다.
+export const SHOW_MAX = 30;
+export type SavedPost = Post & { thumb: string };
+
+async function postId(cafeId: string, link: string): Promise<string> {
+  const { createHash } = await import("node:crypto");
+  return `${cafeId}:${createHash("sha1").update(link, "utf8").digest("hex").slice(0, 12)}`;
+}
+
+/** 저장해 둔 이 팝업의 글 (같은 글은 마지막 기록 하나, 최신순) */
+export async function stored(cafeId: string): Promise<SavedPost[]> {
+  if (mode() === "none") return [];
+  const latestBy = new Map<string, Record<string, string | number>>();
+  for (const r of await rows("blog_posts", { cafe_id: cafeId })) {
+    const k = String(r.entry_id);
+    const prev = latestBy.get(k);
+    if (!prev || Number(r.revision) >= Number(prev.revision)) latestBy.set(k, r);
+  }
+  const out: SavedPost[] = [];
+  for (const r of latestBy.values()) {
+    if (r.status === "deleted") continue;
+    out.push({
+      title: String(r.title || ""),
+      link: String(r.link || ""),
+      desc: String(r.descr || ""),
+      blogger: String(r.blogger || ""),
+      day: String(r.day || "").slice(0, 10),
+      thumb: String(r.thumb || ""),
+    });
+  }
+  out.sort((a, b) => (b.day || "0000").localeCompare(a.day || "0000"));
+  return out.slice(0, SHOW_MAX);
+}
+
+async function checkedToday(cafeId: string): Promise<boolean> {
+  if (mode() === "none") return false;
+  return (await rows("blog_checks", { cafe_id: cafeId, day: kstDay() })).length > 0;
+}
+
+/** 저장해 둔 글 + (오늘 아직 안 물어봤으면) 네이버에서 새 글만 더해 돌려준다. 오류여도 저장해 둔 글은 그대로 */
+export async function refresh(cafeId: string, row: BlogRow): Promise<[SavedPost[], string]> {
+  const have = await stored(cafeId);
+  if (!enabled() || mode() === "none" || (await checkedToday(cafeId))) return [have, ""];
+  const [found, err] = await search(row, SHOW_MAX, true, have.length ? "date" : "sim");
+  if (err) return [have, err];
+  const known = new Set(have.map((p) => p.link));
+  const fresh = found.filter((p) => !known.has(p.link));
+  for (const [p, thumb] of await withThumbs(fresh)) {
+    try {
+      await append(
+        "blog_posts",
+        {
+          cafe_id: cafeId,
+          link: p.link.slice(0, 500),
+          title: [...p.title].slice(0, 200).join(""),
+          descr: [...p.desc].slice(0, 300).join(""),
+          blogger: [...p.blogger].slice(0, 60).join(""),
+          day: p.day,
+          thumb: thumb.slice(0, 600),
+        },
+        await postId(cafeId, p.link),
+      );
+    } catch {
+      /* 한 글을 못 쌓아도 나머지는 계속 */
+    }
+  }
+  try {
+    await append("blog_checks", { cafe_id: cafeId, day: kstDay(), found: String(fresh.length) }, `${cafeId}:${kstDay()}`);
+  } catch {
+    /* 표시를 못 남기면 다음에 다시 물어본다 */
+  }
+  return [fresh.length ? await stored(cafeId) : have, ""];
 }
