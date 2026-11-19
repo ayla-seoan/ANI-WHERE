@@ -4273,7 +4273,8 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
 .st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: #26302D !important; }
 .st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
 /* 오른쪽 끝: 검색 · 알림 · 로그인 */
-.st-key-gnb_right { margin-left: auto; width: auto !important; flex: 0 0 auto; gap: 2px !important; align-items: center; }
+.st-key-gnb_right { margin-left: auto; width: auto !important; flex: 0 0 auto; gap: 10px !important; align-items: center; }   /* 젤리 바탕이 옆 버튼과 겹치지 않게 (11/19) */
+@media (max-width: 640px) { .st-key-gnb_right { gap: 6px !important; } }
 .st-key-gnb_right [class*="st-key-gnb_search_"] button { background: transparent !important; border: 0 !important;
   box-shadow: none !important; }
 .st-key-gnb_right [class*="st-key-gnb_search_"] button span[data-testid="stIconMaterial"] { font-size: 1.6rem !important; }

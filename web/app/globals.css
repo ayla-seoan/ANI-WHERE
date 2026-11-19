@@ -184,6 +184,7 @@ svg {
   margin-left: auto;
   display: flex;
   align-items: center;
+  gap: 10px; /* 마우스를 올리면 생기는 젤리 바탕이 옆 버튼과 겹치지 않게 (11/19 요청) */
   z-index: 3;
 }
 .gnb-search {
@@ -251,6 +252,7 @@ svg {
   }
   .gnb-right {
     order: 2;
+    gap: 6px;
   }
   .gnb-search {
     width: 42px;
