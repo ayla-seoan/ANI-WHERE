@@ -4270,8 +4270,13 @@ html body .st-key-gnb_right [data-testid="stPopover"] button { position: relativ
   min-height: 0 !important; }   /* 글자와 밑줄 사이 반으로 (12px → 6px, 11/18 요청) */
 .st-key-gnb_tabs button p { font-size: .92rem !important; font-weight: 600 !important; color: #8A9592 !important; }
 .st-key-gnb_tabs button:hover p { color: #26302D !important; }
-.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: #26302D !important; }
-.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: #26302D !important; font-weight: 800 !important; }
+/* 고른 탭: 아래 밑줄 없이 글자만 진한 포인트 색 · 굵게 (11/19 요청) */
+.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button { border-bottom-color: transparent !important; }
+.st-key-gnb_tabs [class*="st-key-gnbtab_on_"] button p { color: var(--accent-deep) !important; font-weight: 800 !important; }
+/* 고른 탭은 조금 더 크게 (11/19 요청). 모바일 · 스크롤 규칙보다 앞서게 선택자를 세게 */
+html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button p { font-size: 1.02rem !important; }
+@media (max-width: 640px) {
+  html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button p { font-size: .94rem !important; } }
 /* 오른쪽 끝: 검색 · 알림 · 로그인 */
 .st-key-gnb_right { margin-left: auto; width: auto !important; flex: 0 0 auto; gap: 10px !important; align-items: center; }   /* 젤리 바탕이 옆 버튼과 겹치지 않게 (11/19) */
 @media (max-width: 640px) { .st-key-gnb_right { gap: 6px !important; } }
