@@ -84,20 +84,13 @@
   .leaflet-tooltip.tip-l::before { display: none; }
   .msg { padding: 24px; font-size: 13px; color: #6b6b76; line-height: 1.6; }
   /* '내 위치' 버튼 (11/19 요청, 공개 웹과 같게): 오른쪽 아래, 누르면 내 자리로 확대 + 파란 점 */
-  /* 오른쪽 가운데 버튼 묶음: 확대 · 축소, 그 바로 아래 '내 위치' (11/19 요청). 지도 기본 확대 버튼 대신 — 세 지도 모두 같은 자리 */
-  #ctrl { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); z-index: 1000;
-          display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  #zoom { display: flex; flex-direction: column; background: #fff; border: 1px solid #dde2e0; border-radius: 10px;
-          box-shadow: 0 2px 8px rgba(0,0,0,.16); overflow: hidden; }
-  #zoom button { width: 36px; height: 36px; border: 0; background: #fff; color: #26302d; font-size: 20px; font-weight: 700;
-                 line-height: 1; cursor: pointer; padding: 0; font-family: inherit; }
-  #zoom button + button { border-top: 1px solid #e8ecea; }
-  #zoom button:hover { background: #e6fbf7; color: #0d9488; }
-  #me { width: 38px; height: 38px; border-radius: 50%;
+  /* 위치는 지도 확대 · 축소 버튼 바로 아래로 맞춘다 (placeMe, 11/19 요청: 오른쪽 아래는 모바일에서 등록 · 물어보기 버튼과 겹침).
+     확대 버튼을 못 찾으면 이 기본 자리(오른쪽 아래) */
+  #me { position: absolute; right: 10px; bottom: 28px; z-index: 1000; width: 34px; height: 34px; border-radius: 50%;
         border: 1px solid #dde2e0; background: #fff; color: #0d9488; display: flex; align-items: center;
         justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,.16); cursor: pointer; padding: 0; }
   #me:hover { border-color: #14b8a6; }
-  #me svg { width: 22px; height: 22px; }
+  #me svg { width: 20px; height: 20px; }
   #me.busy svg { animation: meSpin 1s linear infinite; }
   @keyframes meSpin { to { transform: rotate(360deg); } }
   .me-dot { width: 16px; height: 16px; border-radius: 50%; background: #2c7be5; border: 3px solid #fff; box-sizing: border-box;
@@ -109,17 +102,11 @@
 </head>
 <body>
 <div id="map"></div>
-<div id="ctrl">
-  <div id="zoom">
-    <button type="button" id="zin" aria-label="확대">+</button>
-    <button type="button" id="zout" aria-label="축소">−</button>
-  </div>
-  <button id="me" type="button" aria-label="내 현재 위치로">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/>
-    </svg>
-  </button>
-</div>
+<button id="me" type="button" aria-label="내 현재 위치로" title="">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/>
+  </svg>
+</button>
 <div id="me-msg" role="status"></div>
 <div id="spot"></div>
 <div id="styles"></div>
@@ -276,6 +263,7 @@ const Kakao = {
       center: new K.LatLng(KOREA.lat, KOREA.lng), level: 12,
     });
     this.overview();
+    this.map.addControl(new K.ZoomControl(), K.ControlPosition.RIGHT);
     document.getElementById("styles").style.display = "none";   // 지도 그림 바꾸기는 기본 지도에서만
     // 카카오맵에는 이동 범위 옵션이 없어서, 벗어나면 가운데를 범위 안으로 되돌린다
     const clamp = () => {
@@ -338,7 +326,6 @@ const Kakao = {
   focus(p) { this.map.setLevel(4); this.map.setCenter(new kakao.maps.LatLng(p.lat, p.lng)); },
   peek(p) { if (this.map.getLevel() > 5) this.map.setLevel(5); this.map.panTo(new kakao.maps.LatLng(p.lat, p.lng)); },
   fit() { this.overview(); },
-  zoomBy(d) { this.map.setLevel(this.map.getLevel() - d, { animate: true }); },
   me(lat, lng) {
     const pos = new kakao.maps.LatLng(lat, lng);
     if (this.map.getLevel() > 5) this.map.setLevel(5);
@@ -379,7 +366,7 @@ const Naver = {
     this.map = new N.Map("map", {
       center: new N.LatLng(KOREA.lat, KOREA.lng), zoom: 7, minZoom: 6,
       maxBounds: new N.LatLngBounds(new N.LatLng(ASIA.south, ASIA.west), new N.LatLng(ASIA.north, ASIA.east)),
-      zoomControl: false,        // 확대 · 축소는 오른쪽 가운데 우리 버튼 묶음 (#ctrl)
+      zoomControl: true, zoomControlOptions: { position: N.Position.RIGHT_CENTER, style: N.ZoomControlStyle.SMALL },
       mapDataControl: false, scaleControl: false, logoControlOptions: { position: N.Position.BOTTOM_LEFT },
     });
     document.getElementById("styles").style.display = "none";   // 지도 그림 바꾸기는 기본 지도에서만
@@ -423,7 +410,6 @@ const Naver = {
   focus(p) { this.map.setZoom(16, false); this.map.setCenter(new naver.maps.LatLng(p.lat, p.lng)); },
   peek(p) { if (this.map.getZoom() < 15) this.map.setZoom(15, false); this.map.panTo(new naver.maps.LatLng(p.lat, p.lng)); },
   fit() { this.overview(); },
-  zoomBy(d) { this.map.setZoom(this.map.getZoom() + d, true); },
   me(lat, lng) {
     const pos = new naver.maps.LatLng(lat, lng);
     if (this.map.getZoom() < 15) this.map.setZoom(15, false);
@@ -457,7 +443,6 @@ const Basic = {
   init() {
     const asia = L.latLngBounds([ASIA.south, ASIA.west], [ASIA.north, ASIA.east]);
     this.map = L.map("map", {
-      zoomControl: false,        // 확대 · 축소는 오른쪽 가운데 우리 버튼 묶음 (#ctrl)
       center: [KOREA.lat, KOREA.lng], zoom: 7,
       zoomSnap: 0.25,            // 0.25 단위로 맞춰 포천~제주가 지도 칸에 꽉 차게
       maxBounds: asia, maxBoundsViscosity: 1.0,   // 범위 끝에서 더 끌리지 않는다
@@ -571,7 +556,6 @@ const Basic = {
   },
   fit() { this.overview(); },
   peek(p) { this.map.setView([p.lat, p.lng], Math.max(this.map.getZoom(), 14), { animate: true }); },
-  zoomBy(d) { if (d > 0) this.map.zoomIn(); else this.map.zoomOut(); },
   me(lat, lng) {
     this.map.setView([lat, lng], Math.max(this.map.getZoom(), 15), { animate: true });
     if (this.meDot) this.meDot.remove();
@@ -593,7 +577,7 @@ function draw(args) {
   const selected = args.selected;
   ALL = points;
   SEL = selected;
-  if (!engine.map) engine.init();
+  if (!engine.map) { engine.init(); setTimeout(placeMe, 300); }
   engine.draw(points, pinSel || selected);
 
   const view = JSON.stringify([selected, points.map((p) => p.id), HOME]);
@@ -613,18 +597,28 @@ function draw(args) {
 }
 let touched = false;      // 사용자가 지도를 끌거나 확대·축소했는지
 
+// '내 위치' 버튼 자리: 지도 확대 · 축소 버튼 바로 아래 (카카오 '축소' 버튼 · Leaflet 확대 묶음 · 네이버 '축소')
+function placeMe() {
+  const me = document.getElementById("me");
+  const z = document.querySelector("#map .leaflet-control-zoom") ||
+    [...document.querySelectorAll("#map [title], #map [aria-label]")].find((e) =>
+      /축소|zoom ?out/i.test(e.getAttribute("title") || e.getAttribute("aria-label") || ""));
+  if (!z) { me.style.top = me.style.left = ""; me.style.right = "10px"; me.style.bottom = "28px"; return; }
+  const r = z.getBoundingClientRect();
+  if (!r.width) return;
+  me.style.bottom = me.style.right = "auto";
+  me.style.top = Math.round(r.bottom + 8) + "px";
+  me.style.left = Math.round(r.left + r.width / 2 - me.offsetWidth / 2) + "px";
+}
+window.addEventListener("resize", () => setTimeout(placeMe, 150));
+[300, 1000, 2500, 5000].forEach((ms) => setTimeout(placeMe, ms));   // 지도 라이브러리 · 확대 버튼이 늦게 붙어서 몇 번 맞춘다
+
 // '내 위치' 버튼: 누를 때마다 지금 위치를 받아 내 자리로 옮긴다 (위치는 이 화면 안에서만 쓰고 보내지 않는다)
 function meMsg(text) {
   const m = document.getElementById("me-msg");
   m.textContent = text; m.style.display = "block";
   clearTimeout(meMsg.t); meMsg.t = setTimeout(() => { m.style.display = "none"; }, 3500);
 }
-["zin", "zout"].forEach((id, i) => document.getElementById(id).addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (!engine || !engine.map || !engine.zoomBy) return;
-  touched = true;
-  engine.zoomBy(i === 0 ? 1 : -1);
-}));
 document.getElementById("me").addEventListener("click", (e) => {
   e.stopPropagation();
   const btn = e.currentTarget;
