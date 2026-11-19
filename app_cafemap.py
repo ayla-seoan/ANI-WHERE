@@ -50,9 +50,9 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent
 TODAY = date.today()
 MAP_HEIGHT = 620
-# 제목 로고: 민트 로고 하나로 고정 (11/18 요청: 흰 글자 로고 → 다시 민트 로고, 크기는 그대로)
-LOGOS = ["logo_mint.png"]          # 연한 메뉴바 + 초록 로고로 되돌림 (11/18 요청)
-FIXED_LOGO = "logo_mint.png"
+# 제목 로고: 기본 로고(logo.png) 하나로 고정 (11/19 요청: 민트 로고 → 디자인 시스템의 '기본 로고', 크기는 그대로)
+LOGOS = ["logo.png"]
+FIXED_LOGO = "logo.png"
 ADD_LOGO = "logo_add.png"          # 등록 화면 로고 (흰 글자 + 민트 테두리)           # 상세·등록 화면에서는 이 로고로 고정
 TOPBAR_TOP = "0rem"      # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
 TOPBAR_H = "282px"        # 상단 묶음 높이 (로고 + 문구 + 검색 필터. '팝업 카페 N곳' 줄은 묶음 밖)
@@ -392,7 +392,7 @@ html body [class*="st-key-wk_more_"] button p, html body [class*="st-key-wk_more
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
 /* 로고 그림 아래 'ANIME POP-UP · CAFE · GOODS' 글씨까지 읽히게 로고 칸을 키운다 */
 .st-key-home_brand button {{ width: 330px !important; height: 100px !important;
-  background: url("app/static/logo_mint.png") no-repeat left center / contain !important; }}
+  background: url("app/static/logo.png") no-repeat left center / contain !important; }}
 .st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
 /* 로고는 눌러도·커서를 올려도 바탕·그림자·밝기 변화 없이 그대로 (모바일 탭 하이라이트도 끈다) */
 .st-key-home_brand button, .st-key-home_brand button:hover, .st-key-home_brand button:focus,
@@ -1557,7 +1557,9 @@ def render_reviews(cafe_id: str, after_write=None) -> None:
 
     threads = review.threads(reviews.current_rows(), cafe_id)
     if not threads:
-        st.caption("아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.")
+        # 가운데 정렬 (11/19 요청, 웹 .rv-none.center 와 같게)
+        st.markdown('<div style="text-align:center;color:#8A9592;font-size:.88rem;padding:10px 0;">'
+                    '아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</div>', unsafe_allow_html=True)
         return
 
     # 다녀온 후기에 별점이 있으면 목록 위에 평균 별점

@@ -1156,9 +1156,10 @@ svg {
 }
 
 /* ---------- 리스트로 보기 ---------- */
+/* 물어보기 칸 폭은 리스트 · 지도에서 같게, 예전(약 26%)보다 좁게 — 화면의 22%(260~420px), 나머지는 카드 칸 (11/19 요청) */
 .list-layout {
   display: grid;
-  grid-template-columns: 3.3fr 1.165fr;
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 22%, 420px);
   gap: 32px;
   align-items: start;
 }
@@ -1822,7 +1823,7 @@ svg {
 /* ---------- 지도로 보기 (앱: 왼쪽 큰 칸 = 데일리 노트 0.9 + 지도 3.4, 오른쪽 물어보기 1.55) ---------- */
 .map-layout {
   display: grid;
-  grid-template-columns: 4.3fr 1.55fr;
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 22%, 420px);
   gap: 32px;
   align-items: start;
 }

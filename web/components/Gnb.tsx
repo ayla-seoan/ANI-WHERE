@@ -42,7 +42,7 @@ export default function Gnb({ bell }: { bell: BellData | null }) {
     <header className="gnb-wrap">
       <div className="gnb">
         <Link href="/" className="gnb-logo" aria-label="ANI:WHERE 홈">
-          <img src="/logo_mint_sm.webp" alt="ANI:WHERE — ANIME POP-UP · CAFE · GOODS" width={155} height={47} />
+          <img src="/logo_sm.webp" alt="ANI:WHERE" width={155} height={44} />
         </Link>
         <nav className={`gnb-tabs${me ? " four" : ""}`} aria-label="주요 메뉴">
           {tabs.map((t) => (
