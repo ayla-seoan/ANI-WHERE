@@ -31,6 +31,9 @@ body {
   padding: 0;
   max-width: 100vw;
   overflow-x: hidden;
+  /* clip: 가로로 넘치는 것만 자르고 스크롤 상자는 만들지 않는다 — hidden 이면 리스트 · 지도의 물어보기 칸이
+     스크롤을 따라오지 않았다 (position: sticky 가 안 먹음, 11/19 요청). clip 을 모르는 옛 브라우저는 위 hidden */
+  overflow-x: clip;
 }
 body {
   background: #fff;
