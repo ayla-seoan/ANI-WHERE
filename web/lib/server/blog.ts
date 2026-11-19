@@ -112,8 +112,40 @@ type Usage = true | undefined;
 
 /** (글 목록, 오류 이유). 팝업 시작 30일 전부터 쓴 글만, 최신순. 키가 없으면 ([], 'off').
  *  usage 를 주면 이번 달 MONTHLY_LIMIT 번을 넘으면 부르지 않는다 ([], 'limit'). */
+// 네이버가 '일별 사용량 한도 초과'(HTTP 429)라고 하면 그날(한국 시간)은 더 부르지 않는다 (11/19, common/blog.py 와 같게).
+// 앱 · 웹이 함께 알도록 api_usage 에 그날 표시(api='blog_429', month=날짜)를 쌓는다.
+let blockedDay = "";
+function kstDay(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+export async function blocked(): Promise<boolean> {
+  const d = kstDay();
+  if (blockedDay === d) return true;
+  if (mode() === "none") return false;
+  try {
+    if ((await rows("api_usage", { api: "blog_429", month: d })).length) {
+      blockedDay = d;
+      return true;
+    }
+  } catch {
+    /* 못 읽으면 부르기는 한도 검사(allowed)에 맡긴다 */
+  }
+  return false;
+}
+async function markBlocked(): Promise<void> {
+  const d = kstDay();
+  if (blockedDay === d) return;
+  blockedDay = d;
+  try {
+    await append("api_usage", { api: "blog_429", month: d, calls: 0 }, `blog_429:${d}`);
+  } catch {
+    /* 표시를 못 남겨도 이 서버는 오늘 더 부르지 않는다 */
+  }
+}
+
 export async function search(row: BlogRow, limit = 5, usage?: Usage): Promise<[Post[], string]> {
   if (!enabled()) return [[], "off"];
+  if (await blocked()) return [[], "daily"];
   if (usage) {
     if (!(await allowed())) return [[], "limit"];
     await record();
@@ -128,6 +160,10 @@ export async function search(row: BlogRow, limit = 5, usage?: Usage): Promise<[P
     });
   } catch {
     return [[], "연결 실패"];
+  }
+  if (res.status === 429) {
+    await markBlocked();
+    return [[], "daily"];
   }
   if (res.status !== 200) return [[], `HTTP ${res.status}`];
   let items: Record<string, unknown>[];
@@ -252,7 +288,7 @@ export async function record(): Promise<void> {
 
 /** 이 팝업의 네이버 블로그 글 수 (검색 결과 총수). 못 세면 null. 한도 안에서만 부른다 */
 export async function total(row: BlogRow, usage?: Usage): Promise<number | null> {
-  if (!enabled()) return null;
+  if (!enabled() || (await blocked())) return null;
   if (usage) {
     if (!(await allowed())) return null;
     await record();
@@ -264,6 +300,10 @@ export async function total(row: BlogRow, usage?: Usage): Promise<number | null>
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    if (res.status === 429) {
+      await markBlocked();
+      return null;
+    }
     if (res.status !== 200) return null;
     const body = (await res.json()) as { total?: unknown };
     const n = Number(body?.total ?? 0);

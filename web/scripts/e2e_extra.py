@@ -198,6 +198,8 @@ def run(page, tag):
     shot(page, f"web_{tag}_avatar_pick", full=False)
     page.get_by_role("button", name="이 사진으로 저장").click()
     toast(page, "프로필 사진이 수정되었어요.", f"toast_{tag}_avatar")
+    # 바꾼 뒤 '프로필 사진 바꾸기' 는 접힌다 (11/19 요청)
+    expect(page.locator("details.exp", has=page.locator("summary", has_text="프로필 사진 바꾸기"))).not_to_have_attribute("open", "")
     expect(page.locator(".me-avimg")).to_have_attribute("src", __import__("re").compile(r"^/uploads/[0-9a-f]{12}\.webp$"))
     src = page.locator(".me-avimg").get_attribute("src")
     if DATA:
@@ -210,8 +212,10 @@ def run(page, tag):
     page.fill("input[name=nickname]", nn)
     page.get_by_role("button", name="저장", exact=True).click()
     toast(page, f"닉네임을 '{nn}'(으)로 바꿨어요.", f"toast_{tag}_nickname")
+    page.locator("summary", has_text="프로필 사진 바꾸기").click()
     page.get_by_role("button", name="기본 사진 설정").click()
     toast(page, "기본 사진으로 수정되었어요.")
+    expect(page.locator("details.exp", has=page.locator("summary", has_text="프로필 사진 바꾸기"))).not_to_have_attribute("open", "")
     print(tag, "닉네임 · 기본 사진 토스트 OK")
     return lid, nn, href
 

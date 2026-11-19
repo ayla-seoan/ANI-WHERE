@@ -87,6 +87,8 @@ def search(row: dict, limit: int = 5, usage=None) -> tuple[list[Post], str]:
     usage(호출 수 저장소)를 주면 이번 달 MONTHLY_LIMIT 번을 넘으면 부르지 않는다 ([], 'limit')."""
     if not enabled():
         return [], "off"
+    if blocked(usage):
+        return [], "daily"
     if usage is not None:
         if not allowed(usage):
             return [], "limit"
@@ -97,6 +99,9 @@ def search(row: dict, limit: int = 5, usage=None) -> tuple[list[Post], str]:
                            params={"query": query_for(row), "display": 30, "sort": "sim", "format": "json"})
     except requests.RequestException:
         return [], "연결 실패"
+    if res.status_code == 429:
+        _mark_blocked(usage)
+        return [], "daily"
     if res.status_code != 200:
         return [], f"HTTP {res.status_code}"
     try:
@@ -193,6 +198,58 @@ def month_calls(store) -> int:
     return _cache[2] + _pending
 
 
+# 네이버가 '일별 사용량 한도 초과'(HTTP 429)라고 하면 그날(한국 시간)은 더 부르지 않는다 (11/19).
+# 서버가 다시 켜져도 · 공개 웹(Vercel)도 알 수 있게 api_usage 에 그날 표시 한 줄을 쌓는다 (api='blog_429', month=날짜).
+# (예전에는 막힌 뒤에도 팝업 116곳을 계속 불러 한도만 더 써 버렸다)
+_blocked_day = ""
+
+
+def _day() -> str:
+    from datetime import timezone
+    return (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d")
+
+
+def blocked(store=None) -> bool:
+    """오늘 네이버 하루 한도에 걸렸으면 True (부르지 않는다)."""
+    global _blocked_day
+    today = _day()
+    if _blocked_day == today:
+        return True
+    if store is not None:
+        try:
+            if any(r.get("api") == "blog_429" and r.get("month") == today for r in store.all_rows()):
+                _blocked_day = today
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _mark_blocked(store=None) -> None:
+    global _blocked_day
+    if _blocked_day == _day():
+        return
+    _blocked_day = _day()
+    if store is not None:
+        try:
+            store.append({"api": "blog_429", "month": _day(), "calls": 0}, entry_id=f"blog_429:{_day()}")
+        except Exception:
+            pass
+
+
+def warm_claim(store) -> bool:
+    """블로그 글 수 미리 세기는 하루에 한 번만 (서버가 다시 켜질 때마다 116곳을 다시 세던 문제, 11/19).
+    오늘 이미 센 표시(api='blog_warm')가 있으면 False, 없으면 표시를 남기고 True."""
+    today = _day()
+    try:
+        if any(r.get("api") == "blog_warm" and r.get("month") == today for r in store.all_rows()):
+            return False
+        store.append({"api": "blog_warm", "month": today, "calls": 0}, entry_id=f"blog_warm:{today}")
+        return True
+    except Exception:
+        return False
+
+
 def allowed(store) -> bool:
     """한도 안이면 True. 호출 수를 읽지 못하면(표가 없거나 연결 실패) 안전하게 False — 부르지 않는다."""
     try:
@@ -220,7 +277,7 @@ def record(store) -> None:
 
 def total(row: dict, usage=None) -> int | None:
     """이 팝업의 네이버 블로그 글 수 (검색 결과 총수). 못 세면 None. 한도 안에서만 부른다."""
-    if not enabled():
+    if not enabled() or blocked(usage):
         return None
     if usage is not None:
         if not allowed(usage):
@@ -229,6 +286,9 @@ def total(row: dict, usage=None) -> int | None:
     try:
         res = requests.get(os.getenv("NAVER_BLOG_URL") or HUB_URL, headers=_headers(), timeout=TIMEOUT,
                            params={"query": query_for(row), "display": 1, "format": "json"})
+        if res.status_code == 429:
+            _mark_blocked(usage)
+            return None
         return int(res.json().get("total") or 0) if res.status_code == 200 else None
     except (requests.RequestException, ValueError, TypeError):
         return None

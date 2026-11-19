@@ -896,6 +896,9 @@ def _warm_blog_counts(rows: list[dict]) -> None:
     if not blog.enabled() or _BLOG_WARM["day"] == TODAY:
         return
     _BLOG_WARM["day"] = TODAY
+    # 서버가 다시 켜질 때마다 다시 세지 않게, 하루에 한 번만 (저장소에 오늘 표시, 11/19 — 배포가 잦은 날 네이버 하루 한도를 다 썼다)
+    if blog.blocked(api_usage) or not blog.warm_claim(api_usage):
+        return
     todo = [_row_key(r) for r in rows if str(r.get("end_date") or "")[:10] >= TODAY.isoformat()]
 
     def run() -> None:
@@ -907,7 +910,7 @@ def _warm_blog_counts(rows: list[dict]) -> None:
                                          limit=15, usage=api_usage)
             except Exception:
                 continue
-            if err == "limit":
+            if err in ("limit", "daily"):     # 한 달 한도 · 네이버 하루 한도에 걸리면 바로 멈춘다
                 break
             if not err:
                 _BLOG_COUNT[eid] = len(posts)
@@ -6866,9 +6869,10 @@ def _my_account(row: dict) -> None:
                 f'<b>{escape(_nick_only(auth.display_name(row)))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
                 f'가입 {escape(str(row.get("agreed_at", ""))[:10])}<br>회원 번호 <code>{escape(str(row["entry_id"]))}</code>'
                 f'{" · 관리자" if _is_admin() else ""}</span></div></div>', unsafe_allow_html=True)
-    with st.expander("프로필 사진 바꾸기"):
+    n = st.session_state.get("_av_n", 0)
+    # 사진을 바꾸면(_av_n 이 늘면) 새 칸으로 그려 접힌 채로 보인다 (11/19 요청: 바꾼 뒤 '프로필 사진 바꾸기' 닫기)
+    with st.expander("프로필 사진 바꾸기", key=f"av_exp_{n}"):
         st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
-        n = st.session_state.get("_av_n", 0)
         up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n}")
         if up is not None:     # 고른 사진을 바로 보여 준다 (저장 전 미리보기, 11/18 요청: 기다리는 게 보이게)
             st.markdown(f'<div class="av-preview"><img src="data:{up.type or "image/png"};base64,'
