@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { goLogin, useMember } from "../member/MemberContext";
 import type { Item } from "@/lib/popup";
 import { PosterCard } from "../cards";
-import { ChatIcon, CloseIcon, ExpandMore, HelpIcon, TuneIcon } from "../Icons";
+import { BookmarkIcon, ChatIcon, CloseIcon, ExpandMore, HelpIcon, TuneIcon } from "../Icons";
 import FilterBar from "./FilterBar";
 import AskPanel from "../ask/AskPanel";
 import AskFab from "../ask/AskFab";
@@ -27,8 +29,23 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
   const [n, setN] = useState(LIST_PAGE);
   const firstNew = useRef<string | null>(null);
   const areas = useAreas(items);
+  // '북마크' 버튼 (앱 _follow_switch · fav_only): 내가 북마크한 팝업만. 검색 조건이 아니라서 필터 숫자에는 세지 않는다 (11/19)
+  const { me, favs } = useMember();
+  const router = useRouter();
+  const path = usePathname() || "/list";
+  const [favOnly, setFavOnly] = useState(false);
+  const toggleFavOnly = () => {
+    if (!me) {
+      goLogin(router, "북마크는 로그인하면 쓸 수 있어요.", path);
+      return;
+    }
+    setFavOnly((v) => !v);
+  };
 
-  const view = useMemo(() => sortItems(applyCond(items, cond, today), cond.sort, today), [items, cond, today]);
+  const view = useMemo(() => {
+    const hit = applyCond(items, cond, today);
+    return sortItems(favOnly ? hit.filter((p) => favs.has(p.id)) : hit, cond.sort, today);
+  }, [items, cond, today, favOnly, favs]);
 
   // 조건이 바뀌면 다시 처음 장수로
   const sig = view.map((p) => p.id).join(",");
@@ -96,6 +113,15 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
               <TuneIcon />
               {act ? <span>{act}</span> : null}
             </button>
+            <button
+              type="button"
+              className={`fav-only${favOnly ? " on" : ""}`}
+              aria-pressed={favOnly}
+              onClick={toggleFavOnly}
+            >
+              <BookmarkIcon />
+              북마크
+            </button>
             {/* 앱 목록 위 '지역 고르기' 칸 (PC). 필터 상자의 지역과 같은 값 */}
             <select
               className="region-pick pc-only"
@@ -142,7 +168,19 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
               )}
             </>
           ) : (
-            <NoResult items={items} cond={cond} set={set} reset={reset} today={today} />
+            favOnly && applyCond(items, cond, today).length ? (
+              <div className="bx-empty fav-empty">
+                <h4>{favs.size ? "이 조건에 북마크한 팝업이 없어요" : "아직 북마크한 팝업이 없어요"}</h4>
+                <p>카드 오른쪽 아래 북마크 아이콘을 누르면 여기에 모여요.</p>
+                <div className="list-more">
+                  <button type="button" onClick={() => setFavOnly(false)}>
+                    북마크만 보기 끄기
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <NoResult items={items} cond={cond} set={set} reset={reset} today={today} />
+            )
           )}
         </div>
         <div className="list-side pc-only">

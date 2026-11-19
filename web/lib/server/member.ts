@@ -101,8 +101,9 @@ export type ThreadView = { post: ReviewView; replies: ReviewView[] };
 
 /** 한 팝업의 리뷰를 원글 최신순, 답글은 오래된 순으로 (review.threads). 리뷰 본문은 상세 화면에서만 보인다 */
 export async function threadsFor(cafeId: string, myName: string): Promise<ThreadView[]> {
-  const mine = current(await rows("reviews", { cafe_id: cafeId }));
-  const who = await authorMap();
+  // 리뷰 · 회원 이름표를 함께 읽는다 (11/19 속도: 예전엔 차례로 → 상세 1.6초)
+  const [revRows, who] = await Promise.all([rows("reviews", { cafe_id: cafeId }), authorMap()]);
+  const mine = current(revRows);
   const byId = new Map(mine.map((r) => [String(r.entry_id), r]));
   const root = (r: Row): string => {
     const seen = new Set<string>();

@@ -1202,6 +1202,47 @@ svg {
   width: 240px;
   color: #6b7280;
 }
+/* 리스트 '북마크' 버튼 (앱 folsw): 흰 바탕 · 회색 테두리, 켜면 포인트 색으로 채움. 검색 필터 숫자에는 세지 않는다 */
+.fav-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1.5px solid #dde2e0;
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 800;
+  white-space: nowrap;
+  flex: none;
+}
+.fav-only svg {
+  width: 18px;
+  height: 18px;
+}
+.fav-only:hover {
+  border-color: var(--accent);
+}
+.fav-only.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.fav-only.on svg path {
+  fill: currentColor;
+}
+.fav-empty .list-more {
+  margin-top: 10px;
+}
+@media (max-width: 640px) {
+  .fav-only {
+    height: 30px;
+    padding: 0 10px;
+    font-size: 0.8rem;
+  }
+}
 .m-filter {
   display: none;
   align-items: center;
@@ -3433,3 +3474,31 @@ svg {
   animation-iteration-count: infinite, infinite; animation-direction: normal, alternate; }
 @keyframes awFall { from { transform: translateY(0) rotate(0deg); } to { transform: translateY(calc(100vh + 80px)) rotate(var(--r)); } }
 @keyframes awSway { from { margin-left: -24px; } to { margin-left: 24px; } }
+
+/* 화면 옮길 때 맨 위 진행 막대 (components/NavProgress.tsx, 11/19) */
+.aw-nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  z-index: 2000;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-deep) 100%);
+  transform-origin: left;
+  animation: awNav 2.4s cubic-bezier(0.1, 0.7, 0.3, 1) forwards;
+}
+@keyframes awNav {
+  from {
+    transform: scaleX(0.05);
+  }
+  to {
+    transform: scaleX(0.92);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aw-nav-bar {
+    animation: none;
+    transform: scaleX(0.6);
+  }
+}

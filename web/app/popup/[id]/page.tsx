@@ -138,7 +138,8 @@ function IntroBody({ text }: { text: string }) {
 export default async function PopupPage({ params }: Props) {
   const { id } = await params;
   if (!validId(id)) notFound();
-  const { popups } = await getPopupData();
+  // 속도 (11/19): 팝업 목록 · 로그인 회원을 함께 읽는다 (예전엔 차례로)
+  const [{ popups }, me] = await Promise.all([getPopupData(), getMe()]);
   const p = popups.find((x) => x.id === id);
   if (!p) notFound();
 
@@ -150,7 +151,6 @@ export default async function PopupPage({ params }: Props) {
     ["굿즈", <BagIcon key="b" />, p.goods],
     ["이벤트", <PartyIcon key="p" />, p.tags.filter((t) => t !== "상시" && t !== "기간 확인 필요")],
   ];
-  const me = await getMe();
   let threads: Awaited<ReturnType<typeof threadsFor>> = [];
   try {
     threads = await threadsFor(p.id, me ? displayName(me.row) : "");
@@ -185,8 +185,9 @@ export default async function PopupPage({ params }: Props) {
           check: tags.includes(TAG_CHECK) ? { raw: rawFromNote(cur.note) } : null,
           title: `${cur.work || ""} · ${cur.cafe_name || ""}`,
         };
-        byWork = charactersByWork(await currentCafes());
-        history = await historyCards(all);
+        const [cafes, cards] = await Promise.all([currentCafes(), historyCards(all)]);
+        byWork = charactersByWork(cafes);
+        history = cards;
       }
     } catch (e) {
       console.error("[detail] 수정하기 기록을 읽지 못함", e instanceof Error ? e.message : e);
