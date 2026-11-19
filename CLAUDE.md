@@ -48,7 +48,8 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
 ## 저장소
 - `common/storage.py` 는 **append-only** 다. 수정·삭제도 새 행을 쌓는다 (`revision` 증가).
 - 기존 행을 덮어쓰거나 지우는 코드를 쓰지 않는다. 되돌리기가 여기에 걸려 있다.
-  - **유일한 예외:** 탈퇴 회원 개인정보 파기 (`auth.purge_withdrawn`, `supabase/migrations/009`). 법적 파기 의무라 예전 행의 닉네임·사진을 지운다.
+  - **예외 1:** 탈퇴 회원 개인정보 파기 (`auth.purge_withdrawn`, `supabase/migrations/009`). 법적 파기 의무라 예전 행의 닉네임·사진을 지운다.
+  - **예외 2 (11/19 사용자 결정):** 내린 팝업 주간 정리 (`supabase/migrations/012`, 매주 월요일 00:10 KST pg_cron). 지난주까지 기간이 끝났거나 삭제 요청 승인으로 내린 팝업의 모든 기록 + 그 리뷰·북마크·삭제 요청을 지운다. 사진 파일은 `scripts/storage_sweep.py` 가 매일 '안 쓰는' 것만 지운다. 이 두 곳 말고는 지우는 코드를 쓰지 않는다.
 
 ## 기록
 - AI가 틀린 사례를 발견하면 `docs/ai-mistakes.md` 에 한 줄 추가한다.

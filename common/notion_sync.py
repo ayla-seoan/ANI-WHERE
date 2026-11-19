@@ -299,6 +299,23 @@ def _download(urls: list[str]) -> list[str]:
     return saved
 
 
+def _purged_notes(store) -> list[dict]:
+    """매주 월요일 DB 에서 지운 팝업 중 기간이 남았던 것(삭제 요청 승인 등)의 Notion 번호 (supabase 012 purged_popups).
+    {'note': 'notion:<번호> …'} 모양이라 _has_id 로 그대로 본다. 표가 없거나(012 전) 못 읽으면 빈 목록."""
+    if getattr(store, "mode", "") != "supabase":
+        return []
+    try:
+        import requests
+
+        url = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
+        key = (os.getenv("SUPABASE_KEY") or "").strip()
+        res = requests.get(f"{url}/rest/v1/purged_popups", params={"select": "notion_ids"}, timeout=10,
+                           headers={"apikey": key, **({"Authorization": f"Bearer {key}"} if key.startswith("eyJ") else {})})
+        return [{"note": str(r.get("notion_ids") or "")} for r in res.json()] if res.status_code == 200 else []
+    except Exception:
+        return []
+
+
 def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) -> dict:
     """행들을 앱 저장소에 넣는다. {'added': [...], 'skipped': [(이름, 이유)]} 를 돌려준다.
 
@@ -309,6 +326,7 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
     # 이 실행에서 새로 쌓은 행 (11/19): Notion 행 두 개가 앱의 같은 팝업에 맞으면, 두 번째 행은 저장소에서 읽은
     # 예전 모습을 보고 이미지를 또 받거나 방금 채운 소개를 지웠다 (AK&홍대 revision 65, 실행마다 2~4줄씩 쌓임)
     fresh: dict[str, dict] = {}
+    purged = _purged_notes(store)   # 월요일 정리(012)로 지운 뒤에도 다시 넣지 않을 Notion 번호
     for row in rows:
         name = f"{row.get('작품명')} · {row.get('장소명')}"
         entry, extra, why = entry_from_row(row, today)
@@ -350,7 +368,7 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
                 continue
             report["skipped"].append((name, "이미 있음"))
             continue
-        if any(_has_id(r, extra['notion_id']) for r in store.all_rows()):
+        if any(_has_id(r, extra['notion_id']) for r in [*store.all_rows(), *purged]):
             report["skipped"].append((name, "예전에 가져왔다가 내린 항목"))
             continue
         v = guard.validate_cafe(entry, today=today, existing=store.current_rows())

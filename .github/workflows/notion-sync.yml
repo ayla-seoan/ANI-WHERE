@@ -45,6 +45,14 @@ jobs:
           STORAGE_MODE: ${{ secrets.SUPABASE_URL != '' && 'supabase' || 'local' }}
         run: python scripts/notion_import.py
 
+      - name: 쓰지 않는 사진 파일 지우기
+        # 월요일 DB 정리(supabase 012)로 지운 팝업 · 리뷰의 사진 파일. 012 정책상 '안 쓰는 · 하루 지난' 파일만 지울 수 있다
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scripts/storage_sweep.py
+
       - name: 바뀐 데이터 올리기
         run: |
           git add data/cafes.json static/uploads
