@@ -175,15 +175,23 @@ svg {
 .gnb-tabs a:hover {
   color: var(--ink);
 }
+/* 고른 탭: 아래 밑줄 없이 글자만 진한 포인트 색 · 굵게 (11/19 요청) */
 .gnb-tabs a.on {
-  border-bottom-color: var(--ink);
-  color: var(--ink);
+  border-bottom-color: transparent;
+  color: var(--accent-deep);
   font-weight: 800;
+  font-size: 1.02rem; /* 고른 탭은 조금 더 크게 (11/19 요청) */
+}
+@media (max-width: 640px) {
+  .gnb-tabs a.on {
+    font-size: 0.94rem;
+  }
 }
 .gnb-right {
   margin-left: auto;
   display: flex;
   align-items: center;
+  gap: 10px; /* 마우스를 올리면 생기는 젤리 바탕이 옆 버튼과 겹치지 않게 (11/19 요청) */
   z-index: 3;
 }
 .gnb-search {
@@ -251,6 +259,7 @@ svg {
   }
   .gnb-right {
     order: 2;
+    gap: 6px;
   }
   .gnb-search {
     width: 42px;
