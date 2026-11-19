@@ -140,7 +140,15 @@ let ALL = [];
 const sameSpot = (p) => ALL.filter((q) => q.lat === p.lat && q.lng === p.lng);
 
 let lastPinAt = 0;      // 마지막으로 핀을 누른 시각 (지도 '빈 곳 클릭'과 구분)
-function closeSpot() { document.getElementById("spot").classList.remove("open"); spotOf = null; }
+function closeSpot() { document.getElementById("spot").classList.remove("open"); spotOf = null; markPin(null); }
+
+// 누른 핀은 크게 + 분홍(.pin.sel)으로 (11/19 요청, 공개 웹과 같게). 창을 닫으면 원래대로 (상세가 열린 팝업은 그대로 분홍)
+let SEL = null;         // 바깥(앱)이 고른 팝업 (상세)
+let pinSel = null;      // 지도에서 누른 핀
+function markPin(id) {
+  pinSel = id;
+  if (engine && engine.map && loaded) engine.draw(ALL, pinSel || SEL);
+}
 
 // 점을 눌렀을 때: 하나든 여럿이든 먼저 지도 안에 목록 창으로 미리 보여 준다.
 // 목록의 팝업을 누르거나, 팝업이 하나인 점을 한 번 더 누르면 상세로 간다
@@ -159,6 +167,7 @@ function showSpot(p) {
   const here = [p, ...sameSpot(p).filter((q) => q.id !== p.id)];
   const box = document.getElementById("spot");
   spotOf = p.id;
+  markPin(p.id);
   box.innerHTML = "";
   const head = document.createElement("div"); head.className = "head";
   const t = document.createElement("span");
@@ -472,6 +481,8 @@ const Basic = {
                                iconSize: [size, size], iconAnchor: [size / 2, size + 4] });
       L.marker([p.lat, p.lng], { icon, zIndexOffset: sel ? 1000 : 0, bubblingMouseEvents: false })
         .bindTooltip(() => tipCard(p), { className: "tip-l", direction: "top", offset: [0, -size - 6], opacity: 1 })
+        // 카카오 · 네이버 지도와 같게 누르면 지도 안 목록 창 (11/19: 대체 지도에서는 눌러도 아무 일이 없었다)
+        .on("click", () => { lastPinAt = Date.now(); onPick(p); })
         .addTo(this.layer);
     });
   },
@@ -520,8 +531,9 @@ function draw(args) {
   const points = args.points || [];
   const selected = args.selected;
   ALL = points;
+  SEL = selected;
   if (!engine.map) engine.init();
-  engine.draw(points, selected);
+  engine.draw(points, pinSel || selected);
 
   const view = JSON.stringify([selected, points.map((p) => p.id), HOME]);
   if (view === lastView || !points.length) return;

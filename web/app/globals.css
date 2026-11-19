@@ -3592,3 +3592,40 @@ svg {
   width: 100%;
   min-width: 240px;
 }
+
+/* 지도 '내 위치' 버튼 (MapCanvas, 11/19 요청) — 오른쪽 아래, 누르면 내 자리로 확대 */
+.map-me {
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
+  z-index: 500;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid #dde2e0;
+  background: #fff;
+  color: var(--accent-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  cursor: pointer;
+}
+.map-me.leaf {
+  bottom: 28px; /* Leaflet 오른쪽 아래 저작권 글자 위로 */
+}
+.map-me svg {
+  width: 22px;
+  height: 22px;
+}
+.map-me:hover {
+  border-color: var(--accent);
+}
+.map-me.busy svg {
+  animation: awSpin 1s linear infinite;
+}
+@keyframes awSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

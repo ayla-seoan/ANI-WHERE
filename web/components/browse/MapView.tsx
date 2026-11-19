@@ -1,16 +1,13 @@
 "use client";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { periodDot, stateOf, type Item } from "@/lib/popup";
-import { AreaBadge, posterBg } from "../cards";
-import { CalendarIcon, ExpandMore, PinIcon, StoreIcon, TuneIcon } from "../Icons";
+import { useMemo, useState } from "react";
+import type { Item } from "@/lib/popup";
+import { TuneIcon } from "../Icons";
 import FilterBar from "./FilterBar";
 import DailyNote from "./DailyNote";
 import MapCanvas, { type Bounds } from "./MapCanvas";
 import NoResult from "./NoResult";
 import AskPanel from "../ask/AskPanel";
-import BookmarkButton from "../member/BookmarkButton";
 import AskFab from "../ask/AskFab";
 import { activeCount, applyCond, sortItems, useAreas, useCond, useFilterToggle } from "./filters";
 import { useMyLocation } from "@/lib/locate";
@@ -45,11 +42,9 @@ export default function MapView({ items, today }: { items: Item[]; today: string
   );
   const act = activeCount(cond);
   // 위치 기반 (앱과 같게, 11/19 요청): 허용하면 지도 처음 화면을 내 주변으로, 데일리 노트는 가까운 지역부터
-  const me = useMyLocation();
-  // 목록은 24곳씩 (모바일에서 지도 아래로 116장이 한꺼번에 길게 늘어지지 않게, 리스트로 보기와 같은 '더보기')
-  const [n, setN] = useState(24);
-  const sig = view.map((p) => p.id).join(",");
-  useEffect(() => setN(24), [sig]);
+  const firstMe = useMyLocation();
+  const [btnMe, setBtnMe] = useState<{ lat: number; lng: number } | null>(null);
+  const me = btnMe ?? firstMe; // '내 위치' 버튼으로 받은 위치가 있으면 그걸로
 
   const pick = (id: string) => {
     if (mapped.some((p) => p.id === id)) {
@@ -92,60 +87,12 @@ export default function MapView({ items, today }: { items: Item[]; today: string
             </div>
             <div className="map-col">
               {mapped.length || view.length ? (
-                <MapCanvas points={mapped} home={home} focus={focus} me={me} />
+                <MapCanvas points={mapped} home={home} focus={focus} me={me} onMe={setBtnMe} />
               ) : (
                 <NoResult items={items} cond={cond} set={set} reset={reset} today={today} />
               )}
             </div>
           </div>
-          <section className="maplist" aria-label="팝업 목록">
-            <div className="maplist-body">
-              {view.slice(0, n).map((p) => {
-                const s = stateOf(p, today);
-                return (
-                  <div key={p.id} className="scard">
-                    <Link href={`/popup/${p.id}`} className="scard-link" prefetch={false}>
-                      <span className="thumb" style={posterBg(p.poster)} />
-                      <span className="scard-info">
-                        <AreaBadge area={p.area} city={p.city} />
-                        <span className="ctitle">
-                          <strong>{p.work}</strong> <span className={`cstate ${s.color}`}>{s.label}</span>
-                        </span>
-                        <span className="ccafe">
-                          <StoreIcon />
-                          {p.name}
-                        </span>
-                        <span className="cmeta">
-                          <CalendarIcon />
-                          {periodDot(p)}
-                        </span>
-                      </span>
-                    </Link>
-                    <BookmarkButton cafeId={p.id} variant="row" />
-                    {p.lat !== null && (
-                      <button
-                        type="button"
-                        className="scard-pin"
-                        aria-label={`${p.work} 지도에서 보기`}
-                        onClick={() => pick(p.id)}
-                      >
-                        <PinIcon />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-              {view.length > n && (
-                <div className="list-more">
-                  <button type="button" onClick={() => setN((k) => k + 24)}>
-                    <ExpandMore />
-                    {view.length - n}건 더보기
-                  </button>
-                </div>
-              )}
-              {!view.length && <div className="dn-empty">조건에 맞는 팝업이 없어요.</div>}
-            </div>
-          </section>
         </div>
         <div className="map-right pc-only">
           <AskPanel items={items} today={today} />

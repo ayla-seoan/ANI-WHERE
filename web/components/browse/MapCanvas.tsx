@@ -10,6 +10,7 @@ import { CloseIcon } from "../Icons";
 // Leaflet + OpenStreetMap 으로 대신 그린다. 둘 다 실패해도 화면은 멈추지 않고 안내 글만 보인다.
 
 import { homeBox } from "@/lib/locate";
+import { toast } from "../member/Toast";
 
 export type Bounds = { south: number; west: number; north: number; east: number };
 
@@ -120,8 +121,8 @@ function tipCard(list: Item[]): HTMLElement {
 type Engine = {
   draw: (pts: Item[], selected: string) => void;
   focus: (p: Item) => void;
-  /** 내 위치: 그 둘레로 화면을 옮기고 파란 점을 찍는다 (11/19, 앱 home_box) */
-  showMe: (me: { lat: number; lng: number }, b: Bounds) => void;
+  /** 내 위치: 그 둘레로 화면을 옮기고 파란 점을 찍는다 (11/19, 앱 home_box). b 가 없으면 내 자리로 확대 */
+  showMe: (me: { lat: number; lng: number }, b?: Bounds) => void;
   destroy: () => void;
 };
 
@@ -141,6 +142,7 @@ function kakaoEngine(
   map.addControl(new K.ZoomControl(), K.ControlPosition.RIGHT);
   let overlays: any[] = [];
   let tip: any = null;
+  let meDot: any = null;
   let lastPin = 0;
   K.event.addListener(map, "click", () => {
     if (Date.now() - lastPin > 400) onBlank();
@@ -197,13 +199,20 @@ function kakaoEngine(
       map.panTo(new K.LatLng(p.lat, p.lng));
     },
     showMe(me, b) {
-      map.setBounds(box(b), 20, 20, 20, 20);
-      const dot = document.createElement("div");
-      dot.className = "me-dot";
-      dot.setAttribute("aria-label", "내 위치");
-      new K.CustomOverlay({ position: new K.LatLng(me.lat, me.lng), content: dot, zIndex: 4, clickable: false }).setMap(
-        map,
-      );
+      const pos = new K.LatLng(me.lat, me.lng);
+      if (b) map.setBounds(box(b), 20, 20, 20, 20);
+      else {
+        if (map.getLevel() > 5) map.setLevel(5);
+        map.panTo(pos);
+      }
+      if (meDot) meDot.setPosition(pos);
+      else {
+        const dot = document.createElement("div");
+        dot.className = "me-dot";
+        dot.setAttribute("aria-label", "내 위치");
+        meDot = new K.CustomOverlay({ position: pos, content: dot, zIndex: 4, clickable: false });
+        meDot.setMap(map);
+      }
     },
     destroy() {
       window.removeEventListener("resize", onResize);
@@ -244,6 +253,7 @@ function leafletEngine(
     if (Date.now() - lastPin > 400) onBlank();
   });
   const layer = L.layerGroup().addTo(map);
+  let meMark: any = null;
   const ro = new ResizeObserver(() => map.invalidateSize());
   ro.observe(el);
   return {
@@ -281,16 +291,20 @@ function leafletEngine(
       map.setView([p.lat, p.lng], Math.max(map.getZoom(), 14));
     },
     showMe(me, b) {
-      map.fitBounds([
-        [b.south, b.west],
-        [b.north, b.east],
-      ]);
-      L.marker([me.lat, me.lng], {
-        icon: L.divIcon({ className: "me-wrap", html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
-        keyboard: false,
-        interactive: false,
-        zIndexOffset: 2000,
-      }).addTo(map);
+      if (b)
+        map.fitBounds([
+          [b.south, b.west],
+          [b.north, b.east],
+        ]);
+      else map.setView([me.lat, me.lng], Math.max(map.getZoom(), 15));
+      if (meMark) meMark.setLatLng([me.lat, me.lng]);
+      else
+        meMark = L.marker([me.lat, me.lng], {
+          icon: L.divIcon({ className: "me-wrap", html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
+          keyboard: false,
+          interactive: false,
+          zIndexOffset: 2000,
+        }).addTo(map);
     },
     destroy() {
       ro.disconnect();
@@ -304,11 +318,14 @@ export default function MapCanvas({
   home,
   focus,
   me = null,
+  onMe,
 }: {
   points: Item[];
   home: Bounds | null;
   /** 내 위치 (허용했을 때만). 처음 한 번 그 둘레로 화면을 옮긴다 */
   me?: { lat: number; lng: number } | null;
+  /** '내 위치' 버튼으로 새 위치를 받았을 때 (데일리 노트도 가까운 지역부터 다시) */
+  onMe?: (me: { lat: number; lng: number }) => void;
   /** 바깥(데일리 노트·목록)에서 고른 팝업: 그 자리로 옮기고 미리보기 창을 연다. n 이 바뀔 때마다 다시 */
   focus: { id: string; n: number } | null;
 }) {
@@ -376,6 +393,30 @@ export default function MapCanvas({
     engine.current.showMe(me, homeBox(me, ptsRef.current as { lat: number; lng: number }[]));
   }, [me, kind]);
 
+  // '내 위치' 버튼 (11/19 요청): 누를 때마다 지금 위치를 다시 받아 내 자리로 확대해 옮긴다
+  const [locating, setLocating] = useState(false);
+  const goMe = () => {
+    if (!navigator.geolocation) {
+      toast("이 브라우저는 위치를 알려 주지 않아요.", "error");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        setLocating(false);
+        meDone.current = true;
+        const here = { lat: p.coords.latitude, lng: p.coords.longitude };
+        engine.current?.showMe(here);
+        onMe?.(here);
+      },
+      () => {
+        setLocating(false);
+        toast("위치를 알 수 없어요. 브라우저 주소창의 위치 권한을 허용해 주세요.", "error");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  };
+
   // 점 다시 그리기
   const sig = pts.map((p) => p.id).join(",");
   useEffect(() => {
@@ -395,12 +436,27 @@ export default function MapCanvas({
   return (
     <div className="map-box">
       <div ref={el} className="map-canvas" />
+      {(kind === "kakao" || kind === "leaflet") && (
+        <button
+          type="button"
+          className={`map-me${locating ? " busy" : ""}${kind === "leaflet" ? " leaf" : ""}`}
+          aria-label="내 현재 위치로"
+          onClick={goMe}
+          disabled={locating}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+            <circle cx="12" cy="12" r="8" />
+          </svg>
+        </button>
+      )}
       {kind === "loading" && <div className="map-msg">지도를 불러오는 중…</div>}
       {kind === "error" && (
         <div className="map-msg">
           지금은 지도를 불러오지 못했어요.
           <br />
-          아래 목록에서 팝업을 찾아보세요.
+          왼쪽 데일리 팝업 노트나 리스트로 보기에서 팝업을 찾아보세요.
         </div>
       )}
       {spot && (
