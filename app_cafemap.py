@@ -374,11 +374,15 @@ html body [class*="st-key-bx_more_"] button p {{ font-size: .88rem !important; f
 /* 화면에 안 보이는 칸(스타일만 담은 칸, 스크립트용 iframe)은 줄 간격을 차지하지 않게 흐름에서 뺀다 */
 [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] style),
 [data-testid="stElementContainer"]:has(> iframe[data-testid="stIFrame"]),
-[data-testid="stElementContainer"]:has(> [data-testid="stIFrame"]) {{ position: absolute !important;
+[data-testid="stElementContainer"]:has(> [data-testid="stIFrame"]),
+.st-key-_cookie_bridge {{ position: absolute !important;
   width: 0 !important; height: 0 !important; overflow: hidden; margin: 0 !important; }}
 /* 개발용 상단 메뉴 줄(Deploy ⋮)은 숨기고, 맨 위 여백을 줄인다 */
 [data-testid="stHeader"] {{ display: none !important; }}
-.stMainBlockContainer {{ padding-top: 2.5rem !important; }}
+/* 위 여백: 메뉴바(topbar)가 있는 화면은 0 — 메뉴바를 맨 위에 붙인다. 메뉴바가 없는 화면만 2.5rem.
+   (예전엔 여기서 2.5rem 을 먼저 주고 메뉴바 CSS 가 0 으로 덮어써, 새로고침할 때 여백이 생겼다 사라졌다, 11/19) */
+.stMainBlockContainer {{ padding-top: 0 !important; }}
+.stMainBlockContainer:not(:has(.st-key-topbar)) {{ padding-top: 2.5rem !important; }}
 /* 제목 옆 링크 아이콘은 숨긴다 */
 [data-testid="stHeaderActionElements"] {{ display: none; }}
 /* 테두리 있는 상자: 하얀 카드 + 민트 그림자 */
@@ -414,6 +418,14 @@ html body [class*="st-key-bx_more_"] button p {{ font-size: .88rem !important; f
 """
 
 st.set_page_config(page_title="ANI:WHERE", page_icon=":material/map:", layout="wide")
+# 새로고침할 때 맨 위에 여백이 생겼다 사라지던 것 (11/19 요청): 페이지 CSS 는 화면을 그리는 중간에야 와서, 그 전 잠깐
+# Streamlit 기본 위 여백(6rem) · 위쪽 띠 · 쿠키 연결 부품 칸(26px)이 보였다 → 꼭 필요한 규칙만 맨 처음에 보낸다.
+# (위 여백은 메뉴바 화면 기준 0 — 메뉴바가 없는 화면은 뒤의 페이지 CSS 가 다시 맞춘다)
+st.html('<style>[data-testid="stHeader"]{display:none!important}'
+        '.stMainBlockContainer{padding-top:0!important}'
+        '[data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] style),'
+        '.st-key-_cookie_bridge{position:absolute!important;width:0!important;height:0!important;'
+        'overflow:hidden;margin:0!important}</style>')
 
 store = Storage(worksheet="cafes")
 reviews = Storage(worksheet="reviews", headers=review.HEADERS)

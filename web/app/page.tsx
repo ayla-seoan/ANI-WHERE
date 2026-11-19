@@ -20,6 +20,7 @@ import NewSection from "@/components/home/NewSection";
 import WeekCalendar from "@/components/home/WeekCalendar";
 import EmptyState from "@/components/EmptyState";
 import { getMe, getMyFavs } from "@/lib/server/session";
+import { rankScores, type Score } from "@/lib/server/rank";
 import { EventIcon, HelpIcon, HourglassIcon, NewIcon } from "@/components/Icons";
 
 export const revalidate = 600;
@@ -27,23 +28,13 @@ export const revalidate = 600;
 const STORY_MAX = 12;
 
 /**
- * 실시간 인기 급상승 랭킹 (5위까지).
- * 앱은 '최근 7일 북마크 × 2 + 리뷰·답글 수' 로 줄을 세우지만, 이 공개 웹은 북마크·조회 수를 읽지 않는다 (개인 활동 기록이라 공개 데이터에 없음).
- * 그래서 공개된 값만으로 대신 정한다 — 지어낸 숫자는 쓰지 않는다:
- *   1) 다녀온 후기 별점 수(popup_ratings 의 n, 공개 집계)가 많은 순
- *   2) 같으면 진행 중이 오픈 예정보다 먼저
- *   3) 같으면 곧 끝나는 순(종료일이 빠른 순) → 놓치기 전에 보라는 뜻
- *   4) 같으면 최근에 등록된 순
+ * 실시간 인기 급상승 랭킹 (5위까지) — 앱 _home_rank 와 같은 기준 (11/19 요청, lib/server/rank.ts):
+ *   ① 최근 7일 점수 = 북마크 수 × 2 + 리뷰 · 답글 수  ② 같으면 전체 기간 점수  ③ 같으면 오픈이 빠른 순
  */
-function rankTop(live: Popup[], today: string): Popup[] {
+function rankTop(live: Popup[], scores: Map<string, Score>): Popup[] {
+  const sc = (p: Popup) => scores.get(p.id) ?? { week: 0, all: 0 };
   return [...live]
-    .sort(
-      (a, b) =>
-        (b.rating?.n ?? 0) - (a.rating?.n ?? 0) ||
-        stateOf(a, today).rank - stateOf(b, today).rank ||
-        a.end.localeCompare(b.end) ||
-        b.createdAt.localeCompare(a.createdAt),
-    )
+    .sort((a, b) => sc(b).week - sc(a).week || sc(b).all - sc(a).all || a.start.localeCompare(b.start))
     .slice(0, 5);
 }
 
@@ -99,7 +90,7 @@ export default async function Home() {
   const marked = live
     .filter((p) => favs.has(p.id))
     .sort((a, b) => stateOf(a, today).rank - stateOf(b, today).rank || a.end.localeCompare(b.end));
-  const top = rankTop(live, today).map(toItem);
+  const top = rankTop(live, await rankScores()).map(toItem);
   const fresh = [...liveItems].sort((a, b) => b.created.localeCompare(a.created));
   const monday = mondayOf(today);
   const weekItems = popups.filter((p) => p.end && p.end >= monday && p.end <= addDays(monday, 6)).map(toItem);
