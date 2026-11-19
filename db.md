@@ -133,7 +133,7 @@ intro, intro_src
 ### 이관 흐름
 
 ```
-Notion 트래커 DB ──(매일 08:40 GitHub Actions, scripts/notion_import.py)──▶ Supabase cafes (append-only INSERT)
+Notion 트래커 DB ──(매일 08:40 GitHub Actions + 예비 3번, scripts/notion_import.py)──▶ Supabase cafes (append-only INSERT)
                                                                          └─▶ data/cafes.json 거울 커밋
 Supabase popups_current ──▶ Next.js 공개 웹 (ISR 10분) · MCP 서버 · Streamlit(STORAGE_MODE=supabase)
 ```
@@ -153,7 +153,7 @@ Supabase popups_current ──▶ Next.js 공개 웹 (ISR 10분) · MCP 서버 �
 | Automatically expose new tables | **끔** (Supabase 권장) | 권한을 `004_grants.sql` 로 필요한 만큼만 직접 준다 |
 | Enable automatic RLS | **켬** | 마이그레이션에서도 켜지만, 새 표를 만들 때 잊어도 RLS 가 걸리게 한 겹 더 |
 
-SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009 → 010 → 011` 순서로 돌린다. (005 = 아이디·비밀번호 가입, `docs/login.md` · 006·007 = 관리자 표, 10절)
+SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009 → 010 → 011 → 012` 순서로 돌린다. (005 = 아이디·비밀번호 가입, `docs/login.md` · 006·007 = 관리자 표, 10절)
 
 ## 10. 관리자 표 (006, 11/18)
 
@@ -208,4 +208,17 @@ SQL Editor 에서 `001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 �
 - 이름은 무작위 12자 + 확장자. 정책은 **새 파일 넣기(insert) 하나뿐** — 이 버킷 · 이름 모양만. 종류(png·jpg·webp·gif)와 크기(20MB)는 버킷 설정으로 막는다. 고치기·지우기 정책은 없어서 anon 으로는 남의 사진을 바꾸거나 지울 수 없다.
 - 저장 칸(`members.avatar` · `reviews.images` · `cafes.images`)에는 공개 주소 `https://<프로젝트>.supabase.co/storage/v1/object/public/uploads/<이름>` 을 그대로 넣는다. Streamlit 은 `common/images.py` 의 `Remote` 로 이 주소를 보여 준다.
 - 한계: 리뷰를 지워도 Storage 의 사진 파일은 남는다 (지우기 정책을 열면 아무나 지울 수 있어서). 주소는 무작위라 추측하기 어렵지만, 꼭 지워야 하면 관리자가 Supabase 대시보드 Storage 에서 지운다.
+  → 11/19 (012) 부터는 **어느 기록도 쓰지 않는 · 하루 지난** 파일만 anon 이 보고 지울 수 있고(`upload_in_use`), 매일 가져오기 작업이 `scripts/storage_sweep.py` 로 지운다. 쓰고 있는 사진은 여전히 anon 으로 지울 수 없다.
+
+## 15. 내린 팝업 주간 정리 (012, 11/19)
+
+append-only 의 두 번째 예외 (첫 번째는 009 탈퇴 회원 파기). 사용자 결정 11/19.
+
+- **언제:** 매주 월요일 00:10 KST, Supabase pg_cron `aniwhere-purge-popups` (`10 15 * * 0` UTC) 가 `purge_ended_popups()` 를 부른다. anon 은 부를 수 없다.
+- **무엇을:** '이번 주 월요일' 보다 앞에 내려간 팝업 — 종료일이 지난주 일요일 이전이거나, 마지막 기록이 `deleted`(삭제 요청 승인 등)이고 그 기록이 이번 주 월요일 전. 그 팝업의 **모든 revision** + 리뷰(답글 포함) · 북마크 · 삭제 요청 기록을 지운다.
+- **다시 들어오지 않게:** 기간이 남았는데 내린 팝업은 `purged_popups` 에 Notion 번호만 남기고, `notion_sync.import_rows` 가 그 번호를 건너뛴다. 기간이 끝나 지운 팝업은 남기지 않는다 (Notion 에서 기간이 늘면 다시 들어오는 게 맞아서).
+- **사진 파일:** SQL 로는 Storage 파일을 지울 수 없다 (Supabase 문서). 14절의 '안 쓰는 파일' 정책 + `scripts/storage_sweep.py`.
+- **영향:** 되돌릴 수 없다. `/stats` 완결률의 예전 값(10/30 이전 60건 70.0%)은 남은 기록으로 다시 계산돼 바뀐다 — 발표 숫자는 `docs/metrics-log.md` 에 남긴 값을 쓴다. 관리자 간트 · 내 캘린더 지난 달 · 다녀온 팝업에서도 빠진다.
+- **시험 (11/19):** 운영 DB 에서 함수를 돌리고 일부러 오류를 내 되돌림 → 그 시점 기준 팝업 59곳(기록 169줄) · 리뷰 13 · 북마크 42 · 다시 가져오기 막음 1. 실제로 지워진 것 없음 확인.
+- 손으로 돌리기: SQL Editor 에서 `select public.purge_ended_popups();`
 

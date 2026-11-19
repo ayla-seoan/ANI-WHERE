@@ -299,6 +299,23 @@ def _download(urls: list[str]) -> list[str]:
     return saved
 
 
+def _purged_notes(store) -> list[dict]:
+    """매주 월요일 DB 에서 지운 팝업 중 기간이 남았던 것(삭제 요청 승인 등)의 Notion 번호 (supabase 012 purged_popups).
+    {'note': 'notion:<번호> …'} 모양이라 _has_id 로 그대로 본다. 표가 없거나(012 전) 못 읽으면 빈 목록."""
+    if getattr(store, "mode", "") != "supabase":
+        return []
+    try:
+        import requests
+
+        url = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
+        key = (os.getenv("SUPABASE_KEY") or "").strip()
+        res = requests.get(f"{url}/rest/v1/purged_popups", params={"select": "notion_ids"}, timeout=10,
+                           headers={"apikey": key, **({"Authorization": f"Bearer {key}"} if key.startswith("eyJ") else {})})
+        return [{"note": str(r.get("notion_ids") or "")} for r in res.json()] if res.status_code == 200 else []
+    except Exception:
+        return []
+
+
 def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) -> dict:
     """행들을 앱 저장소에 넣는다. {'added': [...], 'skipped': [(이름, 이유)]} 를 돌려준다.
 
@@ -306,6 +323,10 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
     """
     report = {"added": [], "skipped": []}
     rows = [b for row in rows for b in expand_branches(row)]
+    # 이 실행에서 새로 쌓은 행 (11/19): Notion 행 두 개가 앱의 같은 팝업에 맞으면, 두 번째 행은 저장소에서 읽은
+    # 예전 모습을 보고 이미지를 또 받거나 방금 채운 소개를 지웠다 (AK&홍대 revision 65, 실행마다 2~4줄씩 쌓임)
+    fresh: dict[str, dict] = {}
+    purged = _purged_notes(store)   # 월요일 정리(012)로 지운 뒤에도 다시 넣지 않을 Notion 번호
     for row in rows:
         name = f"{row.get('작품명')} · {row.get('장소명')}"
         entry, extra, why = entry_from_row(row, today)
@@ -321,15 +342,25 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
         latlng = (g.lat, g.lng) if g.ok else None
         found = _match(store.current_rows(), entry, extra["notion_id"], latlng, all_rows=store.all_rows())
         if found:
+            eid = str(found["entry_id"])
+            found = fresh.get(eid, found)
+            # 팝업 소개는 그 팝업을 만든 Notion 행(note 의 notion:번호)만 맞춘다. 이름·위치로 겹친 다른 Notion 행은
+            # 이미지 빈칸만 채운다 — 두 행의 소개가 서로 달라 실행마다 썼다 지웠다 했다 (11/19).
+            # Notion 번호가 없는 팝업(앱에서 직접 등록)은 예전처럼 맞는 행이 채운다 (사람이 쓴 소개는 아래에서 그대로)
+            ids = [r for r in store.all_rows() if str(r.get("entry_id")) == eid]
+            owner = any(_has_id(r, extra["notion_id"]) for r in ids) or (
+                not any("notion:" in str(r.get("note") or "") for r in ids) and eid not in fresh)
             # 앱 쪽에 이미지·팝업 소개가 비어 있고 Notion 에 있으면 그 칸만 채운다 (다른 칸은 그대로)
             # 기록에 이미지 이름이 있어도 파일이 없으면(다른 컴퓨터·배포 서버에서 받은 것) 다시 받는다 (11/18)
             saved = (_download(extra["images"]) if fill_images and not images.paths(found.get("images"))
                      and extra["images"] else [])
             # 팝업 소개는 Notion 기준 (바뀌면 바꾸고, Notion 에서 지웠으면 비운다). 사람이 앱에서 쓴 소개는 그대로
-            intro = None if _intro_by_person(store, found["entry_id"]) else extra["intro"]
+            intro = None if (not owner or _intro_by_person(store, eid)) else extra["intro"]
             before = str(found.get("intro") or "").strip()
-            if fill_found(store, found, intro=intro, images_=saved,
-                          intro_src=None if intro is None else extra["intro_src"]):
+            wrote = fill_found(store, found, intro=intro, images_=saved,
+                               intro_src=None if intro is None else extra["intro_src"])
+            if wrote:
+                fresh[eid] = {**found, **wrote, "entry_id": eid}
                 if saved:
                     report.setdefault("images", []).append((name, len(saved)))
                 if intro is not None and intro != before:
@@ -337,7 +368,7 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
                 continue
             report["skipped"].append((name, "이미 있음"))
             continue
-        if any(_has_id(r, extra['notion_id']) for r in store.all_rows()):
+        if any(_has_id(r, extra['notion_id']) for r in [*store.all_rows(), *purged]):
             report["skipped"].append((name, "예전에 가져왔다가 내린 항목"))
             continue
         v = guard.validate_cafe(entry, today=today, existing=store.current_rows())
@@ -356,9 +387,9 @@ def import_rows(store, rows: list[dict], today: date, fill_images: bool = True) 
 
 
 def fill_found(store, found: dict, intro: str | None = None, images_: list[str] | None = None,
-               intro_src: str | None = None) -> bool:
+               intro_src: str | None = None) -> dict:
     """이미 있는 카페의 빈 이미지를 채우고, 팝업 소개를 intro 로 맞춰 새 행으로 쌓는다 (intro=None 이면 소개는 그대로).
-    바뀐 게 있으면 True."""
+    바뀐 게 있으면 쌓은 칸들(참), 없으면 빈 dict(거짓)."""
     payload = {k: found.get(k, "") for k in store.headers
                if k not in ("row_id", "entry_id", "revision", "status", "updated_at")}
     changed = False
@@ -369,10 +400,10 @@ def fill_found(store, found: dict, intro: str | None = None, images_: list[str] 
     if intro_src is not None and intro_src != str(found.get("intro_src") or ""):
         payload["intro_src"], changed = intro_src, True
     if not changed:
-        return False
+        return {}
     payload.update(source=SOURCE, editor="AI")      # 수정 이력에 'AI 자동 수집 · AI' 로 남는다
     store.append(payload, entry_id=str(found["entry_id"]))
-    return True
+    return payload
 
 
 def sync_intros(store, rows: list[dict]) -> dict:

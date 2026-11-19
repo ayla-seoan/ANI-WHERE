@@ -1,4 +1,4 @@
-import Link from "next/link";
+import FootLink from "@/components/FootLink";
 
 // 앱(Streamlit) 바닥글과 똑같이 (11/18 요청): © 연도 ANI:WHERE · 운영 · 문의 + 개인정보처리방침 · 사용자 튜토리얼 · 디자인 시스템.
 // 연락처는 앱(app_cafemap.py CONTACT_EMAIL)과 docs/privacy-policy.md 10절에 공개한 것과 같다.
@@ -14,9 +14,9 @@ export default function Footer() {
         운영: ANI:WHERE · 문의: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
       </div>
       <div className="aw-foot-links">
-        <Link href="/privacy">개인정보처리방침 · 이용약관</Link>
-        <Link href="/guide">사용자 튜토리얼</Link>
-        <Link href="/design">디자인 시스템</Link>
+        <FootLink href="/privacy">개인정보처리방침 · 이용약관</FootLink>
+        <FootLink href="/guide">사용자 튜토리얼</FootLink>
+        <FootLink href="/design">디자인 시스템</FootLink>
       </div>
     </footer>
   );

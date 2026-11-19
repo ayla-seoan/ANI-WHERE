@@ -83,7 +83,10 @@ export default function BlogTab({ cafeId }: { cafeId: string }) {
       ) : !d.enabled ? (
         <div className="blog-empty">블로그 후기는 네이버 검색을 연결한 뒤에 보여요.</div>
       ) : !d.posts.length ? (
-        <div className="blog-empty">아직 이 팝업의 블로그 후기를 찾지 못했어요.</div>
+        // 검색이 실패했으면(네이버 한도 · 연결 실패) '찾지 못했어요', 검색은 됐는데 0건이면 '없어요' (앱과 같게, 11/19 요청)
+        <div className="blog-empty">
+          {d.error ? "아직 이 팝업의 블로그 후기를 찾지 못했어요." : "아직 이 팝업의 블로그 후기가 없어요."}
+        </div>
       ) : (
         <div className="bcards">
           {d.posts.map((p) => (

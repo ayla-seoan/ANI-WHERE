@@ -916,6 +916,11 @@ a.ntf-item:hover {
   color: #8a9592;
   font-size: 0.86rem;
 }
+/* 리뷰가 하나도 없을 때 안내는 가운데 (앱과 같게, 11/19 요청) */
+.rv-none.center {
+  text-align: center;
+  padding: 10px 0;
+}
 .rv-thread {
   border: 1px solid var(--line);
   border-radius: 16px;

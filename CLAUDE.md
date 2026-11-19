@@ -16,7 +16,7 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
 - 참고 웹사이트에서 `recal.kr` 은 다른 사이트 뒤로 보낸다 (`cafe.order_links`).
 - Notion 규칙은 `docs/notion-import.md` 가 기준이다 (1부: 예약 작업 '애니 팝업·콜라보 매일 수집' 의 수집 규칙, 2부: 앱 가져오기). 예약 작업 지시문이나 `notion_sync.py` 를 바꾸면 그 문서도 같이 고친다.
   - Notion DB 는 '행사 × 지점 = 1행' 이고 '지점' 칸은 형제 목록이다. 앱에서 행을 다시 나누지 않는다.
-  - 매일 08:40 KST GitHub Actions(`.github/workflows/notion-sync.yml` → `scripts/notion_import.py`)가 가져와 `data/cafes.json` 을 커밋한다. 로컬에서 `data/cafes.json` 을 올리기 전에 `git pull` 로 그 커밋을 먼저 받는다.
+  - 매일 08:40 KST(예비 09:40 · 11:40 · 14:40) GitHub Actions(`.github/workflows/notion-sync.yml` → `scripts/notion_import.py`)가 가져와 `data/cafes.json` 을 커밋한다. 로컬에서 `data/cafes.json` 을 올리기 전에 `git pull` 로 그 커밋을 먼저 받는다.
   - 가져온 기록의 `note` 끝 `| notion:<번호>` 는 지우지 않는다 (앱에서 고쳐도 `_keep_notion` 으로 남김).
   - 팝업 소개는 Notion 기준으로 맞추되, 사람이 앱에서 쓴 소개는 덮어쓰지 않는다.
   - 실제 데이터에 넣기 전에 임시 복사본으로 먼저 돌려 본다.
@@ -48,7 +48,8 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
 ## 저장소
 - `common/storage.py` 는 **append-only** 다. 수정·삭제도 새 행을 쌓는다 (`revision` 증가).
 - 기존 행을 덮어쓰거나 지우는 코드를 쓰지 않는다. 되돌리기가 여기에 걸려 있다.
-  - **유일한 예외:** 탈퇴 회원 개인정보 파기 (`auth.purge_withdrawn`, `supabase/migrations/009`). 법적 파기 의무라 예전 행의 닉네임·사진을 지운다.
+  - **예외 1:** 탈퇴 회원 개인정보 파기 (`auth.purge_withdrawn`, `supabase/migrations/009`). 법적 파기 의무라 예전 행의 닉네임·사진을 지운다.
+  - **예외 2 (11/19 사용자 결정):** 내린 팝업 주간 정리 (`supabase/migrations/012`, 매주 월요일 00:10 KST pg_cron). 지난주까지 기간이 끝났거나 삭제 요청 승인으로 내린 팝업의 모든 기록 + 그 리뷰·북마크·삭제 요청을 지운다. 사진 파일은 `scripts/storage_sweep.py` 가 매일 '안 쓰는' 것만 지운다. 이 두 곳 말고는 지우는 코드를 쓰지 않는다.
 
 ## 기록
 - AI가 틀린 사례를 발견하면 `docs/ai-mistakes.md` 에 한 줄 추가한다.

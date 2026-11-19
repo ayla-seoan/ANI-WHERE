@@ -11,6 +11,8 @@ import Footer from "@/components/Footer";
 import InstallHint from "@/components/InstallHint";
 import SWRegister from "@/components/SWRegister";
 import ScrollTop from "@/components/ScrollTop";
+import NavProgress from "@/components/NavProgress";
+import { Suspense } from "react";
 import Toast from "@/components/member/Toast";
 import { MemberProvider, type MeLite } from "@/components/member/MemberContext";
 import type { BellData } from "@/components/member/Bell";
@@ -44,19 +46,19 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const data = await getPopupData();
+  // 속도 (11/19): 예전엔 팝업 → 회원 → 북마크 → 알림 규칙 → 알림 → 읽음을 하나씩 기다렸다. 서로 기다릴 필요 없는 것은 함께 읽는다
   // 로그인한 회원 (쿠키 aw_session). 회원이면 북마크 · 종 알림도 서버에서 읽어 넘긴다
-  const me = await getMe();
-  const favIds = await getMyFavs();
+  const [data, me, favIds] = await Promise.all([getPopupData(), getMe(), getMyFavs()]);
   let bell: BellData | null = null;
   if (me) {
     const today = todayKST();
     const rules = await ruleSettings();
+    const [box, read] = await Promise.all([inbox(me.key, rules, today), ntfRead(me.key)]);
     bell = {
-      inbox: (await inbox(me.key, rules, today)).slice(0, 10),
+      inbox: box.slice(0, 10),
       marks: bookmarkMarks(data.popups, new Set(favIds), rules, today),
       cookie: ntfCookieName(me.key),
-      read: await ntfRead(me.key),
+      read,
       near: { on: rules.near.enabled, why: whyOf("near", rules) },
     };
   }
@@ -103,6 +105,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           )}
           <Toast />
         </MemberProvider>
+        <Suspense fallback={null}>
+          <NavProgress />
+        </Suspense>
         <ScrollTop />
         <InstallHint />
         <SWRegister />

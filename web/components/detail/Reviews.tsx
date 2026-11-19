@@ -543,7 +543,7 @@ export default function Reviews({
       {sub === "blog" ? (
         <BlogTab cafeId={cafeId} />
       ) : !threads.length ? (
-        <p className="rv-none">아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</p>
+        <p className="rv-none center">아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</p>
       ) : (
         <>
           {rated.length > 0 && (

@@ -50,9 +50,9 @@ load_dotenv()
 ROOT = Path(__file__).resolve().parent
 TODAY = date.today()
 MAP_HEIGHT = 620
-# 제목 로고: 민트 로고 하나로 고정 (11/18 요청: 흰 글자 로고 → 다시 민트 로고, 크기는 그대로)
-LOGOS = ["logo_mint.png"]          # 연한 메뉴바 + 초록 로고로 되돌림 (11/18 요청)
-FIXED_LOGO = "logo_mint.png"
+# 제목 로고: 기본 로고(logo.png) 하나로 고정 (11/19 요청: 민트 로고 → 디자인 시스템의 '기본 로고', 크기는 그대로)
+LOGOS = ["logo.png"]
+FIXED_LOGO = "logo.png"
 ADD_LOGO = "logo_add.png"          # 등록 화면 로고 (흰 글자 + 민트 테두리)           # 상세·등록 화면에서는 이 로고로 고정
 TOPBAR_TOP = "0rem"      # 상단 고정 묶음이 붙는 위치 (Streamlit 상단 메뉴 줄은 숨겨서 맨 위)
 TOPBAR_H = "282px"        # 상단 묶음 높이 (로고 + 문구 + 검색 필터. '팝업 카페 N곳' 줄은 묶음 밖)
@@ -245,13 +245,18 @@ h1, h2, h3, h4, h5, .wiz-title {{ font-family: "Jua", "Pretendard", sans-serif !
 .st-key-list_more button p {{ color: #5F6B67 !important; font-size: .88rem !important; font-weight: 700 !important; }}
 .st-key-list_more button span {{ color: #5F6B67 !important; }}
 /* '더보기' 버튼은 모두 포인트 색 (11/19 요청: 회색 → 연한 민트 바탕 + 진한 민트 글자 · 화살표) */
-html body .st-key-list_more button, html body [class*="st-key-adm_more_"] button, html body [class*="st-key-wk_more_"] button {{
+html body .st-key-list_more button, html body [class*="st-key-adm_more_"] button, html body [class*="st-key-wk_more_"] button,
+html body [class*="st-key-bx_more_"] button {{
   background: var(--accent-soft) !important; border: 1px solid #9EDDCC !important; }}
-html body .st-key-list_more button:hover, html body [class*="st-key-adm_more_"] button:hover, html body [class*="st-key-wk_more_"] button:hover {{
+html body .st-key-list_more button:hover, html body [class*="st-key-adm_more_"] button:hover, html body [class*="st-key-wk_more_"] button:hover,
+html body [class*="st-key-bx_more_"] button:hover {{
   background: #D3F5EE !important; border-color: var(--accent) !important; }}
 html body .st-key-list_more button p, html body .st-key-list_more button span,
 html body [class*="st-key-adm_more_"] button p, html body [class*="st-key-adm_more_"] button span,
-html body [class*="st-key-wk_more_"] button p, html body [class*="st-key-wk_more_"] button span {{ color: var(--accent-deep) !important; }}
+html body [class*="st-key-wk_more_"] button p, html body [class*="st-key-wk_more_"] button span,
+html body [class*="st-key-bx_more_"] button p, html body [class*="st-key-bx_more_"] button span {{ color: var(--accent-deep) !important; }}
+html body [class*="st-key-bx_more_"] button {{ border-radius: 999px !important; padding: 4px 18px !important; min-height: 0 !important; }}
+html body [class*="st-key-bx_more_"] button p {{ font-size: .88rem !important; font-weight: 700 !important; }}
 .st-key-list_more button:hover {{ background: #E8ECEA !important; }}
 .st-key-view_tools {{ justify-content: flex-end !important; align-items: center; gap: 6px !important; flex-wrap: nowrap !important; }}
 .st-key-view_tools > div {{ width: auto !important; flex: 0 0 auto !important; }}
@@ -392,7 +397,7 @@ html body [class*="st-key-wk_more_"] button p, html body [class*="st-key-wk_more
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
 /* 로고 그림 아래 'ANIME POP-UP · CAFE · GOODS' 글씨까지 읽히게 로고 칸을 키운다 */
 .st-key-home_brand button {{ width: 330px !important; height: 100px !important;
-  background: url("app/static/logo_mint.png") no-repeat left center / contain !important; }}
+  background: url("app/static/logo.png") no-repeat left center / contain !important; }}
 .st-key-home_brand button p {{ font-size: 0 !important; color: transparent !important; }}
 /* 로고는 눌러도·커서를 올려도 바탕·그림자·밝기 변화 없이 그대로 (모바일 탭 하이라이트도 끈다) */
 .st-key-home_brand button, .st-key-home_brand button:hover, .st-key-home_brand button:focus,
@@ -918,16 +923,27 @@ def _warm_blog_counts(rows: list[dict]) -> None:
     threading.Thread(target=run, daemon=True, name="blog-warm").start()
 
 
+_BLOG_ERR: dict[str, str] = {}       # 팝업별 마지막 블로그 검색 실패 이유 (한도 · 연결 실패). 빈 문자열이면 성공
+
+
 def _blog_list(current: dict) -> list[dict]:
     if not blog.enabled():
         return []
+    eid = str(current.get("entry_id"))
+    args = (eid, str(current.get("work") or ""), str(current.get("cafe_name") or ""),
+            str(current.get("start_date") or "")[:10], str(current.get("address") or ""))
     try:
-        posts, _ = _blog_posts(str(current.get("entry_id")), str(current.get("work") or ""),
-                               str(current.get("cafe_name") or ""), str(current.get("start_date") or "")[:10],
-                               str(current.get("address") or ""))
+        posts, err = _blog_posts(*args)
     except Exception:
+        _BLOG_ERR[eid] = "연결 실패"
         return []
-    _BLOG_COUNT[str(current.get("entry_id"))] = len(posts)
+    if err:                 # 실패(한도 · 연결 실패)는 하루 동안 기억하지 않고 다음에 다시 해 본다 (성공만 하루 기억)
+        try:
+            _blog_posts.clear(*args)
+        except Exception:
+            pass
+    _BLOG_ERR[eid] = err or ""
+    _BLOG_COUNT[eid] = len(posts)
     return posts
 
 
@@ -948,7 +964,10 @@ def _render_blog_tab(current: dict, posts: list[dict]) -> None:
         st.markdown('<div class="blog-empty">블로그 후기는 네이버 검색을 연결한 뒤에 보여요.</div>', unsafe_allow_html=True)
         return
     if not posts:
-        st.markdown('<div class="blog-empty">아직 이 팝업의 블로그 후기를 찾지 못했어요.</div>', unsafe_allow_html=True)
+        # 검색이 실패했으면(네이버 한도 · 연결 실패) '찾지 못했어요', 검색은 됐는데 글이 0건이면 '없어요' (11/19 요청)
+        failed = bool(_BLOG_ERR.get(str(current.get("entry_id"))))
+        msg = "아직 이 팝업의 블로그 후기를 찾지 못했어요." if failed else "아직 이 팝업의 블로그 후기가 없어요."
+        st.markdown(f'<div class="blog-empty">{msg}</div>', unsafe_allow_html=True)
         return
     # <a> 로 시작하면 마크다운이 첫 카드를 문단으로 쪼개서, 바깥을 <div> 로 감싼다
     st.markdown('<div class="bcards">' + "".join(_bcard(p) for p in posts) + '</div>', unsafe_allow_html=True)
@@ -1543,7 +1562,9 @@ def render_reviews(cafe_id: str, after_write=None) -> None:
 
     threads = review.threads(reviews.current_rows(), cafe_id)
     if not threads:
-        st.caption("아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.")
+        # 가운데 정렬 (11/19 요청, 웹 .rv-none.center 와 같게)
+        st.markdown('<div style="text-align:center;color:#8A9592;font-size:.88rem;padding:10px 0;">'
+                    '아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</div>', unsafe_allow_html=True)
         return
 
     # 다녀온 후기에 별점이 있으면 목록 위에 평균 별점
@@ -2843,13 +2864,11 @@ def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | N
 
     def open_button(r) -> None:
         """카드 전체를 덮는 투명 버튼. 카드 어디를 눌러도 상세로 넘어간다 (LIST_CSS 의 .st-key-card_)."""
-        if st.button("자세히 보기", key=f"open_{r['entry_id']}", width="stretch"):
-            # 상세는 지도와 함께 보여 준다. 아래쪽 카드를 눌러도 상세 맨 위부터 보이게 올린다
-            # 보던 모드(리스트 전체보기 / 지도보기)는 그대로 둔다. 상세는 모드와 상관없이 지도와 함께 보이고,
-            # 리스트로 돌아가면 원래 보던 모드로 돌아간다
-            st.session_state["selected"] = r["entry_id"]
-            st.session_state["scroll_top"] = True
-            st.rerun()
+        # 상세는 지도와 함께 보여 준다. 아래쪽 카드를 눌러도 상세 맨 위부터 보이게 올린다 (_gnb_open 이 scroll_top 도 켬)
+        # 보던 모드(리스트 전체보기 / 지도보기)는 그대로 둔다. 리스트로 돌아가면 원래 보던 모드로 돌아간다
+        # 속도 (11/19): 예전엔 누른 뒤 st.rerun() 으로 화면을 두 번 그렸다 → 콜백에서 미리 바꿔 한 번만 그린다
+        st.button("자세히 보기", key=f"open_{r['entry_id']}", width="stretch",
+                  on_click=_gnb_open, args=(str(r["entry_id"]),))
 
     if wide:
         # 전체보기: dukplace 처럼 포스터가 꽉 찬 카드를 4열로. 카드 비율이 같아 높이가 늘 맞는다
@@ -4087,7 +4106,7 @@ def _empty_state(df: pd.DataFrame, f: dict) -> None:
     with st.container(horizontal=True, horizontal_alignment="center", key="empty_relax"):
         for what, label in options:
             st.button(label, key=f"relax_{what}", on_click=_relax, args=(what,))
-        if _active_filters():
+        if _active_filters() or st.session_state.get("fav_only"):
             st.button("조건 모두 초기화", key="relax_all", type="primary", on_click=_reset_filters)
 
 
@@ -4327,14 +4346,15 @@ def _gnb_go(view: str) -> None:
 
 
 def _active_filters() -> int:
-    """지금 걸려 있는 검색 조건 수 (검색어·작품·진행여부·날짜·캐릭터·지역·북마크)."""
+    """지금 걸려 있는 검색 조건 수 (검색어·작품·진행여부·날짜·캐릭터·지역·사전예약).
+    '북마크' 버튼은 검색 조건이 아니라서 세지 않는다 (11/19 요청: 북마크를 켜면 검색 아이콘 옆에 1 이 보이던 것)."""
     ss = st.session_state
     return sum([
         bool(str(ss.get("f_query") or "").strip()), ss.get("f_work", "전체") != "전체",
         ss.get("f_span", "진행중 + 예정") != "진행중 + 예정",
         bool(ss.get(f"f_date_{ss.get('date_ver', 0)}")),
         any(ss.get(k) for k in list(ss) if str(k).startswith("filter_chars_")),
-        bool(ss.get("regions")), bool(ss.get("fav_only")), bool(ss.get("res_only")),
+        bool(ss.get("regions")), bool(ss.get("res_only")),
     ])
 
 
@@ -4941,10 +4961,18 @@ def _box_empty(title: str, hint: str, icon: str) -> None:
                 unsafe_allow_html=True)
 
 
+BOX_PAGE = 10          # 내 캘린더 북마크 · 다녀온 팝업: 처음 10건, 더 있으면 '+N건 더보기' 로 10건씩 (11/19 요청)
+
+
 def _box_grid(items: list[tuple[dict, str]], key: str) -> None:
-    """카드 목록 (캘린더 옆 칸이라 한 줄에 한 장)."""
-    for r, review_html in items:
+    """카드 목록 (캘린더 옆 칸이라 한 줄에 한 장). 최근 본 팝업은 원래 10개까지라 더보기가 없다."""
+    n = st.session_state.get(f"bx_n_{key}", BOX_PAGE)
+    for r, review_html in items[:n]:
         _box_card(r, key, review_html)
+    if len(items) > n:
+        with st.container(horizontal=True, horizontal_alignment="center", key=f"bx_morewrap_{key}"):
+            st.button(f"+{len(items) - n}건 더보기", icon=":material/expand_more:", key=f"bx_more_{key}",
+                      on_click=lambda: st.session_state.update({f"bx_n_{key}": n + BOX_PAGE}))
 
 
 def render_box_view(tab: str) -> None:
@@ -5092,7 +5120,7 @@ def page_map() -> None:
         ss.get("f_span", "진행중 + 예정") != "진행중 + 예정",
         bool(ss.get(f"f_date_{ss.get('date_ver', 0)}")),
         any(ss.get(k) for k in list(ss) if str(k).startswith("filter_chars_")),
-        bool(ss.get("regions")), bool(ss.get("fav_only")), bool(ss.get("res_only")),
+        bool(ss.get("regions")), bool(ss.get("res_only")),     # 북마크는 검색 조건이 아니라 세지 않음 (_active_filters)
     ])
     m_open = ss.get("m_filters", False)
     # 모바일 필터 버튼은 보기 전환 아이콘(지도·리스트) 바로 왼쪽의 필터 아이콘 (_view_icon_button)
@@ -5396,8 +5424,14 @@ def render_daily(df: pd.DataFrame) -> None:
     위치를 못 받으면 그날 팝업이 많은 지역부터. 팝업은 팔로우 많은 순.
     """
     st.markdown(DAILY_CSS, unsafe_allow_html=True)
-    with st.container(key="daily_loc"):
-        loc = my_place.my_location()
+    # 속도 (11/19): 메뉴바 위치 부품(gnb_loc)이 이미 답했으면(위치 · 거절 모두) 여기서 다시 묻지 않는다 —
+    # 지도보기에 들어갈 때마다 위치 부품이 새로 붙어 화면을 두 번 더 그렸다 (리스트 → 지도 1.5초)
+    known = st.session_state.get("gnb_loc")
+    if isinstance(known, dict):
+        loc = known
+    else:
+        with st.container(key="daily_loc"):
+            loc = my_place.my_location()
     st.session_state["_my_loc"] = loc     # 같은 실행에서 바로 뒤에 그리는 지도가 처음 화면을 내 주변으로 맞춘다
     off = st.session_state.get("daily_day", 0)
     day = TODAY + timedelta(days=off)
@@ -8257,6 +8291,24 @@ def _ask_bot(html: str) -> str:
             f'<div class="apn-col"><div class="apn-name">ANI:WHERE</div><div class="apn-bot">{html}</div></div></div>')
 
 
+# 물어보기 대화창 스크롤 (11/19): 읽던 위치 기억 · 새 답이면 방금 질문을 맨 위로 · 사용자가 만지면 멈춤. 부모 창에서 돈다
+_ASK_SCROLL_JS = """(function(){const d=document,K='__K__',N=__N__;
+const S=window.__awAsk=window.__awAsk||{},NOW=window.__awAskN=window.__awAskN||{};NOW[K]=N;
+let t=0,iv=0;const quit=()=>clearInterval(iv);
+const scroller=box=>[box,...box.querySelectorAll('*')].find(e=>{const o=getComputedStyle(e).overflowY;
+  return (o==='auto'||o==='scroll')&&e.scrollHeight>e.clientHeight+4;});
+const go=()=>{const box=d.querySelector('.st-key-'+K+'_log');if(!box)return;const e=scroller(box);if(!e)return;
+  if(!e.__awHook){e.__awHook=1;const mark=()=>{e.__awUser=Date.now();};
+    ['wheel','touchstart','pointerdown','keydown'].forEach(ev=>e.addEventListener(ev,mark,{passive:true}));
+    e.addEventListener('scroll',()=>{if(e.__awUser&&Date.now()-e.__awUser<3000)S[K]={n:NOW[K],top:e.scrollTop};},{passive:true});}
+  if(t>0&&e.__awUser&&Date.now()-e.__awUser<2000){quit();return;}
+  const saved=S[K];
+  if(saved&&saved.n===N){e.scrollTop=saved.top;return;}
+  const m=[...box.querySelectorAll('.apn-me')].pop()||[...box.querySelectorAll('.apn-row')].pop();
+  e.scrollTop=m?e.scrollTop+m.getBoundingClientRect().top-e.getBoundingClientRect().top-6:e.scrollHeight;};
+go();t=1;iv=setInterval(()=>{go();if(++t>12)quit();},150);})();"""
+
+
 def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> None:
     """대화 기록 · 예시 칩 · 입력칸. PC 옆 대화창(apn)과 모바일 팝업(apd)이 같은 기록(ask_chat)을 쓴다."""
     with st.container(height=log_height, border=False, key=f"{prefix}_log"):
@@ -8322,13 +8374,14 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
     # 같은 내용의 스크립트라 다시 실행되지 않아, 읽던 자리가 튀지 않는다
     if True:
         components.html(
-            "<script>(function(){const d=window.parent.document;let t=0;"
-            "const go=()=>{const box=d.querySelector('.st-key-" + prefix + "_log');if(!box)return;"
-            "const mark=[...box.querySelectorAll('.apn-me')].pop()||[...box.querySelectorAll('.apn-row')].pop();"
-            "[box,...box.querySelectorAll('*')].forEach(e=>{const o=getComputedStyle(e).overflowY;"
-            "if((o==='auto'||o==='scroll')&&e.scrollHeight>e.clientHeight+4){"
-            "e.scrollTop=mark?e.scrollTop+mark.getBoundingClientRect().top-e.getBoundingClientRect().top-6:e.scrollHeight;}});};"
-            "const iv=setInterval(()=>{go();if(++t>12)clearInterval(iv);},150);})();</script>"
+            # 11/19 요청: 대화가 길어 스크롤이 생기면 마우스로 내릴 때 자꾸 마지막 질문으로 되돌아가던 문제.
+            #  화면을 다시 그리면 대화창이 새로 만들어져(스크롤 0) 이 스크립트가 다시 돌았다 →
+            #  ① 읽던 위치를 창 밖(부모 창)에 기억해 두고, 대화 수가 그대로면 그 위치로 되돌려 놓는다
+            #  ② 새 답이 생겼을 때만(대화 수가 바뀜) 방금 한 질문이 맨 위에 오게 옮긴다
+            #  ③ 옮기는 1.8초 사이에 휠 · 터치 · 스크롤바를 만지면 바로 멈춘다
+            #  ④ 스크립트는 부모 창에서 돌린다 (iframe 안에서 붙인 스크롤 감지는 화면을 다시 그려 iframe 이 없어지면 함께 꺼졌다)
+            "<script>window.parent.eval(" + json.dumps(_ASK_SCROLL_JS.replace("__K__", prefix).replace("__N__", str(n_chat)))
+            + ");</script>"
             f"<!-- {prefix} {n_chat} -->", height=0)          # 내용이 같으면 다시 실행되지 않아서 번호를 붙인다
     with st.container(horizontal=True, key=f"{prefix}_chips"):
         for i, chip in enumerate(_ask_chips()):

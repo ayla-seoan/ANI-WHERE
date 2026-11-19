@@ -5,7 +5,12 @@ name: Notion 매일 가져오기
 
 on:
   schedule:
-    - cron: "40 23 * * *"      # 매일 23:40 UTC = 다음 날 08:40 KST (GitHub 은 붐비면 몇 분 늦게 돌 수 있다)
+    - cron: "40 23 * * *"      # 매일 23:40 UTC = 다음 날 08:40 KST
+    # 예비 (11/19): GitHub 예약 실행은 몇 시간씩 늦거나 빠질 때가 있다 (11/18 은 5시간 늦게, 11/19 는 10시가 넘도록 안 돎).
+    # 다시 돌아도 바뀐 게 없으면 한 줄도 쌓지 않으니(notion_sync.import_rows) 몇 번 더 돌려 둔다: 09:40 · 11:40 · 14:40 KST
+    - cron: "40 0 * * *"
+    - cron: "40 2 * * *"
+    - cron: "40 5 * * *"
   workflow_dispatch:            # Actions 탭에서 'Run workflow' 로 바로 돌릴 수 있다
 
 permissions:
@@ -39,6 +44,14 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           STORAGE_MODE: ${{ secrets.SUPABASE_URL != '' && 'supabase' || 'local' }}
         run: python scripts/notion_import.py
+
+      - name: 쓰지 않는 사진 파일 지우기
+        # 월요일 DB 정리(supabase 012)로 지운 팝업 · 리뷰의 사진 파일. 012 정책상 '안 쓰는 · 하루 지난' 파일만 지울 수 있다
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scripts/storage_sweep.py
 
       - name: 바뀐 데이터 올리기
         run: |
