@@ -98,6 +98,7 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
               setAvs(r?.ok ? null : r); // 실패만 칸 아래에, 성공은 바로 토스트로
               if (r?.ok) {
                 toast("프로필 사진이 수정되었어요.");
+                setOpenPhoto(false); // 바꾼 뒤 '프로필 사진 바꾸기' 닫기 (11/19 요청)
                 setPreview("");
                 setAgree(false);
                 setAvn((n) => n + 1); // 올리기 칸 비우기
@@ -143,6 +144,7 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
                 setAvs(r?.ok ? null : r);
                 if (r?.ok) {
                   toast("기본 사진으로 수정되었어요.");
+                  setOpenPhoto(false);
                   router.refresh();
                 }
               }}
