@@ -284,14 +284,15 @@ a.adm-card.adm-pcard {
   line-height: 1.45;
 }
 a.adm-card.adm-pcard .adm-poster {
+  /* background 줄임 표기가 크기 · 위치보다 뒤에 있어 cover 가 풀리고 포스터 일부만 보였다 (11/19) → 바탕색만 따로 */
+  background-color: #f4f6f5;
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
   width: 44px;
   height: 60px;
-  object-fit: cover;
   border-radius: 6px;
   flex: 0 0 44px;
-  background: #f4f6f5;
   margin-right: 2px;
 }
 .adm-pcard > div {
@@ -1383,4 +1384,30 @@ textarea.st-input {
   .stats-title {
     font-size: 1.4rem;
   }
+}
+
+/* 고른 주 현황: 종료 칸은 정보만 (누르지 않음) · 지난 주 안내 (11/19 요청) */
+.adm-pcard.adm-static {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  line-height: 1.45;
+  cursor: default;
+}
+.adm-pcard.adm-static .adm-poster {
+  background-color: #f4f6f5;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  width: 44px;
+  height: 60px;
+  border-radius: 6px;
+  flex: 0 0 44px;
+  margin-right: 2px;
+}
+.adm-purge-note {
+  color: #9aa5a1;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 2px 2px 10px;
 }

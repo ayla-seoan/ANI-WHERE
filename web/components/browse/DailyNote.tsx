@@ -3,17 +3,20 @@ import { useMemo, useState } from "react";
 import { addDays, weekday, type Item } from "@/lib/popup";
 import { AreaBadge, posterBg } from "../cards";
 import { HelpIcon } from "../Icons";
+import { areasByDistance, type LatLng } from "@/lib/locate";
 
 // 데일리 팝업 노트 (앱 render_daily): 고른 날(처음엔 오늘) 열려 있는 팝업을 지역별로. ‹ › 로 날짜·지역을 넘긴다.
-// 앱은 내 위치에서 가까운 지역부터 보여 주지만, 이 웹은 위치를 묻지 않고 그날 팝업이 많은 지역부터 보여 준다.
+// 위치를 허용하면 내 위치에서 가까운 지역부터 (앱과 같게, 11/19 요청), 아니면 그날 팝업이 많은 지역부터.
 export default function DailyNote({
   items,
   today,
   onPick,
+  me = null,
 }: {
   items: Item[];
   today: string;
   onPick: (id: string) => void;
+  me?: LatLng | null;
 }) {
   const [off, setOff] = useState(0);
   const [ai, setAi] = useState(0);
@@ -22,8 +25,17 @@ export default function DailyNote({
   const order = useMemo(() => {
     const cnt = new Map<string, number>();
     for (const p of open) cnt.set(p.area || "기타", (cnt.get(p.area || "기타") ?? 0) + 1);
-    return [...cnt.entries()].sort((a, b) => b[1] - a[1]);
-  }, [open]);
+    const byCount = [...cnt.entries()].sort((a, b) => b[1] - a[1]);
+    if (!me) return byCount;
+    const near = areasByDistance(
+      me,
+      open
+        .filter((p) => p.lat !== null && p.lng !== null)
+        .map((p) => ({ area: p.area || "기타", lat: p.lat as number, lng: p.lng as number })),
+    );
+    const rank = new Map(near.map((a, i) => [a, i]));
+    return byCount.sort((a, b) => (rank.get(a[0]) ?? 999) - (rank.get(b[0]) ?? 999));
+  }, [open, me]);
   const choices = [...order.map(([a]) => a), "전체"];
   const area = choices[((ai % choices.length) + choices.length) % choices.length];
   const count = area === "전체" ? open.length : (order.find(([a]) => a === area)?.[1] ?? 0);
@@ -39,7 +51,10 @@ export default function DailyNote({
           데일리 팝업 노트
           <span className="help" tabIndex={0}>
             <HelpIcon />
-            <span className="tip">고른 날 열려 있는 팝업이에요. 그날 팝업이 많은 지역부터 보여 줘요.</span>
+            <span className="tip">
+              고른 날 열려 있는 팝업이에요.{" "}
+              {me ? "내 위치에서 가까운 지역부터 보여 줘요." : "그날 팝업이 많은 지역부터 보여 줘요 (위치를 허용하면 가까운 지역부터)."}
+            </span>
           </span>
         </div>
         <div className="dn-nav">

@@ -7148,7 +7148,12 @@ ADMIN_CSS = """
 [class*="st-key-admli_"]:hover .adm-card { border-color: #14B8A6; }
 a.adm-link, a.adm-link:visited { text-decoration: none !important; color: inherit !important; }
 a.adm-card.adm-link { cursor: pointer; }
-a.adm-card.adm-pcard { display: flex !important; gap: 14px !important; align-items: center; }
+a.adm-card.adm-pcard, .adm-card.adm-pcard.adm-static { display: flex !important; gap: 14px !important; align-items: center; }
+.adm-card.adm-pcard.adm-static { cursor: default; }
+.adm-card.adm-pcard.adm-static img { width: 44px; height: 60px; object-fit: cover; border-radius: 6px; flex: 0 0 44px; background: #F4F6F5; }
+.adm-purge-note { color: #9AA5A1; font-size: .78rem; line-height: 1.5; margin: 2px 2px 10px; }
+/* 칸반 '더보기' 가 칸 아래 테두리에 겹치던 것 (11/19 요청) → 위아래 여백 */
+[class*="st-key-adm_more_board_"] { margin-top: 12px !important; margin-bottom: 6px !important; }
 a.adm-card.adm-pcard img { width: 44px; height: 60px; object-fit: cover; border-radius: 6px; flex: 0 0 44px; background: #F4F6F5;
   margin-right: 2px; }
 .adm-pcard > div { min-width: 0; display: grid; gap: 1px; }
@@ -7320,20 +7325,26 @@ def _admin_board() -> None:
     st.markdown('<div class="adm-panel-h">고른 주 현황</div>', unsafe_allow_html=True)
     board = admin.popup_board(store.all_rows(), mon)
     colors = {"새로 생성": "#14B8A6", "예정": "#3672BD", "진행": "#23866A", "종료": "#8A9592"}
+    # 지난 주를 고르면: 기간이 끝난 팝업은 다음 주 월요일에 DB 에서 지워져(supabase 012) 그 주에 끝난 팝업이 안 보일 수 있다 (11/19 요청)
+    past_week = mon < TODAY - timedelta(days=TODAY.weekday())
     cols = st.columns(4, gap="small")
     for i, (col, (name, rows)) in enumerate(zip(cols, board.items())):
         n_key = f"adm_board_n_{i}_{mon.isoformat()}"
         n_show = st.session_state.get(n_key, BOARD_PAGE)
         with col:
+            ended = name == "종료"      # 종료 칸은 정보만 (눌러도 상세로 가지 않음, 11/19 요청)
+            body = (lambda r: f'<img src="{escape(_poster_url(r.get("images")))}" alt="" loading="lazy"><div>'
+                    f'<b>{escape(str(r.get("work") or ""))}</b>'
+                    f'<span>{escape(str(r.get("cafe_name") or ""))}</span>'
+                    f'<em>{escape(str(r.get("start_date") or "")[5:])} ~ {escape(str(r.get("end_date") or "")[5:])}</em></div>')
             cards = "".join(
-                f'<a class="adm-card adm-link adm-pcard" href="{_adm_href(r)}" target="_self">'
-                f'<img src="{escape(_poster_url(r.get("images")))}" alt="" loading="lazy"><div>'
-                f'<b>{escape(str(r.get("work") or ""))}</b>'
-                f'<span>{escape(str(r.get("cafe_name") or ""))}</span>'
-                f'<em>{escape(str(r.get("start_date") or "")[5:])} ~ {escape(str(r.get("end_date") or "")[5:])}</em></div></a>'
+                (f'<div class="adm-card adm-pcard adm-static">{body(r)}</div>' if ended else
+                 f'<a class="adm-card adm-link adm-pcard" href="{_adm_href(r)}" target="_self">{body(r)}</a>')
                 for r in rows[:n_show]) or '<div class="adm-empty">없어요</div>'
+            note = ('<div class="adm-purge-note">기간이 끝난 팝업은 일주일 단위로 다음 주 월요일에 삭제돼요. '
+                    '지난 주에 종료된 팝업은 여기에 보이지 않을 수 있어요.</div>' if ended and past_week else "")
             st.markdown(f'<div class="adm-col" style="--c:{colors[name]}"><div class="adm-colhead">{name}'
-                        f'<small>{len(rows)}곳</small></div>{cards}</div>', unsafe_allow_html=True)
+                        f'<small>{len(rows)}곳</small></div>{note}{cards}</div>', unsafe_allow_html=True)
             if len(rows) > n_show:
                 with st.container(horizontal=True, horizontal_alignment="center", key=f"adm_more_board_{i}"):
                     st.button(f"{len(rows) - n_show}건 더보기", icon=":material/expand_more:", key=f"adm_board_more_btn_{i}",

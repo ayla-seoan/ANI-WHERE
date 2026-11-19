@@ -17,7 +17,7 @@ export type SortKey = (typeof SORTS)[number]["key"];
 
 export type Cond = {
   q: string;
-  area: string; // '' = 전체
+  area: string; // '' = 전체, 여러 곳이면 쉼표로 ('마포,송파') — 11/19 다중 선택
   span: Span;
   day: string; // YYYY-MM-DD 또는 ''
   work: string; // 홈 '요즘 일정 많은 작품' 에서 넘어온 작품 ('' = 전체)
@@ -47,7 +47,7 @@ function fromURL(): Cond {
   const day = sp.get("day") || "";
   return {
     q: (sp.get("q") || "").slice(0, 60),
-    area: (sp.get("area") || "").slice(0, 20),
+    area: (sp.get("area") || "").slice(0, 200),
     span: (SPANS as readonly string[]).includes(span || "") ? (span as Span) : EMPTY.span,
     day: /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "",
     work: (sp.get("work") || "").slice(0, 80),
@@ -123,7 +123,7 @@ export function applyCond(items: Item[], c: Cond, today: string, opts: { area?: 
     if (c.day && !(p.start <= c.day && c.day <= p.end)) return false;
     if (c.work && p.work !== c.work) return false;
     if (c.reserve && !(p.reserve && p.start > today)) return false;
-    if (opts.area !== false && c.area && p.area !== c.area) return false;
+    if (opts.area !== false && c.area && !c.area.split(",").includes(p.area)) return false;
     return matchQuery(p.text, c.q);
   });
 }

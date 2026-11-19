@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { addDays } from "@/lib/popup";
+import { addDays, todayKST } from "@/lib/popup";
 import { posterBg } from "@/components/cards";
 import { BOARD_COLS, ganttRows, popupBoard, posterOf, ymdOf } from "@/lib/server/admin";
 import type { Row } from "@/lib/server/store";
@@ -18,17 +18,31 @@ export const popupHref = (r: Row) => `/popup/${encodeURIComponent(String(r.entry
 const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
 
 /** 포스터 카드 (칸반 · 숫자 카드 목록 같은 모양) */
-export function PopupCard({ r, period }: { r: Row; period: string }) {
-  return (
-    <Link className="adm-card adm-link adm-pcard" href={popupHref(r)}>
+export function PopupCard({ r, period, link = true }: { r: Row; period: string; link?: boolean }) {
+  const body = (
+    <>
       <i className="adm-poster" style={posterBg(posterOf(r.images))} aria-hidden />
       <div>
         <b>{String(r.work || "")}</b>
         <span>{String(r.cafe_name || "")}</span>
         <em>{period}</em>
       </div>
+    </>
+  );
+  // 종료 칸은 정보만 (11/19 요청: 눌러도 상세로 가지 않음 — 끝난 팝업은 지도에서 내려가 있다)
+  if (!link) return <div className="adm-card adm-pcard adm-static">{body}</div>;
+  return (
+    <Link className="adm-card adm-link adm-pcard" href={popupHref(r)}>
+      {body}
     </Link>
   );
+}
+
+/** 이번 주 월요일 (한국 날짜) */
+function thisMonday(): string {
+  const t = todayKST();
+  const wd = (new Date(`${t}T00:00:00Z`).getUTCDay() + 6) % 7; // 월=0
+  return addDays(t, -wd);
 }
 
 export function Gantt({
@@ -154,6 +168,8 @@ export function BoardCols({
   moreHref: (i: number) => string;
 }) {
   const board = popupBoard(all, mon);
+  // 지난 주를 고르면: 종료된 팝업은 다음 주 월요일에 DB 에서 지워져(supabase 012) 그 주에 끝난 팝업이 안 보일 수 있다
+  const pastWeek = mon < thisMonday();
   return (
     <>
       <div className="adm-board">
@@ -167,10 +183,17 @@ export function BoardCols({
                   {name}
                   <small>{list.length}곳</small>
                 </div>
+                {name === "종료" && pastWeek && (
+                  <div className="adm-purge-note">
+                    기간이 끝난 팝업은 일주일 단위로 다음 주 월요일에 삭제돼요. 지난 주에 종료된 팝업은 여기에 보이지 않을 수
+                    있어요.
+                  </div>
+                )}
                 {list.slice(0, n).map((r) => (
                   <PopupCard
                     key={String(r.entry_id)}
                     r={r}
+                    link={name !== "종료"}
                     period={`${String(r.start_date || "").slice(5)} ~ ${String(r.end_date || "").slice(5)}`}
                   />
                 ))}
