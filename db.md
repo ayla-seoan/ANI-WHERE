@@ -133,7 +133,7 @@ intro, intro_src
 ### 이관 흐름
 
 ```
-Notion 트래커 DB ──(매일 08:40 GitHub Actions, scripts/notion_import.py)──▶ Supabase cafes (append-only INSERT)
+Notion 트래커 DB ──(매일 08:40 GitHub Actions + 예비 3번, scripts/notion_import.py)──▶ Supabase cafes (append-only INSERT)
                                                                          └─▶ data/cafes.json 거울 커밋
 Supabase popups_current ──▶ Next.js 공개 웹 (ISR 10분) · MCP 서버 · Streamlit(STORAGE_MODE=supabase)
 ```

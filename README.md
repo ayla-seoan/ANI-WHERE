@@ -716,7 +716,7 @@ ANI-WHERE/
 ├── docs/ai-mistakes.md      AI 실수와 수정 기록
 ├── docs/notion-import.md    Notion 매일 수집 · 앱 가져오기 규칙
 ├── scripts/notion_import.py Notion → data/cafes.json 가져오기 (--dry 로 결과만 보기)
-├── .github/workflows/notion-sync.yml  매일 08:40 KST 자동 가져오기 + 커밋
+├── .github/workflows/notion-sync.yml  매일 08:40 KST 자동 가져오기 + 커밋 (GitHub 예약이 늦을 때를 위해 09:40 · 11:40 · 14:40 예비)
 └── 프롬프트.md               화면을 다듬을 때 쓴 요청 프롬프트 모음
 ```
 

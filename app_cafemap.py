@@ -918,16 +918,27 @@ def _warm_blog_counts(rows: list[dict]) -> None:
     threading.Thread(target=run, daemon=True, name="blog-warm").start()
 
 
+_BLOG_ERR: dict[str, str] = {}       # 팝업별 마지막 블로그 검색 실패 이유 (한도 · 연결 실패). 빈 문자열이면 성공
+
+
 def _blog_list(current: dict) -> list[dict]:
     if not blog.enabled():
         return []
+    eid = str(current.get("entry_id"))
+    args = (eid, str(current.get("work") or ""), str(current.get("cafe_name") or ""),
+            str(current.get("start_date") or "")[:10], str(current.get("address") or ""))
     try:
-        posts, _ = _blog_posts(str(current.get("entry_id")), str(current.get("work") or ""),
-                               str(current.get("cafe_name") or ""), str(current.get("start_date") or "")[:10],
-                               str(current.get("address") or ""))
+        posts, err = _blog_posts(*args)
     except Exception:
+        _BLOG_ERR[eid] = "연결 실패"
         return []
-    _BLOG_COUNT[str(current.get("entry_id"))] = len(posts)
+    if err:                 # 실패(한도 · 연결 실패)는 하루 동안 기억하지 않고 다음에 다시 해 본다 (성공만 하루 기억)
+        try:
+            _blog_posts.clear(*args)
+        except Exception:
+            pass
+    _BLOG_ERR[eid] = err or ""
+    _BLOG_COUNT[eid] = len(posts)
     return posts
 
 
@@ -948,7 +959,10 @@ def _render_blog_tab(current: dict, posts: list[dict]) -> None:
         st.markdown('<div class="blog-empty">블로그 후기는 네이버 검색을 연결한 뒤에 보여요.</div>', unsafe_allow_html=True)
         return
     if not posts:
-        st.markdown('<div class="blog-empty">아직 이 팝업의 블로그 후기를 찾지 못했어요.</div>', unsafe_allow_html=True)
+        # 검색이 실패했으면(네이버 한도 · 연결 실패) '찾지 못했어요', 검색은 됐는데 글이 0건이면 '없어요' (11/19 요청)
+        failed = bool(_BLOG_ERR.get(str(current.get("entry_id"))))
+        msg = "아직 이 팝업의 블로그 후기를 찾지 못했어요." if failed else "아직 이 팝업의 블로그 후기가 없어요."
+        st.markdown(f'<div class="blog-empty">{msg}</div>', unsafe_allow_html=True)
         return
     # <a> 로 시작하면 마크다운이 첫 카드를 문단으로 쪼개서, 바깥을 <div> 로 감싼다
     st.markdown('<div class="bcards">' + "".join(_bcard(p) for p in posts) + '</div>', unsafe_allow_html=True)
