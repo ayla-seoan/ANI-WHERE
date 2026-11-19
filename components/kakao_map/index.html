@@ -83,10 +83,29 @@
   .leaflet-tooltip.tip-l { background: transparent; border: 0; box-shadow: none; padding: 0; }
   .leaflet-tooltip.tip-l::before { display: none; }
   .msg { padding: 24px; font-size: 13px; color: #6b6b76; line-height: 1.6; }
+  /* '내 위치' 버튼 (11/19 요청, 공개 웹과 같게): 오른쪽 아래, 누르면 내 자리로 확대 + 파란 점 */
+  #me { position: absolute; right: 10px; bottom: 28px; z-index: 1000; width: 40px; height: 40px; border-radius: 50%;
+        border: 1px solid #dde2e0; background: #fff; color: #0d9488; display: flex; align-items: center;
+        justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,.16); cursor: pointer; padding: 0; }
+  #me:hover { border-color: #14b8a6; }
+  #me svg { width: 22px; height: 22px; }
+  #me.busy svg { animation: meSpin 1s linear infinite; }
+  @keyframes meSpin { to { transform: rotate(360deg); } }
+  .me-dot { width: 16px; height: 16px; border-radius: 50%; background: #2c7be5; border: 3px solid #fff; box-sizing: border-box;
+            box-shadow: 0 0 0 6px rgba(44,123,229,.22), 0 1px 4px rgba(0,0,0,.3); }
+  #me-msg { display: none; position: absolute; left: 50%; bottom: 80px; transform: translateX(-50%); z-index: 1001;
+            background: rgba(38,48,45,.92); color: #fff; font-size: 12.5px; padding: 8px 12px; border-radius: 10px;
+            max-width: 80%; text-align: center; }
 </style>
 </head>
 <body>
 <div id="map"></div>
+<button id="me" type="button" aria-label="내 현재 위치로" title="">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/>
+  </svg>
+</button>
+<div id="me-msg" role="status"></div>
 <div id="spot"></div>
 <div id="styles"></div>
 
@@ -305,6 +324,15 @@ const Kakao = {
   focus(p) { this.map.setLevel(4); this.map.setCenter(new kakao.maps.LatLng(p.lat, p.lng)); },
   peek(p) { if (this.map.getLevel() > 5) this.map.setLevel(5); this.map.panTo(new kakao.maps.LatLng(p.lat, p.lng)); },
   fit() { this.overview(); },
+  me(lat, lng) {
+    const pos = new kakao.maps.LatLng(lat, lng);
+    if (this.map.getLevel() > 5) this.map.setLevel(5);
+    this.map.panTo(pos);
+    if (this.meDot) this.meDot.setMap(null);
+    const dot = document.createElement("div"); dot.className = "me-dot";
+    this.meDot = new kakao.maps.CustomOverlay({ position: pos, content: dot, zIndex: 4, clickable: false });
+    this.meDot.setMap(this.map);
+  },
 };
 
 /* ---------- 네이버 지도 (NAVER_MAPS_CLIENT_ID = 네이버 클라우드 Maps 의 Client ID, Dynamic Map 사용 체크) ---------- */
@@ -380,6 +408,14 @@ const Naver = {
   focus(p) { this.map.setZoom(16, false); this.map.setCenter(new naver.maps.LatLng(p.lat, p.lng)); },
   peek(p) { if (this.map.getZoom() < 15) this.map.setZoom(15, false); this.map.panTo(new naver.maps.LatLng(p.lat, p.lng)); },
   fit() { this.overview(); },
+  me(lat, lng) {
+    const pos = new naver.maps.LatLng(lat, lng);
+    if (this.map.getZoom() < 15) this.map.setZoom(15, false);
+    this.map.panTo(pos);
+    if (this.meDot) this.meDot.setMap(null);
+    this.meDot = new naver.maps.Marker({ position: pos, map: this.map, zIndex: 4, clickable: false,
+      icon: { content: '<div class="me-dot"></div>', anchor: new naver.maps.Point(8, 8) } });
+  },
 };
 
 // 네이버가 안 되면: 카카오 키가 있으면 카카오, 아니면 기본 지도로 다시 그린다 (지도가 비지 않게)
@@ -518,6 +554,13 @@ const Basic = {
   },
   fit() { this.overview(); },
   peek(p) { this.map.setView([p.lat, p.lng], Math.max(this.map.getZoom(), 14), { animate: true }); },
+  me(lat, lng) {
+    this.map.setView([lat, lng], Math.max(this.map.getZoom(), 15), { animate: true });
+    if (this.meDot) this.meDot.remove();
+    this.meDot = L.marker([lat, lng], { interactive: false, keyboard: false, zIndexOffset: 2000,
+      icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }) })
+      .addTo(this.map);
+  },
 };
 
 /* ---------- 공통 ---------- */
@@ -551,6 +594,28 @@ function draw(args) {
   }
 }
 let touched = false;      // 사용자가 지도를 끌거나 확대·축소했는지
+
+// '내 위치' 버튼: 누를 때마다 지금 위치를 받아 내 자리로 옮긴다 (위치는 이 화면 안에서만 쓰고 보내지 않는다)
+function meMsg(text) {
+  const m = document.getElementById("me-msg");
+  m.textContent = text; m.style.display = "block";
+  clearTimeout(meMsg.t); meMsg.t = setTimeout(() => { m.style.display = "none"; }, 3500);
+}
+document.getElementById("me").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const btn = e.currentTarget;
+  if (!engine || !engine.map || !engine.me) return;
+  // iframe 에서 막히면 같은 주소인 바깥 페이지의 navigator 로 한 번 더 (components/locate 와 같게)
+  let geo = navigator.geolocation;
+  try { geo = geo || window.parent.navigator.geolocation; } catch (_) {}
+  if (!geo) { meMsg("이 브라우저는 위치를 알려 주지 않아요."); return; }
+  btn.classList.add("busy");
+  geo.getCurrentPosition(
+    (pos) => { btn.classList.remove("busy"); touched = true; engine.me(pos.coords.latitude, pos.coords.longitude); },
+    () => { btn.classList.remove("busy"); meMsg("위치를 알 수 없어요. 브라우저 주소창의 위치 권한을 허용해 주세요."); },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+  );
+});
 ["pointerdown", "wheel", "touchstart"].forEach((t) =>
   document.getElementById("map").addEventListener(t, () => { touched = true; }, { passive: true, capture: true }));
 
