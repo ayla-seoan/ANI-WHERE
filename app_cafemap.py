@@ -7151,7 +7151,7 @@ a.adm-card.adm-link { cursor: pointer; }
 a.adm-card.adm-pcard, .adm-card.adm-pcard.adm-static { display: flex !important; gap: 14px !important; align-items: center; }
 .adm-card.adm-pcard.adm-static { cursor: default; }
 .adm-card.adm-pcard.adm-static img { width: 44px; height: 60px; object-fit: cover; border-radius: 6px; flex: 0 0 44px; background: #F4F6F5; }
-.adm-purge-note { color: #9AA5A1; font-size: .78rem; line-height: 1.5; margin: 2px 2px 10px; }
+.adm-purge-note { color: #9AA5A1; font-size: .78rem; line-height: 1.5; margin: 2px 2px 10px; text-align: center; }
 /* 칸반 '더보기' 가 칸 아래 테두리에 겹치던 것 (11/19 요청) → 위아래 여백 */
 [class*="st-key-adm_more_board_"] { margin-top: 12px !important; margin-bottom: 6px !important; }
 a.adm-card.adm-pcard img { width: 44px; height: 60px; object-fit: cover; border-radius: 6px; flex: 0 0 44px; background: #F4F6F5;
