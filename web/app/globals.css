@@ -3593,48 +3593,15 @@ svg {
   min-width: 240px;
 }
 
-/* 지도 오른쪽 가운데 버튼 묶음 (MapCanvas, 11/19 요청): 확대 · 축소, 그 바로 아래 '내 위치' */
-.map-ctrl {
+/* 지도 '내 위치' 버튼 (MapCanvas, 11/19 요청) — 오른쪽 아래, 누르면 내 자리로 확대 */
+.map-me {
+  /* 자리는 MapCanvas 가 확대 · 축소 버튼 바로 아래로 맞춘다 (못 찾으면 여기 오른쪽 아래) */
   position: absolute;
   right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 12px;
   z-index: 500;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-.map-zoom {
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1px solid #dde2e0;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
-  overflow: hidden;
-}
-.map-zoom button {
-  width: 36px;
-  height: 36px;
-  border: 0;
-  background: #fff;
-  color: var(--ink);
-  font-size: 1.3rem;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-}
-.map-zoom button + button {
-  border-top: 1px solid #e8ecea;
-}
-.map-zoom button:hover {
-  background: var(--accent-soft);
-  color: var(--accent-deep);
-}
-.map-me {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   border: 1px solid #dde2e0;
   background: #fff;
@@ -3645,9 +3612,12 @@ svg {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
   cursor: pointer;
 }
+.map-me.leaf {
+  bottom: 28px; /* Leaflet 오른쪽 아래 저작권 글자 위로 */
+}
 .map-me svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 .map-me:hover {
   border-color: var(--accent);
