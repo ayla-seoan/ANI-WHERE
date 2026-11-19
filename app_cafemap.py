@@ -397,7 +397,9 @@ html body [class*="st-key-bx_more_"] button p {{ font-size: .88rem !important; f
   letter-spacing: .14em; color: {MINT}; }}
 /* 누르면 메인으로 가는 로고: 버튼이지만 바탕·테두리 없이 */
 .st-key-home_brand button {{ background: none !important; border: 0 !important;
-  box-shadow: none !important; padding: 0 !important; min-height: 0; transform: none !important; }}
+  box-shadow: none !important; padding: 0 !important; min-height: 0; }}
+/* 눌림 효과(크기 줄기)는 끄되, 메뉴바 모션의 젤리(.gnb-jelly)는 움직이게 (11/19) */
+.st-key-home_brand button:not(.gnb-jelly) {{ transform: none !important; }}
 /* 제목 로고: 버튼 바탕에 로고 그림을 깔고 글자는 숨긴다 (누르면 처음 화면으로) */
 /* 로고 그림 아래 'ANIME POP-UP · CAFE · GOODS' 글씨까지 읽히게 로고 칸을 키운다 */
 .st-key-home_brand button {{ width: 330px !important; height: 100px !important;
@@ -3810,6 +3812,47 @@ _PIN_ICON_JS = """
 
 # 모바일 '맨 위로' 버튼 (11/18 요청): 어느 화면이든(리스트·지도·내 캘린더·관리자…) 아래로 스크롤하면 화면 아래 가운데에
 # 위쪽 화살표 아이콘, 누르면 맨 위로. 메뉴바(_gnb)가 모든 화면에 있어서 거기서 한 번 붙인다
+# 메뉴바 모션 (11/19 요청, 미리보기에서 고른 것 — 공개 웹 components/GnbMotion.tsx 와 같게):
+#   로고 · 검색 · 알림 · 마이페이지(로그인) · 관리자 — 젤리 / 홈 · 지도로 보기 · 리스트로 보기 · 내 캘린더 — 말랑 알약
+# 화면을 다시 그리면 버튼이 새로 만들어져서, 부모 창 문서에 한 번만 붙여 위임(closest)으로 처리한다
+_GNB_MOTION_JS = """(function(){
+if (window.__awGnbMotion) return; window.__awGnbMotion = 1;
+const d = document;
+const PILL = '[class*="st-key-gnbtab_"] button';
+const JELLY = '[class*="st-key-gnb_search_"] button, .st-key-gnb_right [data-testid="stPopover"] button, .st-key-login_btn button, .st-key-admin_btn button';
+const LOGO = '.st-key-home_brand button';
+const restart = (el, c) => { el.classList.remove(c); void el.offsetWidth; el.classList.add(c); };
+let timer = 0, last = null;
+const gnbOf = (el) => el.closest('.st-key-gnb');
+const blobIn = (g) => { let b = g.querySelector(':scope > .gnb-blob');
+  if (!b) { b = d.createElement('span'); b.className = 'gnb-blob'; b.setAttribute('aria-hidden', 'true'); g.prepend(b); } return b; };
+const hide = () => d.querySelectorAll('.gnb-blob.show').forEach((b) => b.classList.remove('show'));
+function pillTo(t, touch) {
+  const g = gnbOf(t); if (!g) return; const blob = blobIn(g);
+  const gr = g.getBoundingClientRect(), r = t.getBoundingClientRect();
+  blob.style.left = (r.left - gr.left - 2) + 'px'; blob.style.top = (r.top - gr.top - 2) + 'px';
+  blob.style.width = (r.width + 4) + 'px'; blob.style.height = (r.height + 4) + 'px';
+  blob.classList.add('show'); restart(blob, 'move'); restart(t, 'gnb-hit');
+  clearTimeout(timer); if (touch) timer = setTimeout(hide, 1200);
+}
+function jelly(t, touch) { hide(); t.classList.add('gnb-on'); restart(t, 'gnb-jelly');
+  if (touch) setTimeout(() => t.classList.remove('gnb-on'), 1200); }
+function pick(e) { const el = e.target; if (!el || !el.closest) return [null, null];
+  let t = el.closest(PILL); if (t) return [t, 'pill'];
+  t = el.closest(JELLY); if (t) return [t, 'jelly'];
+  t = el.closest(LOGO); if (t) return [t, 'logo']; return [null, null]; }
+d.addEventListener('pointerover', (e) => { if (e.pointerType !== 'mouse') return;
+  const [t, k] = pick(e);
+  if (!t) { if (!e.target.closest || !e.target.closest('.st-key-gnb')) hide(); return; }
+  if (t === last) return; if (last) last.classList.remove('gnb-on'); last = t;
+  if (k === 'pill') pillTo(t, false); else if (k === 'jelly') jelly(t, false); else { hide(); restart(t, 'gnb-jelly'); } }, true);
+d.addEventListener('pointerout', (e) => { if (e.pointerType !== 'mouse' || !last) return;
+  if (!last.contains(e.relatedTarget)) { last.classList.remove('gnb-on'); last = null; } }, true);
+d.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; const [t, k] = pick(e); if (!t) return;
+  if (k === 'pill') pillTo(t, true); else if (k === 'jelly') jelly(t, true); else restart(t, 'gnb-jelly'); }, true);
+})();"""
+
+
 _TOP_BTN_JS = """
 (function () {
   if (window.__aniTopBtn) return;
@@ -4146,6 +4189,32 @@ def _reset_filters() -> None:
 # ------------------------------------------------------------ 상단 메뉴바 (로고 · 보기 탭 · 검색 / 알림 / 로그인)
 GNB_CSS = """
 <style>
+/* ---------- 메뉴바 모션 (_GNB_MOTION_JS, 11/19 요청) ---------- */
+.st-key-gnb { position: relative; }
+.st-key-gnb > .gnb-blob { position: absolute; z-index: 0; border-radius: 999px; background: #fff;
+  box-shadow: 0 4px 14px rgba(20,184,166,.2); opacity: 0; pointer-events: none;
+  transition: left .45s cubic-bezier(.34,1.56,.64,1), top .45s cubic-bezier(.34,1.56,.64,1),
+              width .45s cubic-bezier(.34,1.56,.64,1), height .45s cubic-bezier(.34,1.56,.64,1), opacity .2s; }
+.st-key-gnb > .gnb-blob.show { opacity: 1; }
+.st-key-gnb > .gnb-blob.move { animation: gnbStretch .5s ease-out; }
+@keyframes gnbStretch { 0% { transform: scale(1,1); } 30% { transform: scale(1.2,.8); } 60% { transform: scale(.94,1.07); }
+                        80% { transform: scale(1.02,.98); } 100% { transform: scale(1,1); } }
+.st-key-gnb_tabs, [class*="st-key-gnbtab_"] { position: relative; z-index: 1; }
+.st-key-gnb_right { position: relative; z-index: 1; }
+button.gnb-hit { animation: gnbPop .45s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes gnbPop { 0% { transform: scale(1); } 40% { transform: scale(1.1); } 100% { transform: scale(1); } }
+/* 젤리 바탕: 흰 테두리 링 (마이페이지는 프로필 사진이 버튼 바탕이라 사진을 가리지 않게 링으로) */
+.st-key-gnb_right button { transition: box-shadow .25s, background-color .25s; }
+html body .st-key-gnb .st-key-gnb_right button.gnb-on { box-shadow: 0 0 0 4px #fff, 0 6px 16px rgba(20,184,166,.25) !important;
+  background-color: #fff !important; border-radius: 999px !important; }
+button.gnb-jelly { animation: gnbJellyIc .7s both; }
+@keyframes gnbJellyIc { 0% { transform: rotate(0) scale(1); } 22% { transform: rotate(-10deg) scale(1.16); }
+  45% { transform: rotate(7deg) scale(.94); } 68% { transform: rotate(-3deg) scale(1.04); } 100% { transform: none; } }
+.st-key-home_brand button.gnb-jelly { animation: gnbJellyLogo .8s both; }
+@keyframes gnbJellyLogo { 0% { transform: rotate(0) scale(1); } 25% { transform: rotate(-4deg) scale(1.08,.92); }
+  50% { transform: rotate(3deg) scale(.96,1.05); } 72% { transform: rotate(-1deg) scale(1.02,.99); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .st-key-gnb > .gnb-blob, button.gnb-hit, button.gnb-jelly, .st-key-gnb_right button { animation: none !important; transition: none !important; } }
 .st-key-gnb { align-items: center !important; gap: 4px !important; flex-wrap: nowrap; padding: 6px 0 2px; }
 /* 로고: 메뉴바 안에서는 작게 */
 .st-key-gnb .st-key-home_brand button { width: 155px !important; height: 47px !important; }   /* 11/18 로고 조금 작게 */
@@ -4553,6 +4622,7 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
         go("map")                            # 다른 화면에서 지도·리스트·내 캘린더 탭을 누름 (메인이면 표시만 지운다)
     st.markdown(GNB_CSS, unsafe_allow_html=True)
     components.html(f"<script>window.parent.eval({json.dumps(_TOP_BTN_JS)});</script>", height=0)   # 모바일 '맨 위로'
+    components.html(f"<script>window.parent.eval({json.dumps(_GNB_MOTION_JS)});</script>", height=0)   # 메뉴바 모션 (11/19)
     wide = bool(st.session_state.get("list_only"))
     with st.container(horizontal=True, key="gnb"):
         _logo_swap()
