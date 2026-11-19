@@ -2548,7 +2548,10 @@ HOME_CSS = """
 .wkh.past { opacity: .5; }
 [class*="st-key-wk_"]:has(.wkh.past) .hc { opacity: .55; }
 .wk-empty { font-size: .75rem; color: #B3BCB9; padding: 8px 0; }
-[class*="st-key-wk_more_"] button { width: 100%; min-height: 0; padding: 4px 6px; border-radius: 10px; background: #F1F4F3; border: 0; }
+/* '+N건 더보기' 는 요일 칸 가운데 (11/19 요청: 왼쪽으로 치우쳐 보임) */
+[class*="st-key-wk_more_"] { width: 100% !important; display: flex !important; justify-content: center !important; }
+[class*="st-key-wk_more_"] > div, [class*="st-key-wk_more_"] .stButton { width: auto !important; display: flex !important; justify-content: center !important; }
+[class*="st-key-wk_more_"] button { width: auto !important; min-height: 0; padding: 4px 14px; border-radius: 999px; background: #F1F4F3; border: 0; margin: 0 auto !important; }
 [class*="st-key-wk_more_"] button p { font-size: .78rem !important; color: #5B6663 !important; font-weight: 700; }
 .hc.tall .hcp { aspect-ratio: 1/1; }     /* 포스터 높이 줄임 (11/18 요청) */
 .hc.tall .hcbadge { border-radius: 12px 0 10px 0; background: #26302D; }
