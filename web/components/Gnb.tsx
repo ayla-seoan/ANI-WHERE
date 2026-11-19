@@ -6,6 +6,7 @@ import { avatarUrl } from "@/lib/avatar";
 import { CloseIcon, SearchIcon } from "./Icons";
 import Bell, { type BellData } from "./member/Bell";
 import { useMember } from "./member/MemberContext";
+import GnbMotion from "./GnbMotion";
 
 // 앱(Streamlit) 상단 메뉴바와 같은 모양: 연민트 바탕 + 아래 둥근 모서리, 왼쪽 로고, 가운데 탭 (홈 · 지도로 보기 · 리스트로 보기
 // · 회원이면 내 캘린더). 오른쪽: 검색(지도·리스트) · 알림(회원) · 관리자(관리자 회원, 앱의 관리자 화면으로) · 로그인 / 프로필 사진.
@@ -40,6 +41,7 @@ export default function Gnb({ bell }: { bell: BellData | null }) {
 
   return (
     <header className="gnb-wrap">
+      <GnbMotion />
       <div className="gnb">
         <Link href="/" className="gnb-logo" aria-label="ANI:WHERE 홈">
           <img src="/logo_sm.webp" alt="ANI:WHERE" width={155} height={44} />
