@@ -414,6 +414,13 @@ const CITY_COLORS: Record<string, string> = {
 };
 const MORE_COLORS = ["#6C9A8B", "#C77D4E", "#7A6FB3", "#4F95A8", "#B5654A", "#5E8F4A", "#A0628B", "#8A7D3E"];
 
+/** 시 색을 어둡게 (물어보기 카드처럼 옅은 민트 바탕 위에서 지역 배지가 묻히지 않게, 11/20 요청). k = 남길 밝기 비율 */
+export function darken(hex: string, k = 0.72): string {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const f = (v: number) => Math.round(v * k).toString(16).padStart(2, "0");
+  return `#${f((n >> 16) & 255)}${f((n >> 8) & 255)}${f(n & 255)}`;
+}
+
 export function regionColor(city: string): string {
   if (!city || city === "기타") return "#9AA5A1";
   if (CITY_COLORS[city]) return CITY_COLORS[city];

@@ -2115,6 +2115,12 @@ def _area_colors(address) -> tuple[str, str]:
     return _MORE_COLORS[sum(map(ord, city)) % len(_MORE_COLORS)] if city else ("#9AA5A1", "#fff")
 
 
+def _darken(hex_: str, k: float = 0.72) -> str:
+    """시 색을 어둡게 (물어보기 카드처럼 옅은 민트 바탕 위에서 지역 배지가 묻히지 않게, 11/20 요청 · 웹 darken 과 같게)."""
+    n = int(hex_[1:7], 16)
+    return "#" + "".join(f"{round(((n >> s) & 255) * k):02x}" for s in (16, 8, 0))
+
+
 def _area_chip(address, cls: str = "") -> str:
     """지역 칩 (홈 · 내 캘린더 · 알림 · 물어보기, 11/20 요청 '지역마다 색'): 시 색으로 채우고 흰 글자. 웹 areaFill 과 같게.
     지역을 모르면 빈 문자열."""
@@ -2451,7 +2457,7 @@ def _home_head(title: str, icon: str, more_sort: str = "", key: str = "", reserv
 
 
 def _home_area_pills(key: str, areas: list[str], rows: list[dict] | None = None) -> str:
-    """지역 알약 (전체 + 팝업 많은 지역). 지역마다 색 (11/20 요청): 평소엔 시 색 테두리 · 글자, 고르면 옅은(20%) 시 색 바탕
+    """지역 알약 (전체 + 팝업 많은 지역). 지역마다 색 (11/20 요청): 평소엔 시 색 테두리 · 글자, 고르면 진한 시 색 바탕 + 흰 글자
     (웹 NewSection areaPill 과 같게). st.pills 의 단추는 순서대로 놓여서 n번째 단추에 색을 준다."""
     pick = st.pills("지역", ["전체"] + areas, default="전체", key=f"hp_{key}", label_visibility="collapsed")
     css = []
@@ -2460,7 +2466,8 @@ def _home_area_pills(key: str, areas: list[str], rows: list[dict] | None = None)
         c = "#14b8a6" if i == 1 else _area_colors(addr)[0]
         sel = f".st-key-hp_{key} button:nth-child({i})"
         css.append(f"{sel}{{border-color:{c} !important;color:{c} !important}} {sel} *{{color:{c} !important}}"
-                   f"{sel}[aria-checked=\"true\"]{{background:linear-gradient({c}33,{c}33),#fff !important;border-color:{c} !important}}")
+                   f"{sel}[aria-checked=\"true\"]{{background:{c} !important;border-color:{c} !important}}"
+                   f"{sel}[aria-checked=\"true\"] *{{color:#fff !important}}")
     if css:
         st.markdown("<style>" + "".join(css) + "</style>", unsafe_allow_html=True)
     return pick or "전체"
@@ -8546,7 +8553,8 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                         f'<div class="apc-txt"><div class="apc-work">{escape(card["work"])}</div>'
                         f'<div class="apc-cafe">{escape(card["cafe"])}</div>'
                         f'<div class="apc-addr">'
-                        + (f'<span class="apc-area" style="background:linear-gradient({card["area_bg"]}33,{card["area_bg"]}33),#fff;color:{card["area_bg"]}">{escape(card["area"])}</span>'
+                        + (f'<span class="apc-area" style="background:linear-gradient({card["area_bg"]}33,{card["area_bg"]}33),#fff;'
+                           f'color:{_darken(card["area_bg"])};border:1.5px solid {_darken(card["area_bg"])}">{escape(card["area"])}</span>'
                            if card.get("area") else "")
                         + f'{escape(card["address"])}</div>'
                         f'<div class="apc-date">{escape(card["dates"])}</div></div></div>', unsafe_allow_html=True)
