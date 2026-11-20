@@ -72,7 +72,8 @@ export default async function Home() {
   for (const p of perkLive) if (p.work.trim()) count.set(p.work.trim(), (count.get(p.work.trim()) ?? 0) + 1);
   const works = [...count.keys()].sort((a, b) => count.get(b)! - count.get(a)! || byCode(a, b)).slice(0, STORY_MAX);
   const posterOf = new Map<string, string>();
-  for (const p of [...perkLive].sort((a, b) => stateOf(a, today).rank - stateOf(b, today).rank)) {
+  // 포스터는 그 작품의 진행 중·예정 팝업 아무거나 (특전 팝업에 포스터가 없을 수 있음)
+  for (const p of [...live].sort((a, b) => stateOf(a, today).rank - stateOf(b, today).rank)) {
     const w = p.work.trim();
     if (w && !posterOf.has(w) && p.images[0]) posterOf.set(w, p.images[0]);
   }

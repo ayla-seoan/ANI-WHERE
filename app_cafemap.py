@@ -2667,7 +2667,7 @@ def _guest_stories(rows: list[dict], limit: int = 12) -> None:
         if w:
             count[w] = count.get(w, 0) + 1
     works = sorted(count, key=lambda w: (-count[w], w))[:limit]
-    posters = _work_posters(perk_rows)
+    posters = _work_posters(rows)      # 포스터는 그 작품의 진행 중·예정 팝업 아무거나 (특전 팝업에 포스터가 없을 수 있음)
     with st.container(key="stories"):
         st.markdown('<div class="story-head">특전 있는 작품들</div>', unsafe_allow_html=True,
                     help="지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요. "
