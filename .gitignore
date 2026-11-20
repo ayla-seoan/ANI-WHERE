@@ -12,3 +12,12 @@ data/notion_sync.json
 # 회원 기록 (닉네임·해시) — 로컬 실행용. 배포에서는 Supabase members 표
 data/members.json
 data/credentials.json
+
+# 로컬 실행(STORAGE_MODE=local)에서만 쌓이는 시험 기록 — 배포는 Supabase 표 (11/20 정리)
+data/del_requests.json
+data/notices.json
+data/visits.json
+# 물어보기에 로컬에서 쓴 질문 기록 (사람이 쓴 글이라 올리지 않는다)
+logs/ask_questions.jsonl
+# 로컬 시험에서 올린 사진. 이미 저장소에 있는 예전 사진은 그대로 추적되고, 새 사진은 Supabase Storage 에 올라간다
+static/uploads/*
