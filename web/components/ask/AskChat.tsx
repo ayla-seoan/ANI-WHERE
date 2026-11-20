@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { DEFAULT_CHIPS, GUIDE_EXAMPLES, MAX_QUESTION } from "@/lib/ask";
-import { PLACEHOLDER_POSTER, type Item } from "@/lib/popup";
+import { PLACEHOLDER_POSTER, regionColor, type Item } from "@/lib/popup";
 import { OpenIcon } from "../Icons";
 import { send, useChat, type BotMsg } from "./store";
 
@@ -112,7 +112,11 @@ function BotAnswer({
             <span className="apc-cafe">{p.name}</span>
             <span className="apc-addr">
               {/* 지역 배지 (11/20 요청, 리스트 카드의 지역 이름과 같게) */}
-              {p.area && <span className="apc-area">{p.area}</span>}
+              {p.area && (
+                <span className="apc-area" style={{ background: regionColor(p.city) }}>
+                  {p.area}
+                </span>
+              )}
               {p.address}
             </span>
             <span className="apc-date">{cardDates(p, m.distances[p.id])}</span>

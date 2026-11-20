@@ -11,7 +11,7 @@ import {
   type Item,
 } from "@/lib/popup";
 import BookmarkPicker from "@/components/member/BookmarkPicker";
-import { HomeCard, posterBg } from "@/components/cards";
+import { areaFill, HomeCard, posterBg } from "@/components/cards";
 import HScroll from "@/components/HScroll";
 import RankBanner from "@/components/home/RankBanner";
 import NewSection from "@/components/home/NewSection";
@@ -129,7 +129,11 @@ export default async function Home() {
             {marked.map((p) => (
               <Link key={p.id} href={`/popup/${p.id}`} className="story mark" prefetch={false}>
                 <span className="ring">
-                  {p.area && <span className="rg">{p.area}</span>}
+                  {p.area && (
+                    <span className="rg" style={areaFill(p.city)}>
+                      {p.area}
+                    </span>
+                  )}
                   <span className="pic" style={posterBg(p.images[0] ?? "")} />
                 </span>
                 <span className="nm">{p.work}</span>

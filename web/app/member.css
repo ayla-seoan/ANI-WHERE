@@ -2032,3 +2032,24 @@ button.story {
     padding: 16px 14px 12px;
   }
 }
+
+/* ---------- 지역 칩 (11/20 요청: 내 캘린더 · 알림 내역에도 지역, 지역마다 색 — 색은 areaFill) ---------- */
+.bxc .bx-chips {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.bxc .bx-area,
+.ntf-area {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.5;
+  width: fit-content;
+}
+.ntf-area {
+  margin-right: 5px;
+  vertical-align: 1px;
+}

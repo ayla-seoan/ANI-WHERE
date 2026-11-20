@@ -1,6 +1,6 @@
 import Link from "next/link";
 import HScroll from "@/components/HScroll";
-import { posterBg } from "@/components/cards";
+import { areaFill, posterBg } from "@/components/cards";
 import { avatarUrl, uploadUrl } from "@/lib/avatar";
 import { stateOf, type Item } from "@/lib/popup";
 import type { HomeReview } from "@/lib/server/member";
@@ -44,7 +44,7 @@ export default function ReviewSection({
                 <div className="rvw">{p.work}</div>
                 <div className="rvchips">
                   <span className={`st ${s.color}`}>{s.label}</span>
-                  {p.area && <span>{p.area}</span>}
+                  {p.area && <span style={areaFill(p.city)}>{p.area}</span>}
                 </div>
               </div>
             </div>

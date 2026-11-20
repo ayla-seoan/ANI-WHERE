@@ -26,6 +26,18 @@ export function AreaOnPoster({ area, city, className = "area" }: { area: string;
   );
 }
 
+/** 지역 칩 (홈 · 내 캘린더 · 물어보기, 11/20 요청 '지역마다 색'): 시 색으로 채우고 흰 글자 (앱 _area_fill 과 같게) */
+export function areaFill(city: string): CSSProperties {
+  const c = regionColor(city);
+  return { background: c, color: "#fff", borderColor: c, fontWeight: 700 };
+}
+
+/** 지역 고르기 알약: 평소엔 시 색 테두리 · 글자, 고르면 시 색으로 채움 */
+export function areaPill(city: string, on: boolean): CSSProperties {
+  const c = regionColor(city);
+  return on ? { background: c, color: "#fff", borderColor: c } : { borderColor: c, color: c };
+}
+
 /** 흰 바탕 위 지역 배지: 시 색 테두리·글자, 옅은 바탕 (앱 .abadge) */
 export function AreaBadge({ area, city }: { area: string; city: string }) {
   if (!area) return null;
@@ -94,7 +106,7 @@ export function HomeCard({
         <div className="hct">{p.work}</div>
         <div className="hcd">{periodDot(p)}</div>
         <div className="hcchips">
-          {p.area && <span>{p.area}</span>}
+          {p.area && <span style={areaFill(p.city)}>{p.area}</span>}
           <span className={`st ${s.color}`}>{s.label}</span>
         </div>
       </Link>

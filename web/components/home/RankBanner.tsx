@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { periodDot, stateOf, type Item } from "@/lib/popup";
-import { posterBg } from "../cards";
+import { areaFill, posterBg } from "../cards";
 import { FireIcon } from "../Icons";
 
 // 실시간 인기 급상승 랭킹 (앱 _home_slide · _home_rank_rows 모양):
@@ -70,7 +70,7 @@ export default function RankBanner({ items, today }: { items: Item[]; today: str
                     {p.name} · {periodDot(p)}
                   </div>
                   <div className="hbchips">
-                    {p.area && <span>{p.area}</span>}
+                    {p.area && <span style={areaFill(p.city)}>{p.area}</span>}
                     <span>{s.label}</span>
                   </div>
                 </div>

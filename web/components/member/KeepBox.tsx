@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PLACEHOLDER_POSTER } from "@/lib/popup";
+import { areaFill } from "../cards";
 import { ExpandMore } from "../Icons";
 
 // 내 캘린더 가운데 칸 (앱 render_box_view): 북마크 · 다녀온 팝업(내가 쓴 다녀온 후기) · 최근 본 팝업(이 브라우저).
@@ -12,6 +13,9 @@ export type KeepItem = {
   start: string;
   end: string;
   poster: string;
+  /** 지역 칩 (11/20 요청: 지역마다 색) */
+  area: string;
+  city: string;
 };
 type Visited = {
   item: KeepItem;
@@ -88,7 +92,14 @@ function Card({
           }}
         />
         <div className="t">
-          <span className={`st${state === "종료" ? " end" : ""}`}>{state}</span>
+          <span className="bx-chips">
+            {p.area && (
+              <span className="bx-area" style={areaFill(p.city)}>
+                {p.area}
+              </span>
+            )}
+            <span className={`st${state === "종료" ? " end" : ""}`}>{state}</span>
+          </span>
           <div className="w">{p.work}</div>
           <div className="c">{p.name}</div>
           <div className="d">

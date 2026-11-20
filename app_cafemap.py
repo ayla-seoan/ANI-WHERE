@@ -2115,6 +2115,17 @@ def _area_colors(address) -> tuple[str, str]:
     return _MORE_COLORS[sum(map(ord, city)) % len(_MORE_COLORS)] if city else ("#9AA5A1", "#fff")
 
 
+def _area_chip(address, cls: str = "") -> str:
+    """지역 칩 (홈 · 내 캘린더 · 알림 · 물어보기, 11/20 요청 '지역마다 색'): 시 색으로 채우고 흰 글자. 웹 areaFill 과 같게.
+    지역을 모르면 빈 문자열."""
+    area = geo.area_name(str(address or ""))
+    if not area:
+        return ""
+    bg, fg = _area_colors(address)
+    c = f' class="{cls}"' if cls else ""
+    return f'<span{c} style="background:{bg};color:{fg};border-color:{bg};font-weight:700">{escape(area)}</span>'
+
+
 def _area_badge(address, cls: str = "abadge") -> str:
     """📍 지역 배지 HTML (시마다 다른 색). 지역을 모르면 빈 문자열.
 
@@ -2308,7 +2319,7 @@ def _home_card(sec: str, r: dict, rank: int | None = None, badge: str = "", tall
             + (f'<span class="hcrank">{rank}</span>' if rank else "")
             + f'</div><div class="hct">{escape(str(r.get("work") or ""))}</div>'
             f'<div class="hcd">{escape(_period(r, lambda d: f"{d:%m.%d}", show_raw=False))}</div>'
-            f'<div class="hcchips">' + (f'<span>{escape(area)}</span>' if area else "")
+            f'<div class="hcchips">' + _area_chip(r.get("address"))
             + f'<span class="st {color}">{escape(label)}</span></div></div>', unsafe_allow_html=True)
         if st.button("자세히 보기", key=f"open_h{sec}_{eid}", width="stretch"):
             st.session_state.update(selected=eid, scroll_top=True)
@@ -2329,7 +2340,7 @@ def _home_slide(r: dict, rank: int, total: int) -> None:
     area = geo.area_name(str(r.get("address") or ""))
     url = _poster_url(r.get("images"))
     period = _period(r, lambda d: f"{d:%m.%d}", show_raw=False)
-    chips = (f'<span>{escape(area)}</span>' if area else "") + f'<span>{escape(label)}</span>'
+    chips = _area_chip(r.get("address")) + f'<span>{escape(label)}</span>'
     with st.container(key=f"card_hb_{eid}"):
         st.markdown(
             f'<div class="hb"><div class="hbbg" style="background-image:url(&quot;{url}&quot;)"></div>'
@@ -2418,7 +2429,7 @@ def _home_reviews(df: pd.DataFrame, limit: int = 12) -> None:
                 st.markdown(
                     f'<div class="rvc"><div class="rvtop"><div class="rvth" style="background-image:url(&quot;{_poster_url(pop.get("images"))}&quot;)"></div>'
                     f'<div class="rvtt"><div class="rvw">{escape(str(pop.get("work") or ""))}</div><div class="rvchips">'
-                    f'<span class="st {color}">{escape(label)}</span>' + (f'<span>{escape(area)}</span>' if area else "")
+                    f'<span class="st {color}">{escape(label)}</span>' + _area_chip(pop.get("address"))
                     + '</div></div></div><div class="rvbox"><div class="rvme">' + _avatar_img(pic, 34, "rv-av")
                     + f'<div class="rvwho"><b>{escape(_nick_only(who))}</b>{stars}</div><span class="rvdate">{escape(_when(rv.get("updated_at")))}</span></div>'
                     + (f'<span class="rvkind {RV_KIND_CLASS.get(str(rv.get("kind")), "etc")}">{escape(str(rv.get("kind")))}</span>' if rv.get("kind") else "")
@@ -2439,8 +2450,20 @@ def _home_head(title: str, icon: str, more_sort: str = "", key: str = "", reserv
             st.button("더보기", key=f"hmore_{key}", type="tertiary", on_click=_home_more, args=(more_sort, reserve))
 
 
-def _home_area_pills(key: str, areas: list[str]) -> str:
+def _home_area_pills(key: str, areas: list[str], rows: list[dict] | None = None) -> str:
+    """지역 알약 (전체 + 팝업 많은 지역). 지역마다 색 (11/20 요청): 평소엔 시 색 테두리 · 글자, 고르면 시 색으로 채움
+    (웹 NewSection areaPill 과 같게). st.pills 의 단추는 순서대로 놓여서 n번째 단추에 색을 준다."""
     pick = st.pills("지역", ["전체"] + areas, default="전체", key=f"hp_{key}", label_visibility="collapsed")
+    css = []
+    for i, a in enumerate(areas, start=2):           # 1번째는 '전체'
+        addr = next((r.get("address") for r in rows or [] if geo.area_name(str(r.get("address") or "")) == a), "")
+        c = _area_colors(addr)[0]
+        sel = f".st-key-hp_{key} button:nth-child({i})"
+        css.append(f"{sel}{{border-color:{c} !important;color:{c} !important}} {sel} *{{color:{c} !important}}"
+                   f"{sel}[aria-checked=\"true\"]{{background:{c} !important;border-color:{c} !important}}"
+                   f"{sel}[aria-checked=\"true\"] *{{color:#fff !important}}")
+    if css:
+        st.markdown("<style>" + "".join(css) + "</style>", unsafe_allow_html=True)
     return pick or "전체"
 
 
@@ -2465,7 +2488,7 @@ def render_home(df: pd.DataFrame) -> None:
 
         # 따끈따끈 신규 등록 (먼저 등록한 시각이 늦은 순)
         _home_head("따끈따끈 신규 등록 팝업", "fiber_new", more_sort="최신순", key="new")
-        a = _home_area_pills("new", areas)
+        a = _home_area_pills("new", areas, live)
         made = _created_map()
         new = sorted(by_area(live, a), key=lambda r: made.get(str(r["entry_id"]), ""), reverse=True)[:12]
         with st.container(horizontal=True, key="home_row_new"):
@@ -2749,7 +2772,7 @@ def render_stories(df: pd.DataFrame) -> None:
                 rg = geo.area_name(str(r.get("address") or ""))
                 with st.container(key=f"card_story_{i}"):
                     st.markdown(
-                        '<div class="story mark"><div class="ring">' + (f'<span class="rg">{escape(rg)}</span>' if rg else "")
+                        '<div class="story mark"><div class="ring">' + (_area_chip(r.get("address"), "rg") if rg else "")
                         + f'<div class="pic" style="background-image:url(&quot;{_poster_url(r.get("images"))}&quot;)"></div>'
                         + f'</div><div class="nm">{escape(str(r.get("work") or ""))}</div></div>', unsafe_allow_html=True)
                     st.button("보기", key=f"open_story_{i}", on_click=_story_open, args=(eid,))
@@ -4357,6 +4380,11 @@ html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-k
 .ntf-item .ntf-st { float: right; font-size: .72rem; font-weight: 700; color: #FF6B6B; }
 .ntf-item.read .ntf-st { color: #A9B3B0; }
 /* 내 캘린더 '알림 받은 내역': 종 알림과 같은 모양 + 왼쪽 포스터. 빨간 점은 굵은 종류 글자 앞, '새 알림' 은 오른쪽 위 */
+/* 지역 칩 (11/20 요청: 지역마다 색 — 색은 _area_chip 이 칸마다 넣는다) */
+.bxc .bx-chips { display: flex; gap: 4px; align-items: center; }
+.bxc .bx-area, .ntf-area { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem;
+  font-weight: 800; line-height: 1.5; width: fit-content; }
+.ntf-area { margin-right: 5px; vertical-align: 1px; }
 .ntf-item.has-pst { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; position: relative; }
 .ntf-item.has-pst::before { display: none; }
 .ntf-item .ntf-pst { width: 42px; height: 56px; flex: 0 0 42px; object-fit: cover; border-radius: 6px; }
@@ -4957,7 +4985,7 @@ def _render_notice_history() -> None:
         bell = f"<b>{label}</b> · {name}" + _why_html(kind)      # 종 알림(_notices)과 같은 글 → 같은 번호(읽음 공유)
         nid = _ntf_id(f"m{TODAY}{eid}{bell}") if day == TODAY else _ntf_id(f"h{day}{eid}{label}")
         # 화면에는 종류 / 작품 / 매장을 줄바꿈으로 (11/18 요청)
-        text = (f"<b>{label}</b><br>{escape(str(r.get('work') or ''))}<br>"
+        text = (_area_chip(r.get("address"), "ntf-area") + f"<b>{label}</b><br>{escape(str(r.get('work') or ''))}<br>"
                 f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>" + _why_html(kind))
         _ntf_cell(nid, text, eid, poster=_poster_url(r.get("images")), kp="h", past=day != TODAY)
     _render_near_picks()
@@ -5007,7 +5035,7 @@ def _render_near_picks() -> None:
         eid = str(r.get("entry_id"))
         dist = f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km"
         # 거리 / 작품 / 매장 줄바꿈 (별점·상태 줄은 뺐다, 기준은 제목 옆 ? 에) — 11/18 요청
-        text = (f"<b>내 주변 {dist}</b><br>{escape(str(r.get('work') or ''))}<br>"
+        text = (_area_chip(r.get("address"), "ntf-area") + f"<b>내 주변 {dist}</b><br>{escape(str(r.get('work') or ''))}<br>"
                 f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>")
         _ntf_cell(_ntf_id(f"r{TODAY}{eid}"), text, eid, poster=_poster_url(r.get("images")), kp="h")
 
@@ -5094,7 +5122,8 @@ def _box_card(r: dict, key: str, review_html: str = "") -> None:
     with st.container(key=f"bx_{key}_{eid}"):
         st.markdown(
             f'<div class="bxc{" soon" if state == "예정" else ""}"><img class="pst" src="{escape(_poster_url(r.get("images")))}" alt="">'
-            f'<div class="t"><span class="st{" end" if state == "종료" else ""}">{state}</span>'
+            f'<div class="t"><span class="bx-chips">{_area_chip(r.get("address"), "bx-area")}'
+            f'<span class="st{" end" if state == "종료" else ""}">{state}</span></span>'
             f'<div class="w">{escape(str(r.get("work") or ""))}</div><div class="c">{escape(str(r.get("cafe_name") or ""))}</div>'
             f'<div class="d">{escape(_period(r))}</div></div></div>{review_html}', unsafe_allow_html=True)
         st.button(f"{r.get('work')} 상세", key=f"bxbtn_{key}_{eid}", on_click=_gnb_open, args=(eid,))
@@ -8406,7 +8435,8 @@ def _ask_card(cafe_id: str, r: dict, km: float | None = None) -> dict:
         dates = (f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km") + " · " + dates
     return {"id": str(cafe_id), "work": str(r.get("work") or ""), "cafe": str(r.get("cafe_name") or ""),
             "address": str(r.get("address") or ""), "dates": dates, "poster": _poster_url(r.get("images")),
-            "area": geo.area_name(str(r.get("address") or ""))}     # 지역 배지 (11/20 요청, 리스트 카드와 같은 이름)
+            "area": geo.area_name(str(r.get("address") or "")),     # 지역 배지 (11/20 요청, 리스트 카드와 같은 이름 · 색)
+            "area_bg": _area_colors(r.get("address"))[0]}
 
 
 def _ask_panel_submit(prefix: str = "apn") -> None:
@@ -8517,7 +8547,8 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                         f'<div class="apc-txt"><div class="apc-work">{escape(card["work"])}</div>'
                         f'<div class="apc-cafe">{escape(card["cafe"])}</div>'
                         f'<div class="apc-addr">'
-                        + (f'<span class="apc-area">{escape(card["area"])}</span>' if card.get("area") else "")
+                        + (f'<span class="apc-area" style="background:{card["area_bg"]}">{escape(card["area"])}</span>'
+                           if card.get("area") else "")
                         + f'{escape(card["address"])}</div>'
                         f'<div class="apc-date">{escape(card["dates"])}</div></div></div>', unsafe_allow_html=True)
                     key = f"{prefix}_hit_{n}_{cid}"

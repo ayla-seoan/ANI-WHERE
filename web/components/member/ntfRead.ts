@@ -44,7 +44,16 @@ export function useNtfRead(cookie: string, initial: string): NtfRead {
 }
 
 // ---- '내 주변 추천' 위치 (브라우저 위치 권한을 허용했을 때만) ----
-export type NearItem = { id: string; cafeId: string; dist: string; work: string; cafe: string; poster: string };
+export type NearItem = {
+  id: string;
+  cafeId: string;
+  dist: string;
+  work: string;
+  cafe: string;
+  poster: string;
+  area?: string; // 지역 칩 (11/20)
+  city?: string;
+};
 export type Near = { state: "idle" | "asking" | "denied" | "off" | "done"; items: NearItem[] };
 
 let pos: { lat: number; lng: number } | null | undefined;

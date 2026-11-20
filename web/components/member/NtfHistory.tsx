@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { posterBg } from "../cards";
+import { areaFill, posterBg } from "../cards";
 import { fetchNear, useNtfRead, type Near } from "./ntfRead";
 
 // 내 캘린더 '알림 받은 내역' (앱 _render_notice_history · _ntf_cell · _render_near_picks).
@@ -18,6 +18,8 @@ export type HistItem = {
   cafe: string;
   cafeId: string;
   poster: string;
+  area: string;
+  city: string;
   why: string;
 };
 
@@ -77,6 +79,11 @@ export default function NtfHistory({
             <span className="ntf-pst" style={posterBg(h.poster)} />
             <span className="ntf-body">
               <span className="ntf-st">{st(h.id, h.past)}</span>
+              {h.area && (
+                <span className="ntf-area" style={areaFill(h.city)}>
+                  {h.area}
+                </span>
+              )}
               <b>{h.label}</b>
               <br />
               {h.work}
@@ -129,6 +136,11 @@ export default function NtfHistory({
             <span className="ntf-pst" style={posterBg(x.poster)} />
             <span className="ntf-body">
               <span className="ntf-st">{st(x.id)}</span>
+              {x.area && (
+                <span className="ntf-area" style={areaFill(x.city || "")}>
+                  {x.area}
+                </span>
+              )}
               <b>내 주변 {x.dist}</b>
               <br />
               {x.work}
