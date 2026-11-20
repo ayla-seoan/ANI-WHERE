@@ -116,7 +116,7 @@ function BotAnswer({
                 <span className="apc-area" style={{
                     background: `linear-gradient(${regionColor(p.city)}33, ${regionColor(p.city)}33), #fff`,
                     color: darken(regionColor(p.city)),
-                    border: `1.5px solid ${darken(regionColor(p.city))}`,
+                    border: `0.75px solid ${darken(regionColor(p.city))}`,
                   }}>
                   {p.area}
                 </span>
