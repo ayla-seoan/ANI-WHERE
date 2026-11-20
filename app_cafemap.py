@@ -2121,9 +2121,9 @@ def _area_chip(address, cls: str = "") -> str:
     area = geo.area_name(str(address or ""))
     if not area:
         return ""
-    bg, fg = _area_colors(address)
+    bg, _ = _area_colors(address)             # 시 색을 옅게(20%) 깐 바탕 + 시 색 글자 (11/20 요청, 웹 areaFill 과 같게)
     c = f' class="{cls}"' if cls else ""
-    return f'<span{c} style="background:{bg};color:{fg};border-color:{bg};font-weight:700">{escape(area)}</span>'
+    return f'<span{c} style="background:linear-gradient({bg}33,{bg}33),#fff;color:{bg};border-color:{bg}33;font-weight:700">{escape(area)}</span>'
 
 
 def _area_badge(address, cls: str = "abadge") -> str:
@@ -2451,17 +2451,16 @@ def _home_head(title: str, icon: str, more_sort: str = "", key: str = "", reserv
 
 
 def _home_area_pills(key: str, areas: list[str], rows: list[dict] | None = None) -> str:
-    """지역 알약 (전체 + 팝업 많은 지역). 지역마다 색 (11/20 요청): 평소엔 시 색 테두리 · 글자, 고르면 시 색으로 채움
+    """지역 알약 (전체 + 팝업 많은 지역). 지역마다 색 (11/20 요청): 평소엔 시 색 테두리 · 글자, 고르면 옅은(20%) 시 색 바탕
     (웹 NewSection areaPill 과 같게). st.pills 의 단추는 순서대로 놓여서 n번째 단추에 색을 준다."""
     pick = st.pills("지역", ["전체"] + areas, default="전체", key=f"hp_{key}", label_visibility="collapsed")
     css = []
-    for i, a in enumerate(areas, start=2):           # 1번째는 '전체'
+    for i, a in enumerate(["전체"] + areas, start=1):    # 1번째 '전체' 는 포인트 색 (--accent)
         addr = next((r.get("address") for r in rows or [] if geo.area_name(str(r.get("address") or "")) == a), "")
-        c = _area_colors(addr)[0]
+        c = "#14b8a6" if i == 1 else _area_colors(addr)[0]
         sel = f".st-key-hp_{key} button:nth-child({i})"
         css.append(f"{sel}{{border-color:{c} !important;color:{c} !important}} {sel} *{{color:{c} !important}}"
-                   f"{sel}[aria-checked=\"true\"]{{background:{c} !important;border-color:{c} !important}}"
-                   f"{sel}[aria-checked=\"true\"] *{{color:#fff !important}}")
+                   f"{sel}[aria-checked=\"true\"]{{background:linear-gradient({c}33,{c}33),#fff !important;border-color:{c} !important}}")
     if css:
         st.markdown("<style>" + "".join(css) + "</style>", unsafe_allow_html=True)
     return pick or "전체"
@@ -8547,7 +8546,7 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                         f'<div class="apc-txt"><div class="apc-work">{escape(card["work"])}</div>'
                         f'<div class="apc-cafe">{escape(card["cafe"])}</div>'
                         f'<div class="apc-addr">'
-                        + (f'<span class="apc-area" style="background:{card["area_bg"]}">{escape(card["area"])}</span>'
+                        + (f'<span class="apc-area" style="background:linear-gradient({card["area_bg"]}33,{card["area_bg"]}33),#fff;color:{card["area_bg"]}">{escape(card["area"])}</span>'
                            if card.get("area") else "")
                         + f'{escape(card["address"])}</div>'
                         f'<div class="apc-date">{escape(card["dates"])}</div></div></div>', unsafe_allow_html=True)
