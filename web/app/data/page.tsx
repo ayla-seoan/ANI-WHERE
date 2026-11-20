@@ -20,7 +20,7 @@ import {
 } from "@/lib/server/admin";
 import { isAdmin, PROVIDER_LABEL } from "@/lib/server/auth";
 import { getMe } from "@/lib/server/session";
-import { popups } from "@/lib/server/stats";
+import { popups, SURVEY_FORM_TABS, surveyVerify } from "@/lib/server/stats";
 import { current, HEADERS, latest, mode, rows, type Row, type Table as TableName } from "@/lib/server/store";
 import { surveyRows, surveySheetId } from "@/lib/server/survey";
 import { IcClose, IcDatabase, IcLess, IcLogin, IcMore, IcRight, IcSchedule } from "@/components/admin/AdminIcons";
@@ -344,12 +344,20 @@ async function Usage({ mon, members, weekNav }: { mon: string; members: Row[]; w
 // ------------------------------------------------------------------ 사용자 테스트
 async function SurveyTab({ view, href }: { view?: string; href: (p: SP) => string }) {
   const sheetId = surveySheetId();
-  const { rows: sv, error } = sheetId ? await surveyRows(sheetId) : { rows: [], error: "" };
+  const { rows: all, error } = sheetId ? await surveyRows(sheetId) : { rows: [], error: "" };
+  // 검증 (11/20): 구글 폼 응답 탭에 있고 받은 시각이 지금보다 앞선 응답만 센다 (앱 stats.survey_verify)
+  const forms = Object.fromEntries(
+    await Promise.all(
+      Object.entries(SURVEY_FORM_TABS).map(async ([ver, tab]) => [ver, sheetId && !error ? (await surveyRows(sheetId, tab)).rows : []] as const),
+    ),
+  );
+  const { rows: sv, check } = surveyVerify(all, forms);
   const v = SURVEY_VIEWS.some(([k]) => k === view) ? String(view) : "improve";
   return (
     <Survey
       sheetId={sheetId}
       rows={sv}
+      check={check}
       error={error}
       view={v}
       viewHref={(k) => href({ sv: k === "improve" ? undefined : k })}

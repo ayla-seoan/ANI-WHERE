@@ -62,8 +62,9 @@ export function csvRecords(text: string): SurveyRow[] {
 }
 
 /** (줄들, 오류 글). 네트워크 · 형식 오류여도 화면이 멈추지 않게 안내만 */
-export async function surveyRows(sheetId: string): Promise<{ rows: SurveyRow[]; error: string }> {
+export async function surveyRows(sheetId: string, tab = "정리"): Promise<{ rows: SurveyRow[]; error: string }> {
   if (testCsv()) {
+    if (tab !== "정리") return { rows: [], error: "" }; // 시험용 CSV 는 정리 탭만
     try {
       return { rows: csvRecords(await fs.readFile(testCsv(), "utf8")), error: "" };
     } catch {
@@ -71,7 +72,7 @@ export async function surveyRows(sheetId: string): Promise<{ rows: SurveyRow[]; 
     }
   }
   if (!/^[\w-]{10,200}$/.test(sheetId)) return { rows: [], error: "시트를 읽지 못했어요 (SURVEY_SHEET_ID 를 확인해 주세요)." };
-  const qs = new URLSearchParams({ tqx: "out:csv", sheet: "정리" });
+  const qs = new URLSearchParams({ tqx: "out:csv", sheet: tab });
   try {
     const res = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?${qs}`, {
       next: { revalidate: 60, tags: ["survey"] },

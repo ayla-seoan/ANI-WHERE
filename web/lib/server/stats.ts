@@ -304,6 +304,58 @@ export function surveySummary(input: SurveyRow[]): SurveySummary {
 /** '정리' 탭 한 줄의 버전. 1차 폼 응답만 '1차', 나머지는 '2차' */
 export const surveyVersion = (r: SurveyRow) => (s(r, "버전").trim() === "1차" ? "1차" : "2차");
 
+// ---- 응답 검증 (11/20, 앱 stats.survey_verify 와 같은 규칙) ----------------------------------------------------
+// '정리' 탭 줄은 손으로도 넣을 수 있어서, 구글 폼 응답 탭(1차 응답 · 2차 응답)에 같은 닉네임이 있고
+// 폼이 찍은 받은 시각이 지금보다 앞선 것만 실제 응답으로 센다.
+export const SURVEY_FORM_TABS = { "1차": "1차 응답", "2차": "2차 응답" } as const;
+export type SurveyCheck = { 전체: number; 검증: number; 제외: number; 미래: number; 시각없음: number; 폼에없음: number };
+
+/** 구글 폼 타임스탬프 → 한국 시각 'YYYY-MM-DDTHH:MM:SS' 글자 (비교용). 못 읽으면 '' */
+export function formTime(text: string): string {
+  const t = String(text || "").trim();
+  const m = /(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(t);
+  const p2 = (n: number | string) => String(n).padStart(2, "0");
+  if (m) {
+    let h = Number(m[5]);
+    if (m[4] === "오후" && h < 12) h += 12;
+    if (m[4] === "오전" && h === 12) h = 0;
+    return `${m[1]}-${p2(m[2])}-${p2(m[3])}T${p2(h)}:${m[6]}:${p2(m[7] ?? 0)}`;
+  }
+  const iso = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(t);
+  return iso ? `${iso[1]}-${p2(iso[2])}-${p2(iso[3])}T${p2(iso[4])}:${iso[5]}:${p2(iso[6] ?? 0)}` : "";
+}
+
+export function surveyVerify(
+  rows: SurveyRow[],
+  forms: Record<string, SurveyRow[]>,
+  now = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 19),
+): { rows: SurveyRow[]; check: SurveyCheck } {
+  const ok = new Set<string>();
+  const inForm = new Set<string>();
+  let 미래 = 0;
+  let 시각없음 = 0;
+  for (const [ver, rs] of Object.entries(forms)) {
+    for (const r of rs) {
+      const nick = s(r, "닉네임").trim();
+      if (!nick) continue;
+      inForm.add(`${ver}|${nick}`);
+      const t = formTime(s(r, "타임스탬프"));
+      if (!t) 시각없음++;
+      else if (t > now) 미래++;
+      else ok.add(`${ver}|${nick}`);
+    }
+  }
+  const key = (r: SurveyRow) => `${surveyVersion(r)}|${s(r, "닉네임").trim()}`;
+  const people = new Set(rows.filter((r) => s(r, "닉네임").trim()).map(key));
+  const kept = rows.filter((r) => ok.has(key(r)));
+  const good = new Set(kept.map(key));
+  const out = [...people].filter((p) => !good.has(p));
+  return {
+    rows: kept,
+    check: { 전체: people.size, 검증: good.size, 제외: out.length, 미래, 시각없음, 폼에없음: out.filter((p) => !inForm.has(p)).length },
+  };
+}
+
 export type Metric = [string, number | null, number | null, string, boolean, number | null];
 export type Pair = {
   닉네임: string;

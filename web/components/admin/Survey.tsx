@@ -6,6 +6,7 @@ import {
   surveyCompare,
   surveySummary,
   surveyVersion,
+  type SurveyCheck,
   type SurveyRow,
 } from "@/lib/server/stats";
 import { IcCompare, IcEditNote, IcFlow, IcForm, IcHourglass, IcLinkOff, IcTable } from "./AdminIcons";
@@ -404,12 +405,14 @@ function Detail({ rows }: { rows: SurveyRow[] }) {
 export default function Survey({
   sheetId,
   rows,
+  check,
   error,
   view,
   viewHref,
 }: {
   sheetId: string;
   rows: SurveyRow[];
+  check?: SurveyCheck;
   error: string;
   view: string;
   viewHref: (v: string) => string;
@@ -428,11 +431,21 @@ export default function Survey({
             <H>사용자 테스트 (n8n 설문)</H>
             <SurveyReload />
           </div>
+          {!error && check && check.제외 > 0 && (
+            <Note kind="warn">
+              검증된 응답 <b>{check.검증}명</b>만 셉니다 — &apos;정리&apos; 탭 {check.전체}명 중 {check.제외}명 제외 (폼 응답 탭에
+              없음 {check.폼에없음}명 · 폼 응답 시각이 미래 {check.미래}건 · 시각 없음 {check.시각없음}건). 실제 구글 폼으로 들어온
+              응답만 지표가 됩니다.
+            </Note>
+          )}
+          {!error && check && check.제외 === 0 && check.검증 > 0 && (
+            <Caption>검증된 응답 {check.검증}명 (모두 구글 폼 응답 탭에 있고 받은 시각이 확인됨)</Caption>
+          )}
           {error ? (
             <Note kind="warn">{error}</Note>
           ) : !rows.length ? (
             <Note icon={<IcHourglass />}>
-              아직 들어온 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.
+              아직 검증된 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.
             </Note>
           ) : (
             <>

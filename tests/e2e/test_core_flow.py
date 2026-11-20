@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 import os
 import re
-from datetime import date
+from datetime import date, timedelta
 
 from playwright.sync_api import Page, expect
 
@@ -165,9 +165,12 @@ def test_3_카드를_누르면_상세가_열리고_탭으로_돌아올_수_있�
 def test_4_북마크하면_내_캘린더에_보인다(page: Page, app_url, data_dir):
     sign_up(page, app_url)
     open_list(page, app_url)
-    # 아직 북마크하지 않은 카드 하나
+    # 아직 북마크하지 않은 카드 하나 — 이번 달 달력에 막대가 그려지게, 이번 달 안에 시작하는 팝업으로 (11/20: 다음 달에
+    # 여는 팝업이 먼저 걸리면 막대가 없어 날짜에 따라 실패하던 것)
+    month_end = (date.today().replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
     target = next((r for r in current_cafes(data_dir)
-                   if page.locator(f".st-key-fav_off_w_{r['entry_id']}").count()), None)
+                   if str(r.get("start_date", ""))[:10] <= month_end.isoformat()
+                   and page.locator(f".st-key-fav_off_w_{r['entry_id']}").count()), None)
     assert target, "북마크하지 않은 카드가 없습니다"
     eid, work = target["entry_id"], str(target["work"])
 

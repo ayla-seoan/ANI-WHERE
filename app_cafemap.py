@@ -6553,7 +6553,7 @@ def page_privacy() -> None:
 
 GUIDE_FILE = Path(__file__).resolve().parent / "docs" / "guide.md"
 GUIDE_CSS_FILE = Path(__file__).resolve().parent / "static" / "guide" / "guide.css"   # 튜토리얼 꾸밈 (11/18)
-CONTACT_EMAIL = "tjtek888@gmail.com"      # docs/privacy-policy.md 10절 연락처와 같게
+# 문의 연락처는 바닥글에 그대로 쓰지 않고 개인정보처리방침 10절에만 둔다 (11/20: 공유할 때 개인 메일이 모든 화면에 보이지 않게)
 
 
 def _footer() -> None:
@@ -6570,7 +6570,7 @@ def _footer() -> None:
     # (꾸밈 <style> 칸은 화면에서 접히게 되어 있어서, 바닥글 글은 따로 그린다)
     st.markdown(
         f'<div class="aw-foot"><div>© {TODAY.year} ANI:WHERE</div>'
-        f'<div>운영: ANI:WHERE · 문의: <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a></div>'
+        '<div>운영: ANI:WHERE · 문의: <a href="./privacy" target="_self">개인정보처리방침 10. 연락처</a></div>'
         '<div class="aw-foot-links"><a href="./privacy" target="_self">개인정보처리방침 · 이용약관</a>'
         '<a href="./guide" target="_self">사용자 튜토리얼</a><a href="./design" target="_self">디자인 시스템</a></div></div>', unsafe_allow_html=True)
 
@@ -7460,14 +7460,14 @@ def _survey_links(sheet_id: str) -> None:
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def _survey_rows(sheet_id: str) -> tuple[list[dict], str]:
-    """n8n 이 쌓은 구글 시트 '정리' 탭을 CSV 로 읽는다 (1분 기억). (줄들, 오류 글)."""
+def _survey_rows(sheet_id: str, tab: str = "정리") -> tuple[list[dict], str]:
+    """구글 시트 탭을 CSV 로 읽는다 (1분 기억). 기본은 n8n 이 쌓은 '정리' 탭, 검증용으로 폼 응답 탭도. (줄들, 오류 글)."""
     import io
     import requests
 
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq"
     try:
-        res = requests.get(url, params={"tqx": "out:csv", "sheet": "정리"}, timeout=10)
+        res = requests.get(url, params={"tqx": "out:csv", "sheet": tab}, timeout=10)
         if res.status_code != 200 or "text/csv" not in res.headers.get("content-type", ""):
             return [], "시트를 읽지 못했어요 (공유 설정이 '링크가 있는 모든 사용자 · 보기' 인지 확인해 주세요)."
         df = pd.read_csv(io.StringIO(res.content.decode("utf-8")), dtype=str).fillna("")
@@ -7494,8 +7494,18 @@ def _admin_survey() -> None:
     if err:
         st.warning(err, icon=":material/error:")
         return
+    # 검증 (11/20): 구글 폼 응답 탭에 있고 받은 시각이 지금보다 앞선 응답만 센다 (stats.survey_verify)
+    forms = {ver: _survey_rows(sheet_id, tab)[0] for ver, tab in stats.SURVEY_FORM_TABS.items()}
+    rows, check = stats.survey_verify(rows, forms)
+    if check["제외"]:
+        st.warning(f"검증된 응답 **{check['검증']}명**만 셉니다 — '정리' 탭 {check['전체']}명 중 {check['제외']}명 제외 "
+                   f"(폼 응답 탭에 없음 {check['폼에 없음']}명 · 폼 응답 시각이 미래 {check['폼 응답 미래 시각']}건 · "
+                   f"시각 없음 {check['폼 응답 시각 없음']}건). 실제 구글 폼으로 들어온 응답만 지표가 됩니다.",
+                   icon=":material/verified_user:")
+    else:
+        st.caption(f"검증된 응답 {check['검증']}명 (모두 구글 폼 응답 탭에 있고 받은 시각이 확인됨)")
     if not rows:
-        st.info("아직 들어온 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
+        st.info("아직 검증된 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
                 icon=":material/hourglass_empty:")
         return
     view = st.segmented_control("보기", ["1차 → 2차 개선", "2차 자세히", "1차 자세히"], default="1차 → 2차 개선",

@@ -11,8 +11,9 @@
 """
 from __future__ import annotations
 
+import re
 from collections import Counter
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -250,6 +251,65 @@ def survey_summary(rows: list[dict]) -> dict:
         "막힌곳": blocks.most_common(5),
         "바라는점": [str(r.get("바라는점")).strip() for r in people if str(r.get("바라는점") or "").strip()],
     }
+
+
+# ---- 응답 검증 (11/20, 1차 강사 코멘트 "실측이면 참가자 · 측정 방법 · 원자료 공개") --------------------------------
+# '정리' 탭 줄은 손으로도 넣을 수 있어서, **구글 폼 응답 탭(1차 응답 · 2차 응답)에 같은 닉네임이 있고 폼이 찍은 받은 시각이
+# 지금보다 앞선 것**만 실제 응답으로 센다. 받은 시각이 없거나 미래(폼은 미래 시각을 찍지 못함)면 집계에서 뺀다.
+SURVEY_FORM_TABS = {"1차": "1차 응답", "2차": "2차 응답"}
+_FORM_TIME = re.compile(r"(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?")
+_KST = timezone(timedelta(hours=9))
+
+
+def parse_form_time(text) -> datetime | None:
+    """구글 폼 타임스탬프 ('2026. 11. 19 오후 9:22:00' · '2026-11-19 21:22:00') → 한국 시각 (시간대 없는 값)."""
+    t = str(text or "").strip()
+    m = _FORM_TIME.search(t)
+    if m:
+        y, mo, d, ampm, h, mi, sec = m.groups()
+        h = int(h)
+        if ampm == "오후" and h < 12:
+            h += 12
+        if ampm == "오전" and h == 12:
+            h = 0
+        try:
+            return datetime(int(y), int(mo), int(d), h, int(mi), int(sec or 0))
+        except ValueError:
+            return None
+    try:
+        return datetime.fromisoformat(t.replace("/", "-")).replace(tzinfo=None) if t else None
+    except ValueError:
+        return None
+
+
+def survey_verify(rows: list[dict], forms: dict[str, list[dict]], now: datetime | None = None) -> tuple[list[dict], dict]:
+    """(검증된 '정리' 줄, 설명). forms = {'1차': 1차 응답 탭 줄들, '2차': ...}."""
+    now = now or datetime.now(_KST).replace(tzinfo=None)
+    ok: set[tuple[str, str]] = set()
+    future = no_time = 0
+    for ver, rs in forms.items():
+        for r in rs:
+            nick = str(r.get("닉네임") or "").strip()
+            t = parse_form_time(r.get("타임스탬프"))
+            if not nick:
+                continue
+            if t is None:
+                no_time += 1
+            elif t > now:
+                future += 1
+            else:
+                ok.add((ver, nick))
+
+    def key(r: dict) -> tuple[str, str]:
+        return survey_version(r), str(r.get("닉네임") or "").strip()
+
+    people = {key(r) for r in rows if key(r)[1]}
+    kept = [r for r in rows if key(r) in ok]
+    good = {key(r) for r in kept}
+    return kept, {"전체": len(people), "검증": len(good), "제외": len(people - good),
+                  "폼 응답 미래 시각": future, "폼 응답 시각 없음": no_time,
+                  "폼에 없음": len({p for p in people - good if p not in {(v, str(r.get("닉네임") or "").strip())
+                                                                          for v, rs in forms.items() for r in rs}})}
 
 
 def survey_version(row: dict) -> str:
