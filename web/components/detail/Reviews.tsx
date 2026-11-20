@@ -466,17 +466,20 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
       )}
       {editing ? (
         <EditBox r={r} isReply={reply} onClose={() => setEditing(false)} />
+      ) : r.images.length > 0 ? (
+        // 사진이 있으면 왼쪽 사진 · 오른쪽 글 (11/20 요청, 앱 .rv-content 와 같게)
+        <div className="rv-content">
+          <div className="rv-pics">
+            {r.images.map((x) => (
+              <a key={x} href={picSrc(x)} target="_blank" rel="noopener noreferrer">
+                <img src={picSrc(x)} alt="리뷰 사진" loading="lazy" />
+              </a>
+            ))}
+          </div>
+          {r.body.trim() && <p className="rv-body">{r.body}</p>}
+        </div>
       ) : (
         r.body.trim() && <p className="rv-body">{r.body}</p>
-      )}
-      {r.images.length > 0 && (
-        <div className="rv-pics">
-          {r.images.map((x) => (
-            <a key={x} href={picSrc(x)} target="_blank" rel="noopener noreferrer">
-              <img src={picSrc(x)} alt="리뷰 사진" loading="lazy" />
-            </a>
-          ))}
-        </div>
       )}
       {asking && (
         <div className="dlg-bg" onClick={() => setAsking(false)}>

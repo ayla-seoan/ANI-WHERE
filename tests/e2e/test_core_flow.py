@@ -496,3 +496,11 @@ def test_15_대댓글은_ㄴ_표시_사진_첨부_접어_두기(page: Page, app_
     more.click()
     wait_idle(page)
     expect(page.get_by_text("e2e 사진 붙인 대댓글")).to_be_visible(timeout=LONG)
+    # 사진 있는 글은 사진 옆에 글 (11/20): 같은 줄(.rv-content) 안에 사진과 글이 함께
+    content = page.locator(".rv-content", has_text="e2e 사진 붙인 대댓글")
+    expect(content.locator(".rv-pics img")).to_have_count(1)
+    pic, txt = content.locator(".rv-pics").bounding_box(), content.locator(".rv-body").bounding_box()
+    assert txt["x"] > pic["x"] + pic["width"] - 1 and txt["y"] < pic["y"] + pic["height"], (pic, txt)
+    if os.getenv("E2E_SHOTS"):
+        page.locator(".rv-content", has_text="e2e 사진 붙인 대댓글").locator("xpath=ancestor::div[contains(@class,'stVerticalBlock')][2]").first.screenshot(
+            path=os.path.join(os.getenv("E2E_SHOTS"), "st_reply.png"))
