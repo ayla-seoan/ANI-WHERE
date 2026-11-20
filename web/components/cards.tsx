@@ -33,10 +33,10 @@ export function areaFill(city: string): CSSProperties {
   return { background: `linear-gradient(${c}33, ${c}33), #fff`, color: c, borderColor: `${c}33`, fontWeight: 700 };
 }
 
-/** 지역 고르기 알약: 평소엔 시 색 테두리 · 글자, 고르면 옅은(20%) 시 색 바탕 */
+/** 지역 고르기 알약: 평소엔 시 색 테두리 · 글자, 고르면 진한 시 색 바탕 + 흰 글자 (11/20 요청) */
 export function areaPill(city: string, on: boolean, color?: string): CSSProperties {
   const c = color || regionColor(city); // '전체' 는 포인트 색 (--accent #14b8a6)
-  return on ? { background: `linear-gradient(${c}33, ${c}33), #fff`, color: c, borderColor: c } : { borderColor: c, color: c };
+  return on ? { background: c, color: "#fff", borderColor: c } : { borderColor: c, color: c };
 }
 
 /** 흰 바탕 위 지역 배지: 시 색 테두리·글자, 옅은 바탕 (앱 .abadge) */

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { DEFAULT_CHIPS, GUIDE_EXAMPLES, MAX_QUESTION } from "@/lib/ask";
-import { PLACEHOLDER_POSTER, regionColor, type Item } from "@/lib/popup";
+import { darken, PLACEHOLDER_POSTER, regionColor, type Item } from "@/lib/popup";
 import { OpenIcon } from "../Icons";
 import { send, useChat, type BotMsg } from "./store";
 
@@ -113,7 +113,11 @@ function BotAnswer({
             <span className="apc-addr">
               {/* 지역 배지 (11/20 요청, 리스트 카드의 지역 이름과 같게) */}
               {p.area && (
-                <span className="apc-area" style={{ background: `linear-gradient(${regionColor(p.city)}33, ${regionColor(p.city)}33), #fff`, color: regionColor(p.city) }}>
+                <span className="apc-area" style={{
+                    background: `linear-gradient(${regionColor(p.city)}33, ${regionColor(p.city)}33), #fff`,
+                    color: darken(regionColor(p.city)),
+                    border: `1.5px solid ${darken(regionColor(p.city))}`,
+                  }}>
                   {p.area}
                 </span>
               )}
