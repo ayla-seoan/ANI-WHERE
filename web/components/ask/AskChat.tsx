@@ -113,7 +113,7 @@ function BotAnswer({
             <span className="apc-addr">
               {/* 지역 배지 (11/20 요청, 리스트 카드의 지역 이름과 같게) */}
               {p.area && (
-                <span className="apc-area" style={{ background: regionColor(p.city) }}>
+                <span className="apc-area" style={{ background: `linear-gradient(${regionColor(p.city)}33, ${regionColor(p.city)}33), #fff`, color: regionColor(p.city) }}>
                   {p.area}
                 </span>
               )}

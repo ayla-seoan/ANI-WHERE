@@ -26,16 +26,17 @@ export function AreaOnPoster({ area, city, className = "area" }: { area: string;
   );
 }
 
-/** 지역 칩 (홈 · 내 캘린더 · 물어보기, 11/20 요청 '지역마다 색'): 시 색으로 채우고 흰 글자 (앱 _area_fill 과 같게) */
+/** 지역 칩 (홈 · 내 캘린더 · 물어보기, 11/20 요청 '지역마다 색'): 시 색을 옅게(20%) 깐 바탕 + 시 색 글자 (앱 _area_chip 과 같게) */
 export function areaFill(city: string): CSSProperties {
   const c = regionColor(city);
-  return { background: c, color: "#fff", borderColor: c, fontWeight: 700 };
+  // 흰 바탕 위에 옅은 시 색을 겹친다 — 포스터 · 어두운 배너 위에서도 비치지 않고 읽힌다
+  return { background: `linear-gradient(${c}33, ${c}33), #fff`, color: c, borderColor: `${c}33`, fontWeight: 700 };
 }
 
-/** 지역 고르기 알약: 평소엔 시 색 테두리 · 글자, 고르면 시 색으로 채움 */
-export function areaPill(city: string, on: boolean): CSSProperties {
-  const c = regionColor(city);
-  return on ? { background: c, color: "#fff", borderColor: c } : { borderColor: c, color: c };
+/** 지역 고르기 알약: 평소엔 시 색 테두리 · 글자, 고르면 옅은(20%) 시 색 바탕 */
+export function areaPill(city: string, on: boolean, color?: string): CSSProperties {
+  const c = color || regionColor(city); // '전체' 는 포인트 색 (--accent #14b8a6)
+  return on ? { background: `linear-gradient(${c}33, ${c}33), #fff`, color: c, borderColor: c } : { borderColor: c, color: c };
 }
 
 /** 흰 바탕 위 지역 배지: 시 색 테두리·글자, 옅은 바탕 (앱 .abadge) */

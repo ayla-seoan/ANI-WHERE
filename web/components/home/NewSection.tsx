@@ -19,7 +19,7 @@ export default function NewSection({ items, areas, today }: { items: Item[]; are
             className="pill"
             aria-pressed={area === a}
             onClick={() => setArea(a)}
-            style={a === "전체" ? undefined : areaPill(cityOf(a), area === a)}
+            style={a === "전체" ? areaPill("", area === a, "#14b8a6") : areaPill(cityOf(a), area === a)}
           >
             {a}
           </button>
