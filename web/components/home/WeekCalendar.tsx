@@ -1,20 +1,20 @@
 "use client";
 import { useState } from "react";
-import { addDays, byCode, daysBetween, type Item } from "@/lib/popup";
+import { addDays, byCode, daysBetween, weekday, type Item } from "@/lib/popup";
 import { HomeCard } from "../cards";
 import { ExpandMore } from "../Icons";
 
-const WEEKDAYS = "월화수목금토일";
 const WEEK_MAX = 2; // 요일마다 2곳까지, 나머지는 '+N건 더보기' (앱 WEEK_MAX)
 
-// 이번 주에 끝나는 팝업: 월~일 일곱 칸 (앱 _home_week). 그날 끝나는 팝업을 그 요일 칸에, 오늘 칸은 강조, 지난 요일은 흐리게.
+// 곧 끝나는 팝업 (11/20 요청, 예전 '이번 주에 끝나는 팝업' 월~일): 어제부터 7일 (금요일이면 목 ~ 다음 주 수, 앱 _home_week).
+// 그날 끝나는 팝업을 그 날짜 칸에, 오늘 칸은 강조, 어제 칸은 흐리게.
 // 모바일에서는 요일을 위에서 아래로 한 줄씩 쌓는다 (CSS).
-export default function WeekCalendar({ items, monday, today }: { items: Item[]; monday: string; today: string }) {
+export default function WeekCalendar({ items, first, today }: { items: Item[]; first: string; today: string }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   return (
     <div className="home-week">
       {Array.from({ length: 7 }, (_, i) => {
-        const day = addDays(monday, i);
+        const day = addDays(first, i);
         const ends = items
           .filter((p) => p.end === day && p.start && p.start <= day)
           .sort((a, b) => byCode(a.work, b.work));
@@ -25,7 +25,7 @@ export default function WeekCalendar({ items, monday, today }: { items: Item[]; 
           <div key={day} className={`wk ${cls}`}>
             <div className={`wkh ${cls}`}>
               <b>
-                {WEEKDAYS[i]}
+                {weekday(day)}
                 {day === today ? " · 오늘" : ""}
               </b>
               <span className="wkd">

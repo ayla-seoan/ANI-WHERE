@@ -112,6 +112,14 @@ function show(q: string, items: Item[], today: string, loc?: { lat: number; lng:
   r = show("팝업 추천해줘", items, today);
   assert.equal(r.query.intent, "recommend");
   assert.ok(r.hits.length > 0 && r.hits.every((h) => h.start <= today && h.end >= today), "추천: 진행 중만");
+  assert.ok(r.hits.length <= 5, "추천: 상위 5곳만 (더보기 없음, 11/20)");
+
+  r = show("서울 팝업 추천해줘", items, today);
+  assert.equal(r.query.intent, "recommend");
+  assert.ok(
+    r.hits.length > 0 && r.hits.length <= 5 && r.hits.every((h) => h.city === "서울" || h.address.includes("서울")),
+    "서울 추천: 서울 팝업 중 상위 5곳",
+  );
 
   assert.ok(needsLocation("내 주변 가까운 팝업", items, today));
   r = show("내 주변 가까운 팝업", items, today);

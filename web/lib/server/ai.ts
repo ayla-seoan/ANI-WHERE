@@ -2,6 +2,7 @@ import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { mask } from "@/lib/guard";
+import { RAW_ROOT, rawHeaders } from "./github";
 
 // OpenAI 호출 한 곳 (common/ai.py call_structured 를 옮긴 것).
 //  - 프롬프트는 코드에 두지 않고 common/prompts/<이름>.<버전>.txt 를 서버에서 읽는다
@@ -11,7 +12,7 @@ import { mask } from "@/lib/guard";
 //  - OPENAI_API_KEY 가 없으면 부르지 않고 바로 규칙 기반 대체. 실패해도 멈추지 않는다.
 //  - 키는 서버 환경변수에만 (NEXT_PUBLIC_ 아님).
 
-const REPO_RAW = "https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/common/prompts";
+const REPO_RAW = `${RAW_ROOT}/common/prompts`; // lib/server/github.ts
 // 배포 묶음 안의 사본(content/prompts, scripts/sync_docs.mjs 가 옮김) → 저장소 원본(../common/prompts) 차례로
 const LOCAL_DIRS = [
   path.join(process.cwd(), "content", "prompts"),
@@ -49,7 +50,7 @@ async function latestVersion(name: string): Promise<string> {
     // 배포 묶음에 프롬프트 폴더가 없으면 공개 저장소에서 v1, v2, … 차례로 있는지 본다
     for (let v = 1; v <= 20; v++) {
       try {
-        const res = await fetch(`${REPO_RAW}/${name}.v${v}.txt`, { method: "HEAD", cache: "no-store", signal: AbortSignal.timeout(4000) });
+        const res = await fetch(`${REPO_RAW}/${name}.v${v}.txt`, { method: "HEAD", headers: rawHeaders(), cache: "no-store", signal: AbortSignal.timeout(4000) });
         if (!res.ok) break;
         best = v;
       } catch {
@@ -74,7 +75,7 @@ export async function loadPrompt(name: string, version?: string): Promise<[strin
       /* 다음 자리 */
     }
   }
-  const res = await fetch(`${REPO_RAW}/${name}.${v}.txt`, { cache: "force-cache", signal: AbortSignal.timeout(6000) });
+  const res = await fetch(`${REPO_RAW}/${name}.${v}.txt`, { headers: rawHeaders(), cache: "force-cache", signal: AbortSignal.timeout(6000) });
   if (!res.ok) throw new Error(`프롬프트 파일이 없습니다: ${name}.${v}.txt`);
   return [await res.text(), v];
 }

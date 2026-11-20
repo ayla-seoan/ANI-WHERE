@@ -1,14 +1,15 @@
 import "server-only";
 import { cache } from "react";
 import { areaName, cityName, regionOf, type DataSource, type Popup } from "./popup";
+import { imgUrl } from "./uploads";
+import { RAW_ROOT, rawHeaders } from "./server/github";
 
 // 데이터를 읽는 곳은 이 파일 하나뿐이다. 서버에서만 실행되므로 SUPABASE_ANON_KEY 는 브라우저로 내려가지 않는다.
 // (NEXT_PUBLIC_ 접두사를 붙이지 않는다.)
 
-const REPO_RAW = "https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main";
-const CAFES_JSON = `${REPO_RAW}/data/cafes.json`;
-const REVIEWS_JSON = `${REPO_RAW}/data/reviews.json`;
-const UPLOADS = `${REPO_RAW}/static/uploads/`;
+// 공개 백업 데이터 위치는 서버만 안다 (lib/server/github.ts, 11/20: 브라우저에 깃허브 주소를 보이지 않게)
+const CAFES_JSON = `${RAW_ROOT}/data/cafes.json`;
+const REVIEWS_JSON = `${RAW_ROOT}/data/reviews.json`;
 const REVALIDATE = 600; // 10분 (ISR)
 const TIMEOUT_MS = 10_000;
 
@@ -62,7 +63,7 @@ function imageUrls(v: unknown): string[] {
     if (!name) continue;
     if (/^https:\/\//i.test(name)) out.push(name);
     else if (/^\/uploads\/[0-9a-f]{12}\.(png|jpe?g|webp|gif)$/.test(name) && process.env.WEB_STORAGE === "local") out.push(name);
-    else if (/^[\w.-]+\.(png|jpe?g|webp|gif|avif)$/i.test(name)) out.push(UPLOADS + encodeURIComponent(name));
+    else if (imgUrl(name)) out.push(imgUrl(name)); // 예전 사진 파일 이름 → 우리 주소 /img/… (서버가 대신 받아 줌)
   }
   return Array.from(new Set(out));
 }
@@ -220,12 +221,12 @@ async function fromSupabase(base: string, key: string): Promise<Popup[]> {
 }
 
 async function fromGitHub(): Promise<Popup[]> {
-  const rows = await getJSON(CAFES_JSON);
+  const rows = await getJSON(CAFES_JSON, rawHeaders());
   if (!Array.isArray(rows)) throw new Error("cafes.json 이 목록이 아님");
   const popups = attachCreated(toPopups(latestActive(rows as Row[])), firstSeen(rows as Row[]));
   const ratings: Ratings = new Map();
   try {
-    const rs = await getJSON(REVIEWS_JSON);
+    const rs = await getJSON(REVIEWS_JSON, rawHeaders());
     if (Array.isArray(rs)) {
       const sums = new Map<string, { s: number; n: number }>();
       for (const r of latestActive(rs as Row[])) {
@@ -273,12 +274,12 @@ export const getPopupData = cache(async (): Promise<PopupData> => {
     try {
       return { popups: await fromSupabase(url, key), source: "supabase", sourceLabel: "데이터: Supabase", note };
     } catch (e) {
-      note = `Supabase 연결 실패로 GitHub 공개 데이터를 대신 씀 (${e instanceof Error ? e.message : "오류"})`;
+      note = `Supabase 연결 실패로 공개 백업 데이터를 대신 씀 (${e instanceof Error ? e.message : "오류"})`;
       console.error("[data]", note);
     }
   }
   try {
-    return { popups: await fromGitHub(), source: "github", sourceLabel: "데이터: GitHub 공개 데이터", note };
+    return { popups: await fromGitHub(), source: "github", sourceLabel: "데이터: 공개 백업 데이터", note };
   } catch (e) {
     const why = e instanceof Error ? e.message : "오류";
     console.error("[data] GitHub 데이터도 읽지 못함:", why);

@@ -314,13 +314,15 @@ class Storage:
                 _READ_CACHE[key] = (time.time(), rows + [record])
         return record
 
-    def append_many(self, items: list[tuple[dict[str, Any], str]]) -> list[dict]:
+    def append_many(self, items: list[tuple[dict[str, Any], str]], fresh: bool = True) -> list[dict]:
         """(payload, entry_id) 여러 개를 한 번에 쌓는다 (11/20 블로그 후기 속도: append 는 한 행마다 표 전체를
         새로 읽어 글 10개면 10번 읽었다). 표는 한 번만 읽어 번호를 매기고 저장도 한 번에 보낸다.
-        묶음이 거부되면(한 행의 민감정보 · 번호 충돌 등) 한 행씩 append 로 다시 쌓아 나머지는 살린다. 쌓은 행을 돌려준다."""
+        묶음이 거부되면(한 행의 민감정보 · 번호 충돌 등) 한 행씩 append 로 다시 쌓아 나머지는 살린다. 쌓은 행을 돌려준다.
+        fresh=False 면 기억해 둔 표(all_rows)로 번호를 매긴다 — 다른 서버가 먼저 쌓아 번호가 겹치면 DB 가 거부하고
+        위처럼 한 행씩(새로 읽어서) 쌓는다. 새 글처럼 겹칠 일이 거의 없는 기록에만 쓴다 (블로그 후기, 11/20)."""
         if not items:
             return []
-        rows = self._fresh_rows()
+        rows = self._fresh_rows() if fresh else self.all_rows()
         top: dict[str, int] = {}
         for r in rows:
             k = str(r.get("entry_id"))

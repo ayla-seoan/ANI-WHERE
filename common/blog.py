@@ -362,12 +362,13 @@ def refresh(row: dict, cafe_id: str, posts_store, checks_store, usage=None, thum
     try:
         posts_store.append_many([({"cafe_id": str(cafe_id), "link": p.link[:500], "title": p.title[:200], "descr": p.desc[:300],
                                    "blogger": p.blogger[:60], "day": p.day.isoformat() if p.day else "",
-                                   "thumb": (pics.get(p.link) or "")[:600]}, _post_id(str(cafe_id), p.link)) for p in new])
+                                   "thumb": (pics.get(p.link) or "")[:600]}, _post_id(str(cafe_id), p.link)) for p in new],
+                                fresh=False)      # 표 전체를 다시 읽지 않는다 (0.9초 · 미국 서버는 더)
     except Exception:
         pass
     try:
-        checks_store.append({"cafe_id": str(cafe_id), "day": _day(), "found": str(len(new))},
-                            entry_id=f"{cafe_id}:{_day()}")
+        checks_store.append_many([({"cafe_id": str(cafe_id), "day": _day(), "found": str(len(new))}, f"{cafe_id}:{_day()}")],
+                                 fresh=False)     # 오늘 표시는 아직 없다(checked_today) → 다시 읽지 않고 쌓는다
     except Exception:
         pass
     return stored(posts_store, cafe_id) if new else have, ""

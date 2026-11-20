@@ -391,11 +391,12 @@ svg {
   border-color: var(--accent);
   color: var(--accent-deep);
 }
+/* 줄 안쪽에 (11/20 요청: 바깥으로 6px 나가 카드 가장자리에 걸쳐 보였다, 앱과 같게) */
 .aw-arrow.l {
-  left: -6px;
+  left: 8px;
 }
 .aw-arrow.r {
-  right: -6px;
+  right: 8px;
 }
 .aw-arrow.show {
   display: block;

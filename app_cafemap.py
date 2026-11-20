@@ -2319,17 +2319,18 @@ WEEKDAYS = "월화수목금토일"
 
 
 def _home_week(df: pd.DataFrame) -> None:
-    """월~일 일곱 칸. 칸 머리: 요일 · (오늘) · 그날 끝나는 팝업 수. 지난 요일 칸은 이미 끝난 팝업이라 흐리게."""
-    monday = TODAY - timedelta(days=TODAY.weekday())
+    """곧 끝나는 팝업 (11/20 요청, 예전 '이번 주' 월~일): 어제부터 7일 — 금요일이면 목 ~ 다음 주 수 (웹 WeekCalendar 와 같음).
+    칸 머리: 요일 · (오늘) · 그날 끝나는 팝업 수. 어제 칸은 이미 끝난 팝업이라 흐리게."""
+    first = TODAY - timedelta(days=1)
     rows = df.to_dict("records")
     with st.container(horizontal=True, key="home_week"):
         for i in range(7):
-            day = monday + timedelta(days=i)
+            day = first + timedelta(days=i)
             ends = sorted([r for r in rows if pd.to_datetime(r["end_date"]).date() == day
                            and pd.to_datetime(r["start_date"]).date() <= day], key=lambda r: str(r.get("work") or ""))
             cls = "today" if day == TODAY else ("past" if day < TODAY else "")
             with st.container(key=f"wk_{i}"):
-                st.markdown(f'<div class="wkh {cls}"><b>{WEEKDAYS[i]}{" · 오늘" if day == TODAY else ""}</b>'
+                st.markdown(f'<div class="wkh {cls}"><b>{WEEKDAYS[day.weekday()]}{" · 오늘" if day == TODAY else ""}</b>'
                             f'<span class="wkd">{day.month}.{day.day}</span><span class="wkn">{len(ends)}</span></div>',
                             unsafe_allow_html=True)
                 # 칸이 너무 길어지지 않게 요일마다 3곳까지, 나머지는 '+N건 더보기' 를 누르면 그 칸에서 펼친다 (11/18 요청)
@@ -2403,7 +2404,7 @@ def _home_area_pills(key: str, areas: list[str]) -> str:
 
 
 def render_home(df: pd.DataFrame) -> None:
-    """홈 (11/18 요청): 내가 관심있는 작품 · 실시간 인기 급상승 랭킹 · 따끈따끈 신규 등록 · 이번 주에 끝나는 · 사전예약 팝업."""
+    """홈 (11/18 요청): 내가 관심있는 작품 · 실시간 인기 급상승 랭킹 · 따끈따끈 신규 등록 · 곧 끝나는 · 사전예약 팝업."""
     live = _live_rows(df)
     areas = _home_areas(live)
     by_area = lambda rows, a: rows if a == "전체" else [r for r in rows if geo.area_name(str(r.get("address") or "")) == a]
@@ -2430,8 +2431,8 @@ def render_home(df: pd.DataFrame) -> None:
             for r in new:
                 _home_card("n", r)
 
-        # 이번 주에 끝나는 팝업: 월~일 주간 캘린더 (11/18 요청). 그날 끝나는 팝업을 그 요일 칸에, 오늘 칸은 강조
-        _home_head("이번 주에 끝나는 팝업", "hourglass_bottom", more_sort="종료 임박순", key="week")
+        # 곧 끝나는 팝업: 어제부터 7일 칸 (11/20 요청, 예전 '이번 주에 끝나는 팝업' 월~일). 그날 끝나는 팝업을 그 날짜 칸에, 오늘 칸은 강조
+        _home_head("곧 끝나는 팝업", "hourglass_bottom", more_sort="종료 임박순", key="week")
         _home_week(df)
 
         # 사전예약 팝업 (태그·특전·소개에 '사전 예약')
@@ -2827,7 +2828,7 @@ STORY_CSS = """
   background: rgba(255,255,255,.95); box-shadow: 0 2px 8px rgba(0,0,0,.12); color: #26302D; font-size: 18px; line-height: 24px;
   text-align: center; cursor: pointer; padding: 0; display: none; }
 .aw-arrow:hover { border-color: var(--accent); color: var(--accent-deep); }
-.aw-arrow.l { left: -6px; } .aw-arrow.r { right: -6px; }
+.aw-arrow.l { left: 8px; } .aw-arrow.r { right: 8px; }   /* 줄 안쪽에 (11/20 요청, 웹과 같게) */
 .aw-arrow.show { display: block; }
 /* 최애 고르기 창 */
 .fw-title { font-size: 1.25rem; font-weight: 800; text-align: center; }

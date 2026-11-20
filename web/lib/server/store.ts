@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { RAW_ROOT, rawHeaders } from "./github";
 
 // 회원 데이터 저장소 — common/storage.py 와 같은 append-only 규칙.
 //  - 고치기·지우기도 새 행(revision + 1)을 쌓는다. 기존 행을 고치거나 지우는 코드는 없다.
@@ -91,7 +92,8 @@ let githubCafes: Row[] | null = null;
 async function baseCafes(): Promise<Row[]> {
   if (githubCafes) return githubCafes;
   try {
-    const res = await fetch("https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/data/cafes.json", {
+    const res = await fetch(`${RAW_ROOT}/data/cafes.json`, {
+      headers: rawHeaders(),
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });

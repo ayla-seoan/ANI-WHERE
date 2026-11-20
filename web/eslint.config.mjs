@@ -24,6 +24,7 @@ const eslintConfig = [
       "build/**",
       "next-env.d.ts",
       ".ask-check/**",
+      ".rank-check/**",
       ".auth-check/**",
     ],
   },

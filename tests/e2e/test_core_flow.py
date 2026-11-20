@@ -349,7 +349,7 @@ def test_12_로고를_누르면_홈이_열리고_랭킹_카드로_상세에_간�
     expect(page.locator(".story-head")).to_have_text("요즘 일정 많은 작품")   # 로그인 전 (11/18)
     expect(page.locator(".story.hot").first).to_be_visible()
     expect(page.locator(".hbtitle").first).to_contain_text("실시간 인기 급상승 랭킹")   # 배너 안 왼쪽 위
-    for title in ("따끈따끈 신규 등록 팝업", "이번 주에 끝나는 팝업", "사전예약 팝업", "꿀팁 가득! 실시간 후기 모음"):
+    for title in ("따끈따끈 신규 등록 팝업", "곧 끝나는 팝업", "사전예약 팝업", "꿀팁 가득! 실시간 후기 모음"):
         expect(page.locator(".home-h", has_text=title)).to_be_visible(timeout=LONG)
     expect(page.locator(".st-key-gnbtab_on_home")).to_be_visible()
     rank = page.locator(".hls-wrap .hl")

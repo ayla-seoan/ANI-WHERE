@@ -4,6 +4,7 @@ import { addDays, mondayOf } from "../popup";
 import { displayName } from "./auth";
 import type { Me } from "./session";
 import { append, current, latest, rows, type Row } from "./store";
+import { imgUrl } from "../uploads";
 
 // 관리자 대시보드 · 삭제 요청 · 알림 · 접속 기록 — common/admin.py 를 옮긴 것 (화면과 상관없는 계산만).
 // 저장소는 모두 append-only 다. 처리·수정·삭제도 새 행을 쌓는다 (store.append 만 쓴다).
@@ -62,7 +63,7 @@ export function posterOf(images: unknown): string {
     if (/^https:\/\/[^\s"'<>]+$/i.test(name)) return name;
     if (/^\/uploads\/[0-9a-f]{12}\.(png|jpe?g|webp|gif)$/.test(name) && process.env.WEB_STORAGE === "local") return name;
     if (/^[\w.-]+\.(png|jpe?g|webp|gif|avif)$/i.test(name))
-      return `https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/static/uploads/${encodeURIComponent(name)}`;
+      return imgUrl(name);
   }
   return "/default_poster.webp";
 }

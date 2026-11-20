@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { RAW_ROOT, rawHeaders } from "@/lib/server/github";
 import { todayKST } from "@/lib/popup";
 import {
   beforeAfter,
@@ -26,13 +27,14 @@ export const metadata: Metadata = { title: "지표" };
 
 const MINT = "#56C2A7";
 const STATS_BEFORE = "#B8C2BF"; // 개선 전: 회색
-const REPO_RAW = "https://raw.githubusercontent.com/ayla-seoan/ANI-WHERE/main/data";
+const REPO_RAW = `${RAW_ROOT}/data`; // 서버에서만 (lib/server/github.ts)
 
 /** 저장소 연결이 없으면(회원 기능 꺼짐) 앱처럼 공개 기록(GitHub data/*.json)으로 계산한다 */
 async function table(name: "cafes" | "reviews" | "favorites"): Promise<Row[]> {
   if (mode() !== "none") return rows(name);
   try {
     const res = await fetch(`${REPO_RAW}/${name}.json`, {
+      headers: rawHeaders(),
       next: { revalidate: 600 },
       signal: AbortSignal.timeout(10_000),
     });

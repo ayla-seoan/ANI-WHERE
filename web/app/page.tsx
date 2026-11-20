@@ -4,7 +4,6 @@ import {
   addDays,
   byCode,
   daysBetween,
-  mondayOf,
   periodDot,
   stateOf,
   todayKST,
@@ -85,8 +84,9 @@ export default async function Home() {
   const [scores, reviews] = await Promise.all([rankScores(), homeReviews(new Set(popups.map((p) => p.id)))]);
   const top = rankOrder(live, scores).slice(0, TOP_N).map(toItem);
   const fresh = [...liveItems].sort((a, b) => b.created.localeCompare(a.created));
-  const monday = mondayOf(today);
-  const weekItems = popups.filter((p) => p.end && p.end >= monday && p.end <= addDays(monday, 6)).map(toItem);
+  // 곧 끝나는 팝업: 어제부터 7일 (11/20 요청 — 금요일이면 목 ~ 다음 주 수, 앱 _home_week)
+  const first = addDays(today, -1);
+  const weekItems = popups.filter((p) => p.end && p.end >= first && p.end <= addDays(first, 6)).map(toItem);
   // 사전예약 팝업: 아직 열기 전(오픈 예정)인 것만, 빨리 여는 순
   const reserve = liveItems
     .filter((p) => p.reserve && stateOf(p, today).rank === 1)
@@ -168,8 +168,8 @@ export default async function Home() {
       <HomeHead title="따끈따끈 신규 등록 팝업" icon={<NewIcon />} more="/list?sort=new" />
       <NewSection items={fresh} areas={topAreas(liveItems)} today={today} />
 
-      <HomeHead title="이번 주에 끝나는 팝업" icon={<HourglassIcon />} more="/list?sort=end" />
-      <WeekCalendar items={weekItems} monday={monday} today={today} />
+      <HomeHead title="곧 끝나는 팝업" icon={<HourglassIcon />} more="/list?sort=end" />
+      <WeekCalendar items={weekItems} first={first} today={today} />
 
       <HomeHead title="사전예약 팝업" icon={<EventIcon />} more="/list?reserve=1&sort=open" />
       {reserve.length ? (

@@ -670,7 +670,9 @@ function intentAnswer(question: string, items: Item[], today: string, ctx: AskCt
     const rated = live.some((r) => rating(r).n > 0);
     const why = rated ? "별점 높은 순 → 리뷰 많은 순" : "아직 별점이 없어 곧 끝나는 순";
     const pre = intent === "popular" ? "북마크 수는 ANI:WHERE 앱에서만 볼 수 있어서, " : "";
-    return done(q, intent, `${condTxt}${pre}지금 갈 수 있는 팝업을 ${why}으로 골랐어요.`, live);
+    // 추천은 그 순서의 상위 5곳만 — 나머지를 '더보기' 로 다 보여 주면 추천이 아니다 (11/20 요청, 앱 _done limit=5 와 같게).
+    // '서울 팝업 추천해줘' 처럼 지역 · 작품 조건이 있으면 그 안에서 5곳 (filtered)
+    return done(q, intent, `${condTxt}${pre}지금 갈 수 있는 팝업을 ${why}으로 골랐어요.`, intent === "recommend" ? live.slice(0, 5) : live);
   }
   if (intent === "ending") {
     const live = filtered(q, items, today)

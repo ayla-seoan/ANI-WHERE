@@ -75,6 +75,8 @@ AI 코딩 도구가 이 저장소에서 작업할 때 지켜야 할 것.
   - 종 알림 읽음 표시는 앱과 같은 쿠키(`aw_ntf_read_<sha1(회원 번호)[:8]>`, 알림 번호 = `sha1(글)[:8]`)를 쓴다. 앱의 알림 글(`_notices` · `_why_html`)을 바꾸면 `web/lib/server/ntf.ts` 도 같이 바꾼다.
 - 블로그 후기는 저장해 둔 글(`blog_posts`, 013)을 보여 준다. 네이버 검색은 `blog.refresh`(웹 `lib/server/blog.ts` 의 `refresh`)로만, 팝업마다 하루 한 번(`blog_checks`) 새 글만 더한다. 상세 · 건수 화면에서 검색을 직접 부르지 않는다 (하루 한도 429).
 - 로컬 시험 서버는 `STORAGE_MODE=local`(웹 `WEB_STORAGE=local`) + 임시 데이터 폴더로만 켜고, 끝나면 끈다. 실제 `.env` 로 켠 채 두면 예전 코드가 운영 DB 에 쓴다 (11/19 이미지 사고).
+- 공개 화면(웹 HTML · JS · 공유 링크)에 깃허브 주소 · 계정 이름을 넣지 않는다 (11/20, 불특정 다수에게 공유). 예전 사진은 `web/lib/uploads.ts` 의 `imgUrl`(→ `/img/…`), 원본 위치는 서버 전용 `web/lib/server/github.ts` 한곳. Streamlit 공유 링크는 `&embed=true`.
+- 로컬 시험 서버를 다 쓰면 끈다 — 지난 세션 서버가 며칠씩 남아 있었다 (11/20 3000 · 3100 · 3110).
 - MCP 서버(`mcp_server/`)는 읽기 전용. 쓰기 도구를 만들지 않고, `note`·`editor`·`source`·리뷰 본문·닉네임은 내보내지 않는다. stdout 에 print 하지 않는다.
 - 테스트·로컬 실행은 실제 `data/` 를 바꿀 수 있다 (앱을 켜면 Notion 동기화·기간 종료 처리가 돈다). 시험할 때는 `ANIWHERE_DATA_DIR` 로 임시 복사본을 쓴다 (`tests/e2e/conftest.py` 참고).
 - `.claude/hooks/` 가 커밋 전 검사(키·민감정보·코드 속 프롬프트)와 프롬프트 덮어쓰기 차단을 한다. 훅에 걸리면 우회하지 말고 원인을 고친다.

@@ -13,3 +13,8 @@ baseRadius = "large"
 maxUploadSize = 20
 # static/ 폴더의 파일을 app/static/ 주소로 내보낸다 (기본 포스터 그림)
 enableStaticServing = true
+
+[client]
+# 오른쪽 위 메뉴를 최소로 (11/20 요청: 공유할 때 만든 사람 · 저장소 정보가 보이지 않게)
+toolbarMode = "minimal"
+showErrorDetails = false
