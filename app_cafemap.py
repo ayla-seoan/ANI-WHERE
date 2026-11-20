@@ -1423,15 +1423,18 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     rated = review.stars(r.get("rating")) if r.get("kind") == review.RATED_KIND else ""
     if rated and not (mine and st.session_state.get("rv_editing") == eid):
         st.markdown(f'<div class="rv-stars">{rated}</div>', unsafe_allow_html=True)
-    if mine and st.session_state.get("rv_editing") == eid:
-        _review_edit_box(r)
-    elif str(r.get("body") or "").strip():
-        st.markdown(_plain(r.get("body", "")))
+    text = str(r.get("body") or "").strip()
     pics = images.paths(r.get("images"))
-    if pics:
-        st.markdown('<div class="rv-pics">' + "".join(
+    if mine and st.session_state.get("rv_editing") == eid:
+        _review_edit_box(r)            # 고치는 동안 사진은 수정 칸의 '붙어 있는 사진' 으로 본다
+    elif pics:
+        # 사진이 있으면 사진 옆에 글 (11/20 요청, 웹 .rv-content 와 같게). 사진을 누르면 확대 보기(.rv-pics a)
+        body_html = f'<div class="rv-body">{escape(text).replace(chr(10), "<br>")}</div>' if text else ""
+        st.markdown('<div class="rv-content"><div class="rv-pics">' + "".join(
             f'<a href="{images.url(p)}" target="_blank" rel="noopener"><img src="{images.url(p)}" alt="리뷰 사진"/></a>'
-            for p in pics) + "</div>", unsafe_allow_html=True)
+            for p in pics) + "</div>" + body_html + "</div>", unsafe_allow_html=True)
+    elif text:
+        st.markdown(_plain(r.get("body", "")))
 
 
 def _review_edit_box(r: dict) -> None:
@@ -1639,7 +1642,7 @@ def render_reviews(cafe_id: str, after_write=None) -> None:
                 open_key = f"rv_open_{pid}"
                 opened = st.session_state.get(open_key, False)
                 st.button("댓글 접기" if opened else f"+{len(t.replies)}건의 댓글", key=f"rv_tog_{pid}",
-                          type="tertiary", icon=":material/expand_less:" if opened else ":material/subdirectory_arrow_right:",
+                          type="tertiary", width="stretch", icon=":material/expand_less:" if opened else ":material/subdirectory_arrow_right:",
                           on_click=lambda k=open_key: st.session_state.update({k: not st.session_state.get(k, False)}))
                 if opened:
                     for r in t.replies:
@@ -3293,6 +3296,21 @@ iframe[src*="kakao_map"] {{
 .rv-pics {{ display:flex; gap:6px; flex-wrap:wrap; margin:-4px 0 6px; }}
 .rv-pics img {{ width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid #E4E8E6; display:block; }}
 .rv-pics a:hover img {{ border-color:var(--accent); }}
+/* 사진 있는 리뷰: 왼쪽 사진(한 줄에 둘까지) · 오른쪽 글 (11/20 요청, 웹 .rv-content 와 같게) */
+.rv-content {{ display:flex; gap:12px; align-items:flex-start; margin:-4px 0 8px; }}
+.rv-content .rv-pics {{ flex:0 0 auto; max-width:174px; margin:0; }}
+.rv-content .rv-body {{ flex:1; min-width:0; font-size:.95rem; line-height:1.55; color:#26302D; word-break:break-word; }}
+@media (max-width: 640px) {{
+  .rv-content .rv-pics {{ max-width:150px; }}
+  .rv-content .rv-pics img {{ width:72px; height:72px; }}
+}}
+/* 대댓글 '+N건의 댓글' · '댓글 접기' (11/20 요청): 눈에 띄게 — 가운데 글자 · 민트 테두리 · 연한 민트 배경 (웹 .rv-more-replies) */
+[class*="st-key-rv_tog_"] {{ width:100% !important; }}
+[class*="st-key-rv_tog_"] button {{ width:100% !important; justify-content:center !important; min-height:2.3rem;
+  border:1.5px solid {MINT} !important; background:{MINT_SOFT} !important; border-radius:10px !important;
+  color:{MINT_DEEP} !important; font-weight:700 !important; }}
+[class*="st-key-rv_tog_"] button:hover {{ background:#D3F0E6 !important; }}
+[class*="st-key-rv_tog_"] button p {{ color:{MINT_DEEP} !important; font-weight:700 !important; }}
 /* 리뷰 '+ 사진 첨부' 버튼: 내용 아래 왼쪽에 작은 테두리 버튼 (누르면 사라지고 올리는 칸이 열린다) */
 [class*="st-key-rv_"][class*="_pic_btn_"] button {{ min-height:0 !important; height:26px; min-width:30px; padding:0 10px !important;
   border:1.5px solid var(--accent) !important; border-radius:8px !important; background:#fff !important; }}
