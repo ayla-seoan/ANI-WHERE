@@ -65,12 +65,14 @@ export default async function Home() {
   const live = popups.filter((p) => stateOf(p, today).rank < 2 && p.start && p.end);
   const liveItems = live.map(toItem);
 
-  // 요즘 일정 많은 작품: 진행 중·예정 팝업이 많은 작품 순. 숫자 = 그 작품 팝업 수. 대표 포스터는 진행 중인 것 먼저
+  // 특전 있는 작품들 (11/20 요청, 예전 이름 '요즘 일정 많은 작품'): 진행 중·예정 팝업 중 특전이 적힌 팝업이 많은 작품 순.
+  // 숫자 = 그 작품의 특전 있는 팝업 수. 대표 포스터는 진행 중인 것 먼저 (앱 _guest_stories)
+  const perkLive = live.filter((p) => p.perks.length > 0);
   const count = new Map<string, number>();
-  for (const p of live) if (p.work.trim()) count.set(p.work.trim(), (count.get(p.work.trim()) ?? 0) + 1);
+  for (const p of perkLive) if (p.work.trim()) count.set(p.work.trim(), (count.get(p.work.trim()) ?? 0) + 1);
   const works = [...count.keys()].sort((a, b) => count.get(b)! - count.get(a)! || byCode(a, b)).slice(0, STORY_MAX);
   const posterOf = new Map<string, string>();
-  for (const p of [...live].sort((a, b) => stateOf(a, today).rank - stateOf(b, today).rank)) {
+  for (const p of [...perkLive].sort((a, b) => stateOf(a, today).rank - stateOf(b, today).rank)) {
     const w = p.work.trim();
     if (w && !posterOf.has(w) && p.images[0]) posterOf.set(w, p.images[0]);
   }
@@ -137,19 +139,19 @@ export default async function Home() {
       ) : (
         <section className="stories" aria-labelledby="story-h">
           <div className="story-head" id="story-h">
-            요즘 일정 많은 작품
+            특전 있는 작품들
             <span
               className="help"
               tabIndex={0}
-              aria-label="지금 진행 중이거나 곧 열리는 팝업이 많은 작품이에요. 숫자는 그 작품의 팝업 수예요."
+              aria-label="지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요."
             >
               <HelpIcon />
               <span className="tip">
-                지금 진행 중이거나 곧 열리는 팝업이 많은 작품이에요. 숫자는 그 작품의 팝업 수예요.
+                지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요.
               </span>
             </span>
           </div>
-          <HScroll className="story-row" label="요즘 일정 많은 작품">
+          <HScroll className="story-row" label="특전 있는 작품들">
             {works.map((w) => (
               <Link key={w} href={`/list?work=${encodeURIComponent(w)}`} className="story hot" prefetch={false}>
                 <span className="ring">

@@ -2658,18 +2658,19 @@ def _story_open(eid: str) -> None:
 
 
 def _guest_stories(rows: list[dict], limit: int = 12) -> None:
-    """로그인 전 홈: '요즘 일정 많은 작품' — 진행 중·예정 팝업이 많은 작품 순. 숫자 = 그 작품 팝업 수.
-    누르면 그 작품만 걸러진 리스트 보기로."""
+    """로그인 전 홈: '특전 있는 작품들' (11/20 요청, 예전 '요즘 일정 많은 작품') — 진행 중·예정 팝업 중
+    특전(perks)이 적힌 팝업이 많은 작품 순. 숫자 = 그 작품의 특전 있는 팝업 수. 누르면 그 작품만 걸러진 리스트 보기로."""
+    perk_rows = [r for r in rows if _split(r.get("perks") or "")]
     count: dict[str, int] = {}
-    for r in rows:
+    for r in perk_rows:
         w = str(r.get("work") or "").strip()
         if w:
             count[w] = count.get(w, 0) + 1
     works = sorted(count, key=lambda w: (-count[w], w))[:limit]
-    posters = _work_posters(rows)
+    posters = _work_posters(perk_rows)
     with st.container(key="stories"):
-        st.markdown('<div class="story-head">요즘 일정 많은 작품</div>', unsafe_allow_html=True,
-                    help="지금 진행 중이거나 곧 열리는 팝업이 많은 작품이에요. 숫자는 그 작품의 팝업 수예요. "
+        st.markdown('<div class="story-head">특전 있는 작품들</div>', unsafe_allow_html=True,
+                    help="지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요. "
                          "로그인하고 팝업을 북마크하면 여기가 내 '북마크 팝업' 으로 바뀌어요.")
         with st.container(horizontal=True, key="story_row"):
             # (로그인 전에는 '최애 추가하기' 칸을 두지 않는다, 11/18 요청)
@@ -2686,7 +2687,7 @@ def render_stories(df: pd.DataFrame) -> None:
     위에는 지역, 아래는 작품 이름. 누르면 그 팝업 상세. 맨 앞 '최애 추가하기' 로 팝업을 골라 한 번에 북마크한다."""
     rows = _live_rows(df)
     if not _member():
-        _guest_stories(rows)       # 로그인 전: '요즘 일정 많은 작품' (11/18 요청)
+        _guest_stories(rows)       # 로그인 전: '특전 있는 작품들' (11/20 요청)
         return
     _, mine, _ = _fav_state()
     marked = sorted([r for r in rows if str(r.get("entry_id")) in mine], key=lambda r: (_status(r)[2], str(r.get("end_date"))))

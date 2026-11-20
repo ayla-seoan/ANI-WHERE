@@ -20,7 +20,7 @@ export type Cond = {
   area: string; // '' = 전체, 여러 곳이면 쉼표로 ('마포,송파') — 11/19 다중 선택
   span: Span;
   day: string; // YYYY-MM-DD 또는 ''
-  work: string; // 홈 '요즘 일정 많은 작품' 에서 넘어온 작품 ('' = 전체)
+  work: string; // 홈 '특전 있는 작품들' 에서 넘어온 작품 ('' = 전체)
   reserve: boolean; // 홈 '사전예약 팝업' 더보기
   sort: SortKey;
   /** 물어보기 '더보기 · 리스트로 보기': 그 답에서 찾은 팝업만 (다른 조건 대신, 앱 ask_only) */
