@@ -49,6 +49,9 @@ _UNCERTAIN = re.compile(
     r"정확(?:한|히)\s*(?:위치|날짜|정보)?\s*(?:는|은)?\s*(?:아직|모름|몰라)"
 )
 UNCERTAIN_FACTOR = 0.3
+# 거꾸로 된 날짜: 끝을 다음 해로 넘겨도 이 날 수보다 길면 앞뒤를 바꾼다. 바꾼 기간의 신뢰도 (0.8 미만 → 검토대기)
+REVERSED_DAYS = 183
+SWAPPED_CONF = 0.6
 
 
 # ================================================================ 6.1 운영시간 (날짜보다 먼저)
@@ -345,6 +348,7 @@ def _find_dates(text: str, today: date) -> tuple[date | None, date | None, float
     plain = re.sub(rf"\s*\(\s*[{_WD}](?:요일)?\s*\)", "", text)
     start = end = None
     explicit = False
+    end_year_given = False      # 끝 날짜에 연도가 따로 적혀 있었나 (거꾸로 된 날짜 판단용)
     for kind, pat in DATE_PATTERNS:
         m = pat.search(plain)
         if not m:
@@ -353,8 +357,7 @@ def _find_dates(text: str, today: date) -> tuple[date | None, date | None, float
         if kind in ("ymd_kr", "ymd_dot"):
             y1, m1, d1, y2, m2, d2 = g
             start, end, explicit = _mkdate(y1, m1, d1), _mkdate(y2 or y1, m2 or m1, d2), True
-            if start and end and end < start and not y2:
-                end = _mkdate(int(y1) + 1, m2 or m1, d2)
+            end_year_given = bool(y2)
         else:
             m1, d1, m2, d2 = g
             start, end = _mkdate(today.year, m1, d1), _mkdate(today.year, m2 or m1, d2)
@@ -363,6 +366,7 @@ def _find_dates(text: str, today: date) -> tuple[date | None, date | None, float
         isos = _TWO_ISO.findall(plain)
         if len(isos) >= 2:
             start, end, explicit = _mkdate(*isos[0]), _mkdate(*isos[1]), True
+            end_year_given = True
     if start is None:
         m = _SINGLE_LABELED.search(plain)
         if m:
@@ -385,6 +389,16 @@ def _find_dates(text: str, today: date) -> tuple[date | None, date | None, float
         else:
             notes.append("기간을 찾지 못했어요")
         return None, None, 0.0, notes
+    swapped = False
+    if start and end and end < start:
+        # 끝이 시작보다 앞: 연도가 없으면 해를 넘기는 행사(12/20 ~ 1/15)인지 먼저 본다.
+        # 다음 해로 넘겨도 반년 넘게 걸리거나 연도가 적혀 있으면 앞뒤를 거꾸로 적은 것으로 보고 바꾼다 (12/20 ~ 11/15).
+        crossed = None if end_year_given else _mkdate(end.year + 1, end.month, end.day)
+        if crossed and (crossed - start).days <= REVERSED_DAYS:
+            end = crossed
+        else:
+            notes.append(f"날짜가 거꾸로 적혀 있어 앞뒤를 바꿨어요 (원문: {start.month}/{start.day} ~ {end.month}/{end.day}). 기간을 확인해 주세요")
+            start, end, swapped = end, start, True
     if not explicit and start:
         start, end = _fix_year(start, end, today)
     start, ok1 = _check_weekday(start, weekdays, explicit)
@@ -395,6 +409,8 @@ def _find_dates(text: str, today: date) -> tuple[date | None, date | None, float
     if start and end and end < start:
         notes.append("종료일이 시작일보다 빨라요")
         return None, None, 0.0, notes
+    if swapped:
+        return start, end, SWAPPED_CONF, notes      # 바꾼 기간은 사람이 확인 (자동등록 안 함)
     return start, end, (1.0 if start and end else 0.5), notes
 
 
@@ -594,8 +610,8 @@ def parse_notice(raw_text: str, today: date | None = None) -> dict:
     ended = bool(end and end < today)
     if ended:
         reasons.append(f"이미 끝난 행사예요 ({start} ~ {end}). 요일로 연도를 맞췄다면 지난 공지일 수 있어요")
-    auto = bool(work and confidence["작품명"] >= 0.8 and start and end and (address or area)
-                and not uncertain and not ended)
+    auto = bool(work and confidence["작품명"] >= 0.8 and start and end and confidence["기간"] >= 0.8
+                and (address or area) and not uncertain and not ended)
     return {
         "work": work, "cafe_name": cafe_name, "address": address, "area": area,
         "start_date": start, "end_date": end,

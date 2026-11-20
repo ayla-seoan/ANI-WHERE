@@ -60,6 +60,9 @@ function sentences(text: string): string[] {
 const NEGATION = /안\s*(?:한대요|해요|합니다|함)|없(?:대요|어요|습니다|음)|미정|추후\s*공지|예정\s*없/;
 const UNCERTAIN = /같아요|같은데|인\s*것\s*같|라고\s*들었|듣긴\s*했|아시는\s*분|못\s*찾|정확(?:한|히)\s*(?:위치|날짜|정보)?\s*(?:는|은)?\s*(?:아직|모름|몰라)/;
 const UNCERTAIN_FACTOR = 0.3;
+// 거꾸로 된 날짜: 끝을 다음 해로 넘겨도 이 날 수보다 길면 앞뒤를 바꾼다. 바꾼 기간의 신뢰도 (0.8 미만 → 검토대기)
+const REVERSED_DAYS = 183;
+const SWAPPED_CONF = 0.6;
 
 // ================================================================ 6.1 운영시간
 const TIME_RANGE = /\d{1,2}\s*:\s*\d{2}\s*[~\-–]\s*\d{1,2}\s*:\s*\d{2}/;
@@ -322,6 +325,7 @@ export function findDates(text: string, today: D): [D | null, D | null, number, 
   let start: D | null = null;
   let end: D | null = null;
   let explicit = false;
+  let endYearGiven = false; // 끝 날짜에 연도가 따로 적혀 있었나 (거꾸로 된 날짜 판단용)
   const ty = yearOf(today);
   for (const [kind, pat] of DATE_PATTERNS) {
     const m = pat.exec(plain);
@@ -331,7 +335,7 @@ export function findDates(text: string, today: D): [D | null, D | null, number, 
       start = mkdate(y1, m1, d1);
       end = mkdate(y2 || y1, m2 || m1, d2);
       explicit = true;
-      if (start && end && end < start && !y2) end = mkdate(Number(y1) + 1, m2 || m1, d2);
+      endYearGiven = !!y2;
     } else {
       const [, m1, d1, m2, d2] = m;
       start = mkdate(ty, m1, d1);
@@ -345,6 +349,7 @@ export function findDates(text: string, today: D): [D | null, D | null, number, 
       start = mkdate(isos[0][1], isos[0][2], isos[0][3]);
       end = mkdate(isos[1][1], isos[1][2], isos[1][3]);
       explicit = true;
+      endYearGiven = true;
     }
   }
   if (start === null) {
@@ -367,6 +372,21 @@ export function findDates(text: string, today: D): [D | null, D | null, number, 
     notes.push(VAGUE.test(plain) ? "'11월 중순' 같은 흐릿한 기간은 날짜로 바꾸지 않았어요" : "기간을 찾지 못했어요");
     return [null, null, 0, notes];
   }
+  let swapped = false;
+  if (start && end && end < start) {
+    // 끝이 시작보다 앞: 연도가 없으면 해를 넘기는 행사(12/20 ~ 1/15)인지 먼저 본다.
+    // 다음 해로 넘겨도 반년 넘게 걸리거나 연도가 적혀 있으면 앞뒤를 거꾸로 적은 것으로 보고 바꾼다 (12/20 ~ 11/15).
+    const [ey, em, ed] = ymd(end);
+    const crossed = endYearGiven ? null : mkdate(ey + 1, em, ed);
+    if (crossed && plusDays(start, REVERSED_DAYS) >= crossed) {
+      end = crossed;
+    } else {
+      const [, sm, sd] = ymd(start);
+      notes.push(`날짜가 거꾸로 적혀 있어 앞뒤를 바꿨어요 (원문: ${sm}/${sd} ~ ${em}/${ed}). 기간을 확인해 주세요`);
+      [start, end] = [end, start];
+      swapped = true;
+    }
+  }
   if (!explicit && start) [start, end] = fixYear(start, end, today);
   const w1 = checkWeekday(start, weekdays, explicit);
   const w2 = checkWeekday(end, weekdays, explicit);
@@ -382,6 +402,7 @@ export function findDates(text: string, today: D): [D | null, D | null, number, 
     notes.push("종료일이 시작일보다 빨라요");
     return [null, null, 0, notes];
   }
+  if (swapped) return [start, end, SWAPPED_CONF, notes]; // 바꾼 기간은 사람이 확인 (자동등록 안 함)
   return [start, end, start && end ? 1.0 : 0.5, notes];
 }
 
@@ -587,7 +608,10 @@ export function parseNotice(rawText: string, today: D): Parsed {
   if (uncertain.length) reasons.push("'~같아요', '아시는 분' 같은 불확실한 표현이 있어요");
   const ended = !!(end && end < today);
   if (ended) reasons.push(`이미 끝난 행사예요 (${start} ~ ${end}). 요일로 연도를 맞췄다면 지난 공지일 수 있어요`);
-  const auto = !!(work && confidence["작품명"] >= 0.8 && start && end && (address || area) && !uncertain.length && !ended);
+  const auto = !!(
+    work && confidence["작품명"] >= 0.8 && start && end && confidence["기간"] >= 0.8 &&
+    (address || area) && !uncertain.length && !ended
+  );
   return {
     work,
     cafe_name: cafeName,
