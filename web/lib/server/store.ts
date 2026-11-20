@@ -236,6 +236,68 @@ export async function append(
   return record;
 }
 
+/** 여러 행을 한 번에 쌓는다 (11/20 블로그 후기 속도: 글마다 번호 읽기 + 저장으로 왕복이 글 수 × 2번이었다).
+ *  번호(revision)는 scope 로 좁힌 표를 한 번만 읽어(또는 known 으로 받아) 매기고, 저장도 한 번에 보낸다. 묶음 저장이 거부되면
+ *  (한 행의 민감정보 · 번호 충돌 등) 한 행씩 append 로 다시 쌓아 나머지는 살린다. 쌓은 행을 돌려준다 */
+export async function appendMany(
+  table: Table,
+  items: { payload: Row; entryId: string }[],
+  scope: Record<string, string> = {},
+  known?: Row[],
+): Promise<Row[]> {
+  const m = mode();
+  if (m === "none") throw new StorageWriteError("회원 기능이 아직 설정되지 않았어요 (저장소 연결 없음).");
+  if (!items.length) return [];
+  const top = new Map<string, number>();
+  // known: 부르는 쪽이 방금 읽은 같은 범위의 행 (있으면 다시 읽지 않는다). 번호가 겹치면 DB 가 거부 → 아래 한 행씩
+  for (const r of known ?? (await rows(table, scope))) {
+    const k = String(r.entry_id);
+    top.set(k, Math.max(top.get(k) ?? 0, Number(r.revision) || 0));
+  }
+  const records: Row[] = items.map(({ payload, entryId }) => {
+    const record: Row = {};
+    for (const h of HEADERS[table]) record[h] = "";
+    const revision = (top.get(entryId) ?? 0) + 1;
+    top.set(entryId, revision);
+    return Object.assign(record, payload, {
+      row_id: randomUUID().replace(/-/g, "").slice(0, 10),
+      entry_id: entryId,
+      revision,
+      status: "active",
+      updated_at: nowIso(),
+    });
+  });
+  if (m === "local") {
+    const own = await readLocalOwn(table);
+    own.push(...records);
+    await writeLocal(table, own);
+    return records;
+  }
+  const { root, headers } = sb();
+  try {
+    const res = await fetch(`${root}/rest/v1/${table}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify(records.map((r) => toDb(table, r))),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    if ([200, 201, 204].includes(res.status)) return records;
+    console.error(`[store] ${table} 묶음 저장 거부 ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  } catch {
+    /* 아래에서 한 행씩 */
+  }
+  const ok: Row[] = [];
+  for (const { payload, entryId } of items) {
+    try {
+      ok.push(await append(table, payload, entryId));
+    } catch {
+      /* 한 행을 못 쌓아도 나머지는 계속 */
+    }
+  }
+  return ok;
+}
+
 /** Supabase DB 함수 부르기 (아이디 로그인 · 탈퇴 정리). local 모드는 부르는 쪽이 따로 처리한다 */
 export async function rpc<T>(name: string, params: Record<string, string>): Promise<T> {
   const { root, headers } = sb();

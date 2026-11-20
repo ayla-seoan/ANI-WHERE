@@ -1,7 +1,7 @@
 import "server-only";
 import { mask } from "@/lib/guard";
 import { areaName } from "@/lib/popup";
-import { append, mode, rows } from "./store";
+import { append, appendMany, mode, rows, type Row } from "./store";
 
 // 팝업별 블로그 후기 (네이버 블로그 검색) — common/blog.py 를 옮긴 것. 서버에서만 부른다.
 //
@@ -115,6 +115,7 @@ type Usage = true | undefined;
 // 네이버가 '일별 사용량 한도 초과'(HTTP 429)라고 하면 그날(한국 시간)은 더 부르지 않는다 (11/19, common/blog.py 와 같게).
 // 앱 · 웹이 함께 알도록 api_usage 에 그날 표시(api='blog_429', month=날짜)를 쌓는다.
 let blockedDay = "";
+let openCheck = { day: "", at: 0 }; // '오늘 안 막힘' 을 확인한 때 (1분 기억, 11/20 속도)
 function kstDay(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
@@ -122,11 +123,13 @@ export async function blocked(): Promise<boolean> {
   const d = kstDay();
   if (blockedDay === d) return true;
   if (mode() === "none") return false;
+  if (openCheck.day === d && Date.now() - openCheck.at < 60_000) return false;
   try {
     if ((await rows("api_usage", { api: "blog_429", month: d })).length) {
       blockedDay = d;
       return true;
     }
+    openCheck = { day: d, at: Date.now() };
   } catch {
     /* 못 읽으면 부르기는 한도 검사(allowed)에 맡긴다 */
   }
@@ -226,15 +229,10 @@ export async function thumbnail(link: string): Promise<string> {
   }
 }
 
-/** 글마다 대표 사진을 함께 (동시에 최대 5개씩 가져온다) */
+/** 글마다 대표 사진을 함께 (11/20: 5개씩 차례로 → 한꺼번에. 글은 많아야 SHOW_MAX 개, 하나에 3초까지) */
 export async function withThumbs(posts: Post[]): Promise<[Post, string][]> {
-  const out: [Post, string][] = [];
-  for (let i = 0; i < posts.length; i += 5) {
-    const part = posts.slice(i, i + 5);
-    const thumbs = await Promise.all(part.map((p) => thumbnail(p.link)));
-    part.forEach((p, j) => out.push([p, thumbs[j]]));
-  }
-  return out;
+  const thumbs = await Promise.all(posts.map((p) => thumbnail(p.link)));
+  return posts.map((p, i) => [p, thumbs[i]]);
 }
 
 // ------------------------------------------------------------------ 호출 한도 (한 달 30,000번에서 완전히 멈춤)
@@ -332,8 +330,13 @@ async function postId(cafeId: string, link: string): Promise<string> {
 /** 저장해 둔 이 팝업의 글 (같은 글은 마지막 기록 하나, 최신순) */
 export async function stored(cafeId: string): Promise<SavedPost[]> {
   if (mode() === "none") return [];
-  const latestBy = new Map<string, Record<string, string | number>>();
-  for (const r of await rows("blog_posts", { cafe_id: cafeId })) {
+  return pick(await rows("blog_posts", { cafe_id: cafeId }));
+}
+
+/** blog_posts 행 → 화면 글 (같은 글은 마지막 기록 하나, 최신순, SHOW_MAX 개) */
+function pick(all: Row[]): SavedPost[] {
+  const latestBy = new Map<string, Row>();
+  for (const r of all) {
     const k = String(r.entry_id);
     const prev = latestBy.get(k);
     if (!prev || Number(r.revision) >= Number(prev.revision)) latestBy.set(k, r);
@@ -354,24 +357,40 @@ export async function stored(cafeId: string): Promise<SavedPost[]> {
   return out.slice(0, SHOW_MAX);
 }
 
-async function checkedToday(cafeId: string): Promise<boolean> {
-  if (mode() === "none") return false;
-  return (await rows("blog_checks", { cafe_id: cafeId, day: kstDay() })).length > 0;
-}
 
-/** 저장해 둔 글 + (오늘 아직 안 물어봤으면) 네이버에서 새 글만 더해 돌려준다. 오류여도 저장해 둔 글은 그대로 */
-export async function refresh(cafeId: string, row: BlogRow): Promise<[SavedPost[], string]> {
-  const have = await stored(cafeId);
-  if (!enabled() || mode() === "none" || (await checkedToday(cafeId))) return [have, ""];
+export type Timing = Record<string, number>;
+
+/** 저장해 둔 글 + (오늘 아직 안 물어봤으면) 네이버에서 새 글만 더해 돌려준다. 오류여도 저장해 둔 글은 그대로.
+ *  11/20 속도: 저장해 둔 글 · 오늘 물어봤는지를 동시에 읽고, 쌓을 때 그 행을 다시 읽지 않는다. timing 에 단계별 ms */
+export async function refresh(cafeId: string, row: BlogRow, timing: Timing = {}): Promise<[SavedPost[], string]> {
+  const t0 = Date.now();
+  const lap = (k: string, from: number) => (timing[k] = Date.now() - from);
+  if (mode() === "none") return [[], ""];
+  const day = kstDay();
+  const [postRows, checkRows] = await Promise.all([
+    rows("blog_posts", { cafe_id: cafeId }),
+    enabled() ? rows("blog_checks", { cafe_id: cafeId, day }) : Promise.resolve([] as Row[]),
+  ]);
+  lap("read", t0);
+  const have = pick(postRows);
+  if (!enabled() || checkRows.length) return [have, ""];
+  const t1 = Date.now();
   const [found, err] = await search(row, SHOW_MAX, true, have.length ? "date" : "sim");
+  lap("search", t1);
   if (err) return [have, err];
   const known = new Set(have.map((p) => p.link));
   const fresh = found.filter((p) => !known.has(p.link));
-  for (const [p, thumb] of await withThumbs(fresh)) {
-    try {
-      await append(
-        "blog_posts",
-        {
+  // 찾은 글은 한 번에 쌓는다 (11/20 속도: 예전엔 글마다 번호 읽기 + 저장 → 글 10개면 왕복 20번, 첫 화면 4~5초)
+  const saved: SavedPost[] = [];
+  const t2 = Date.now();
+  const pics = await withThumbs(fresh);
+  lap("thumbs", t2);
+  const t3 = Date.now();
+  try {
+    const items = await Promise.all(
+      pics.map(async ([p, thumb]) => ({
+        entryId: await postId(cafeId, p.link),
+        payload: {
           cafe_id: cafeId,
           link: p.link.slice(0, 500),
           title: [...p.title].slice(0, 200).join(""),
@@ -380,16 +399,22 @@ export async function refresh(cafeId: string, row: BlogRow): Promise<[SavedPost[
           day: p.day,
           thumb: thumb.slice(0, 600),
         },
-        await postId(cafeId, p.link),
-      );
-    } catch {
-      /* 한 글을 못 쌓아도 나머지는 계속 */
-    }
+      })),
+    );
+    const ok = new Set((await appendMany("blog_posts", items, { cafe_id: cafeId }, postRows)).map((r) => String(r.link)));
+    for (const [p, thumb] of pics) if (ok.has(p.link.slice(0, 500))) saved.push({ ...p, thumb: thumb.slice(0, 600) });
+  } catch {
+    /* 못 쌓아도 이번 화면에는 찾은 글을 보여 준다 */
+    for (const [p, thumb] of pics) saved.push({ ...p, thumb });
   }
   try {
-    await append("blog_checks", { cafe_id: cafeId, day: kstDay(), found: String(fresh.length) }, `${cafeId}:${kstDay()}`);
+    // 오늘 표시는 아직 없다(checkRows 가 비었다) → 다시 읽지 않고 1번으로 쌓는다. 다른 서버가 먼저 쌓았으면 DB 가 거부
+    await appendMany("blog_checks", [{ payload: { cafe_id: cafeId, day, found: String(fresh.length) }, entryId: `${cafeId}:${day}` }], {}, checkRows);
   } catch {
     /* 표시를 못 남기면 다음에 다시 물어본다 */
   }
-  return [fresh.length ? await stored(cafeId) : have, ""];
+  lap("save", t3);
+  // 저장해 둔 글 + 새 글을 다시 읽지 않고 바로 합친다 (stored 와 같은 순서 · 개수)
+  const all = [...have, ...saved].sort((x, y) => (y.day || "0000").localeCompare(x.day || "0000"));
+  return [all.slice(0, SHOW_MAX), ""];
 }

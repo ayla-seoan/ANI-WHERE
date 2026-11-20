@@ -155,11 +155,11 @@ def thumbnail(link: str) -> str:
 
 
 def with_thumbs(posts: list[Post]) -> list[tuple[Post, str]]:
-    """글마다 대표 사진을 함께 (동시에 최대 5개씩 가져온다)."""
+    """글마다 대표 사진을 함께 (11/20: 5개씩 → 10개씩 한꺼번에. 글은 많아야 SHOW_MAX 개, 하나에 3초까지)."""
     from concurrent.futures import ThreadPoolExecutor
     if not posts:
         return []
-    with ThreadPoolExecutor(max_workers=min(5, len(posts))) as ex:
+    with ThreadPoolExecutor(max_workers=min(10, len(posts))) as ex:
         return list(zip(posts, ex.map(lambda p: thumbnail(p.link), posts)))
 
 
@@ -358,13 +358,13 @@ def refresh(row: dict, cafe_id: str, posts_store, checks_store, usage=None, thum
     known = {p["link"] for p in have}
     new = [p for p in found if p.link not in known]
     pics = dict((p.link, th) for p, th in with_thumbs(new)) if (thumbs and new) else {}
-    for p in new:
-        try:
-            posts_store.append({"cafe_id": str(cafe_id), "link": p.link[:500], "title": p.title[:200], "descr": p.desc[:300],
-                                "blogger": p.blogger[:60], "day": p.day.isoformat() if p.day else "",
-                                "thumb": (pics.get(p.link) or "")[:600]}, entry_id=_post_id(str(cafe_id), p.link))
-        except Exception:
-            pass
+    # 한 번에 쌓는다 (11/20 속도: 글마다 append 하면 글마다 표 전체를 새로 읽어 글 10개면 몇 초씩 걸렸다)
+    try:
+        posts_store.append_many([({"cafe_id": str(cafe_id), "link": p.link[:500], "title": p.title[:200], "descr": p.desc[:300],
+                                   "blogger": p.blogger[:60], "day": p.day.isoformat() if p.day else "",
+                                   "thumb": (pics.get(p.link) or "")[:600]}, _post_id(str(cafe_id), p.link)) for p in new])
+    except Exception:
+        pass
     try:
         checks_store.append({"cafe_id": str(cafe_id), "day": _day(), "found": str(len(new))},
                             entry_id=f"{cafe_id}:{_day()}")

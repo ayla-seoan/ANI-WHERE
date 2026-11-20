@@ -314,6 +314,47 @@ class Storage:
                 _READ_CACHE[key] = (time.time(), rows + [record])
         return record
 
+    def append_many(self, items: list[tuple[dict[str, Any], str]]) -> list[dict]:
+        """(payload, entry_id) 여러 개를 한 번에 쌓는다 (11/20 블로그 후기 속도: append 는 한 행마다 표 전체를
+        새로 읽어 글 10개면 10번 읽었다). 표는 한 번만 읽어 번호를 매기고 저장도 한 번에 보낸다.
+        묶음이 거부되면(한 행의 민감정보 · 번호 충돌 등) 한 행씩 append 로 다시 쌓아 나머지는 살린다. 쌓은 행을 돌려준다."""
+        if not items:
+            return []
+        rows = self._fresh_rows()
+        top: dict[str, int] = {}
+        for r in rows:
+            k = str(r.get("entry_id"))
+            top[k] = max(top.get(k, 0), int(r.get("revision", 0) or 0))
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        records = []
+        for payload, entry_id in items:
+            top[entry_id] = top.get(entry_id, 0) + 1
+            record = {k: "" for k in self.headers}
+            record.update(payload)
+            record.update({"row_id": uuid.uuid4().hex[:10], "entry_id": entry_id, "revision": top[entry_id],
+                           "status": "active", "updated_at": now})
+            records.append(record)
+        try:
+            if self.mode == "sheets" and self._ws is not None:
+                self._ws.append_rows([[str(r.get(h, "")) for h in self.headers] for r in records])
+            elif self.mode == "supabase" and self._sb is not None:
+                self._sb_insert(records)
+            else:
+                self._write_local(rows + records)
+        except StorageWriteError:
+            out = []
+            for payload, entry_id in items:
+                try:
+                    out.append(self.append(payload, entry_id=entry_id))
+                except StorageWriteError:
+                    pass
+            return out
+        key = self._cache_key()
+        if key is not None:
+            with _CACHE_LOCK:
+                _READ_CACHE[key] = (time.time(), rows + records)
+        return records
+
     def revert(self, entry_id: str, extra: dict | None = None) -> dict | None:
         """직전 revision 을 새 행으로 다시 쌓아 되돌린다. 이력은 지우지 않는다."""
         history = sorted(

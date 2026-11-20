@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPopup } from "@/lib/data";
-import { enabled, refresh, type SavedPost } from "@/lib/server/blog";
+import { enabled, refresh, type SavedPost, type Timing } from "@/lib/server/blog";
 
 // GET /api/blog/<팝업 id>[?thumbs=0] → 그 팝업의 네이버 블로그 후기 (앱 _blog_list).
 //   { enabled, posts: [{ title, link, desc, blogger, day, thumb }], count, error }
@@ -10,21 +10,24 @@ import { enabled, refresh, type SavedPost } from "@/lib/server/blog";
 
 export const dynamic = "force-dynamic";
 
-type Found = { at: number; posts: SavedPost[]; error: string };
+type Found = { at: number; posts: SavedPost[]; error: string; timing: Timing };
 const found = new Map<string, Found>(); // 같은 서버에서 잠깐(1분 · 실패는 10분) 기억 — 표 읽기도 줄인다
 
 async function postsFor(id: string): Promise<Found | null> {
   const hit = found.get(id);
-  if (hit && Date.now() - hit.at < (hit.error ? 600_000 : 60_000)) return hit;
+  if (hit && Date.now() - hit.at < (hit.error ? 600_000 : 60_000)) return { ...hit, timing: { memo: 0 } };
+  const timing: Timing = {};
+  const t = Date.now();
   const p = await getPopup(id);
+  timing.popup = Date.now() - t;
   if (!p) return null;
   const [posts, error] = await refresh(id, {
     work: p.work,
     cafe_name: p.name === "매장 미정" ? "" : p.name,
     start_date: p.start,
     address: p.address,
-  });
-  const f = { at: Date.now(), posts, error };
+  }, timing);
+  const f = { at: Date.now(), posts, error, timing };
   found.set(id, f);
   if (found.size > 2000) found.delete(found.keys().next().value as string);
   return f;
@@ -39,13 +42,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     f = await postsFor(id);
   } catch {
-    f = { at: Date.now(), posts: [], error: "검색 실패" };
+    f = { at: Date.now(), posts: [], error: "검색 실패", timing: {} };
   }
   if (!f) return NextResponse.json({ enabled: true, posts: [], count: 0, error: "팝업 없음" }, { status: 404 });
   // 저장해 둔 글이 있으면 실패 표시는 보내지 않는다 (화면은 저장된 글을 보여 준다)
   const error = f.posts.length ? "" : f.error;
   return NextResponse.json(
     { enabled: true, posts: f.posts, count: f.posts.length, error },
-    { headers: head(error ? 300 : 600) },
+    // 단계별 걸린 시간 (11/20 속도 확인용, 개발자 도구 Network > Timing 에 보인다): popup · read · search · thumbs · save
+    { headers: { ...head(error ? 300 : 600), "Server-Timing": Object.entries(f.timing).map(([k, v]) => `${k};dur=${v}`).join(", ") } },
   );
 }

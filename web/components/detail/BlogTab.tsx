@@ -3,20 +3,19 @@ import { useEffect, useState } from "react";
 
 // 상세 '블로그 후기' 탭 (앱 _render_blog_tab · _bcard). 서버 /api/blog/<id> 가 네이버 블로그를 찾아 준다.
 //   안내 한 줄 + 카드 (제목 · 요약 2줄 · 블로거 · 날짜, 오른쪽 대표 사진). 누르면 원문 새 탭.
-// useBlogCount(id) 는 서브탭 이름 '블로그 후기 (n)' 의 숫자 (대표 사진 없이 가볍게 센다). 모르면 null.
+// useBlogCount(id) 는 서브탭 이름 '블로그 후기 (n)' 의 숫자. 모르면 null.
+// 11/20 속도: 숫자 · 탭이 같은 요청 하나를 같이 쓴다 (예전엔 ?thumbs=0 주소를 따로 불러 같은 팝업을 두 번 찾았다)
 
 export type BlogPost = { title: string; link: string; desc: string; blogger: string; day: string; thumb: string };
 type BlogData = { enabled: boolean; posts: BlogPost[]; count: number; error?: string };
 
 const OFF: BlogData = { enabled: false, posts: [], count: 0 };
-const full = new Map<string, Promise<BlogData>>();
-const light = new Map<string, Promise<BlogData>>();
+const box = new Map<string, Promise<BlogData>>();
 
-function load(cafeId: string, thumbs: boolean): Promise<BlogData> {
-  const box = thumbs ? full : light;
+function load(cafeId: string): Promise<BlogData> {
   let p = box.get(cafeId);
   if (!p) {
-    p = fetch(`/api/blog/${encodeURIComponent(cafeId)}${thumbs ? "" : "?thumbs=0"}`)
+    p = fetch(`/api/blog/${encodeURIComponent(cafeId)}`)
       .then(async (r) => {
         const j = (await r.json()) as Partial<BlogData>;
         return {
@@ -40,8 +39,7 @@ export function useBlogCount(cafeId: string): number | null {
   const [n, setN] = useState<{ id: string; n: number } | null>(null);
   useEffect(() => {
     let live = true;
-    // 탭을 이미 열어 대표 사진까지 받았으면 그것을 쓴다
-    (full.get(cafeId) ?? load(cafeId, false)).then((d) => live && setN({ id: cafeId, n: d.count }));
+    load(cafeId).then((d) => live && setN({ id: cafeId, n: d.count }));
     return () => {
       live = false;
     };
@@ -68,7 +66,7 @@ export default function BlogTab({ cafeId }: { cafeId: string }) {
   const [data, setData] = useState<{ id: string; d: BlogData } | null>(null);
   useEffect(() => {
     let live = true;
-    load(cafeId, true).then((d) => live && setData({ id: cafeId, d }));
+    load(cafeId).then((d) => live && setData({ id: cafeId, d }));
     return () => {
       live = false;
     };
