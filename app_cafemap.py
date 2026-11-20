@@ -6632,7 +6632,7 @@ def _footer() -> None:
     # (꾸밈 <style> 칸은 화면에서 접히게 되어 있어서, 바닥글 글은 따로 그린다)
     st.markdown(
         f'<div class="aw-foot"><div>© {TODAY.year} ANI:WHERE</div>'
-        '<div>운영: ANI:WHERE · 문의: <a href="./privacy" target="_self">개인정보처리방침 10. 연락처</a></div>'
+        '<div>운영: ANI:WHERE · 문의: <a href="./privacy" target="_self">개인정보처리방침_10. 연락처</a></div>'
         '<div class="aw-foot-links"><a href="./privacy" target="_self">개인정보처리방침 · 이용약관</a>'
         '<a href="./guide" target="_self">사용자 튜토리얼</a><a href="./design" target="_self">디자인 시스템</a></div></div>', unsafe_allow_html=True)
 
@@ -8239,6 +8239,9 @@ ASK_PANEL_CSS = """
 .apc-addr { color: #7A8582; font-size: .74rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 1;
   -webkit-box-orient: vertical; overflow: hidden; }
 .apc-date { color: #2E9C82; font-weight: 800; font-size: .78rem; margin-top: 1px; }
+/* 지역 배지 (11/20 요청, 웹 .apc-area 와 같게) */
+.apc-area { display: inline-block; margin-right: 4px; padding: 0 6px; border-radius: 6px; background: #56C2A7; color: #fff;
+  font-size: .7rem; font-weight: 800; line-height: 1.5; vertical-align: 1px; }
 /* 카드 전체를 덮는 투명 버튼 (글자는 화면 읽기용으로만 남는다) */
 [class*="st-key-apn_hit_"], [class*="st-key-apd_hit_"] { position: absolute !important; inset: 0; z-index: 2;
   width: 100% !important; height: 100% !important; }
@@ -8402,7 +8405,8 @@ def _ask_card(cafe_id: str, r: dict, km: float | None = None) -> dict:
     if km is not None:
         dates = (f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km") + " · " + dates
     return {"id": str(cafe_id), "work": str(r.get("work") or ""), "cafe": str(r.get("cafe_name") or ""),
-            "address": str(r.get("address") or ""), "dates": dates, "poster": _poster_url(r.get("images"))}
+            "address": str(r.get("address") or ""), "dates": dates, "poster": _poster_url(r.get("images")),
+            "area": geo.area_name(str(r.get("address") or ""))}     # 지역 배지 (11/20 요청, 리스트 카드와 같은 이름)
 
 
 def _ask_panel_submit(prefix: str = "apn") -> None:
@@ -8512,7 +8516,9 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                         f'<div class="apc"><img src="{escape(card["poster"])}" alt="">'
                         f'<div class="apc-txt"><div class="apc-work">{escape(card["work"])}</div>'
                         f'<div class="apc-cafe">{escape(card["cafe"])}</div>'
-                        f'<div class="apc-addr">{escape(card["address"])}</div>'
+                        f'<div class="apc-addr">'
+                        + (f'<span class="apc-area">{escape(card["area"])}</span>' if card.get("area") else "")
+                        + f'{escape(card["address"])}</div>'
                         f'<div class="apc-date">{escape(card["dates"])}</div></div></div>', unsafe_allow_html=True)
                     key = f"{prefix}_hit_{n}_{cid}"
                     if in_dialog:

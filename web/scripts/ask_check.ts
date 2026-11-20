@@ -131,6 +131,28 @@ function show(q: string, items: Item[], today: string, loc?: { lat: number; lng:
   assert.ok(r.guide, "팝업과 상관없는 질문은 묻는 법 안내");
 
   r = show("치이카와 화성 팝업 이번 주말", items, today);
+
+  // 11/20: 대한민국 시 · 군 이름 — 팝업이 없는 지역은 '아직 ○○에 팝업이 없어요'
+  r = show("태백에 팝업 있어?", items, today);
+  assert.deepEqual(r.query.places, ["태백"]);
+  assert.match(r.text, /^아직 태백에 팝업이 없어요\./);
+  r = show("포항시 팝업 추천해줘", items, today);
+  assert.match(r.text, /아직 포항에 팝업이 없어요/);
+  r = show("고양이 팝업", items, today);
+  assert.ok(!r.query.places.includes("고양"), "'고양이' 의 '고양' 은 지역이 아니다");
+  r = show("음성 팝업", items, today);
+  assert.ok(!r.query.places.includes("음성"), "'음성' 은 '음성군' 으로 써야 지역 (흔한 낱말)");
+  r = show("충북 음성군 팝업", items, today);
+  assert.ok(r.query.places.includes("음성"), "'음성군' 은 지역");
+  r = show("추천해줘", items, today);
+  assert.match(r.text, /지금 갈 수 있는 \d건의 팝업을/);
+  // 11/20: 민감한 개인정보는 넣을 수 없다고 답한다
+  r = show("010-1234-5678 부산 팝업 알려줘", items, today);
+  assert.match(r.text, /^전화번호는 민감한 개인정보라 넣을 수 없어요/);
+  assert.ok(r.hits.length > 0, "가린 뒤에 부산 팝업은 찾는다");
+  r = show("내 전화번호 010-1234-5678 저장해줘", items, today);
+  assert.equal(r.query.intent, "pii");
+  assert.ok(!r.guide && /넣을 수 없어요/.test(r.text));
   console.log("\n모든 점검 통과");
 })().catch((e) => {
   console.error(e);

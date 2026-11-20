@@ -9,7 +9,7 @@ export default function Footer() {
     <footer className="aw-foot">
       <div>© {year} ANI:WHERE</div>
       <div>
-        운영: ANI:WHERE · 문의: <FootLink href="/privacy">개인정보처리방침 10. 연락처</FootLink>
+        운영: ANI:WHERE · 문의: <FootLink href="/privacy">개인정보처리방침_10. 연락처</FootLink>
       </div>
       <div className="aw-foot-links">
         <FootLink href="/privacy">개인정보처리방침 · 이용약관</FootLink>

@@ -14,9 +14,11 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from common import guard
 
@@ -396,6 +398,52 @@ def city_name(address: str) -> str:
     if district.startswith("경기"):
         return district.split()[1].removesuffix("시")
     return area
+
+
+# ------------------------------------------------------------- 대한민국 시·도 · 시·군 · 구 이름 (11/20, 물어보기)
+# 좌표 없이 이름만. 물어보기가 '포항 팝업 있어?' 의 '포항' 을 지역으로 알아보고, 그 지역에 팝업이 없으면
+# '아직 포항에 팝업이 없어요' 라고 답하는 데 쓴다. 원본은 common/kr_regions.json (웹도 같은 파일을 옮겨 쓴다).
+_KR = json.loads((Path(__file__).with_name("kr_regions.json")).read_text(encoding="utf-8"))
+KR_PROVINCES: dict[str, list[str]] = _KR["provinces"]                  # '경북' → ['경상북도']
+KR_CITIES: list[str] = list(dict.fromkeys(_KR["cities"]))
+KR_SUFFIX_ONLY: set[str] = set(_KR["suffix_only"])                      # '공주시' 처럼 써야 지역
+KR_CITY_SET: set[str] = set(KR_CITIES)
+# 짧은 이름 뒤에 올 수 있는 말: 끝 · 띄어쓰기 · 조사 · '팝업' 같은 말 ('고양이' 의 '고양' 은 지역이 아니다)
+_KR_TAIL = r"(?=$|[^가-힣]|에서|에는|에|쪽|근처|지역|팝업|카페|역|은|는|도|엔|랑|이랑)"
+
+
+def kr_places(text: str, loose: set[str] | frozenset[str] = frozenset()) -> list[str]:
+    """글 속 시·도 · 시·군 · 구 이름을 짧은 이름으로 ('경상북도 포항시' → ['경북', '포항']).
+
+    loose: '시·군·구' 없이 써도 지역으로 볼 이름 (동네 사전 · 데이터에 이미 있는 것 — '경주' '진주' 등은 예전처럼).
+    긴 이름부터 찾고, 이미 잡힌 자리와 겹치는 짧은 이름은 버린다 ('부산진' 속 '부산')."""
+    text = text or ""
+    found: list[tuple[int, int, str]] = []
+
+    def take(pattern: str, name: str) -> None:
+        for m in re.finditer(pattern, text):
+            if any(m.start() < e and s < m.end() for s, e, _ in found):
+                continue
+            found.append((m.start(), m.end(), name))
+
+    names: list[tuple[str, str, str]] = []     # (찾을 글자, 짧은 이름, 종류)
+    for short, aliases in KR_PROVINCES.items():
+        names += [(a, short, "full") for a in aliases] + [(short, short, "province")]
+    names += [(c, c, "city") for c in KR_CITIES]
+    for word, short, kind in sorted(names, key=lambda x: len(x[0]), reverse=True):
+        w = re.escape(word)
+        if kind in ("full", "province"):
+            take(rf"(?<![가-힣]){w}", short)
+        elif word in KR_SUFFIX_ONLY and word not in loose:
+            take(rf"(?<![가-힣]){w}(?:시|군|구)", short)
+        else:
+            take(rf"(?<![가-힣]){w}(?:시|군|구|{_KR_TAIL})", short)
+    return list(dict.fromkeys(name for _, _, name in sorted(found)))
+
+
+def in_province(place: str, address: str) -> bool:
+    """'경북' 이 '경상북도 포항시 …' 처럼 긴 이름으로 적힌 주소에도 맞는가."""
+    return any(a in (address or "") for a in KR_PROVINCES.get(place, []))
 
 
 def area_name(address: str) -> str:
