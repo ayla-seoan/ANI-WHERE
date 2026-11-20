@@ -207,7 +207,8 @@ export async function append(
   Object.assign(record, payload, {
     row_id: randomUUID().replace(/-/g, "").slice(0, 10),
     entry_id: id,
-    revision: await nextRevision(table, id),
+    // 새 글(번호를 새로 만든 것)은 revision 이 늘 1 — DB 를 다시 읽지 않는다 (11/20 리뷰 등록 속도)
+    revision: entryId ? await nextRevision(table, id) : 1,
     status,
     updated_at: nowIso(),
   });

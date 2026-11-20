@@ -1150,9 +1150,16 @@ def render_similar(current: dict, df: pd.DataFrame) -> None:
                     tip="이 팝업 자리에서 30km 안에 있는 다른 팝업을 가까운 순으로 모았어요. 끝난 팝업은 빼요.")
 
 
+@st.fragment
 def render_detail_tabs(current: dict) -> None:
-    """상세 화면 오른쪽: 리뷰 / 수정하기 탭."""
+    """상세 화면 오른쪽: 리뷰 / 수정하기 탭.
+
+    조각(fragment)이라 리뷰 · 답글을 쓰거나 댓글을 펼칠 때 이 칸만 다시 그린다 (11/20 리뷰 등록 1초 안에).
+    팝업 정보 수정처럼 화면 전체가 바뀌는 일은 그쪽에서 st.rerun() 으로 전체를 다시 그린다."""
     entry_id = str(current["entry_id"])
+    msg = st.session_state.pop("rv_flash", None)
+    if msg:
+        _toast(msg)
     n = review.counts(reviews.current_rows()).get(entry_id, 0)
     # 키를 주고 고른 탭을 서버가 기억하게 한다. 그렇지 않으면 수정하기에서 이미지를 지우거나 올려
     # 다시 그릴 때마다 첫 탭(리뷰)으로 돌아가 버린다
@@ -1196,6 +1203,26 @@ def _when(stamp: str) -> str:
         return ""
 
 
+def _save_photos(files: list) -> list[str]:
+    """리뷰 사진 여러 장을 한꺼번에 저장 (11/20 등록 속도: 한 장씩 위치정보 지우고 올리면 장 수만큼 기다렸다).
+    순서는 고른 순서 그대로. 한 장이라도 형식이 틀리면 ValueError."""
+    if len(files) <= 1:
+        return [images.save(p.name, p.getvalue()) for p in files]
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(4, len(files))) as ex:
+        return list(ex.map(lambda p: images.save(p.name, p.getvalue()), files))
+
+
+def _rerun_reviews() -> None:
+    """리뷰를 쓴 뒤 다시 그리기: 상세 오른쪽 칸(조각)만 다시 그린다 (11/20 — 화면 전체를 다시 그리면 1초를 넘었다).
+    조각 밖에서 불리면 화면 전체."""
+    from streamlit.errors import StreamlitAPIException
+    try:
+        st.rerun(scope="fragment")
+    except StreamlitAPIException:
+        st.rerun()
+
+
 def _write_box(cafe_id: str, parent_id: str = "") -> None:
     """글쓰기 칸. parent_id 가 있으면 답글 칸이다.
 
@@ -1230,12 +1257,12 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
         "다녀온 후기나 기대하는 점을 남겨 주세요 (대기 시간, 특전 소진 여부 등)",
     )
     bad = _block_sensitive(body)
-    # 사진 첨부 (선택, 원글만 — 답글 칸은 가볍게 둔다). 처음엔 작은 '사진 첨부' 버튼만, 누르면 올리는 칸이 열린다.
-    # 저장은 등록을 누를 때 한다
+    # 사진 첨부 (선택, 원글 · 답글 모두 — 11/20 답글에도). 처음엔 작은 '사진 첨부' 버튼만, 누르면 올리는 칸이 열린다.
+    # 답글 칸에서는 칸을 눌러 열었을 때만 버튼이 보인다 (CSS .st-key-rpbox_ … _pics_off_). 저장은 등록을 누를 때 한다
     photos = []
-    if not parent_id:
-        open_key = f"{slot}_pic_open_{n}"
-        opened = st.session_state.get(open_key, False)
+    open_key = f"{slot}_pic_open_{n}"
+    opened = st.session_state.get(open_key, False)
+    with st.container(key=f"{slot}_pics_{'on' if opened else 'off'}_{n}"):
         # 열고 나면 버튼은 감추고 올리는 칸만 둔다
         if not opened:
             st.button("+ 사진 첨부", key=f"{slot}_pic_btn_{n}", type="tertiary",
@@ -1264,7 +1291,7 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
             # 답글 칸 비우기 (키 번호를 올려 빈 입력칸으로 다시 그린다)
             if st.button("취소", width="stretch", key=f"{slot}_cancel_{n}"):
                 st.session_state[f"{slot}_n"] = n + 1
-                st.rerun()
+                _rerun_reviews()
 
     if clicked:
         # 입력 직후 바로 누르면 위의 비활성화보다 먼저 들어올 수 있어서 한 번 더 검사한다
@@ -1275,14 +1302,17 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
                 st.error(err)
             return
         try:
-            saved = [images.save(p.name, p.getvalue()) for p in photos]
+            saved = _save_photos(photos)
         except ValueError as err:
             st.error(str(err))
             return
         reviews.append(review.to_row(cafe_id, body, nick, kind or "", parent_id, rating=rating, images=saved))
         st.session_state[f"{slot}_n"] = n + 1
-        st.session_state["flash"] = "답글을 남겼습니다." if parent_id else "리뷰를 남겼습니다."
-        st.rerun()
+        if parent_id:
+            st.session_state[f"rv_open_{parent_id}"] = True     # 방금 단 답글이 보이게 댓글을 펼쳐 둔다
+        # 조각만 다시 그리면 화면 맨 위의 flash 는 돌지 않아서, 상세 오른쪽 칸 첫머리에서 띄운다 (render_detail_tabs)
+        st.session_state["rv_flash"] = "답글을 남겼습니다." if parent_id else "리뷰를 남겼습니다."
+        _rerun_reviews()
 
 
 # 리뷰 종류마다 배지 색을 달리한다 (기타는 회색)
@@ -1360,7 +1390,8 @@ def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
     if r.get("kind"):
         head = f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] " + head
     if reply:
-        head = ":gray-badge[답글] " + head
+        # 대댓글 표시 (11/20 요청): 앞에 'ㄴ' — 위 댓글에 단 답글이라는 뜻 (웹 .rv-re 와 같게)
+        head = '<span class="rv-re" aria-label="답글">ㄴ</span> ' + head
     eid = str(r["entry_id"])
     when = f" · :gray[{_when(r.get('updated_at'))}]"
     if int(r.get("revision") or 1) > 1:
@@ -1423,31 +1454,30 @@ def _review_edit_box(r: dict) -> None:
     body = st.text_area("내용", value=str(r.get("body") or ""), key=f"rv_edit_body_{eid}", height=90,
                         max_chars=review.MAX_BODY, label_visibility="collapsed")
     bad = _block_sensitive(body)
-    # 사진 (11/18 요청): 원래 사진이 없었어도 고칠 때 새로 붙일 수 있다. 있던 사진은 '빼기' 로 뺄 수 있다 (원글만)
+    # 사진 (11/18 요청): 원래 사진이 없었어도 고칠 때 새로 붙일 수 있다. 있던 사진은 '빼기' 로 뺄 수 있다 (11/20 답글도)
     keep: list[str] = []
     photos = []
-    if not str(r.get("parent_id") or ""):
-        old_pics = images.paths(r.get("images"))
-        old = [x.name for x in old_pics]
-        if old:
-            st.caption("붙어 있는 사진 (뺄 사진은 체크를 풀어요)")
-            cols = st.columns(min(len(old), 4))
-            for i, name in enumerate(old):
-                with cols[i % len(cols)]:
-                    _show_pic(old_pics[i])
-                    if st.checkbox("남기기", value=True, key=f"rv_edit_keep_{eid}_{i}"):
-                        keep.append(name)
-        room = review.MAX_IMAGES - len(keep)
-        if room > 0:
-            photos = list(st.file_uploader(f"사진 추가 (최대 {room}장 · 한 장 {review.IMAGE_MB}MB)", type=images.TYPES,
-                                           accept_multiple_files=True, key=f"rv_edit_img_{eid}") or [])
-            if len(photos) > room:
-                st.caption(f":red[사진은 모두 {review.MAX_IMAGES}장까지예요. 앞의 {room}장만 올라가요.]")
-                photos = photos[:room]
-            heavy = [x.name for x in photos if images.too_big(x.getvalue(), review.IMAGE_MB)]
-            if heavy:
-                st.caption(f":red[{review.IMAGE_MB}MB 가 넘는 사진은 올릴 수 없어요: {', '.join(heavy)}]")
-                bad = True
+    old_pics = images.paths(r.get("images"))
+    old = [x.name for x in old_pics]
+    if old:
+        st.caption("붙어 있는 사진 (뺄 사진은 체크를 풀어요)")
+        cols = st.columns(min(len(old), 4))
+        for i, name in enumerate(old):
+            with cols[i % len(cols)]:
+                _show_pic(old_pics[i])
+                if st.checkbox("남기기", value=True, key=f"rv_edit_keep_{eid}_{i}"):
+                    keep.append(name)
+    room = review.MAX_IMAGES - len(keep)
+    if room > 0:
+        photos = list(st.file_uploader(f"사진 추가 (최대 {room}장 · 한 장 {review.IMAGE_MB}MB)", type=images.TYPES,
+                                       accept_multiple_files=True, key=f"rv_edit_img_{eid}") or [])
+        if len(photos) > room:
+            st.caption(f":red[사진은 모두 {review.MAX_IMAGES}장까지예요. 앞의 {room}장만 올라가요.]")
+            photos = photos[:room]
+        heavy = [x.name for x in photos if images.too_big(x.getvalue(), review.IMAGE_MB)]
+        if heavy:
+            st.caption(f":red[{review.IMAGE_MB}MB 가 넘는 사진은 올릴 수 없어요: {', '.join(heavy)}]")
+            bad = True
     c1, c2 = st.columns(2)
     if c1.button("취소", width="stretch", key=f"rv_edit_no_{eid}"):
         st.session_state.pop("rv_editing", None)
@@ -1467,20 +1497,20 @@ def _review_edit_box(r: dict) -> None:
         payload = {k: current.get(k, "") for k in review.HEADERS
                    if k not in ("row_id", "entry_id", "revision", "status", "updated_at")}
         payload["body"] = body.strip()
+        try:
+            added = _save_photos(photos)
+        except ValueError as err:
+            st.error(str(err))
+            return
+        payload["images"] = ",".join(keep + added)        # 답글도 사진을 고칠 수 있다 (11/20)
         if not str(current.get("parent_id") or ""):
-            try:
-                added = [images.save(x.name, x.getvalue()) for x in photos]
-            except ValueError as err:
-                st.error(str(err))
-                return
-            payload["images"] = ",".join(keep + added)
             payload["kind"] = kind if kind in review.KINDS else review.KINDS[0]
             # 별점은 다녀온 후기일 때만 남기고, 종류를 바꾸면 비운다
             payload["rating"] = rating if payload["kind"] == review.RATED_KIND and rating else ""
         reviews.append(payload, entry_id=eid)
         st.session_state.pop("rv_editing", None)
-        st.session_state["flash"] = "수정했습니다."
-        st.rerun()
+        st.session_state["rv_flash"] = "수정했습니다."
+        _rerun_reviews()
 
 
 def _review_lightbox() -> None:
@@ -1604,8 +1634,16 @@ def render_reviews(cafe_id: str, after_write=None) -> None:
         pid = str(t.post["entry_id"])
         with st.container(border=True):
             _review_card(t.post, replies=len(t.replies))
-            for r in t.replies:
-                _review_card(r, reply=True)
+            # 대댓글은 처음엔 접어 두고 '+N건의 댓글' 버튼만 (11/20 요청). 누르면 아래로 펼치고 '댓글 접기' 로 바뀐다
+            if t.replies:
+                open_key = f"rv_open_{pid}"
+                opened = st.session_state.get(open_key, False)
+                st.button("댓글 접기" if opened else f"+{len(t.replies)}건의 댓글", key=f"rv_tog_{pid}",
+                          type="tertiary", icon=":material/expand_less:" if opened else ":material/subdirectory_arrow_right:",
+                          on_click=lambda k=open_key: st.session_state.update({k: not st.session_state.get(k, False)}))
+                if opened:
+                    for r in t.replies:
+                        _review_card(r, reply=True)
             # 답글은 입력칸만 보여 주고, 칸을 누르면(또는 글이 있으면) 닉네임과 등록·취소 버튼이 나온다
             # (LIST_CSS 의 .st-key-rpbox_ — 칸을 눌렀는지는 브라우저만 알아서 CSS 로 처리한다)
             with st.container(key=f"rpbox_{pid}"):
@@ -3218,6 +3256,12 @@ iframe[src*="kakao_map"] {{
 [class*="st-key-rpbox_"]:focus-within [data-baseweb="textarea"], [class*="st-key-rpbox_"]:focus-within textarea,
 [class*="st-key-rpbox_"]:has(textarea:not(:placeholder-shown)) [data-baseweb="textarea"],
 [class*="st-key-rpbox_"]:has(textarea:not(:placeholder-shown)) textarea {{ height: 5rem !important; }}
+/* 답글 칸 '+ 사진 첨부' (11/20): 칸을 눌렀거나 글이 있을 때만. 한 번 열어 둔 사진 칸(_pics_on_)은 그대로 */
+[class*="st-key-rpbox_"] [class*="_pics_off_"] {{ display: none; }}
+[class*="st-key-rpbox_"]:focus-within [class*="_pics_off_"],
+[class*="st-key-rpbox_"]:has(textarea:not(:placeholder-shown)) [class*="_pics_off_"] {{ display: flex; }}
+/* 대댓글 표시 'ㄴ' (11/20, 웹 .rv-re 와 같게) */
+.rv-re {{ display: inline-block; color: #6B7673; font-size: 1.05rem; font-weight: 800; margin-right: 2px; }}
 /* 다녀온 후기 별점: 가운데 정렬 질문 + 안내 + 큰 별 5개 (회색, 고른 별까지 노랑. 커서를 올리면 그 별까지 미리 노랑) */
 [class*="_rate_box_"] {{ display: flex; flex-direction: column; align-items: center; text-align: center; gap: .2rem !important;
   padding: .4rem 0 .2rem; }}

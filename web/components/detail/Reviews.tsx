@@ -1,7 +1,7 @@
 "use client";
 import { submitWith } from "@/lib/submit";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useRef, useState } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { reviewCreateAction, reviewDeleteAction, reviewEditAction, type FormState } from "@/app/actions";
 import { avatarUrl, uploadUrl } from "@/lib/avatar";
 import { sensitiveWarning } from "@/lib/guard";
@@ -82,6 +82,8 @@ function Stars({ value, onChange }: { value: number | null; onChange: (n: number
   );
 }
 
+/** 저장이 끝나면 알림 → 칸 비우기 → 뒤에서 화면 맞추기 (11/20 등록 속도: 서버는 화면을 다시 그리지 않고 바로 답하고,
+ *  router.refresh() 는 기다리지 않는다. 그 사이 새 글은 Reviews 의 pending 으로 먼저 보인다) */
 function useDone(s: FormState, after: () => void) {
   const router = useRouter();
   const seen = useRef<FormState>(null);
@@ -91,20 +93,27 @@ function useDone(s: FormState, after: () => void) {
     if (s.ok) {
       toast(s.ok);
       after();
-      router.refresh();
+      startTransition(() => router.refresh());
     }
   }, [s, after, router]);
 }
 
-/** 글쓰기 칸. parentId 가 있으면 답글 칸 (칸을 누르면 등록·취소 버튼이 나온다) */
+/** 사진 주소: 방금 고른 사진(blob:)은 그대로, 저장된 사진은 우리 주소로 */
+const picSrc = (x: string) => (x.startsWith("blob:") ? x : uploadUrl(x));
+
+type Posted = { parentId: string; view: RView };
+
+/** 글쓰기 칸. parentId 가 있으면 답글 칸 (칸을 누르면 등록·취소 · 사진 첨부가 나온다) */
 function WriteBox({
   cafeId,
   parentId = "",
   me,
+  onPosted,
 }: {
   cafeId: string;
   parentId?: string;
   me: { nick: string; avatar: string };
+  onPosted?: (p: Posted) => void;
 }) {
   const [kind, setKind] = useState(KINDS[0]);
   const [rating, setRating] = useState<number | null>(null);
@@ -114,7 +123,10 @@ function WriteBox({
   const [picOpen, setPicOpen] = useState(false);
   const [pics, setPics] = useState<File[]>([]);
   const [s, action, busy] = useActionState(reviewCreateAction, null);
+  const sent = useRef<Posted | null>(null); // 보낸 내용 (저장되면 목록에 먼저 붙인다)
   useDone(s, () => {
+    if (sent.current) onPosted?.(sent.current);
+    sent.current = null;
     setBody("");
     setRating(null);
     setFocus(false);
@@ -130,7 +142,23 @@ function WriteBox({
     <form
       onSubmit={submitWith((fd) => {
         fd.delete("photos");
-        for (const p of pics.slice(0, MAX_IMAGES)) fd.append("photos", p);
+        const send = pics.slice(0, MAX_IMAGES);
+        for (const p of send) fd.append("photos", p);
+        sent.current = {
+          parentId,
+          view: {
+            id: `pending-${Date.now()}`,
+            kind: reply ? "" : kind,
+            name: me.nick,
+            avatar: me.avatar,
+            body: body.trim(),
+            rating: !reply && kind === RATED ? rating : null,
+            images: send.map((p) => URL.createObjectURL(p)),
+            when: new Date().toISOString(),
+            edited: false,
+            mine: true,
+          },
+        };
         action(fd);
       })}
       className={`write${reply ? " reply" : ""}${focus || body || pics.length ? " open" : ""}`}
@@ -184,9 +212,17 @@ function WriteBox({
           {s.error}
         </div>
       )}
-      {!reply &&
-        (!picOpen ? (
-          <button type="button" className="pic-btn" onClick={() => setPicOpen(true)}>
+      {/* 사진 첨부: 원글 · 답글 모두 (11/20). 답글 칸은 칸을 눌러 열었을 때만 보인다 (.write.reply:not(.open) .pic-btn) */}
+      {!picOpen ? (
+          <button
+            type="button"
+            className="pic-btn"
+            onMouseDown={(e) => e.preventDefault() /* 답글 칸이 닫히지 않게 입력칸 포커스를 그대로 둔다 */}
+            onClick={() => {
+              setFocus(true);
+              setPicOpen(true);
+            }}
+          >
             + 사진 첨부
           </button>
         ) : (
@@ -196,7 +232,7 @@ function WriteBox({
             files={pics}
             onChange={setPics}
           />
-        ))}
+        )}
       {heavy.length > 0 && (
         <p className="cap pic-err">
           {IMAGE_MB}MB 를 넘는 사진은 올릴 수 없어요: {heavy.join(", ")}
@@ -217,6 +253,8 @@ function WriteBox({
             onClick={() => {
               setBody("");
               setFocus(false);
+              setPics([]);
+              setPicOpen(false);
             }}
           >
             취소
@@ -326,7 +364,7 @@ function EditBox({ r, isReply, onClose }: { r: RView; isReply: boolean; onClose:
         aria-label="고칠 내용"
       />
       {warn && <div className="auth-warn">{warn}</div>}
-      {!isReply && r.images.length > 0 && (
+      {r.images.length > 0 && (
         <>
           <p className="cap">붙어 있는 사진 (뺄 사진은 체크를 풀어요)</p>
           <div className="rv-keep">
@@ -346,7 +384,7 @@ function EditBox({ r, isReply, onClose }: { r: RView; isReply: boolean; onClose:
           </div>
         </>
       )}
-      {!isReply && room > 0 && (
+      {room > 0 && (
         <PicPicker label={`사진 추가 (최대 ${room}장 · 한 장 ${IMAGE_MB}MB)`} room={room} files={pics} onChange={setPics} />
       )}
       {heavy.length > 0 && (
@@ -376,9 +414,14 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
   const [asking, setAsking] = useState(false);
   const [reason, setReason] = useState("");
   return (
-    <div className={`rv-card${reply ? " is-reply" : ""}`}>
+    <div className={`rv-card${reply ? " is-reply" : ""}${r.id.startsWith("pending-") ? " is-pending" : ""}`}>
       <div className="rv-head">
-        {reply && <span className="kb gray">답글</span>}
+        {/* 대댓글 표시 (11/20 요청): 앞에 'ㄴ' — 위 댓글에 단 답글 (앱 .rv-re 와 같게) */}
+        {reply && (
+          <span className="rv-re" aria-label="답글">
+            ㄴ
+          </span>
+        )}
         {r.kind && <span className={`kb ${KIND_COLOR[r.kind] || "gray"}`}>{r.kind}</span>}
         <Av v={r.avatar} size={26} />
         <b>{r.name}</b>
@@ -386,7 +429,7 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
           · {whenText(r.when)}
           {r.edited ? " (수정됨)" : ""}
         </span>
-        {(r.mine || admin) && (
+        {(r.mine || admin) && !r.id.startsWith("pending-") && (
           <span className="rv-more">
             <button type="button" aria-label={r.mine ? "내 글 수정·삭제" : "글 삭제 (관리자)"} onClick={() => setMenu((m) => !m)}>
               ⋯
@@ -429,8 +472,8 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
       {r.images.length > 0 && (
         <div className="rv-pics">
           {r.images.map((x) => (
-            <a key={x} href={uploadUrl(x)} target="_blank" rel="noopener noreferrer">
-              <img src={uploadUrl(x)} alt="리뷰 사진" loading="lazy" />
+            <a key={x} href={picSrc(x)} target="_blank" rel="noopener noreferrer">
+              <img src={picSrc(x)} alt="리뷰 사진" loading="lazy" />
             </a>
           ))}
         </div>
@@ -496,17 +539,38 @@ export default function Reviews({
   const [sub, setSub] = useState<"review" | "blog">("review");
   const [pick, setPick] = useState("전체");
   const blogN = useBlogCount(cafeId); // 앱처럼 탭 이름에 글 수 (모르면 0)
-  const n = threads.reduce((a, t) => a + 1 + t.replies.length, 0);
-  const rated = threads.filter((t) => t.post.kind === RATED && t.post.rating).map((t) => t.post.rating as number);
+  // 방금 쓴 글: 서버가 저장했다고 답하면 바로 붙여 보여 주고, 새 목록(router.refresh)이 오면 비운다 (11/20 등록 속도)
+  const [pending, setPending] = useState<Posted[]>([]);
+  // 대댓글은 처음엔 접어 두고 '+N건의 댓글' 로 펼친다 (11/20 요청). 방금 답글을 단 글은 펼쳐 둔다
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setPending((cur) => {
+      cur.forEach((p) => p.view.images.forEach((x) => x.startsWith("blob:") && URL.revokeObjectURL(x)));
+      return cur.length ? [] : cur;
+    });
+  }, [threads]);
+  const posted = (p: Posted) => {
+    setPending((cur) => [...cur, p]);
+    if (p.parentId) setOpen((o) => ({ ...o, [p.parentId]: true }));
+  };
+  const all: TView[] = [
+    ...pending.filter((p) => !p.parentId).map((p) => ({ post: p.view, replies: [] as RView[] })).reverse(),
+    ...threads.map((t) => {
+      const more = pending.filter((p) => p.parentId === t.post.id).map((p) => p.view);
+      return more.length ? { ...t, replies: [...t.replies, ...more] } : t;
+    }),
+  ];
+  const n = all.reduce((a, t) => a + 1 + t.replies.length, 0);
+  const rated = all.filter((t) => t.post.kind === RATED && t.post.rating).map((t) => t.post.rating as number);
   const avg = rated.length ? Math.round((rated.reduce((a, b) => a + b, 0) / rated.length) * 10) / 10 : 0;
-  const count = Object.fromEntries(KINDS.map((k) => [k, threads.filter((t) => t.post.kind === k).length]));
-  const shown = threads.filter((t) => pick === "전체" || t.post.kind === pick);
+  const count = Object.fromEntries(KINDS.map((k) => [k, all.filter((t) => t.post.kind === k).length]));
+  const shown = all.filter((t) => pick === "전체" || t.post.kind === pick);
 
   return (
     <div className="rv-pane">
       <div className="side-box rvbox">
         {me ? (
-          <WriteBox cafeId={cafeId} me={me} />
+          <WriteBox cafeId={cafeId} me={me} onPosted={posted} />
         ) : (
           <>
             <p className="side-note">리뷰는 로그인하면 쓸 수 있어요.</p>
@@ -542,7 +606,7 @@ export default function Reviews({
       </div>
       {sub === "blog" ? (
         <BlogTab cafeId={cafeId} />
-      ) : !threads.length ? (
+      ) : !all.length ? (
         <p className="rv-none center">아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</p>
       ) : (
         <>
@@ -567,7 +631,7 @@ export default function Reviews({
           <div className="seg small" role="tablist" aria-label="리뷰 보기">
             {["전체", ...KINDS].map((k) => (
               <button key={k} type="button" className={pick === k ? "on" : ""} onClick={() => setPick(k)}>
-                {k} {k === "전체" ? threads.length : count[k]}
+                {k} {k === "전체" ? all.length : count[k]}
               </button>
             ))}
           </div>
@@ -580,10 +644,20 @@ export default function Reviews({
           {shown.map((t) => (
             <div key={t.post.id} className="rv-thread">
               <Card r={t.post} replies={t.replies.length} />
-              {t.replies.map((r) => (
-                <Card key={r.id} r={r} reply />
-              ))}
-              {me && <WriteBox cafeId={cafeId} parentId={t.post.id} me={me} />}
+              {t.replies.length > 0 && (
+                <button
+                  type="button"
+                  className="rv-more-replies"
+                  aria-expanded={!!open[t.post.id]}
+                  onClick={() => setOpen((o) => ({ ...o, [t.post.id]: !o[t.post.id] }))}
+                >
+                  {open[t.post.id] ? "댓글 접기" : `+${t.replies.length}건의 댓글`}
+                </button>
+              )}
+              {open[t.post.id] && t.replies.map((r) => <Card key={r.id} r={r} reply />)}
+              {me && !t.post.id.startsWith("pending-") && (
+                <WriteBox cafeId={cafeId} parentId={t.post.id} me={me} onPosted={posted} />
+              )}
             </div>
           ))}
         </>
