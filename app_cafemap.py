@@ -40,6 +40,7 @@ from common import favwork  # 스토리 줄 '내가 관심있는 작품' (11/18)
 from common import cookie_bridge   # 브라우저 로그인 쿠키 → 서버 (배포에서 st.context.cookies 에 안 옴, 11/18)
 from common import links as links_check   # 참고 웹사이트 확인 (11/18 안정성)
 from common import dates as pdates   # 기간 표기: 상시 · 기간 확인 필요 (11/18 안정성)
+from common import rank as home_rank   # 홈 '실시간 인기 급상승' 규칙 — 웹 lib/rank.ts 와 같음 (11/20)
 from common import locate as my_place   # 앱 안의 locate() (주소 → 좌표) 와 이름이 겹쳐서 따로 부른다
 from common.schema import CafeEntry
 from common import storage as storage_mod
@@ -48,7 +49,7 @@ from common.storage import Storage, StorageWriteError
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent
-TODAY = date.today()
+TODAY = home_rank.today_kst()     # 한국 날짜 (11/20: 서버가 UTC 면 00~09시에 어제로 보여 웹과 상태가 달랐다)
 MAP_HEIGHT = 620
 # 제목 로고: 기본 로고(logo.png) 하나로 고정 (11/19 요청: 민트 로고 → 디자인 시스템의 '기본 로고', 크기는 그대로)
 LOGOS = ["logo.png"]
@@ -2225,9 +2226,6 @@ LIST_PAGE = 24         # 리스트 보기에서 처음 보여 줄 카드 수 (4�
 
 
 # ================================================================ 홈 (11/18 요청)
-HOME_WEEK_DAYS = 7          # 실시간 인기: 최근 7일 북마크·리뷰
-
-
 def _created_map() -> dict[str, str]:
     """팝업별 처음 등록한 시각 (첫 기록)."""
     out: dict[str, str] = {}
@@ -2238,18 +2236,9 @@ def _created_map() -> dict[str, str]:
     return out
 
 
-def _recent(rows: list[dict], days: int) -> list[dict]:
-    since = (datetime.now().astimezone() - timedelta(days=days)).isoformat()
-    return [r for r in rows if str(r.get("updated_at") or "") >= since]
-
-
 def _home_rank(live: list[dict]) -> list[dict]:
-    """실시간 인기 급상승: 최근 7일 북마크 × 2 + 리뷰·답글 수, 같으면 전체 기간 점수. 0점은 오픈 임박 순으로 채운다."""
-    frows, rrows = favs.current_rows(), reviews.current_rows()
-    f7, r7 = favorite.counts(_recent(frows, HOME_WEEK_DAYS)), review.counts(_recent(rrows, HOME_WEEK_DAYS))
-    fa, ra = favorite.counts(frows), review.counts(rrows)
-    score = lambda e: (f7.get(e, 0) * 2 + r7.get(e, 0), fa.get(e, 0) * 2 + ra.get(e, 0))
-    return sorted(live, key=lambda r: (tuple(-x for x in score(str(r["entry_id"]))), str(r.get("start_date") or "")))
+    """실시간 인기 급상승 순서. 규칙은 common/rank.py 한곳 (웹 lib/rank.ts 와 같은 시험 samples/rank_cases.json, 11/20)."""
+    return home_rank.order(live, home_rank.scores(favs.current_rows(), reviews.current_rows()))
 
 
 def _is_reserve(r: dict) -> bool:

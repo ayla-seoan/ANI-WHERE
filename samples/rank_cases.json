@@ -1,0 +1,31 @@
+{
+  "_about": "홈 '실시간 인기 급상승 랭킹' 규칙 시험 (common/rank.py · web/lib/rank.ts 가 둘 다 이 답을 내야 한다). 추가만 한다.",
+  "cases": [
+    {
+      "name": "시간대 섞임 · 오래된 원글의 최근 답글 · 숨은 답글 · 같은 날 오픈",
+      "now": "2026-11-20T03:00:00+00:00",
+      "favorites": [
+        {"entry_id": "u1:pa", "cafe_id": "pa", "updated_at": "2026-11-19T10:00:00+00:00"},
+        {"entry_id": "u1:pb", "cafe_id": "pb", "updated_at": "2026-11-13T11:00:00+09:00"},
+        {"entry_id": "u2:pd", "cafe_id": "pd", "updated_at": "2026-11-01T00:00:00+00:00"}
+      ],
+      "reviews": [
+        {"entry_id": "r1", "cafe_id": "pc", "parent_id": "", "updated_at": "2026-10-01T00:00:00+00:00"},
+        {"entry_id": "r2", "cafe_id": "pc", "parent_id": "r1", "updated_at": "2026-11-19T00:00:00+00:00"},
+        {"entry_id": "r3", "cafe_id": "pe", "parent_id": "gone", "updated_at": "2026-11-19T00:00:00+00:00"},
+        {"entry_id": "r4", "cafe_id": "pd", "parent_id": "", "updated_at": "2026-11-18T09:00:00"}
+      ],
+      "popups": [
+        {"id": "pe", "start": "2026.11.03"},
+        {"id": "pz", "start": "2026-11-01"},
+        {"id": "pb", "start": "2026-11-01"},
+        {"id": "p0", "start": "2026-11-01"},
+        {"id": "pc", "start": "2026-11-12"},
+        {"id": "pd", "start": "2026-11-05"},
+        {"id": "pa", "start": "2026-11-10"}
+      ],
+      "scores": {"pa": [2, 2], "pb": [0, 2], "pc": [1, 2], "pd": [1, 3]},
+      "expected": ["pa", "pd", "pc", "pb", "p0", "pz", "pe"]
+    }
+  ]
+}

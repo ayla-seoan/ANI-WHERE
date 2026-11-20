@@ -99,7 +99,51 @@ export type ReviewView = {
 };
 export type ThreadView = { post: ReviewView; replies: ReviewView[] };
 
-/** 한 팝업의 리뷰를 원글 최신순, 답글은 오래된 순으로 (review.threads). 리뷰 본문은 상세 화면에서만 보인다 */
+function toView(r: Row, who: (nick: string) => Author, myName: string): ReviewView {
+  const a = who(String(r.nickname));
+  const n = Number(r.rating);
+  return {
+    id: String(r.entry_id),
+    kind: String(r.kind || ""),
+    name: a.name,
+    avatar: a.avatar,
+    body: String(r.body || ""),
+    rating: n >= 1 && n <= 5 ? n : null,
+    images: String(r.images || "")
+      .split(",")
+      .map((x) => x.trim())
+      // 예전 파일 이름(앱 static/uploads) · https 주소(Supabase Storage) · 시험용 /uploads/
+      .filter(
+        (x) =>
+          /^[\w.-]+\.(png|jpe?g|webp|gif)$/i.test(x) ||
+          /^https:\/\/[^\s"'<>]+$/.test(x) ||
+          /^\/uploads\/[0-9a-f]{12}\.(png|jpe?g|webp|gif)$/.test(x),
+      ),
+    when: String(r.updated_at || ""),
+    edited: Number(r.revision || 1) > 1,
+    mine: canEdit(r, myName),
+    parentId: String(r.parent_id || ""),
+  };
+}
+
+export type HomeReview = ReviewView & { cafeId: string };
+
+/** 홈 '꿀팁 가득! 실시간 후기 모음' (앱 _home_reviews, 11/18 요청): 지금 있는 팝업의 원글(답글 빼고 · 본문 있는 것)을
+ * 사진 있는 리뷰 먼저, 그다음 최신 순으로 limit 개. 저장소를 못 읽으면 빈 목록 */
+export async function homeReviews(popupIds: Set<string>, limit = 12): Promise<HomeReview[]> {
+  try {
+    const [revRows, who] = await Promise.all([rows("reviews"), authorMap()]);
+    return current(revRows)
+      .filter((r) => !String(r.parent_id || "") && popupIds.has(String(r.cafe_id)) && String(r.body || "").trim())
+      .map((r) => ({ ...toView(r, who, ""), cafeId: String(r.cafe_id) }))
+      .sort((a, b) => Number(b.images.length > 0) - Number(a.images.length > 0) || b.when.localeCompare(a.when))
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+/** 한 팝업의 리뷰를 원글 최신순, 답글은 오래된 순으로 (review.threads). 리뷰 본문은 상세 화면과 홈 후기 모음에서만 보인다 */
 export async function threadsFor(cafeId: string, myName: string): Promise<ThreadView[]> {
   // 리뷰 · 회원 이름표를 함께 읽는다 (11/19 속도: 예전엔 차례로 → 상세 1.6초)
   const [revRows, who] = await Promise.all([rows("reviews", { cafe_id: cafeId }), authorMap()]);
@@ -115,32 +159,7 @@ export async function threadsFor(cafeId: string, myName: string): Promise<Thread
     }
     return cur ? String(cur.entry_id) : "";
   };
-  const view = (r: Row): ReviewView => {
-    const a = who(String(r.nickname));
-    const n = Number(r.rating);
-    return {
-      id: String(r.entry_id),
-      kind: String(r.kind || ""),
-      name: a.name,
-      avatar: a.avatar,
-      body: String(r.body || ""),
-      rating: n >= 1 && n <= 5 ? n : null,
-      images: String(r.images || "")
-        .split(",")
-        .map((x) => x.trim())
-        // 예전 파일 이름(앱 static/uploads) · https 주소(Supabase Storage) · 시험용 /uploads/
-        .filter(
-          (x) =>
-            /^[\w.-]+\.(png|jpe?g|webp|gif)$/i.test(x) ||
-            /^https:\/\/[^\s"'<>]+$/.test(x) ||
-            /^\/uploads\/[0-9a-f]{12}\.(png|jpe?g|webp|gif)$/.test(x),
-        ),
-      when: String(r.updated_at || ""),
-      edited: Number(r.revision || 1) > 1,
-      mine: canEdit(r, myName),
-      parentId: String(r.parent_id || ""),
-    };
-  };
+  const view = (r: Row) => toView(r, who, myName);
   const posts = new Map<string, ThreadView>();
   for (const r of mine) if (!String(r.parent_id || "")) posts.set(String(r.entry_id), { post: view(r), replies: [] });
   for (const r of mine) {

@@ -3825,3 +3825,183 @@ svg {
     transition: none !important;
   }
 }
+
+/* 홈 '꿀팁 가득! 실시간 후기 모음' (앱 .rvc, 11/20) — 좁은 카드 가로 줄, 누르면 팝업 상세 */
+.home-row > .rvc {
+  flex: 0 0 260px;
+  width: 260px;
+}
+.rvc {
+  display: block;
+  border: 1px solid #e6ecea;
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  margin-bottom: 18px;
+  background: #fff;
+  color: inherit;
+  text-decoration: none;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.rvc:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+.rvtop {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.rvth {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  flex: none;
+  border: 1px solid #eef2f1;
+}
+.rvtt {
+  min-width: 0;
+}
+.rvw {
+  font-weight: 800;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rvchips {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.rvchips span {
+  font-size: 0.68rem;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #f1f4f3;
+  color: #5b6663;
+  font-weight: 600;
+}
+.rvchips span.st.green {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+}
+.rvchips span.st.blue {
+  color: #2c5bc5;
+  background: #eaf0fc;
+}
+.rvchips span.st.red {
+  color: #d93a4a;
+  background: #fdecee;
+}
+.rvc .rvbox {
+  /* 상세 리뷰 칸(member.css .rvbox: 세로 flex)과 이름이 같아서 홈 카드 안에서는 되돌린다 */
+  display: block;
+  margin-top: 12px;
+  background: #f7f9f8;
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 120px;
+}
+.rvme {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.rvme .rv-av {
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  flex: none;
+}
+.rvwho {
+  min-width: 0;
+  flex: 1;
+}
+.rvwho > b {
+  font-size: 0.85rem;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rvs {
+  color: #f4b63f;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.rvs .off {
+  color: #dde3e1;
+}
+.rvs b {
+  color: #26302d;
+  margin-left: 4px;
+}
+.rvs .of {
+  color: #9aa5a1;
+}
+.rvdate {
+  font-size: 0.72rem;
+  color: #9aa5a1;
+  align-self: flex-start;
+  white-space: nowrap;
+}
+.rvkind {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.rvkind.visit {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+}
+.rvkind.hope {
+  color: #2c5bc5;
+  background: #eaf0fc;
+}
+.rvkind.etc {
+  color: #5b6663;
+  background: #eef0ef;
+}
+.rvbody {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #3a4542;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+.rvpics {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.rvpics .rvp {
+  flex: 1;
+  aspect-ratio: 4/3;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  background-color: #eef2f1;
+}
+@media (max-width: 640px) {
+  .home-row > .rvc {
+    flex-basis: 230px;
+    width: 230px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rvc,
+  .rvc:hover {
+    transition: none;
+    transform: none;
+  }
+}

@@ -10,7 +10,6 @@ import {
   todayKST,
   toItem,
   type Item,
-  type Popup,
 } from "@/lib/popup";
 import BookmarkPicker from "@/components/member/BookmarkPicker";
 import { HomeCard, posterBg } from "@/components/cards";
@@ -18,25 +17,17 @@ import HScroll from "@/components/HScroll";
 import RankBanner from "@/components/home/RankBanner";
 import NewSection from "@/components/home/NewSection";
 import WeekCalendar from "@/components/home/WeekCalendar";
+import ReviewSection from "@/components/home/ReviewSection";
 import EmptyState from "@/components/EmptyState";
 import { getMe, getMyFavs } from "@/lib/server/session";
-import { rankScores, type Score } from "@/lib/server/rank";
-import { EventIcon, HelpIcon, HourglassIcon, NewIcon } from "@/components/Icons";
+import { rankScores } from "@/lib/server/rank";
+import { homeReviews } from "@/lib/server/member";
+import { rankOrder, TOP_N } from "@/lib/rank";
+import { EventIcon, HelpIcon, HourglassIcon, NewIcon, RateReviewIcon } from "@/components/Icons";
 
 export const revalidate = 600;
 
 const STORY_MAX = 12;
-
-/**
- * 실시간 인기 급상승 랭킹 (5위까지) — 앱 _home_rank 와 같은 기준 (11/19 요청, lib/server/rank.ts):
- *   ① 최근 7일 점수 = 북마크 수 × 2 + 리뷰 · 답글 수  ② 같으면 전체 기간 점수  ③ 같으면 오픈이 빠른 순
- */
-function rankTop(live: Popup[], scores: Map<string, Score>): Popup[] {
-  const sc = (p: Popup) => scores.get(p.id) ?? { week: 0, all: 0 };
-  return [...live]
-    .sort((a, b) => sc(b).week - sc(a).week || sc(b).all - sc(a).all || a.start.localeCompare(b.start))
-    .slice(0, 5);
-}
 
 /** 팝업이 많은 지역 n 곳 (앱 _home_areas) */
 function topAreas(rows: Item[], n = 3): string[] {
@@ -90,7 +81,9 @@ export default async function Home() {
   const marked = live
     .filter((p) => favs.has(p.id))
     .sort((a, b) => stateOf(a, today).rank - stateOf(b, today).rank || a.end.localeCompare(b.end));
-  const top = rankTop(live, await rankScores()).map(toItem);
+  // 실시간 인기 급상승 랭킹 (5위까지): 규칙은 lib/rank.ts — 앱 common/rank.py 와 같은 시험(samples/rank_cases.json)을 통과 (11/20)
+  const [scores, reviews] = await Promise.all([rankScores(), homeReviews(new Set(popups.map((p) => p.id)))]);
+  const top = rankOrder(live, scores).slice(0, TOP_N).map(toItem);
   const fresh = [...liveItems].sort((a, b) => b.created.localeCompare(a.created));
   const monday = mondayOf(today);
   const weekItems = popups.filter((p) => p.end && p.end >= monday && p.end <= addDays(monday, 6)).map(toItem);
@@ -188,6 +181,10 @@ export default async function Home() {
       ) : (
         <div className="home-empty">곧 열리는 팝업 중 사전예약을 받는 곳이 없어요.</div>
       )}
+
+      {/* 꿀팁 가득! 실시간 후기 모음 (앱 _home_reviews, 11/20 웹에 추가) */}
+      <HomeHead title="꿀팁 가득! 실시간 후기 모음" icon={<RateReviewIcon />} />
+      <ReviewSection reviews={reviews} popups={new Map(popups.map((p) => [p.id, toItem(p)]))} today={today} />
     </div>
   );
 }
