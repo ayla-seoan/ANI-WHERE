@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       .map((p) => ({ p, d: km(here, [p.lat as number, p.lng as number]) }))
       .sort((a, b) => a.d - b.d)
       .slice(0, rules.near.max ?? 3)
-      .map(({ p, d }) => ({ id: nearId(today, p.id), cafeId: p.id, dist: distText(d), work: p.work, cafe: p.name, poster: p.images[0] || "" }));
+      .map(({ p, d }) => ({ id: nearId(today, p.id), cafeId: p.id, dist: distText(d), work: p.work, cafe: p.name, poster: p.images[0] || "", area: p.area, city: p.city }));
   } else {
     items = live
       .filter((p) => p.end >= today && diffDays(today, p.start) <= 3)
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
           -(a.p.rating?.avg ?? 0) - -(b.p.rating?.avg ?? 0) || -(a.p.rating?.n ?? 0) - -(b.p.rating?.n ?? 0) || a.d - b.d,
       )
       .slice(0, 3)
-      .map(({ p, d }) => ({ id: pickId(today, p.id), cafeId: p.id, dist: distText(d), work: p.work, cafe: p.name, poster: p.images[0] || "" }));
+      .map(({ p, d }) => ({ id: pickId(today, p.id), cafeId: p.id, dist: distText(d), work: p.work, cafe: p.name, poster: p.images[0] || "", area: p.area, city: p.city }));
   }
   return NextResponse.json({ enabled: true, km: NEAR_KM, items }, { headers: { "Cache-Control": "no-store" } });
 }

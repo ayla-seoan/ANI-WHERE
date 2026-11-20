@@ -51,6 +51,7 @@ export default async function CalendarPage({ searchParams }: Props) {
   const [laneH, top, minH] = [23, 32, 86];
 
   // 가운데 칸: 북마크 · 다녀온(내가 쓴 다녀온 후기) · 최근 본 (최근 본 것은 이 브라우저에 남은 목록으로)
+  const byId = new Map(popups.map((p) => [p.id, p])); // 알림 내역의 지역 칩 (11/20)
   const live = popups.filter((p) => !p.end || p.end >= today);
   const toKeep = (p: (typeof popups)[number]): KeepItem => ({
     id: p.id,
@@ -59,6 +60,8 @@ export default async function CalendarPage({ searchParams }: Props) {
     start: p.start,
     end: p.end,
     poster: p.images[0] || "",
+    area: p.area,
+    city: p.city,
   });
   const favItems = live
     .filter((p) => fav.has(p.id))
@@ -110,6 +113,8 @@ export default async function CalendarPage({ searchParams }: Props) {
       cafe: h.e.cafeName,
       cafeId: h.e.cafeId,
       poster: h.e.poster,
+      area: byId.get(h.e.cafeId)?.area || "",
+      city: byId.get(h.e.cafeId)?.city || "",
       why,
     };
   });
