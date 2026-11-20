@@ -8554,7 +8554,7 @@ def _ask_chat_body(prefix: str, log_height: int, in_dialog: bool = False) -> Non
                         f'<div class="apc-cafe">{escape(card["cafe"])}</div>'
                         f'<div class="apc-addr">'
                         + (f'<span class="apc-area" style="background:linear-gradient({card["area_bg"]}33,{card["area_bg"]}33),#fff;'
-                           f'color:{_darken(card["area_bg"])};border:1.5px solid {_darken(card["area_bg"])}">{escape(card["area"])}</span>'
+                           f'color:{_darken(card["area_bg"])};border:0.75px solid {_darken(card["area_bg"])}">{escape(card["area"])}</span>'
                            if card.get("area") else "")
                         + f'{escape(card["address"])}</div>'
                         f'<div class="apc-date">{escape(card["dates"])}</div></div></div>', unsafe_allow_html=True)
