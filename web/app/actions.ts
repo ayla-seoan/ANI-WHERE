@@ -267,19 +267,20 @@ export async function reviewCreateAction(_: FormState, f: FormData): Promise<For
   const rating = kind === RATED_KIND && r >= 1 && r <= 5 ? r : null;
   const body = str(f, "body");
   const nick = displayName(me.row);
-  // 사진 첨부는 원글만 (답글 칸은 가볍게). 다녀온 후기는 별점만 골라도, 사진만 올려도 등록할 수 있다
-  const photos = parentId ? [] : reviewPhotos(f, MAX_IMAGES);
+  // 사진 첨부는 원글 · 답글 모두 (11/20 답글에도). 다녀온 후기는 별점만 골라도, 사진만 올려도 등록할 수 있다
+  const photos = reviewPhotos(f, MAX_IMAGES);
   if (typeof photos === "string") return { error: photos };
   const errors = validateReview(body, nick, kind === RATED_KIND && (rating !== null || photos.length > 0));
   if (errors.length) return { error: errors[0] };
   try {
-    const saved: string[] = [];
-    for (const p of photos) saved.push(await saveImage(p, "review"));
+    // 사진은 한꺼번에 (위치정보 지우기 + 올리기를 한 장씩 기다리지 않는다, 11/20 등록 속도)
+    const saved = await Promise.all(photos.map((p) => saveImage(p, "review")));
     await append("reviews", toReviewRow(cafeId, body, nick, kind, parentId, rating, saved));
   } catch (e) {
     return { error: say(e) };
   }
-  revalidatePath(`/popup/${cafeId}`);
+  // revalidatePath 는 부르지 않는다 (11/20): 부르면 저장 응답에 상세 화면 전체를 다시 그려 실어 보내 1초를 넘겼다.
+  // 화면은 브라우저가 바로 새 글을 붙여 보여 주고(Reviews 의 pending), 뒤에서 router.refresh() 로 맞춘다
   return { ok: parentId ? "답글을 남겼습니다." : "리뷰를 남겼습니다." };
 }
 
@@ -300,27 +301,26 @@ export async function reviewEditAction(_: FormState, f: FormData): Promise<FormS
   const payload: Row = {};
   for (const k of ["cafe_id", "parent_id", "kind", "nickname", "body", "rating", "images"]) payload[k] = cur[k] ?? "";
   payload.body = body.trim();
-  // 사진 (원글만): 있던 사진은 '남기기' 를 푼 것만 빼고, 남은 자리만큼 새 사진을 더한다
+  // 사진 (원글 · 답글 모두, 11/20): 있던 사진은 '남기기' 를 푼 것만 빼고, 남은 자리만큼 새 사진을 더한다
   const had = String(cur.images || "")
     .split(",")
     .map((x) => x.trim())
     .filter(Boolean);
-  const keep = isReply ? had : had.filter((x) => f.getAll("keep").map(String).includes(x));
-  const photos = isReply ? [] : reviewPhotos(f, MAX_IMAGES - keep.length);
+  const keep = had.filter((x) => f.getAll("keep").map(String).includes(x));
+  const photos = reviewPhotos(f, MAX_IMAGES - keep.length);
   if (typeof photos === "string") return { error: photos };
   if (!isReply) {
     payload.kind = kind;
     payload.rating = kind === RATED_KIND && rating ? String(rating) : ""; // 종류를 바꾸면 별점은 비운다
   }
   try {
-    const added: string[] = [];
-    for (const p of photos) added.push(await saveImage(p, "review"));
-    if (!isReply) payload.images = [...keep, ...added].join(",");
+    const added = await Promise.all(photos.map((p) => saveImage(p, "review")));
+    payload.images = [...keep, ...added].join(",");
     await append("reviews", payload, id);
   } catch (e) {
     return { error: say(e) };
   }
-  revalidatePath(`/popup/${cur.cafe_id}`);
+  // 등록과 같이 revalidatePath 없이 (화면은 브라우저가 router.refresh() 로 맞춘다)
   return { ok: "수정했습니다." };
 }
 

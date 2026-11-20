@@ -430,3 +430,69 @@ def test_14_디자인_시스템_페이지는_로그인_없이_열린다(page: Pa
     expect(page.locator(".ds-comp")).to_have_count(5)
     assert page.evaluate("document.documentElement.scrollWidth") <= page.viewport_size["width"]
     expect(page.locator(".aw-foot a", has_text="디자인 시스템")).to_be_visible()
+
+
+# ------------------------------------------------------------------ 15. 대댓글 (11/20)
+def test_15_대댓글은_ㄴ_표시_사진_첨부_접어_두기(page: Page, app_url, data_dir):
+    """리뷰 등록은 빨라야 하고(조각만 다시 그림), 답글은 'ㄴ' 표시 · 사진 첨부 · '+N건의 댓글' 로 접었다 펼친다."""
+    import time as _t
+    sign_up(page, app_url)
+    open_list(page, app_url)
+    target = pick_cafe(data_dir)
+    open_detail(page, target["entry_id"])
+    text = "e2e 대댓글 확인용 원글"
+    send = page.get_by_role("button", name="리뷰 등록")
+    for _ in range(3):
+        wait_idle(page)
+        body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
+        body.fill(text)
+        body.press("Tab")
+        wait_idle(page)
+        try:
+            expect(send).to_have_count(1, timeout=8000)
+            expect(send).to_be_enabled(timeout=8000)
+            break
+        except AssertionError:
+            continue
+    t0 = _t.perf_counter()
+    send.click()
+    expect(page.locator('[data-testid="stMarkdownContainer"]', has_text=text).first).to_be_visible(timeout=LONG)
+    page.wait_for_function("() => !document.querySelector('[data-testid=\"stStatusWidget\"]')", timeout=LONG,
+                           polling=50)
+    took = _t.perf_counter() - t0
+    print(f"리뷰 등록 → 카드가 보이고 다시 그리기가 끝날 때까지 {took:.2f}초 (임시 로컬 저장소)")
+    wait_idle(page)
+
+    # 답글: 칸을 누르면 '+ 사진 첨부' 가 보이고, 사진과 함께 등록할 수 있다
+    th = page.locator('[class*="st-key-rpbox_"]').first
+    reply_box = th.get_by_placeholder("답글을 남겨 주세요")
+    reply_box.click()
+    th.get_by_role("button", name="+ 사진 첨부").click()
+    wait_idle(page)
+    th = page.locator('[class*="st-key-rpbox_"]').first
+    th.locator('input[type="file"]').set_input_files(
+        str(Path(__file__).resolve().parents[2] / "static" / "default_poster.png"))
+    wait_idle(page)
+    reply_box = th.get_by_placeholder("답글을 남겨 주세요")
+    reply_box.fill("e2e 사진 붙인 대댓글")
+    reply_box.press("Tab")
+    wait_idle(page)
+    th.get_by_role("button", name="답글 등록").click()
+    wait_idle(page)
+    # 방금 단 답글은 펼쳐져 보이고, 앞에 'ㄴ' · 사진이 붙는다
+    expect(page.get_by_text("e2e 사진 붙인 대댓글")).to_be_visible(timeout=LONG)
+    expect(page.locator(".rv-re").first).to_have_text("ㄴ")
+    fold = page.get_by_role("button", name="댓글 접기")
+    expect(fold).to_be_visible(timeout=LONG)
+    stored = [json.loads(json.dumps(r)) for r in json.loads((data_dir / "reviews.json").read_text(encoding="utf-8"))]
+    reply = next(r for r in stored if r.get("body") == "e2e 사진 붙인 대댓글")
+    assert reply["parent_id"] and reply["images"], reply
+    # 접으면 '+1건의 댓글' 만 남고, 누르면 다시 아래로 보인다
+    fold.click()
+    wait_idle(page)
+    expect(page.get_by_text("e2e 사진 붙인 대댓글")).to_have_count(0, timeout=LONG)
+    more = page.get_by_role("button", name="+1건의 댓글")
+    expect(more).to_be_visible(timeout=LONG)
+    more.click()
+    wait_idle(page)
+    expect(page.get_by_text("e2e 사진 붙인 대댓글")).to_be_visible(timeout=LONG)

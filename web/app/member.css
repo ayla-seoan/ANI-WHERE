@@ -934,6 +934,40 @@ a.ntf-item:hover {
   padding-top: 10px;
   border-top: 1px dashed #e6ecea;
 }
+/* 대댓글 (11/20): 앞에 'ㄴ' 표시 · 조금 안쪽으로. 처음엔 '+N건의 댓글' 로 접어 둔다 */
+.rv-re {
+  color: #6b7673;
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-right: 2px;
+}
+.rv-card.is-reply {
+  padding-left: 8px;
+}
+.rv-more-replies {
+  display: block;
+  margin: 8px 0 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--accent-deep);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rv-more-replies + .rv-card {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed #e6ecea;
+}
+/* 방금 쓴 글 (저장됐고 새 목록을 받는 중) */
+.rv-card.is-pending {
+  opacity: 0.75;
+}
+/* 답글 칸 '+ 사진 첨부' 는 칸을 눌러 열었을 때만 */
+.write.reply:not(.open) .pic-btn {
+  display: none;
+}
 .rv-head {
   display: flex;
   align-items: center;

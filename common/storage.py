@@ -281,12 +281,23 @@ class Storage:
     def append(self, payload: dict[str, Any], entry_id: str | None = None,
                status: str = "active") -> dict:
         """새 등록 또는 수정. 항상 새 행이 쌓인다."""
-        rows = self._fresh_rows()          # 번호(revision)는 늘 새로 읽어서 매긴다 (기억한 값으로 매기면 겹칠 수 있음)
-        entry_id = entry_id or uuid.uuid4().hex[:10]
-        revision = max(
-            [int(r.get("revision", 0)) for r in rows if str(r.get("entry_id")) == entry_id],
-            default=0,
-        ) + 1
+        key = self._cache_key()
+        if entry_id is None and key is not None:
+            # 새 글은 새 번호라 revision 이 늘 1 — 원격 표 전체를 다시 읽지 않는다 (11/20 리뷰 등록 속도: 읽기만 0.3~0.6초).
+            # 기억해 둔 표가 있으면 거기에 이번 기록을 붙여 바로 보이게 한다 (없으면 다음 읽기 때 새로 읽음)
+            with _CACHE_LOCK:
+                hit = _READ_CACHE.get(key)
+            now = time.time()
+            fresh = hit and now - hit[0] < CACHE_SECONDS and not _past_refresh(hit[0], now)
+            rows = [dict(r) for r in hit[1]] if fresh else None
+            entry_id, revision = uuid.uuid4().hex[:10], 1
+        else:
+            rows = self._fresh_rows()      # 수정은 번호(revision)를 늘 새로 읽어서 매긴다 (기억한 값으로 매기면 겹칠 수 있음)
+            entry_id = entry_id or uuid.uuid4().hex[:10]
+            revision = max(
+                [int(r.get("revision", 0)) for r in rows if str(r.get("entry_id")) == entry_id],
+                default=0,
+            ) + 1
 
         record = {k: "" for k in self.headers}
         record.update(payload)
@@ -297,19 +308,19 @@ class Storage:
             "status": status,
             "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         })
-        for key in ("perks", "goods"):
-            if isinstance(record.get(key), list):
-                record[key] = ", ".join(record[key])
+        for col in ("perks", "goods"):
+            if isinstance(record.get(col), list):
+                record[col] = ", ".join(record[col])
 
         if self.mode == "sheets" and self._ws is not None:
             self._ws.append_row([str(record.get(h, "")) for h in self.headers])
         elif self.mode == "supabase" and self._sb is not None:
             self._sb_insert([record])      # 실패하면 StorageWriteError. 로컬로 대신 쓰지 않는다
         else:
+            rows = self._read_local() if rows is None else rows
             rows.append(record)
             self._write_local(rows)
-        key = self._cache_key()
-        if key is not None:                # 방금 읽은 것 + 이번 기록으로 기억을 바로 고친다
+        if key is not None and rows is not None:   # 방금 읽은(또는 기억한) 것 + 이번 기록으로 기억을 바로 고친다
             with _CACHE_LOCK:
                 _READ_CACHE[key] = (time.time(), rows + [record])
         return record
