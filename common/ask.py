@@ -182,10 +182,17 @@ def parse(question: str, rows: list[dict], today: date) -> Query:
         if (nc in nq) if len(nc) > 2 else _word_at_start(c, q):
             query.characters.append(c)
 
-    # 지역: 동네 사전(홍대·성수…) + 데이터에 나오는 시 이름
+    # 지역: 동네 사전(홍대·성수…) + 데이터에 나오는 시 이름 + 대한민국 시·도 · 시·군 · 구 (11/20, geo.kr_places)
     places = set(geo.GAZETTEER) | {geo.city_name(str(r.get("address") or "")) for r in rows}
+    kr = geo.kr_places(q, loose=frozenset(places))
     for p in sorted((p for p in places if p and len(p) >= 2), key=len, reverse=True):
         if p in q and not any(p in x for x in query.places):
+            if p in geo.KR_CITY_SET and p not in kr:
+                continue          # 시·군 이름이 다른 낱말 속에 있을 뿐 ('고양이' 의 '고양') → 지역 아님
+            query.places.append(p)
+    named = [_norm(x) for x in query.works + query.characters]
+    for p in kr:              # 사전에 없는 시·군 ('태백' '김천' …) · 시·도 ('경북')
+        if not any(p in x or x in p for x in query.places) and not any(_norm(p) in n for n in named):
             query.places.append(p)
 
     query.window, query.window_label = _window(q, today)
@@ -224,7 +231,7 @@ def _place_match(place: str, row: dict) -> bool:
     addr = str(row.get("address") or "")
     if place in addr or place in str(row.get("cafe_name") or ""):
         return True
-    if place in (geo.area_name(addr), geo.city_name(addr)):
+    if place in (geo.area_name(addr), geo.city_name(addr)) or geo.in_province(place, addr):
         return True
     district = geo.DISTRICT_OF.get(place, "")       # '홍대' → '서울 마포구'
     return bool(district) and _norm(district) in _norm(addr)
@@ -362,19 +369,63 @@ def relax_hint(query: Query, rows: list[dict], today: date) -> str:
     return (" " + " · ".join(tips[:2]) + ".") if tips else ""
 
 
+def empty_places(query: Query, rows: list[dict], today: date) -> list[str]:
+    """질문 속 지역 중 (다른 조건 없이도) 지금 · 앞으로 팝업이 하나도 없는 곳 (11/20 요청: '아직 포항에 팝업이 없어요')."""
+    return [p for p in query.places if not search(Query(places=[p]), rows, today)]
+
+
+def no_place_text(places: list[str]) -> str:
+    return f"아직 {'·'.join(places)}에 팝업이 없어요."
+
+
 def count_answer(query: Query, n: int, rows: list[dict], today: date) -> str:
     cond = phrase(query) or ("'" + "', '".join(query.words) + "' 이(가) 들어간")
     if n:
         return f"네, {cond} 팝업이 {n}건 있어요." + (" 아래에 5건까지 보여 드려요." if n > 5 else "")
+    empty = empty_places(query, rows, today)
+    if empty:
+        return no_place_text(empty) + relax_hint(query, rows, today)
     return f"현재 진행하는 팝업이 없어요. ({cond} 조건으로 찾았어요.)" + relax_hint(query, rows, today)
+
+
+def pii_note(question: str) -> str:
+    """질문에 민감한 개인정보가 들어 있으면 '넣을 수 없어요' 한 줄 (11/20 요청). 이미 ●로 가린 질문이면 '개인정보'."""
+    kinds = list(dict.fromkeys(f.kind for f in guard.scan(question)))
+    if not kinds and re.search(r"●{4,}", question or ""):
+        kinds = ["개인정보"]
+    if not kinds:
+        return ""
+    name = "·".join(kinds)
+    last = name[-1]
+    josa = "은" if "가" <= last <= "힣" and (ord(last) - 0xAC00) % 28 else "는"
+    return f"{name}{josa} 민감한 개인정보라 넣을 수 없어요. 저장하거나 보내지 않고 가린 뒤에 찾았어요."
 
 
 def answer(question: str, rows: list[dict], today: date, version: str | None = None,
            ctx: dict | None = None) -> Answer:
     """ctx: {'loc': {'lat','lng'} | None, 'ratings': {cafe_id: (평균, 개수)}, 'favs': {cafe_id: 북마크 수}}"""
+    note = pii_note(question)                # 가리기 전에 본다 (가린 뒤에는 무엇이었는지 모른다)
     question = guard.mask(question.strip())[:MAX_QUESTION]
+    out = _answer(question, rows, today, version, ctx)
+    if note:
+        if out.query.intent == "unknown":    # 개인정보 말고는 물어본 게 없음 → '못 알아들었어요' 대신
+            out.query.intent = "pii"         # (화면은 'unknown' 이면 예시 상자를 그려서 이 문장이 안 보인다)
+            out.text = note.replace(" 저장하거나 보내지 않고 가린 뒤에 찾았어요.", " 저장하거나 보내지 않아요.") + \
+                "\n팝업은 작품 이름 · 장소 · 날짜로 물어봐 주세요."
+        else:
+            out.text = note + "\n" + out.text
+            out.summary = note + "\n" + out.summary if out.summary else out.summary
+    return out
+
+
+def _answer(question: str, rows: list[dict], today: date, version: str | None, ctx: dict | None) -> Answer:
     special = intent_answer(question, rows, today, ctx or {})
     if special is not None:
+        # 추천 · 곧 끝나는 · 내 주변 같은 질문도, 그 지역에 팝업이 아예 없으면 '아직 ○○에 팝업이 없어요'
+        if not special.hits and special.query.places and special.query.intent not in _ME_INTENTS:
+            empty = empty_places(special.query, rows, today)
+            if empty:
+                special.text = no_place_text(empty)
         return special
     query, all_hits = retrieve(question, rows, today, k=None)
     ok, unknown = understood(query, rows)
@@ -597,7 +648,8 @@ def intent_answer(question: str, rows: list[dict], today: date, ctx: dict) -> "A
         live.sort(key=lambda r: (-rating(r)[0], -rating(r)[1], -favs.get(eid(r), 0), str(r.get("end_date") or "")))
         rated = any(rating(r)[1] for r in live)
         why = "별점 높은 순 → 리뷰 많은 순" if rated else "아직 별점이 없어 북마크 많은 순"
-        return _done(query, live, f"{cond_txt}지금 갈 수 있는 팝업을 {why}으로 골랐어요.", intent)
+        # 몇 건을 골랐는지 말한다 (11/20 요청: '지금 갈 수 있는 5건의 팝업을 …') — 카드는 5건까지(_done limit)
+        return _done(query, live, f"{cond_txt}지금 갈 수 있는 {min(len(live), 5)}건의 팝업을 {why}으로 골랐어요.", intent)
 
     if intent == "ending":
         live = [r for r in _filtered(query, rows, today)
@@ -770,7 +822,8 @@ def _rank_answer(intent: str, question: str, query: Query, rows: list[dict], tod
 
 def find(question: str, rows: list[dict], today: date, ctx: dict | None = None) -> tuple[Query, list[Hit]]:
     """AI 없이 찾기만: 자주 묻는 질문 규칙(의도) → 없으면 검색어 해석. 평가(scripts/eval_ask.py)가 쓴다."""
-    special = intent_answer(guard.mask(question.strip())[:MAX_QUESTION], rows, today, ctx or {})
+    question = guard.mask(question.strip())[:MAX_QUESTION]   # 검색도 가린 질문으로 (answer 와 같게, 11/20)
+    special = intent_answer(question, rows, today, ctx or {})
     if special is not None:
         return special.query, special.hits
     return retrieve(question, rows, today)

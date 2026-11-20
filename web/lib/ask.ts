@@ -8,6 +8,8 @@
 // 앱과 다른 점: 북마크 수 · 블로그 글 수는 공개 데이터에 없어서, 그 순서가 필요한 질문은 별점 · 곧 끝나는 순으로 대신하고 그렇게 말한다.
 
 import type { Item } from "./popup";
+import { mask, scan } from "./guard";
+import KR from "../content/kr-regions.json";
 
 export const MAX_QUESTION = 200;
 export const CARD_MAX = 5;
@@ -200,9 +202,51 @@ const DISTRICT_OF: Record<string, string> = {
   스타필드: "경기 하남시",
 };
 
+// ---- 대한민국 시·도 · 시·군 · 구 이름 (common/geo.py kr_places 와 같게, 11/20). 원본 common/kr_regions.json
+const KR_PROVINCES = KR.provinces as Record<string, string[]>;
+const KR_CITIES = [...new Set(KR.cities as string[])];
+const KR_SUFFIX_ONLY = new Set(KR.suffix_only as string[]);
+export const KR_CITY_SET = new Set(KR_CITIES);
+// 짧은 이름 뒤에 올 수 있는 말: 끝 · 띄어쓰기 · 조사 · '팝업' 같은 말 ('고양이' 의 '고양' 은 지역이 아니다)
+const KR_TAIL = "(?=$|[^가-힣]|에서|에는|에|쪽|근처|지역|팝업|카페|역|은|는|도|엔|랑|이랑)";
+const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** 글 속 시·도 · 시·군 · 구 이름을 짧은 이름으로. loose: '시·군·구' 없이 써도 지역으로 볼 이름 (동네 사전 · 데이터에 있는 것) */
+export function krPlaces(text: string, loose: Set<string> = new Set()): string[] {
+  const t = text || "";
+  const found: [number, number, string][] = [];
+  const take = (pattern: string, name: string) => {
+    for (const m of t.matchAll(new RegExp(pattern, "g"))) {
+      const s = m.index ?? 0;
+      const e = s + m[0].length;
+      if (found.some(([a, b]) => s < b && a < e)) continue;
+      found.push([s, e, name]);
+    }
+  };
+  const names: [string, string, string][] = [];
+  for (const [short, aliases] of Object.entries(KR_PROVINCES)) {
+    for (const a of aliases) names.push([a, short, "full"]);
+    names.push([short, short, "province"]);
+  }
+  for (const c of KR_CITIES) names.push([c, c, "city"]);
+  names.sort((a, b) => b[0].length - a[0].length);
+  for (const [word, short, kind] of names) {
+    const w = reEsc(word);
+    if (kind !== "city") take(`(?<![가-힣])${w}`, short);
+    else if (KR_SUFFIX_ONLY.has(word) && !loose.has(word)) take(`(?<![가-힣])${w}(?:시|군|구)`, short);
+    else take(`(?<![가-힣])${w}(?:시|군|구|${KR_TAIL})`, short);
+  }
+  return [...new Set(found.sort((a, b) => a[0] - b[0]).map(([, , n]) => n))];
+}
+
+/** '경북' 이 '경상북도 포항시 …' 처럼 긴 이름으로 적힌 주소에도 맞는가 */
+function inProvince(place: string, address: string): boolean {
+  return (KR_PROVINCES[place] || []).some((a) => (address || "").includes(a));
+}
+
 function placeMatch(place: string, r: Item): boolean {
   if (r.address.includes(place) || r.name.includes(place)) return true;
-  if (place === r.area || place === r.city) return true;
+  if (place === r.area || place === r.city || inProvince(place, r.address)) return true;
   const district = DISTRICT_OF[place];
   return !!district && norm(r.address).includes(norm(district));
 }
@@ -252,7 +296,18 @@ export function parse(question: string, items: Item[], today: string): Query {
   const places = [...new Set([...GAZETTEER, ...items.map((r) => r.city)])]
     .filter((p) => p && p.length >= 2)
     .sort((a, b) => b.length - a.length);
-  for (const p of places) if (q.includes(p) && !query.places.some((x) => x.includes(p))) query.places.push(p);
+  const kr = krPlaces(q, new Set(places));
+  for (const p of places) {
+    if (!q.includes(p) || query.places.some((x) => x.includes(p))) continue;
+    if (KR_CITY_SET.has(p) && !kr.includes(p)) continue; // 시·군 이름이 다른 낱말 속에 있을 뿐 ('고양이' 의 '고양')
+    query.places.push(p);
+  }
+  const named = [...query.works, ...query.characters].map(norm);
+  for (const p of kr) {
+    // 사전에 없는 시·군 ('태백' '김천' …) · 시·도 ('경북')
+    if (!query.places.some((x) => x.includes(p) || p.includes(x)) && !named.some((n) => n.includes(norm(p))))
+      query.places.push(p);
+  }
 
   [query.window, query.windowLabel] = windowOf(q, today);
   const known = [...query.works, ...query.characters, ...query.places].map(norm);
@@ -367,9 +422,29 @@ function relaxHint(q: Query, items: Item[], today: string): string {
   return tips.length ? " " + tips.slice(0, 2).join(" · ") + "." : "";
 }
 
+/** 질문 속 지역 중 (다른 조건 없이도) 지금 · 앞으로 팝업이 하나도 없는 곳 (11/20: '아직 포항에 팝업이 없어요') */
+function emptyPlaces(q: Query, items: Item[], today: string): string[] {
+  const only = (p: string): Query => ({ works: [], characters: [], places: [p], window: null, windowLabel: "", words: [], intent: "" });
+  return q.places.filter((p) => !search(only(p), items, today).length);
+}
+const noPlaceText = (places: string[]) => `아직 ${places.join("·")}에 팝업이 없어요.`;
+
+/** 질문에 민감한 개인정보가 들어 있으면 '넣을 수 없어요' 한 줄 (ask.py pii_note 와 같게). 이미 ●로 가렸으면 '개인정보' */
+export function piiNote(question: string): string {
+  let kinds = [...new Set(scan(question).map((f) => f.kind))];
+  if (!kinds.length && /●{4,}/.test(question || "")) kinds = ["개인정보"];
+  if (!kinds.length) return "";
+  const name = kinds.join("·");
+  const code = name.charCodeAt(name.length - 1) - 0xac00;
+  const josa = code >= 0 && code <= 11171 && code % 28 ? "은" : "는";
+  return `${name}${josa} 민감한 개인정보라 넣을 수 없어요. 저장하거나 보내지 않고 가린 뒤에 찾았어요.`;
+}
+
 function countAnswer(q: Query, n: number, items: Item[], today: string): string {
   const cond = phrase(q) || `'${q.words.join("', '")}' 이(가) 들어간`;
   if (n) return `네, ${cond} 팝업이 ${n}건 있어요.` + (n > CARD_MAX ? ` 아래에 ${CARD_MAX}건까지 보여 드려요.` : "");
+  const empty = emptyPlaces(q, items, today);
+  if (empty.length) return noPlaceText(empty) + relaxHint(q, items, today);
   const hint = relaxHint(q, items, today);
   return hint ? `현재 진행하는 팝업이 없어요. (${cond} 조건으로 찾았어요.)${hint}` : NO_HIT;
 }
@@ -672,7 +747,10 @@ function intentAnswer(question: string, items: Item[], today: string, ctx: AskCt
     const pre = intent === "popular" ? "북마크 수는 ANI:WHERE 앱에서만 볼 수 있어서, " : "";
     // 추천은 그 순서의 상위 5곳만 — 나머지를 '더보기' 로 다 보여 주면 추천이 아니다 (11/20 요청, 앱 _done limit=5 와 같게).
     // '서울 팝업 추천해줘' 처럼 지역 · 작품 조건이 있으면 그 안에서 5곳 (filtered)
-    return done(q, intent, `${condTxt}${pre}지금 갈 수 있는 팝업을 ${why}으로 골랐어요.`, intent === "recommend" ? live.slice(0, 5) : live);
+    // 추천은 몇 건을 골랐는지 말한다 (11/20 요청: '지금 갈 수 있는 5건의 팝업을 …', 앱과 같게)
+    const picked = intent === "recommend" ? live.slice(0, 5) : live;
+    const many = intent === "recommend" ? `${picked.length}건의 ` : "";
+    return done(q, intent, `${condTxt}${pre}지금 갈 수 있는 ${many}팝업을 ${why}으로 골랐어요.`, picked);
   }
   if (intent === "ending") {
     const live = filtered(q, items, today)
@@ -708,8 +786,30 @@ export function answer(question: string, items: Item[], today: string, ctx: AskC
   const empty: Query = { works: [], characters: [], places: [], window: null, windowLabel: "", words: [], intent: "" };
   if (!qq) return done(empty, "invalid", "질문을 입력해 주세요. 예: 이번 주말 성수에서 하는 팝업 있어?");
   if (qq.length < 2) return done(empty, "invalid", "질문이 너무 짧아요. 작품 이름이나 지역을 함께 적어 주세요.");
+  const note = piiNote(qq);
+  // 개인정보는 가린 뒤에 찾는다 (ask.py answer 와 같게 — 대화창은 가리지 않은 질문을 넘겨서 숫자가 낱말로 잡혀 0건이었다)
+  const out = answerRules(mask(qq), items, today, ctx);
+  if (!note) return out;
+  if (out.query.intent === "unknown") {
+    // 개인정보 말고는 물어본 게 없음 → '못 알아들었어요' 예시 상자 대신 이 안내 (intent 'pii')
+    const text =
+      note.replace(" 저장하거나 보내지 않고 가린 뒤에 찾았어요.", " 저장하거나 보내지 않아요.") +
+      "\n팝업은 작품 이름 · 장소 · 날짜로 물어봐 주세요.";
+    return { ...out, text, guide: false, query: { ...out.query, intent: "pii" } };
+  }
+  return { ...out, text: `${note}\n${out.text}` };
+}
+
+function answerRules(qq: string, items: Item[], today: string, ctx: AskCtx): AskResult {
   const special = intentAnswer(qq, items, today, ctx);
-  if (special) return special;
+  if (special) {
+    // 추천 · 곧 끝나는 · 내 주변 같은 질문도, 그 지역에 팝업이 아예 없으면 '아직 ○○에 팝업이 없어요'
+    if (!special.hits.length && special.query.places.length) {
+      const empty = emptyPlaces(special.query, items, today);
+      if (empty.length) return { ...special, text: noPlaceText(empty) };
+    }
+    return special;
+  }
   const q = parse(qq, items, today);
   if (!understood(q, items)) return done(q, "unknown", GUIDE_HEAD, [], { guide: true });
   const hits = search(q, items, today);

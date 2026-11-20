@@ -5,6 +5,7 @@
 //   static/guide/*.png → web/public/guide/*.webp (sharp 로 줄인다)
 //   static/{logo,logo_mint,logo2,ask_avatar,default_poster}.png → web/public/design/
 //   common/prompts/ask.v*.txt · cafe.v*.txt → web/content/prompts/ (서버가 실행 중에 파일로 읽는다 — 코드 안에 넣지 않는다)
+//   common/kr_regions.json → web/content/kr-regions.json (물어보기가 알아보는 시·도 · 시·군 · 구 이름)
 //
 // 원본이 없으면(= Vercel 처럼 web/ 만 있는 곳) 아무것도 바꾸지 않고 이미 옮겨 둔 것을 그대로 쓴다.
 // 사용: cd web && node scripts/sync_docs.mjs   (package.json 의 prebuild 가 부른다)
@@ -64,6 +65,8 @@ async function main() {
   for (const f of await fs.readdir(PROMPTS)) {
     if (/^(ask|cafe)\.v\d+\.txt$/.test(f)) await fs.copyFile(path.join(PROMPTS, f), path.join(WEB, "content", "prompts", f));
   }
+  // 대한민국 시·도 · 시·군 · 구 이름 (물어보기 '아직 ○○에 팝업이 없어요', 11/20) — 원본 common/kr_regions.json
+  await fs.copyFile(path.join(ROOT, "common", "kr_regions.json"), path.join(WEB, "content", "kr-regions.json"));
 
   // ---- 문서: 문자열로 묶기
   const privacy = await read(path.join(DOCS, "privacy-policy.md"));

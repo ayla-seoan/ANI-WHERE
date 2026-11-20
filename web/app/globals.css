@@ -1698,6 +1698,19 @@ svg {
   font-weight: 800;
   font-size: 0.78rem;
 }
+/* 물어보기 카드의 지역 배지 (11/20 요청, 홈 북마크 동그라미 지역 배지와 같은 민트) */
+.apc-area {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: #56c2a7;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1.5;
+  vertical-align: 1px;
+}
 .apn-more {
   display: block;
   width: calc(100% - 46px);
