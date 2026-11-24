@@ -36,6 +36,8 @@ class Query:
     include_ended: bool = False
     words: list[str] = field(default_factory=list)
     intent: str = ""
+    perk: bool = False                                     # '특전 · 사은품 있는' — 특전 칸이 채워진 팝업만 (11/24)
+    perk_items: list[str] = field(default_factory=list)    # '엽서 주는' — 특전 칸에 그 물건이 적힌 팝업만
 
     def describe(self) -> str:
         parts = []
@@ -47,6 +49,8 @@ class Query:
             parts.append("지역 " + ", ".join(self.places))
         if self.window_label:
             parts.append(self.window_label)
+        if self.perk:
+            parts.append("특전 " + (", ".join(self.perk_items) or "있음"))
         return " · ".join(parts) or "조건 없음 (낱말로만 찾음)"
 
 
@@ -163,6 +167,11 @@ def parse(question: str, rows: list[dict], today: date) -> Query:
         else:
             # 작품명 전체, 또는 4글자 이상 앞부분('주술회전' ← '주술회전 0')이 질문에 있으면 작품으로 본다
             hit = nw in nq or (len(nw) >= 4 and nw[:4] in nq)
+            if hit and nw not in nq:
+                # 앞부분만 말했으면 ('주술회전' ← '주술회전 사멸회유') 말한 만큼만 작품 이름으로 (답: '주술회전 팝업이 4건')
+                first = re.split(r"[\s·:×x\-]+", w.strip())[0]
+                if _norm(first) in nq and len(_norm(first)) >= 3:
+                    w, nw = first, _norm(first)
             if not hit:
                 # 작품명의 첫 낱말만 말해도 ('산리오' ← '산리오 캐릭터즈', '원피스' ← '원피스 대해적시대') 3글자 이상이면 작품으로
                 first = re.split(r"[\s·:×x\-]+", w.strip())[0]
@@ -195,6 +204,7 @@ def parse(question: str, rows: list[dict], today: date) -> Query:
         if not any(p in x or x in p for x in query.places) and not any(_norm(p) in n for n in named):
             query.places.append(p)
 
+    query.perk, query.perk_items = _perk(q)
     query.window, query.window_label = _window(q, today)
     query.include_ended = False      # 끝난 팝업은 답하지 않는다 (11/18 요청: 종료된 팝업은 어디에도 안 보이게)
     known = [_norm(x) for x in query.works + query.characters + query.places]
@@ -205,6 +215,8 @@ def parse(question: str, rows: list[dict], today: date) -> Query:
             continue
         if any(k and (k in _norm(w) or _norm(base) in k) for k in known):
             continue
+        if query.perk and (_PERK_WORD.search(w) or base in _PERK_GENERIC or any(i in w for i in query.perk_items)):
+            continue          # '특전' '사은품' '엽서' '주는' 은 특전 조건으로 이미 읽었다
         words.append(base)
     query.words = words
     return query
@@ -220,6 +232,47 @@ _STOP = {"팝업", "카페", "콜라보", "있어", "있나요", "있니", "어�
          "있는지", "궁금해", "궁금", "찾아줘", "찾아", "검색", "좀", "혹시", "정보", "언제까지", "언제부터", "몇", "개", "건"}
 _PARTICLE = re.compile(r"(?:에서|에는|에|의|은|는|이|가|을|를|도|로|으로)$")
 _DATE_WORD = re.compile(r"\d{1,2}월|\d{1,2}일|주말에?|이번주에?|이번달에?|다음주에?")
+
+
+# ------------------------------------------------------------- 특전 (11/24 요청)
+# '특전 있는 팝업' '사은품 있는 팝업' → 특전 칸이 채워진 팝업, '엽서 주는 팝업' → 특전 칸에 엽서가 적힌 팝업
+_PERK_ANY = re.compile(r"특전|사은품|증정|혜택")
+_PERK_GIVE = r"(?:주는|준다|주나요|증정|받는|받을|받고|나눠\s*주|드리는|드려요)"
+_PERK_GIVE_AT = re.compile(r"(?<![가-힣A-Za-z])" + _PERK_GIVE)        # 낱말 첫머리에서만 ('추천해줘' 의 '줘' 는 아님)
+_PERK_WORD = re.compile(r"특전|사은품|증정|혜택|^" + _PERK_GIVE)
+# 자주 나오는 특전 물건. 같은 줄은 같은 물건으로 본다 ('포카' = '포토카드')
+PERK_ITEMS = [("엽서", "포스트카드"), ("포토카드", "포카"), ("코스터",), ("스티커", "씰"), ("키링", "키홀더"), ("아크릴",),
+              ("클리어파일", "파일"), ("책갈피",), ("부채",), ("쇼핑백",), ("뱃지", "배지"), ("포스터", "브로마이드"), ("티켓",),
+              ("컵홀더",), ("카드",)]
+_PERK_ALIAS = {name: group for group in PERK_ITEMS for name in group}
+_PERK_GENERIC = {"선물", "굿즈", "뭔가", "무언가", "무엇", "뭐", "덤", "팝업", "카페"}     # 물건 이름이 아닌 말 → '특전 있는' 으로
+_PERK_FREE = re.compile(r"([가-힣A-Za-z]{2,})(?:(?:을|를)\s*|\s+)" + _PERK_GIVE)
+
+
+def _perk(q: str) -> tuple[bool, list[str]]:
+    """(특전 조건이 있나, 콕 집은 특전 물건). 물건은 '주는 · 받는' 같은 말이나 '특전 · 사은품' 과 함께 말했을 때만."""
+    any_ = bool(_PERK_ANY.search(q))
+    give = bool(_PERK_GIVE_AT.search(q))
+    if not (any_ or give):
+        return False, []
+    items: list[str] = []
+    for group in PERK_ITEMS:
+        hit = next((n for n in group if n in q), None)
+        if hit and not any(hit in x or x in hit for x in items):
+            items.append(hit)
+    m = _PERK_FREE.search(q)              # 목록에 없는 물건: '부적 주는 팝업'
+    if m and not items:
+        word = m.group(1)
+        if not _PERK_ANY.search(word) and word not in _PERK_GENERIC and word not in _STOP:
+            items.append(word)
+    return True, items
+
+
+def _perk_match(query: "Query", row: dict) -> bool:
+    perks = _norm(row.get("perks"))
+    if not perks:
+        return False
+    return all(any(_norm(n) in perks for n in _PERK_ALIAS.get(i, (i,))) for i in query.perk_items)
 
 
 def _word_at_start(name: str, q: str) -> bool:
@@ -279,6 +332,11 @@ def search(query: Query, rows: list[dict], today: date) -> list[Hit]:
                 continue
         if query.window:
             score += 2; why.append(query.window_label)
+        if query.perk:
+            if _perk_match(query, r):
+                score += 3; why.append("특전")
+            else:
+                continue          # 특전을 물었으면 특전이 적힌 팝업만
         text = _norm(" ".join(str(r.get(c) or "") for c in
                               ("work", "characters", "cafe_name", "intro", "perks", "goods", "tags")))
         extra = sum(1 for w in query.words if _norm(w) in text)
@@ -331,7 +389,8 @@ def phrase(query: Query) -> str:
     when = {"오늘(진행 중)": "지금 진행 중인"}.get(query.window_label, query.window_label)
     where = f"{'·'.join(query.places)}에서 하는" if query.places else ""
     what = " ".join(query.works + [c for c in query.characters if not any(_norm(c) in _norm(w) for w in query.works)])
-    return " ".join(x for x in (when, where, what) if x).strip()
+    perk = (f"{'·'.join(query.perk_items)} 주는" if query.perk_items else "특전 있는") if query.perk else ""
+    return " ".join(x for x in (when, where, what, perk) if x).strip()
 
 
 def understood(query: Query, rows: list[dict]) -> tuple[bool, list[str]]:
@@ -340,7 +399,7 @@ def understood(query: Query, rows: list[dict]) -> tuple[bool, list[str]]:
                           for r in rows))
     unknown = [w for w in query.words if _norm(w) not in text]
     known = [w for w in query.words if _norm(w) in text]
-    if query.works or query.characters or query.places:
+    if query.works or query.characters or query.places or query.perk:
         return True, unknown
     if query.window:
         # 날짜만 읽었는데 팝업과 상관없는 말이 섞였으면 ('오늘 날씨 어때?') 못 알아들은 것으로
@@ -351,16 +410,19 @@ def understood(query: Query, rows: list[dict]) -> tuple[bool, list[str]]:
 def relax_hint(query: Query, rows: list[dict], today: date) -> str:
     """0건일 때: 조건 하나를 빼면 몇 건인지 ('서울을 빼면 3건 있어요')."""
     tips = []
-    for field_, label in (("places", lambda q: "·".join(q.places)), ("window", lambda q: q.window_label),
+    for field_, label in (("perk", lambda q: "·".join(q.perk_items) or "특전"),
+                          ("places", lambda q: "·".join(q.places)), ("window", lambda q: q.window_label),
                           ("characters", lambda q: ", ".join(q.characters)), ("works", lambda q: ", ".join(q.works))):
         if not getattr(query, field_):
             continue
         q2 = Query(**{**query.__dict__})
         if field_ == "window":
             q2.window, q2.window_label = None, ""
+        elif field_ == "perk":
+            q2.perk, q2.perk_items = False, []
         else:
             setattr(q2, field_, [])
-        if not (q2.works or q2.characters or q2.places or q2.window):
+        if not (q2.works or q2.characters or q2.places or q2.window or q2.perk):
             continue
         n = len(search(q2, rows, today))
         if n:
@@ -565,6 +627,8 @@ def _filtered(query: Query, rows: list[dict], today: date, ongoing_only: bool = 
         if query.works and not (work and any(_norm(w) in work or work in _norm(w) for w in query.works)):
             continue
         if query.places and not any(_place_match(p, r) for p in query.places):
+            continue
+        if query.perk and not _perk_match(query, r):
             continue
         out.append(r)
     return out

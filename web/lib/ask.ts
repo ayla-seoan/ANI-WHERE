@@ -25,6 +25,10 @@ export type Query = {
   windowLabel: string;
   words: string[];
   intent: string;
+  /** '특전 · 사은품 있는' — 특전 칸이 채워진 팝업만 (11/24) */
+  perk: boolean;
+  /** '엽서 주는' — 특전 칸에 그 물건이 적힌 팝업만 */
+  perkItems: string[];
 };
 
 export type AskResult = {
@@ -139,6 +143,44 @@ const DATE_WORD = /^(?:\d{1,2}월|\d{1,2}일|주말에?|이번주에?|이번달�
 const WORD_CHAR = /[가-힣A-Za-z0-9]/;
 
 /** name 이 질문 속 낱말의 첫머리에 있는가 (뒤에 조사는 붙어도 된다). 오래된 사파리를 위해 정규식 뒤돌아보기 없이 */
+// ------------------------------------------------------------------ 특전 (11/24 요청, ask.py _perk 와 같게)
+// '특전 있는 팝업' '사은품 있는 팝업' → 특전 칸이 채워진 팝업, '엽서 주는 팝업' → 특전 칸에 엽서가 적힌 팝업
+const PERK_ANY = /특전|사은품|증정|혜택/;
+const PERK_GIVE = "(?:주는|준다|주나요|증정|받는|받을|받고|나눠\\s*주|드리는|드려요)";
+const PERK_GIVE_AT = new RegExp("(?<![가-힣A-Za-z])" + PERK_GIVE); // 낱말 첫머리에서만 ('추천해줘' 의 '줘' 는 아님)
+const PERK_WORD = new RegExp("특전|사은품|증정|혜택|^" + PERK_GIVE);
+/** 자주 나오는 특전 물건. 같은 줄은 같은 물건으로 본다 ('포카' = '포토카드') */
+const PERK_ITEMS: string[][] = [
+  ["엽서", "포스트카드"], ["포토카드", "포카"], ["코스터"], ["스티커", "씰"], ["키링", "키홀더"], ["아크릴"],
+  ["클리어파일", "파일"], ["책갈피"], ["부채"], ["쇼핑백"], ["뱃지", "배지"], ["포스터", "브로마이드"], ["티켓"],
+  ["컵홀더"], ["카드"],
+];
+const PERK_GENERIC = new Set(["선물", "굿즈", "뭔가", "무언가", "무엇", "뭐", "덤", "팝업", "카페"]);
+const PERK_FREE = new RegExp("([가-힣A-Za-z]{2,})(?:(?:을|를)\\s*|\\s+)" + PERK_GIVE);
+
+/** [특전 조건이 있나, 콕 집은 특전 물건] */
+export function perkOf(q: string): [boolean, string[]] {
+  const any = PERK_ANY.test(q);
+  if (!(any || PERK_GIVE_AT.test(q))) return [false, []];
+  const items: string[] = [];
+  for (const group of PERK_ITEMS) {
+    const hit = group.find((n) => q.includes(n));
+    if (hit && !items.some((x) => x.includes(hit) || hit.includes(x))) items.push(hit);
+  }
+  const m = q.match(PERK_FREE); // 목록에 없는 물건: '부적 주는 팝업'
+  if (m && !items.length) {
+    const word = m[1];
+    if (!PERK_ANY.test(word) && !PERK_GENERIC.has(word) && !STOP.has(word)) items.push(word);
+  }
+  return [true, items];
+}
+
+function perkMatch(q: Query, r: Item): boolean {
+  const perks = norm(r.perks || "");
+  if (!perks) return false;
+  return q.perkItems.every((i) => (PERK_ITEMS.find((g) => g.includes(i)) ?? [i]).some((n) => perks.includes(norm(n))));
+}
+
 function wordAtStart(name: string, q: string): boolean {
   const n = name.trim();
   if (!n) return false;
@@ -254,7 +296,7 @@ function placeMatch(place: string, r: Item): boolean {
 export function parse(question: string, items: Item[], today: string): Query {
   const q = question.trim();
   const nq = norm(q);
-  const query: Query = { works: [], characters: [], places: [], window: null, windowLabel: "", words: [], intent: "" };
+  const query: Query = { works: [], characters: [], places: [], window: null, windowLabel: "", words: [], intent: "", perk: false, perkItems: [] };
 
   const works = [...new Set(items.map((r) => r.work.trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
   for (let w of works) {
@@ -264,6 +306,14 @@ export function parse(question: string, items: Item[], today: string): Query {
     if (nw.length === 2) hit = wordAtStart(w, q);
     else {
       hit = nq.includes(nw) || (nw.length >= 4 && nq.includes(nw.slice(0, 4)));
+      if (hit && !nq.includes(nw)) {
+        // 앞부분만 말했으면 ('주술회전' ← '주술회전 사멸회유') 말한 만큼만 작품 이름으로 (답: '주술회전 팝업이 4건')
+        const first = w.trim().split(/[\s·:×x-]+/)[0];
+        if (nq.includes(norm(first)) && norm(first).length >= 3) {
+          w = first;
+          nw = norm(first);
+        }
+      }
       if (!hit) {
         const first = w.trim().split(/[\s·:×x-]+/)[0];
         hit = norm(first).length >= 3 && !STOP.has(norm(first)) && wordAtStart(first, q);
@@ -309,12 +359,15 @@ export function parse(question: string, items: Item[], today: string): Query {
       query.places.push(p);
   }
 
+  [query.perk, query.perkItems] = perkOf(q);
   [query.window, query.windowLabel] = windowOf(q, today);
   const known = [...query.works, ...query.characters, ...query.places].map(norm);
   for (const w of q.match(/[가-힣A-Za-z0-9]{2,}/g) || []) {
     const base = w.replace(PARTICLE, "");
     if (base.length < 2 || STOP.has(w) || STOP.has(base) || DATE_WORD.test(w) || DATE_WORD.test(base)) continue;
     if (known.some((k) => k && (norm(w).includes(k) || k.includes(norm(base))))) continue;
+    // '특전' '사은품' '엽서' '주는' 은 특전 조건으로 이미 읽었다
+    if (query.perk && (PERK_WORD.test(w) || PERK_GENERIC.has(base) || query.perkItems.some((i) => w.includes(i)))) continue;
     query.words.push(base);
   }
   return query;
@@ -348,6 +401,10 @@ export function search(query: Query, items: Item[], today: string): Item[] {
       else continue;
     }
     if (query.window) score += 2;
+    if (query.perk) {
+      if (perkMatch(query, r)) score += 3;
+      else continue; // 특전을 물었으면 특전이 적힌 팝업만
+    }
     const text = bigText(r);
     const extra = query.words.filter((w) => text.includes(norm(w))).length;
     if (extra) score += Math.min(extra, 3) * 0.5;
@@ -383,6 +440,7 @@ function describe(q: Query): string {
   if (q.characters.length) parts.push("캐릭터 " + q.characters.join(", "));
   if (q.places.length) parts.push("지역 " + q.places.join(", "));
   if (q.windowLabel) parts.push(q.windowLabel);
+  if (q.perk) parts.push("특전 " + (q.perkItems.join(", ") || "있음"));
   return parts.join(" · ");
 }
 
@@ -391,14 +449,15 @@ export function phrase(q: Query): string {
   const when = q.windowLabel === "오늘(진행 중)" ? "지금 진행 중인" : q.windowLabel;
   const where = q.places.length ? `${q.places.join("·")}에서 하는` : "";
   const what = [...q.works, ...q.characters.filter((c) => !q.works.some((w) => norm(w).includes(norm(c))))].join(" ");
-  return [when, where, what].filter(Boolean).join(" ").trim();
+  const perk = q.perk ? (q.perkItems.length ? `${q.perkItems.join("·")} 주는` : "특전 있는") : "";
+  return [when, where, what, perk].filter(Boolean).join(" ").trim();
 }
 
 function understood(q: Query, items: Item[]): boolean {
   const text = items.map(bigText).join(" ");
   const unknown = q.words.filter((w) => !text.includes(norm(w)));
   const known = q.words.filter((w) => text.includes(norm(w)));
-  if (q.works.length || q.characters.length || q.places.length) return true;
+  if (q.works.length || q.characters.length || q.places.length || q.perk) return true;
   if (q.window) return !unknown.length || known.length > 0;
   return known.length > 0;
 }
@@ -407,6 +466,7 @@ function understood(q: Query, items: Item[]): boolean {
 function relaxHint(q: Query, items: Item[], today: string): string {
   const tips: string[] = [];
   const tries: [boolean, string, Partial<Query>][] = [
+    [q.perk, q.perkItems.join("·") || "특전", { perk: false, perkItems: [] }],
     [q.places.length > 0, q.places.join("·"), { places: [] }],
     [!!q.window, q.windowLabel, { window: null, windowLabel: "" }],
     [q.characters.length > 0, q.characters.join(", "), { characters: [] }],
@@ -415,7 +475,7 @@ function relaxHint(q: Query, items: Item[], today: string): string {
   for (const [on, label, patch] of tries) {
     if (!on) continue;
     const q2 = { ...q, ...patch };
-    if (!(q2.works.length || q2.characters.length || q2.places.length || q2.window)) continue;
+    if (!(q2.works.length || q2.characters.length || q2.places.length || q2.window || q2.perk)) continue;
     const n = search(q2, items, today).length;
     if (n) tips.push(`'${label === "오늘(진행 중)" ? "지금" : label}' 조건을 빼면 ${n}건 있어요`);
   }
@@ -424,7 +484,7 @@ function relaxHint(q: Query, items: Item[], today: string): string {
 
 /** 질문 속 지역 중 (다른 조건 없이도) 지금 · 앞으로 팝업이 하나도 없는 곳 (11/20: '아직 포항에 팝업이 없어요') */
 function emptyPlaces(q: Query, items: Item[], today: string): string[] {
-  const only = (p: string): Query => ({ works: [], characters: [], places: [p], window: null, windowLabel: "", words: [], intent: "" });
+  const only = (p: string): Query => ({ works: [], characters: [], places: [p], window: null, windowLabel: "", words: [], intent: "", perk: false, perkItems: [] });
   return q.places.filter((p) => !search(only(p), items, today).length);
 }
 const noPlaceText = (places: string[]) => `아직 ${places.join("·")}에 팝업이 없어요.`;
@@ -573,6 +633,7 @@ function filtered(q: Query, items: Item[], today: string, ongoingOnly = true): I
     if (q.works.length && !(work && q.works.some((w) => work.includes(norm(w)) || norm(w).includes(work))))
       return false;
     if (q.places.length && !q.places.some((p) => placeMatch(p, r))) return false;
+    if (q.perk && !perkMatch(q, r)) return false;
     return true;
   });
 }
@@ -783,7 +844,7 @@ function intentAnswer(question: string, items: Item[], today: string, ctx: AskCt
 /** 질문 하나에 답한다 (ask.py answer 의 규칙 부분). AI 를 부르지 않고, 어디에도 보내지 않는다 */
 export function answer(question: string, items: Item[], today: string, ctx: AskCtx = {}): AskResult {
   const qq = (question || "").trim().slice(0, MAX_QUESTION);
-  const empty: Query = { works: [], characters: [], places: [], window: null, windowLabel: "", words: [], intent: "" };
+  const empty: Query = { works: [], characters: [], places: [], window: null, windowLabel: "", words: [], intent: "", perk: false, perkItems: [] };
   if (!qq) return done(empty, "invalid", "질문을 입력해 주세요. 예: 이번 주말 성수에서 하는 팝업 있어?");
   if (qq.length < 2) return done(empty, "invalid", "질문이 너무 짧아요. 작품 이름이나 지역을 함께 적어 주세요.");
   const note = piiNote(qq);
