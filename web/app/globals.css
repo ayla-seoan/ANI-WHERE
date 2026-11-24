@@ -933,6 +933,11 @@ svg {
   border-radius: 12px 0 10px 0;
   background: #26302d;
 }
+/* 오늘 종료는 빨강으로 눈에 띄게 (11/24 요청) */
+.hc .hcbadge.today,
+.hc.tall .hcbadge.today {
+  background: var(--red);
+}
 .hc.tall .hcd,
 .hc.tall .hcchips {
   display: none;
