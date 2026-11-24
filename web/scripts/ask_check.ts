@@ -138,6 +138,28 @@ function show(q: string, items: Item[], today: string, loc?: { lat: number; lng:
   assert.match(r.text, /^아직 태백에 팝업이 없어요\./);
   r = show("포항시 팝업 추천해줘", items, today);
   assert.match(r.text, /아직 포항에 팝업이 없어요/);
+
+  // 11/24: 특전 — '특전 · 사은품 있는' 은 특전 칸이 채워진 팝업만, '엽서 주는' 은 특전에 엽서가 적힌 팝업만. 지역과 함께도
+  r = show("특전 있는 팝업 찾아줘", items, today);
+  assert.ok(r.query.perk && r.hits.length > 0 && r.hits.every((h) => h.perks.trim()), "특전 있는: 특전 칸이 채워져야");
+  assert.match(r.text, /^네, 특전 있는 팝업이 \d+건 있어요\./);
+  r = show("사은품 있는 팝업 찾아줘", items, today);
+  assert.ok(r.query.perk && r.hits.length > 0 && r.hits.every((h) => h.perks.trim()), "사은품: 특전으로 읽어야");
+  r = show("엽서 주는 팝업 찾아줘", items, today);
+  assert.deepEqual(r.query.perkItems, ["엽서"]);
+  assert.ok(r.hits.every((h) => /엽서|포스트카드/.test(h.perks)), "엽서 주는: 특전에 엽서가 있어야");
+  r = show("서울 특전 있는 팝업 찾아줘", items, today);
+  assert.ok(
+    r.hits.length > 0 && r.hits.every((h) => h.perks.trim() && (h.city === "서울" || h.address.includes("서울"))),
+    "서울 + 특전",
+  );
+  r = show("포항 사은품 주는 팝업", items, today);
+  assert.match(r.text, /아직 포항에 팝업이 없어요/);
+  r = show("특전 있는 팝업 추천해줘", items, today);
+  assert.equal(r.query.intent, "recommend");
+  assert.ok(r.hits.every((h) => h.perks.trim()), "추천 + 특전");
+  r = show("팝업 추천해줘", items, today);
+  assert.ok(!r.query.perk, "'추천해줘' 의 '줘' 는 특전 조건이 아니다");
   r = show("고양이 팝업", items, today);
   assert.ok(!r.query.places.includes("고양"), "'고양이' 의 '고양' 은 지역이 아니다");
   r = show("음성 팝업", items, today);

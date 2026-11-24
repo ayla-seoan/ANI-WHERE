@@ -41,6 +41,10 @@ def grade(case: dict, query, hits) -> tuple[bool, str]:
             return False, f"다른 지역 섞임: {r.get('address')}"
         if case.get("window") and not (query.window and ask._overlaps(r, query.window)):
             return False, "날짜 조건 안 맞음"
+        if case.get("perk") and not str(r.get("perks") or "").strip():
+            return False, f"특전이 없는 팝업 섞임: {r.get('work')}"
+        if case.get("perk_item") and case["perk_item"] not in str(r.get("perks") or ""):
+            return False, f"특전에 {case['perk_item']} 이(가) 없는 팝업 섞임: {r.get('work')}"
         if case.get("ongoing") and not ask._ongoing(r, TODAY):
             return False, f"진행 중이 아닌 팝업 섞임: {r.get('work')}"
         if case.get("upcoming") and not (ask.mycal._day(r.get("start_date")) and ask.mycal._day(r.get("start_date")) > TODAY):

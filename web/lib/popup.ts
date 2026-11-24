@@ -490,6 +490,8 @@ export type Item = {
   /** 물어보기(lib/ask.ts)용: 캐릭터 · (특전 · 굿즈 · 이벤트 태그) · 공개 별점 집계 */
   characters: string;
   extra: string;
+  /** 특전 칸만 (물어보기 '특전 있는 · 엽서 주는 팝업', 11/24) */
+  perks: string;
   rating: { avg: number; n: number } | null;
 };
 
@@ -519,6 +521,7 @@ export function toItem(p: Popup): Item {
     text: searchText(p),
     characters: p.characters,
     extra: [...p.perks, ...p.goods, ...p.tags].join(" "),
+    perks: p.perks.join(" "),
     rating: p.rating,
   };
 }
