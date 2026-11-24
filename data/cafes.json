@@ -6548,5 +6548,30 @@
     "editor": "AI",
     "intro": "",
     "intro_src": ""
+  },
+  {
+    "row_id": "a451ab7aa8",
+    "entry_id": "d984e80447",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-11-24T01:47:50+00:00",
+    "cafe_name": "코엑스 B홀",
+    "work": "2026 월드웹툰페스티벌",
+    "characters": "해당 없음 (복수 작품 합동 행사)",
+    "address": "서울 강남구 영동대로 513 코엑스 B홀",
+    "lat": 37.5116,
+    "lng": 127.0595,
+    "start_date": "2026-12-02",
+    "end_date": "2026-12-06",
+    "perks": "",
+    "goods": "웹툰 팝업스토어 운영 (판매 상품 구성과 가격은 공식 사이트에 없음)",
+    "source": "AI 자동 수집",
+    "note": "대략 위치 (코엑스) | notion:422b77b7c99a8160a427f9ed26e69ca1",
+    "images": "https://yusliwxhuvjsfvfgiynk.supabase.co/storage/v1/object/public/uploads/ccf8cd49e643.jpg",
+    "tags": "사전 예약",
+    "links": "https://www.wefe.kr/ https://recal.kr/ko/c/offline",
+    "editor": "AI",
+    "intro": "문화체육관광부와 한국콘텐츠진흥원이 개최하는 글로벌 웹툰 축제\n기간 표기는 12.2 WED – 12.6 SUN\n\n[구성] 특별 기획전\n체험행사\n웹툰 팝업스토어\n월드 웹툰 어워즈 연계 프로그램\n무대 프로그램과 행사장 배치도가 공식 사이트에 별도 메뉴로 운영됨\n\n[예약] 인기 부스는 온라인 사전예약으로 운영\n\n[참여 작품] 블러디 메리\n괜찮아, 전남친!\n너 고소!\n나태 공자 노력 천재 되다\n마법학교 앞점멸 천재가 되었다\n야자 중에 소환당했습니다\n무서운 계약\n블랙 기업에도 볕이 들까요?\n\n[메인 비주얼 표시 작품] 전지적 독자 시점\n나 혼자만 레벨업\n미래의 골동품 가게\n더 그레이트\n\n※ 입장료·운영 시간·굿즈·특전·식음 안내는 공식 사이트 메인에 없다\n(출처: 2026 월드웹툰페스티벌 공식 사이트)",
+    "intro_src": "https://www.wefe.kr/"
   }
 ]
