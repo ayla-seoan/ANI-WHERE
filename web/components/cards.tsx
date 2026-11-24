@@ -101,7 +101,7 @@ export function HomeCard({
     <div className={`hc-wrap${tall ? " tall" : ""}`}>
       <Link href={`/popup/${p.id}`} className={`hc${tall ? " tall" : ""}`} prefetch={false}>
         <div className="hcp" style={posterBg(p.poster)}>
-          {badge && <span className={`hcbadge${badge.startsWith("사전예약") ? " res" : ""}`}>{badge}</span>}
+          {badge && <span className={`hcbadge${badge.startsWith("사전예약") ? " res" : badge === "오늘 종료" ? " today" : ""}`}>{badge}</span>}
           {rank ? <span className="hcrank">{rank}</span> : null}
         </div>
         <div className="hct">{p.work}</div>

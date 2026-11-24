@@ -2321,7 +2321,7 @@ def _home_card(sec: str, r: dict, rank: int | None = None, badge: str = "", tall
     with st.container(key=f"card_h{sec}_{eid}"):
         st.markdown(
             f'<div class="hc{" tall" if tall else ""}"><div class="hcp" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')">'
-            + (f'<span class="hcbadge{" res" if badge.startswith("사전예약") else ""}">{escape(badge)}</span>' if badge else "")
+            + (f'<span class="hcbadge{" res" if badge.startswith("사전예약") else " today" if badge == "오늘 종료" else ""}">{escape(badge)}</span>' if badge else "")
             + (f'<span class="hcrank">{rank}</span>' if rank else "")
             + f'</div><div class="hct">{escape(str(r.get("work") or ""))}</div>'
             f'<div class="hcd">{escape(_period(r, lambda d: f"{d:%m.%d}", show_raw=False))}</div>'
@@ -2629,6 +2629,7 @@ HOME_CSS = """
 [class*="st-key-wk_more_"] button p { font-size: .78rem !important; color: #5B6663 !important; font-weight: 700; }
 .hc.tall .hcp { aspect-ratio: 1/1; }     /* 포스터 높이 줄임 (11/18 요청) */
 .hc.tall .hcbadge { border-radius: 12px 0 10px 0; background: #26302D; }
+.hc .hcbadge.today, .hc.tall .hcbadge.today { background: #D93A4A; }     /* 오늘 종료는 빨강으로 눈에 띄게 (11/24 요청) */
 .hc.tall .hcd, .hc.tall .hcchips { display: none; }
 .hc.tall { padding-bottom: 12px; }
 .hc.tall .hct { margin-top: 5px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: .88rem; }
