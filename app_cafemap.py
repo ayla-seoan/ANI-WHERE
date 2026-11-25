@@ -2173,17 +2173,45 @@ def _home_area(mapped: pd.DataFrame) -> dict | None:
     return _busiest_area(mapped)
 
 
+def _abrowse_period_short(r) -> str:
+    """모바일 카드 · 데일리 노트의 짧은 기간 (웹 periodShort 와 같게): 열린 뒤 '~ 12.15', 열리기 전 '11.28 ~'."""
+    tags = _split(r.get("tags") or "") if not isinstance(r.get("tags"), list) else r.get("tags")
+    start, end = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+    if pdates.TAG_CHECK in tags or not start:
+        return "기간 확인 필요"
+    if start > TODAY:
+        return f"{start:%m.%d} ~"
+    return "상시" if not end or pdates.is_always(end) else f"~ {end:%m.%d}"
+
+
+def _abrowse_chip(r) -> str:
+    """포스터 왼쪽 아래 칩 하나 (이벤트 정보가 먼저, 없으면 굿즈 — _chips 의 카드 규칙과 같게). 없으면 빈 문자열."""
+    tags = [t for t in _split(r.get("tags") or "") if t not in (pdates.TAG_ALWAYS, pdates.TAG_CHECK)]
+    goods = _split(r.get("goods") or "")
+    if tags:
+        return f'<span class="bc-chip tag">{escape(tags[0])}</span>'
+    return f'<span class="bc-chip">{escape(goods[0])}</span>' if goods else ""
+
+
 def _poster_card(r, label: str, color: str = "green") -> str:
+    """리스트로 보기 카드 (A안 · 웹 BrowseCard 와 같게): 포스터(3:4, 민트 테두리) 위에 상태 · 지역 · 칩,
+    아래에 작품(Jua) · '매장 · 기간'. PC 에서 마우스를 올리면 캐릭터 · 주소 · 특전이 포스터 아래쪽에 겹쳐 보인다."""
+    one = lambda v: " ".join(str(v or "").split())
+    over = "".join(f"<span>{k} · {escape(v)}</span>" for k, v in (
+        ("캐릭터", one(r.get("characters"))), ("주소", one(r.get("address"))),
+        ("특전", " · ".join(_split(r.get("perks") or "")))) if v)
+    area = geo.area_name(str(r.get("address") or ""))
+    badge = (f'<span class="bc-area" style="background:{_area_colors(r.get("address"))[0]}">{escape(area)}</span>'
+             if area else "")
     return f"""
-<div class="pcard" style="background-image:url('{_poster_url(r.get("images"))}'), url('{images.DEFAULT_POSTER_URL}')">
-  {_area_badge(r.get("address"), cls="area")}
-  <span class="state {color}">{escape(label)}</span>
-  <div class="info">
-    <div class="t">{escape(str(r['work']))}</div>
-    <div class="s">{_mi("local_cafe")}{escape(str(r['cafe_name']))}</div>
-    <div class="d"><span class="d-long">{escape(_period(r, lambda d: f"{d:%m월 %d일}", show_raw=False))}</span><span class="d-short">{escape(_period(r, lambda d: f"{d:%m/%d}", show_raw=False))}</span></div>
-    <div class="chips short">{_chips(r)}</div>
-    <div class="more">{_card_more(r)}</div>
+<div class="bc">
+  <div class="bc-poster" style="background-image:url('{_poster_url(r.get("images"))}'), url('{images.DEFAULT_POSTER_URL}')">
+    <span class="bc-state {color}">{escape(label)}</span>{badge}
+    {f'<span class="bc-over">{over}</span>' if over else ""}{_abrowse_chip(r)}
+  </div>
+  <div class="bc-text">
+    <span class="t bc-title">{escape(str(r['work']))}</span>
+    <span class="bc-sub"><span class="bc-name">{escape(str(r['cafe_name']))}</span><span class="bc-date ab-pc"> · {escape(_period(r, lambda d: f"{d:%m.%d}", show_raw=False))}</span><span class="bc-date ab-m"> · {escape(_abrowse_period_short(r))}</span></span>
   </div>
 </div>"""
 
@@ -2230,7 +2258,7 @@ def _list_bar(count: int, wide: bool, note: str = "") -> None:
     with head:
         # 지도보기에서는 개수 제목을 두지 않는다 (리스트 전체보기에서만)
         if wide:
-            st.markdown(f"#### 팝업 카페 :green[**{count}**]곳", help=note or None)   # 숫자만 굵게
+            st.markdown(f"#### 팝업 카페 :green[**{count}곳**]", help=note or None)   # A안: 'N곳' 을 진한 민트로
     # 리스트 전체보기 ↔ 지도보기 전환은 정렬(최신순) 칸 위 오른쪽 끝의 아이콘 버튼 (_view_icon_button)
 
 
@@ -2244,16 +2272,7 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
                     " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }</style>",
                     unsafe_allow_html=True)
     if wide:
-        # 모바일 리스트 보기: 필터 아이콘을 '팝업 카페 N곳' 줄 오른쪽 위에, 글자 높이만큼 작게 (11/18 요청)
-        st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: -70px !important; }"
-                    # '팝업 카페 N곳' ↔ 정렬 ↔ 카드 사이 여백 반으로 (11/18 요청)
-                    " .st-key-sort { margin-top: -31px !important; }"
-                    " [data-testid='stLayoutWrapper']:has(> .st-key-listtools) { margin-bottom: -13px !important; }"
-                    " html body .st-key-view_tools .st-key-m_filter_btn button { width: 30px !important; min-width: 30px !important;"
-                    "   height: 26px !important; border-radius: 8px !important; }"
-                    " html body .st-key-view_tools .st-key-m_filter_btn button span { font-size: 1rem !important; }"
-                    " html body .st-key-view_tools .st-key-m_filter_btn { width: 30px !important; min-width: 30px !important; flex: 0 0 30px !important; } }</style>",
-                    unsafe_allow_html=True)
+        pass      # 모바일 리스트 보기: 필터 버튼(44px)은 '팝업 카페 N곳' 줄 오른쪽 끝 (A_BROWSE_CSS, A-MList)
     else:
         # 모바일 지도 보기: 필터 아이콘은 뺐다 (11/18 요청)
         st.markdown("<style>@media (max-width: 640px) { html body .st-key-view_tools { display: none !important; } }</style>",
@@ -3482,13 +3501,13 @@ def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | N
                   on_click=_gnb_open, args=(str(r["entry_id"]),))
 
     if wide:
-        # 전체보기: dukplace 처럼 포스터가 꽉 찬 카드를 4열로. 카드 비율이 같아 높이가 늘 맞는다
-        # 모바일에서는 4개 칸을 하나의 격자로 풀어 2~3열로 작게 보인다 (LIST_CSS 의 .st-key-wide_grid).
+        # 전체보기 (A안): 포스터 카드 격자. 4개 칸을 하나의 격자로 풀어 PC 는 폭에 맞게(auto-fill 190px~), 모바일은 2열
+        # (A_BROWSE_CSS 의 .st-key-wide_grid).
         # 칸마다 i%4 번째 카드가 들어가 있어서, 원래 순서대로 놓이게 카드마다 순번(order)을 준다
         order_css = "".join(f'[data-testid="stLayoutWrapper"]:has(> .st-key-card_w_{r["entry_id"]}),'
                             f'.st-key-card_w_{r["entry_id"]}{{order:{i}}}'
                             for i, (_, r) in enumerate(view.iterrows()))
-        st.markdown(f"<style>@media (max-width: 640px) {{ {order_css} }}</style>", unsafe_allow_html=True)
+        st.markdown(f"<style>{order_css}</style>", unsafe_allow_html=True)      # A안: PC 도 한 격자 (auto-fill)
         with st.container(key="wide_grid"):
             # 속도 (11/18): 카드를 한꺼번에 100장 넘게 그리면 클릭마다 화면 조각 400여 개·150KB 를 다시 보낸다 →
             # 처음엔 LIST_PAGE 장만, 아래 '더 보기' 로 더. 조건(검색·지역·정렬)이 바뀌면 다시 처음 장수로
@@ -3504,7 +3523,7 @@ def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | N
                     _heart(r["entry_id"], "w")
             if len(view) > n_show:
                 with st.container(horizontal=True, horizontal_alignment="center", key="list_more"):
-                    st.button(f"{len(view) - n_show}건 더보기", icon=":material/expand_more:", key="list_more_btn",
+                    st.button(f"{len(view) - n_show}건 더보기", key="list_more_btn",
                               on_click=lambda: st.session_state.update(list_n=n_show + LIST_PAGE, _more_from=n_show))
             # 방금 '더보기' 로 불러왔으면 새로 나온 첫 카드가 화면 위쪽에 오게 내린다 (11/18 요청)
             first = st.session_state.pop("_more_from", None)
@@ -4126,6 +4145,355 @@ iframe[src*="kakao_map"] {{
 """
 
 
+# A안 리스트로 보기 · 지도로 보기 (11/25, docs/design/handoff A-List · A-MList · A-Map · A-MMap): 기존 CSS 뒤에 불러서 덮는다
+# (웹 web/app/a-browse.css 와 같은 값. 데일리 팝업 노트 안쪽은 DAILY_CSS, 모바일 필터 시트는 MOBILE_SHEET_CSS)
+A_BROWSE_CSS = """
+<style>
+/* ===== A안: 리스트로 보기 · 지도로 보기 (11/25, docs/design/handoff A-List · A-MList · A-Map · A-MMap) =====
+   공개 웹 web/app/a-browse.css 와 같은 값. 예전 규칙(GLOBAL_CSS · LIST_CSS · GNB_CSS · ASK_PANEL_CSS · ASK_FAB_CSS)은
+   그대로 두고 page_map 이 그 뒤에 내보내 덮는다 (선택자를 html body 로 세게). */
+.ab-m { display: none; }
+@media (max-width: 640px) { .ab-pc { display: none !important; } .ab-m { display: inline; } }
+
+/* ---------- 1. 검색 필터 상자: PC 는 메뉴바 검색 아이콘에서 펼쳐지는 말풍선, 모바일은 아래 시트(MOBILE_SHEET_CSS) ---------- */
+@media (min-width: 641px) {
+  html body .st-key-topbar .st-key-filters { margin-top: 14px; padding: 16px !important; border: 1.5px solid #9eddcc;
+    border-radius: 18px; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+  /* 꼬리: 16px 네모를 45도 돌려 위 · 왼쪽 테두리만 */
+  html body .st-key-topbar .st-key-filters::before { top: -9.5px; right: calc(var(--bubble-tail, 85px) + 2px); width: 16px; height: 16px;
+    border: 0; border-left: 1.5px solid #9eddcc; border-top: 1.5px solid #9eddcc; background: #fff; transform: rotate(45deg); }
+  html body .st-key-topbar .st-key-filters::after { display: none; }
+  html body .st-key-filters > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { gap: 10px !important; }
+}
+html body .st-key-filters [data-testid="stWidgetLabel"] p { font-size: 12.5px !important; font-weight: 700 !important;
+  color: #5f6b68 !important; line-height: 1.5; }
+html body .st-key-filters [data-testid="stTextInputRootElement"], html body .st-key-filters [data-testid="stDateInputField"],
+html body .st-key-filters [data-testid="stSelectbox"] > div:not([data-testid]) > div,
+html body .st-key-filters [data-testid="stMultiSelect"] > div:not([data-testid]) > div {
+  min-height: 44px !important; border: 1px solid #e3e9e7 !important; border-radius: 12px !important;
+  background: #fff !important; box-shadow: none !important; }
+html body .st-key-filters [data-testid="stTextInputRootElement"], html body .st-key-filters [data-testid="stDateInputField"],
+html body .st-key-filters [data-testid="stSelectbox"] > div:not([data-testid]) > div { height: 44px !important; }
+html body .st-key-filters [data-testid="stTextInputRootElement"]:focus-within, html body .st-key-filters [data-testid="stDateInputField"]:focus-within,
+html body .st-key-filters [data-testid="stSelectbox"] > div:not([data-testid]) > div:focus-within,
+html body .st-key-filters [data-testid="stMultiSelect"] > div:not([data-testid]) > div:focus-within { border-color: #14b8a6 !important; }
+html body .st-key-filters input { font-size: 14px !important; background: transparent !important; }
+html body .st-key-filter_reset button { height: 44px !important; min-height: 44px !important; padding: 0 16px !important; border: 0 !important;
+  border-radius: 999px !important; background: #f4f6f5 !important; box-shadow: none !important; }
+html body .st-key-filter_reset button p { font-size: 14px !important; font-weight: 700 !important; color: #26302d !important; white-space: nowrap; }
+html body .st-key-filter_reset button:hover { background: #e6fbf7 !important; }
+html body .st-key-filter_reset button:hover p { color: #0b5e57 !important; }
+
+/* ---------- 2. 목록 위 줄: 팝업 카페 N곳 · 북마크 · 지역 고르기 · 정렬, 그 아래 걸린 필터 칩 ---------- */
+html body .st-key-listbar h4 { font-family: "NanumSquareRound", "Pretendard", sans-serif !important; font-size: 18px !important;
+  font-weight: 800 !important; line-height: 1.4 !important; color: #26302d !important; padding: 0 !important; margin: 0 !important;
+  white-space: nowrap; }
+html body .st-key-listbar h4 span, html body .st-key-listbar h4 strong { color: #0f6b5c !important; font-weight: 800 !important; }
+/* 북마크 (목록 위 · 필터 시트): 알약. 켜지면 민트 테두리 + 연한 민트 바탕 */
+html body [class*="st-key-folsw"] button { height: 40px !important; min-height: 40px !important; padding: 0 14px !important; gap: 6px;
+  border: 1.5px solid #e3e9e7 !important; border-radius: 999px !important; background: #fff !important; box-shadow: none !important; }
+html body [class*="st-key-folsw"] button p { font-size: 13.5px !important; font-weight: 700 !important; color: #26302d !important; }
+html body [class*="st-key-folsw"] button span[data-testid="stIconMaterial"] { font-size: 18px !important; color: #26302d !important; }
+html body [class*="st-key-folsw"][class*="_off"] button:hover { border-color: #14b8a6 !important; }
+html body [class*="st-key-folsw"][class*="_on"] button { border-color: #14b8a6 !important; background: #e6fbf7 !important; }
+html body [class*="st-key-folsw"][class*="_on"] button p { color: #0b5e57 !important; font-weight: 800 !important; }
+html body [class*="st-key-folsw"][class*="_on"] button span[data-testid="stIconMaterial"] { color: #0b5e57 !important; }
+/* 지역 고르기 · 정렬: 40px 알약 */
+html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]),
+html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) { min-height: 40px !important; height: auto !important; }
+html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]) > div,
+html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div {
+  min-height: 40px !important; border: 1.5px solid #e3e9e7 !important; border-radius: 20px !important; background: #fff !important;
+  box-shadow: none !important; align-items: center; }
+html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div { height: 40px !important; padding-left: 4px; }
+html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]) > div:focus-within,
+html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div:focus-within { border-color: #14b8a6 !important; }
+html body .st-key-listtools .st-key-sort input, html body .st-key-listtools .st-key-regions input {
+  font-size: 13.5px !important; font-weight: 700 !important; color: #26302d !important; background: transparent !important; }
+html body .st-key-listtools .st-key-regions input::placeholder { color: #26302d !important; opacity: 1 !important; font-weight: 700; }
+html body .st-key-listtools .st-key-regions [data-testid="stMultiSelectTagsContainer"] { padding: 3px 4px 3px 8px !important; gap: 4px; align-items: center !important; }
+/* 고른 지역 = 민트 칩 */
+html body .st-key-listtools .st-key-regions [data-tag] { height: 28px !important; margin: 0 !important; padding: 0 4px 0 10px !important;
+  border: 1.5px solid #14b8a6 !important; border-radius: 999px !important; background: #e6fbf7 !important; color: #0b5e57 !important;
+  font-size: 13px !important; font-weight: 800 !important; display: inline-flex !important; align-items: center !important; }
+html body .st-key-listtools .st-key-regions [data-tag] span { color: #0b5e57 !important; line-height: 1.2 !important; }
+html body .st-key-listtools .st-key-regions [data-tag] svg { color: #0b5e57 !important; fill: #0b5e57 !important; }
+@media (min-width: 641px) {
+  html body .st-key-listtools { margin-bottom: 14px !important; }
+  html body .st-key-listtools > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important;
+    align-items: center !important; gap: 8px !important; }
+  html body .st-key-listtools [data-testid="stColumn"]:has(.st-key-listbar) { margin-right: 8px; }
+  html body .st-key-listtools [data-testid="stColumn"]:has([class*="st-key-folsw_"]) { margin-left: 0 !important; }
+  html body .st-key-listtools [data-testid="stColumn"]:has(.st-key-regions) { min-width: 150px !important; max-width: calc(100% - 170px); }
+  html body .st-key-listtools .st-key-regions, html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] {
+    min-width: 150px !important; margin-left: 0 !important; }
+  html body .st-key-listtools [data-testid="stColumn"]:has(.st-key-sort) { margin-left: auto !important; flex: 0 0 140px !important; width: 140px !important; }
+}
+/* 걸린 필터 칩 (_abrowse_cond_chips): 민트 알약 + ×, 사전예약은 보라 */
+html body .st-key-abrowse_chips { flex-wrap: wrap !important; align-items: center !important; gap: 8px !important; margin: 0 0 14px; }
+html body .st-key-abrowse_chips > div { width: auto !important; flex: 0 0 auto !important; max-width: 100%; }
+html body .st-key-abrowse_chips button { height: 40px !important; min-height: 40px !important; max-width: 100%; padding: 0 12px 0 14px !important;
+  border: 1.5px solid #14b8a6 !important; border-radius: 999px !important; background: #e6fbf7 !important; box-shadow: none !important; }
+html body .st-key-abrowse_chips button > div { flex-direction: row-reverse; gap: 6px !important; min-width: 0; }
+html body .st-key-abrowse_chips button p { font-size: 13.5px !important; font-weight: 800 !important; color: #0b5e57 !important; line-height: 1 !important;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+html body .st-key-abrowse_chips button span[data-testid="stIconMaterial"] { font-size: 16px !important; color: #0b5e57 !important; margin: 0 !important; }
+html body .st-key-abrowse_chips button:hover { background: #d3f5ee !important; }
+html body .st-key-abrowse_chips .st-key-res_only_chip button { border-color: #6c5ce7 !important; background: #f1ecff !important; }
+html body .st-key-abrowse_chips .st-key-res_only_chip button p,
+html body .st-key-abrowse_chips .st-key-res_only_chip button span[data-testid="stIconMaterial"] { color: #5b3fae !important; }
+/* 물어보기 '더보기' 로 온 목록 표시 줄 */
+html body .st-key-ask_only_bar { margin: 0 0 14px; padding: 10px 14px !important; border: 0 !important; border-radius: 14px !important; background: #e9f7f2 !important; }
+html body .ask-only { font-size: 14px; color: #26302d; }
+html body .ask-only b, html body .ask-only span:not(.mi) { color: #0f6b5c; }
+html body .ask-only .mi { color: #0f6b5c; }
+html body .st-key-ask_only_clear button { height: 36px !important; min-height: 36px !important; padding: 0 12px !important; border-radius: 999px !important; background: #fff !important; }
+html body .st-key-ask_only_clear button p { font-size: 13px !important; font-weight: 700 !important; }
+
+/* ---------- 3. 포스터 카드(_poster_card) + 격자 ---------- */
+html body .st-key-wide_grid { gap: 0 !important; padding-bottom: 0 !important; margin-bottom: 0 !important; }
+html body .st-key-wide_grid > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px 16px !important; height: auto !important; align-items: start; }
+html body .st-key-wide_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+html body .st-key-wide_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] { display: contents !important; }
+html body .st-key-wide_grid [data-testid="stLayoutWrapper"]:has(> [class*="st-key-card_w_"]) { height: auto !important; min-height: 0 !important;
+  min-width: 0 !important; width: auto !important; position: relative; }
+html body .st-key-wide_grid [class*="st-key-card_w_"] { position: relative; height: auto !important; min-height: 0 !important; min-width: 0 !important;
+  width: 100% !important; gap: 0 !important; container-type: inline-size; }
+.bc { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: #26302d; }
+.bc-poster { position: relative; display: block; box-sizing: border-box; aspect-ratio: 3 / 4; border: 2.5px solid #9eddcc; border-radius: 12px;
+  overflow: hidden; background-color: #f4f6f5; background-size: cover; background-position: center;
+  transition: border-color .15s ease, box-shadow .15s ease; }
+.bc-state, .bc-area, .bc-chip { position: absolute; z-index: 2; font-size: 12px; line-height: 1.5; border-radius: 999px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.bc-state { left: 10px; top: 10px; padding: 2px 10px; font-weight: 800; color: #0b5e57; background: #e6fbf7; }
+.bc-state.blue, .dn-state.blue { color: #2c5bc5; background: #eaf0fc; }
+.bc-state.red, .dn-state.red { color: #c0313f; background: #fdecee; }
+.bc-state.gray, .dn-state.gray { color: #5f6b68; background: #f4f6f5; }
+.bc-area { right: 10px; top: 10px; max-width: 48%; padding: 1px 9px; font-weight: 800; color: #fff; border: 1.5px solid rgba(255,255,255,.85); }
+.bc-chip { left: 10px; bottom: 12px; max-width: calc(100% - 64px); padding: 2px 9px; font-weight: 700; color: #26302d; background: rgba(255,255,255,.92); }
+.bc-chip.tag { color: #0b5e57; }
+/* 마우스를 올렸을 때만 보이는 겹침 판 (캐릭터 · 주소 · 특전). 터치 기기에서는 띄우지 않는다 */
+.bc-over { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .bc-over { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; display: flex; flex-direction: column; gap: 1px;
+    padding: 40px 12px 54px; background: linear-gradient(transparent, rgba(31,42,39,.86) 45%); color: #fff; font-size: 12px; line-height: 1.6;
+    opacity: 0; visibility: hidden; transition: opacity .15s ease, visibility .15s; }
+  .bc-over span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  [class*="st-key-card_w_"]:hover .bc-over, [class*="st-key-card_w_"]:focus-within .bc-over { opacity: 1; visibility: visible; }
+  [class*="st-key-card_w_"]:hover .bc-poster, [class*="st-key-card_w_"]:focus-within .bc-poster { border-color: #14b8a6;
+    box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+}
+.bc-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-bottom: 2px; }
+.bc-title { font-family: "Jua", sans-serif; font-size: 17px; line-height: 1.25; color: #0f6b5c; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2; overflow: hidden; word-break: break-all; }
+.bc-sub { display: flex; min-width: 0; font-size: 13px; line-height: 1.5; color: #5f6b68; }
+.bc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-date { flex: none; white-space: pre; }
+html body [class*="st-key-card_w_"] [data-testid="stMarkdownContainer"]:has(.bc) { margin-bottom: 0 !important; }
+/* 북마크 버튼: 포스터 오른쪽 아래 34px (포스터 높이 = 카드 폭 × 4/3 이라 카드 폭으로 자리를 잰다) */
+html body [class*="st-key-card_w_"] [class*="st-key-fav_"] { position: absolute !important; top: calc(100cqw * 4 / 3 - 44px) !important;
+  bottom: auto !important; right: 10px !important; left: auto !important; width: 34px !important; height: 34px; z-index: 7; }
+html body [class*="st-key-card_w_"] [class*="st-key-fav_"] button { width: 34px !important; min-width: 34px !important; height: 34px !important;
+  min-height: 34px !important; padding: 0 !important; border: 0 !important; border-radius: 8px !important; box-shadow: none !important; }
+html body [class*="st-key-card_w_"] [class*="st-key-fav_off_"] button { background: rgba(255,255,255,.75) !important; }
+html body [class*="st-key-card_w_"] [class*="st-key-fav_off_"] button:hover { background: #fff !important; box-shadow: 0 0 0 2px #14b8a6 !important; }
+html body [class*="st-key-card_w_"] [class*="st-key-fav_"] button span[data-testid="stIconMaterial"] { font-size: 20px !important; }
+/* 'N건 더보기': 46px 알약 */
+html body .st-key-list_more { margin-top: 14px !important; }
+html body .st-key-list_more button { height: 46px !important; min-height: 46px !important; padding: 0 28px !important; border: 0 !important;
+  border-radius: 999px !important; background: #e6fbf7 !important; box-shadow: none !important; }
+html body .st-key-list_more button p { font-size: 14px !important; font-weight: 800 !important; color: #0b5e57 !important; }
+html body .st-key-list_more button:hover { background: #d3f5ee !important; }
+/* 빈 결과 */
+html body .empty-box { padding: 40px 16px 24px; border-radius: 18px; background: #f6f8f7; }
+html body .empty-ic .mi { color: #9eddcc; }
+html body .empty-t { font-size: 21px; color: #26302d; }
+html body .empty-s { color: #5f6b68; font-size: 14px; }
+html body .st-key-empty_relax { margin-top: 4px; }
+html body .st-key-empty_relax button:not([data-testid="stBaseButton-primary"]) { height: 40px !important; min-height: 40px !important; padding: 0 14px !important;
+  border: 1.5px solid #e3e9e7 !important; border-radius: 999px !important; background: #fff !important; box-shadow: none !important; }
+html body .st-key-empty_relax button:not([data-testid="stBaseButton-primary"]) p { font-size: 13.5px !important; font-weight: 700 !important; color: #26302d !important; }
+html body .st-key-empty_relax button:not([data-testid="stBaseButton-primary"]):hover { border-color: #14b8a6 !important; }
+html body .st-key-empty_relax button:not([data-testid="stBaseButton-primary"]):hover p { color: #0b5e57 !important; }
+
+/* ---------- 4. 물어보기 (겉모양만): PC 오른쪽 칸 · 모바일 버튼 / 팝업 ---------- */
+html body .st-key-ask_panel { border: 1.5px solid #9eddcc !important; border-radius: 18px !important; box-shadow: none !important; }
+html body .st-key-ask_panel > [data-testid="stElementContainer"]:has(.apn-head) { padding: 0 !important; width: 100% !important; background: #e9f7f2 !important; }
+html body .st-key-ask_panel > [data-testid="stElementContainer"]:has(.apn-head) [data-testid="stMarkdown"] { width: 100% !important; }
+html body .apn-head { flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; padding: 14px 16px; background: #e9f7f2; }
+html body .apn-head::before { content: ""; flex: none; width: 36px; height: 36px; background: url("app/static/mascot.png") center / contain no-repeat; }
+html body .apn-title { font-family: "Jua", sans-serif; font-weight: 400; font-size: 19px; line-height: 1.3; color: #0f6b5c; }
+html body .st-key-apn_log, html body .st-key-apd_log { padding-top: 12px; }
+html body .apn-row { margin: 0 0 2px; }
+html body .apn-ava, html body .apn-name { display: none; }
+html body .apn-col { max-width: 92%; }
+html body .apn-bot { background: #f6f8f7; border-radius: 18px 18px 18px 4px; padding: 12px 14px; font-size: 14px; line-height: 1.6; color: #26302d; }
+html body .apn-bot b, html body .apn-bot strong, html body .apn-num { color: #0f6b5c; }
+html body .apn-me { margin: 0 0 2px; }
+html body .apn-me span { max-width: 82%; background: #14b8a6; border-radius: 18px 18px 4px 18px; padding: 10px 14px; font-size: 14px;
+  font-weight: 600; line-height: 1.5; }
+html body .apn-exbox { border: 1px solid #9eddcc; background: #fff; }
+html body .apn-exbox b { color: #0f6b5c; font-size: 12px; }
+html body .apn-ex { font-size: 12.5px; padding: 4px 10px; border-color: #9eddcc; color: #0f6b5c; }
+html body [class*="st-key-apn_card_"], html body [class*="st-key-apd_card_"] { margin: 0 !important; width: 100% !important; max-width: 100% !important; }
+html body .apc { gap: 10px; padding: 8px; border: 1px solid #e3e9e7; border-radius: 12px; background: #fff; transition: border-color .12s; }
+html body [class*="st-key-apn_card_"]:hover .apc, html body [class*="st-key-apd_card_"]:hover .apc { background: #fff; border-color: #14b8a6; }
+html body .apc img { width: 40px; height: 54px; flex: 0 0 40px; border-radius: 7px; background: #f4f6f5; }
+html body .apc-txt { gap: 1px; }
+html body .apc-work { font-family: inherit; font-size: 13.5px; font-weight: 800; line-height: 1.4; color: #26302d; }
+html body .apc-cafe { font-size: 12px; font-weight: 600; line-height: 1.4; }
+html body .apc-addr { font-size: 12px; line-height: 1.5; color: #5f6b68; }
+html body .apc-date { font-size: 12px; font-weight: 700; color: #0f6b5c; }
+html body [class*="st-key-apn_more_"] button, html body [class*="st-key-apd_more_"] button { min-height: 0 !important; padding: 7px 12px !important;
+  border: 1px solid #9eddcc !important; border-radius: 999px !important; background: #fff !important; box-shadow: none !important; }
+html body [class*="st-key-apn_more_"] button p, html body [class*="st-key-apd_more_"] button p,
+html body [class*="st-key-apn_more_"] button span, html body [class*="st-key-apd_more_"] button span { font-size: 12.5px !important; font-weight: 700 !important; color: #0f6b5c !important; }
+html body .st-key-apn_chips, html body .st-key-apd_chips { gap: 6px !important; padding-top: 8px; border-top: 0 !important; }
+html body .st-key-apn_chips button, html body .st-key-apd_chips button { padding: 6px 12px !important; border: 1px solid #9eddcc !important;
+  background: #fff !important; box-shadow: none !important; }
+html body .st-key-apn_chips button p, html body .st-key-apd_chips button p { font-size: 12.5px !important; line-height: 1.4 !important; color: #0f6b5c !important; }
+html body .st-key-apn_chips button:hover, html body .st-key-apd_chips button:hover { border-color: #14b8a6 !important; background: #e6fbf7 !important; }
+html body .st-key-apn_chips button:hover p, html body .st-key-apd_chips button:hover p { color: #0b5e57 !important; }
+/* 입력칸: 44px 알약 + 44px 동그라미 보내기(종이비행기. 글자 '보내기' 는 읽기 프로그램용으로 남는다) */
+html body .st-key-apn_form, html body .st-key-apd_form { margin-top: 10px !important; border-top: 1px solid #eef2f1; }
+html body .st-key-apn_form [data-testid="stForm"], html body .st-key-apd_form [data-testid="stForm"] { padding: 12px 0 !important; }
+html body .st-key-apn_form [data-testid="stHorizontalBlock"], html body .st-key-apd_form [data-testid="stHorizontalBlock"] {
+  flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; gap: 8px !important; }
+html body .st-key-apn_form [data-testid="stColumn"]:first-child, html body .st-key-apd_form [data-testid="stColumn"]:first-child {
+  flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }
+html body .st-key-apn_form [data-testid="stColumn"]:last-child, html body .st-key-apd_form [data-testid="stColumn"]:last-child {
+  flex: 0 0 44px !important; width: 44px !important; min-width: 44px !important; }
+html body .st-key-apn_form [data-testid="stTextInputRootElement"], html body .st-key-apd_form [data-testid="stTextInputRootElement"] {
+  height: 44px !important; border: 1px solid #e3e9e7 !important; border-radius: 999px !important; background: #f6f8f7 !important; }
+html body .st-key-apn_form [data-testid="stTextInputRootElement"]:focus-within,
+html body .st-key-apd_form [data-testid="stTextInputRootElement"]:focus-within { border-color: #14b8a6 !important; }
+html body .st-key-apn_form input, html body .st-key-apd_form input { font-size: 14px !important; background: transparent !important; padding: 0 14px !important; }
+html body .st-key-apn_form [data-testid="stFormSubmitButton"] button, html body .st-key-apd_form [data-testid="stFormSubmitButton"] button {
+  width: 44px !important; min-width: 44px !important; height: 44px !important; min-height: 44px !important; padding: 0 !important;
+  border: 0 !important; border-radius: 50% !important; box-shadow: none !important; overflow: hidden;
+  background: #14b8a6 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12l16-8-6 16-2.5-6.5z'/%3E%3C/svg%3E") center / 20px 20px no-repeat !important; }
+html body .st-key-apn_form [data-testid="stFormSubmitButton"] button:hover,
+html body .st-key-apd_form [data-testid="stFormSubmitButton"] button:hover { background-color: #0d9488 !important; }
+html body .st-key-apn_form [data-testid="stFormSubmitButton"] button p,
+html body .st-key-apd_form [data-testid="stFormSubmitButton"] button p { font-size: 0 !important; color: transparent !important; }
+@media (min-width: 641px) {
+  /* 리스트: 목록 | 물어보기 320px (간격 20px) · 지도: (노트 300 | 지도) | 물어보기 340px (간격 16px) */
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel) { flex-wrap: nowrap !important; gap: 20px !important; }
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel) > [data-testid="stColumn"]:first-child {
+    flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel) > [data-testid="stColumn"]:has(.st-key-ask_panel) {
+    flex: 0 0 320px !important; width: 320px !important; min-width: 320px !important; }
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel):has(.st-key-map_row) { gap: 16px !important; }
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel):has(.st-key-map_row) > [data-testid="stColumn"]:has(.st-key-ask_panel) {
+    flex: 0 0 340px !important; width: 340px !important; min-width: 340px !important; }
+}
+@media (max-width: 640px) {
+  /* 모바일 물어보기 버튼: 흰 동그라미 + 민트 테두리 + 마스코트 (등록 + 버튼과 같은 56px, 그 바로 위) */
+  html body .st-key-add_btn button { width: 56px !important; height: 56px !important; }
+  html body .st-key-ask_fab { width: 56px !important; height: 56px; bottom: calc(76px + 56px + 12px); }
+  html body .st-key-ask_fab button { width: 56px !important; height: 56px !important; border: 2px solid #14b8a6 !important;
+    background: #fff url("app/static/mascot.png") center / 36px auto no-repeat !important; box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }
+  html body .st-key-ask_fab button span { display: none !important; }
+}
+
+/* ---------- 5. 지도로 보기: PC 3단 (노트 300 | 지도 | 물어보기 340), 모바일은 지도(400px) → 노트 ---------- */
+html body .st-key-map_frame { position: relative; gap: 0 !important; }
+html body .st-key-map_frame iframe { border-radius: 18px; }
+/* '지도에 N곳': PC 는 지도 위 가운데 알약 (왼쪽 위는 확대 · 축소 버튼 자리), 모바일은 지도 위 제목 줄 */
+html body .st-key-map_frame > [data-testid="stElementContainer"]:has(.map-count) { position: absolute !important; left: 50%; top: 14px;
+  transform: translateX(-50%); z-index: 3; width: auto !important; pointer-events: none; }
+html body .st-key-map_frame [data-testid="stMarkdownContainer"]:has(.map-count) { margin: 0 !important; }
+.map-count { padding: 6px 14px; border-radius: 999px; background: #fff; font-size: 13px; font-weight: 700; line-height: 1.5; color: #26302d;
+  white-space: nowrap; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+.map-count b { color: #0f6b5c; font-weight: 800; }
+@media (min-width: 641px) {
+  html body .st-key-map_row > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: 16px !important;
+    align-items: flex-start !important; }
+  html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {
+    flex: 0 0 300px !important; width: 300px !important; min-width: 300px !important; }
+  html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_frame) {
+    flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }
+  /* 노트 칸: 회색 바탕 상자, 지도 · 물어보기와 같은 높이. 목록만 그 안에서 스크롤 */
+  html body .st-key-map_daily { height: calc(100vh - 115px) !important; min-height: 520px; padding: 16px !important; border-radius: 18px;
+    background: #f6f8f7; overflow: hidden; gap: 12px !important; flex-wrap: nowrap !important; flex: 0 0 auto !important; }
+  html body .st-key-map_daily > [data-testid="stElementContainer"]:has(.dn-list) { flex: 1 1 0 !important; min-height: 0 !important;
+    overflow-y: auto; margin-right: -6px; padding-right: 6px; width: auto !important; }
+  html body .st-key-map_daily > [data-testid="stElementContainer"]:has(style), html body .st-key-map_daily > [data-testid="stElementContainer"]:has(iframe) {
+    position: absolute !important; width: 0 !important; height: 0 !important; overflow: hidden; }
+}
+@media (max-width: 640px) {
+  html body .st-key-map_row [data-testid="stHorizontalBlock"]:has(.st-key-map_daily) { flex-direction: column !important; flex-wrap: nowrap !important;
+    gap: 18px !important; }
+  html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_frame) { order: -1 !important;
+    flex: 0 0 auto !important; width: 100% !important; min-width: 100% !important; }
+  html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {
+    flex: 0 0 auto !important; width: 100% !important; min-width: 100% !important; }
+  html body .st-key-map_frame iframe { height: 400px !important; min-height: 0 !important; }
+  html body .st-key-map_frame > [data-testid="stElementContainer"]:has(.map-count) { position: static !important; transform: none; margin: 4px 0 12px; }
+  .map-count { padding: 0; border-radius: 0; background: none; box-shadow: none; font-size: 17px; font-weight: 800; }
+}
+
+/* ---------- 6. 모바일 (폭 640px 이하): A-MList ---------- */
+@media (max-width: 640px) {
+  /* 목록 위 줄: 제목 + 필터 버튼(44px), 그 아래 칩 줄(북마크 · 지역 고르기 · 정렬, 36px) */
+  html body .st-key-listtools:has(.st-key-listbar h4) { position: relative; margin-bottom: 12px !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { display: flex !important;
+    flex-direction: row !important; flex-wrap: wrap !important; align-items: center !important; gap: 12px 6px !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stColumn"]:has(.st-key-listbar) { flex: 1 1 100% !important; width: 100% !important;
+    min-width: 0 !important; min-height: 44px; padding-right: 52px; display: flex !important; align-items: center; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stColumn"]:has([class*="st-key-folsw_"]) { display: block !important;
+    flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stColumn"]:has(.st-key-regions) { display: block !important;
+    flex: 1 1 120px !important; width: auto !important; min-width: 0 !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stColumn"]:has(.st-key-sort) { flex: 0 0 112px !important; width: 112px !important;
+    min-width: 0 !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [class*="st-key-folsw_"],
+  html body .st-key-listtools:has(.st-key-listbar h4) .st-key-regions { display: block !important; }
+  html body .st-key-listtools .st-key-listbar h4 { font-size: 17px !important; }
+  html body .st-key-listtools [class*="st-key-folsw"] button { height: 36px !important; min-height: 36px !important; padding: 0 12px !important; gap: 4px; }
+  html body .st-key-listtools [class*="st-key-folsw"] button p { font-size: 13px !important; }
+  html body .st-key-listtools [class*="st-key-folsw"] button span[data-testid="stIconMaterial"] { font-size: 16px !important; }
+  html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]),
+  html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]),
+  html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]) > div,
+  html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div { min-height: 36px !important; }
+  html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div { height: 36px !important; }
+  html body .st-key-listtools .st-key-sort input, html body .st-key-listtools .st-key-regions input { font-size: 13px !important; }
+  html body .st-key-listtools .st-key-regions [data-tag] { height: 26px !important; }
+  /* 필터 버튼: '팝업 카페 N곳' 줄 오른쪽 끝 44px 네모 + 걸린 조건 수 */
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) { position: absolute !important; top: 0; right: 0;
+    width: 44px !important; height: 44px !important; min-height: 44px !important; margin: 0 !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn, html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn .stButton {
+    width: 44px !important; min-width: 44px !important; flex: 0 0 44px !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn button { position: relative; overflow: visible !important; width: 44px !important;
+    min-width: 44px !important; height: 44px !important; padding: 0 !important; border: 1.5px solid #e3e9e7 !important; border-radius: 12px !important;
+    background: #fff !important; box-shadow: none !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn button span[data-testid="stIconMaterial"] { font-size: 22px !important; color: #26302d !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn button [data-testid="stMarkdownContainer"] { position: absolute; top: -6px; right: -6px;
+    width: auto !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn button p { min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px;
+    background: #0b7a70; color: #fff !important; font-size: 11px !important; font-weight: 800 !important; line-height: 18px !important; text-align: center; }
+  html body .st-key-abrowse_chips { gap: 6px !important; margin-bottom: 12px; }
+  html body .st-key-abrowse_chips button { height: 36px !important; min-height: 36px !important; padding: 0 10px 0 12px !important; }
+  html body .st-key-abrowse_chips button p { font-size: 13px !important; max-width: 200px; }
+  /* 카드 격자: 2열 */
+  html body .st-key-wide_grid > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px !important; }
+  .bc { gap: 6px; }
+  .bc-state, .bc-area, .bc-chip { font-size: 11.5px; }
+  .bc-state { left: 8px; top: 8px; padding: 2px 8px; }
+  .bc-area { right: 8px; top: 8px; padding: 1px 8px; }
+  .bc-chip { left: 8px; bottom: 8px; max-width: calc(100% - 58px); padding: 2px 8px; background: rgba(255,255,255,.9); }
+  .bc-title { font-size: 16px; }
+  .bc-sub { font-size: 12.5px; }
+  html body [class*="st-key-card_w_"] [class*="st-key-fav_"] { top: calc(100cqw * 4 / 3 - 42px) !important; right: 8px !important; bottom: auto !important; }
+  html body .st-key-list_more, html body .st-key-list_more > div, html body .st-key-list_more .stButton, html body .st-key-list_more button { width: 100% !important; }
+}
+</style>
+"""
+
+
 def _scroll_top() -> None:
     """페이지를 맨 위로 올린다. Streamlit 은 다시 그려도 스크롤 위치를 그대로 두어서,
     상세를 닫고 돌아오면 짧아진 페이지의 맨 아래에 머문다.
@@ -4633,6 +5001,40 @@ def _follow_switch(key: str) -> None:
               on_click=lambda: st.session_state.update(fav_only=not on))
 
 
+def _abrowse_cond_chips(f: dict) -> None:
+    """걸린 필터 칩 (A안 · 웹 CondChips 와 같게): 목록 · 지도 위에 지금 걸린 조건을 알약으로, 누르면 그 조건만 풀린다.
+    지역은 '지역 고르기' 칸이 고른 지역을 칩으로 보여 주고, 북마크는 '북마크' 버튼이 따로 있어 여기엔 넣지 않는다."""
+    chips: list[tuple[str, str]] = []
+    query = str(f.get("query") or "").strip()
+    if query:
+        chips.append(("query", f"검색: {query}"))
+    if f.get("span", "진행중 + 예정") != "진행중 + 예정":
+        chips.append(("span", str(f["span"])))
+    day = f.get("day")
+    if day:
+        chips.append(("day", f"{day.month}.{day.day} ({_WEEKDAYS[day.weekday()]})"))
+    if f.get("work", "전체") != "전체":
+        chips.append(("work", f"작품: {f['work']}"))
+    if f.get("chars"):
+        chips.append(("chars", "캐릭터: " + " · ".join(map(str, f["chars"]))))
+    if chips:      # 기본값이 아닌 필터 칸은 민트로 (A-List '진행 중' 칸)
+        box = {"query": ".st-key-f_query", "span": ".st-key-f_span", "day": '[class*="st-key-f_date_"]',
+               "work": ".st-key-f_work", "chars": '[class*="st-key-filter_chars_"]'}
+        on = ", ".join(f"html body .st-key-filters {box[w]} {inner}" for w, _ in chips for inner in (
+            '[data-testid="stTextInputRootElement"]', '[data-testid="stDateInputField"]',
+            '[data-testid="stSelectbox"] > div:not([data-testid]) > div', '[data-testid="stMultiSelect"] > div:not([data-testid]) > div'))
+        st.markdown(f"<style>{on} {{ border-color: #14b8a6 !important; background: #e6fbf7 !important; }}</style>",
+                    unsafe_allow_html=True)
+    if not chips and not f.get("reserve"):
+        return
+    with st.container(horizontal=True, key="abrowse_chips"):
+        for what, label in chips:
+            st.button(label, icon=":material/close:", key=f"abchip_{what}", on_click=_relax, args=(what,))
+        if f.get("reserve"):          # 홈 '사전예약 팝업' 더보기로 건 조건 (보라)
+            st.button("사전예약 팝업만", icon=":material/close:", key="res_only_chip",
+                      on_click=lambda: st.session_state.update(res_only=False))
+
+
 # 모바일 필터 시트 (필터 아이콘을 눌렀을 때만 page_map 이 붙인다). PC 에는 머리·아래 줄을 늘 숨긴다
 MOBILE_SHEET_CSS = """
 .st-key-filters { position: fixed !important; left: 0; right: 0; top: 44px; bottom: 0; z-index: 1005;
@@ -4670,6 +5072,22 @@ MOBILE_SHEET_CSS = """
 .st-key-m_sheet_done button { width: 100% !important; min-height: 0 !important; height: 50px; border-radius: 12px !important;
   background: #26302D !important; border: 0 !important; }
 .st-key-m_sheet_done button p { font-size: 1.02rem !important; font-weight: 700 !important; color: #fff !important; }
+/* A안 (11/25, A-MList 필터 시트 · 웹 a-browse.css): 아래에서 올라오는 시트 — 위 모서리 22px, 높이는 내용만큼(최대 86%),
+   제목 Jua 21px, 칸 사이 14px(구분선 없음), 아래 줄은 '전체 삭제' 글자 버튼 + 민트 알약 'N곳 표시' */
+html body .st-key-filters { top: auto !important; max-height: 86vh; max-height: 86dvh; border: 0 !important; border-radius: 22px 22px 0 0 !important;
+  padding: 16px 16px 0 !important; box-shadow: 0 0 0 100vmax rgba(20,24,23,.45) !important; }
+html body .sheet-title { font-family: "Jua", sans-serif; font-size: 21px; font-weight: 400; color: #26302d; }
+html body .st-key-filters [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+html body .st-key-filters .st-key-m_only > div { padding: 7px 0 !important; border-bottom: 0 !important; }
+html body .st-key-m_sheet_foot { flex-direction: row !important; align-items: center !important; justify-content: space-between !important;
+  gap: 8px !important; border-top: 0 !important; padding: 12px 0 calc(16px + env(safe-area-inset-bottom)) !important; }
+html body .st-key-m_sheet_foot > div, html body .st-key-m_sheet_foot .stButton,
+html body .st-key-m_sheet_foot [class*="st-key-m_sheet_"] { width: auto !important; flex: 0 0 auto !important; }
+html body .st-key-m_sheet_reset button { width: auto !important; height: 46px !important; padding: 0 4px !important; }
+html body .st-key-m_sheet_reset button p { font-size: 14px !important; font-weight: 700 !important; color: #5f6b68 !important; }
+html body .st-key-m_sheet_done button { width: auto !important; height: 46px !important; padding: 0 24px !important; border-radius: 999px !important;
+  background: #14b8a6 !important; box-shadow: none !important; }
+html body .st-key-m_sheet_done button p { font-size: 14px !important; font-weight: 800 !important; }
 """
 
 
@@ -6571,6 +6989,7 @@ def page_map() -> None:
     # '스파이패밀리' 와 '스파이 패밀리' 가 따로 걸리지 않게 목록의 작품명으로 맞춘다
     df["work"] = df["work"].fillna("").astype(str).map(catalog.canonical_work)
 
+    st.markdown(A_BROWSE_CSS, unsafe_allow_html=True)     # A안: 리스트로 보기 · 지도로 보기 (LIST_CSS · GNB_CSS · ASK_PANEL_CSS 를 덮는다)
     # 모바일(폭 640px 이하)에서는 검색 필터를 접어 두고 '검색 필터' 버튼으로 연다. PC 에서는 버튼을 숨기고 늘 보인다.
     # 화면 폭은 서버가 모르니, 열림 상태는 서버가 기억하고 '좁은 화면일 때만 숨기기' 는 CSS 가 맡는다
     ss = st.session_state
@@ -6712,16 +7131,15 @@ def page_map() -> None:
         with region:
             # 지금 등록된 카페가 있는 지역만, 카드 배지와 같은 이름으로. 여러 곳을 함께 고를 수 있다
             st.multiselect("지역", areas, key="regions", label_visibility="collapsed",
-                           placeholder="지역 고르기 (여러 곳 가능)", select_all=False)   # 기본이 전체라 '전체 선택' 은 뺌 (11/18)
+                           placeholder="+ 지역 고르기", select_all=False)   # 기본이 전체라 '전체 선택' 은 뺌 (11/18)
         with sort:
             _view_icon_button(wide, active, m_open)
             st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
 
         # ('마지막 업데이트' 줄은 11/18 요청으로 모든 화면에서 뺐다 — _update_note 는 남겨 둠)
+        if not current:
+            _abrowse_cond_chips(fcond)        # 걸린 필터 칩 (리스트 · 지도 모두)
         if wide:
-            if st.session_state.get("res_only"):
-                st.button("사전예약 팝업만 보는 중", icon=":material/close:", key="res_only_chip",
-                          on_click=lambda: st.session_state.update(res_only=False))
             render_list(view, wide=True, df_all=df, fcond=fcond)
     if wide:
         with chat, st.container(key="ask_panel"):
@@ -6738,6 +7156,7 @@ def page_map() -> None:
                      "work": str(r["work"]), "cafe": str(r["cafe_name"]),
                      "address": str(r["address"] or "-"),
                      "dates": _period(r, lambda d: f"{d:%m.%d}"),
+                     "state": _status(r)[0], "state_color": _status(r)[1],      # 미리보기 카드의 상태 배지 (A안)
                      "poster": _poster_url(r.get("images"))}
                     for _, r in mapped.iterrows()],
             selected=selected, height=MAP_HEIGHT,
@@ -6765,6 +7184,8 @@ def page_map() -> None:
         with col_day, st.container(key="map_daily"):
             render_daily(df)
         with col_map, st.container(key="map_frame"):
+            if not mapped.empty:          # A안: 지도 위 '지도에 N곳' 알약
+                st.markdown(f'<div class="map-count">지도에 <b>{len(mapped)}곳</b></div>', unsafe_allow_html=True)
             draw_map()
         # PC 지도: 화면 높이에 맞춰 늘린다 (메뉴바·여백만 빼고, 페이지 스크롤이 생기지 않을 만큼, 11/18 요청)
         st.markdown("<style>@media (min-width: 641px) { .st-key-map_frame iframe { height: calc(100vh - 140px) !important;"
@@ -6786,83 +7207,90 @@ def page_map() -> None:
 
 # ================================================================ 데일리 팝업 노트
 # 지도보기 왼쪽: 고른 날(처음엔 오늘)에 열려 있는 팝업을 지역별로. 날짜는 ‹ › 로 하루씩 옮긴다
-DAILY_CSS = f"""
+DAILY_CSS = """
 <style>
-/* 머리 상자: 제목 / ‹ 날짜 › / ‹ 지역 › 세 줄을 촘촘하게 */
-.st-key-daily_head {{ border:1px solid #DDE2E0; border-radius:12px; padding:8px 6px; background:#fff;
-                     gap:4px !important; }}
-.st-key-daily_head [data-testid="stMarkdownContainer"] {{ margin:0 !important; }}
-.dn-title {{ text-align:center; color:#6B7672; font-size:.75rem; font-weight:600; line-height:1.2; }}
-.st-key-daily_nav, .st-key-daily_areas {{ align-items:center !important; justify-content:center !important;
-  gap:4px !important; flex-wrap:nowrap !important; }}
-.st-key-daily_nav > div, .st-key-daily_areas > div {{ width:auto !important; flex:0 0 auto !important; }}
-.st-key-daily_nav button, .st-key-daily_areas button {{ min-height:0 !important; height:22px; width:22px;
-  padding:0 !important; line-height:1; }}
-.st-key-daily_nav button p, .st-key-daily_areas button p {{ font-size:1rem !important; line-height:1 !important;
-  color:var(--accent-deep) !important; font-weight:700; margin:0 !important; }}
-.st-key-daily_nav [data-testid="stMarkdownContainer"], .st-key-daily_areas [data-testid="stMarkdownContainer"] {{
-  display:flex; align-items:center; height:22px; margin:0 !important; }}
-.st-key-daily_nav [data-testid="stMarkdownContainer"] p, .st-key-daily_areas [data-testid="stMarkdownContainer"] p {{
-  margin:0; line-height:1; }}
-.dn-date {{ font-weight:800; font-size:.88rem; color:#1F2A27; white-space:nowrap; }}
-.dn-today {{ background:var(--accent-soft); color:var(--accent-deep); font-size:.66rem; font-weight:700;
-            padding:.1rem .35rem; border-radius:5px; margin-right:4px; }}
-.dn-area {{ display:inline-block; min-width:70px; text-align:center; font-size:.76rem; font-weight:700; color:#26302D;
-           background:#F4F6F5; border-radius:999px; padding:.2rem .6rem; white-space:nowrap; }}
-.dn-area span {{ color:#8A9490; font-weight:500; margin-left:3px; }}
-/* 목록: 포스터 · 위치 · 작품명만. 포스터를 점선으로 잇는다 */
-.dn-list {{ margin-top:12px; padding:0 2px; }}   /* 스크롤 없이 아래로 모두 보인다 */
-.dn-item {{ display:flex; align-items:center; gap:10px; position:relative; padding:0 0 12px;
-           text-decoration:none !important; color:inherit !important; }}
-.dn-item:not(:last-child)::before {{ content:""; position:absolute; left:17px; top:38px; bottom:2px;
-                                    border-left:1.5px dashed #C9D1CE; }}
-.dn-thumb {{ flex:0 0 36px; height:36px; border-radius:50%; background:#F4F6F5 center/cover no-repeat;
-            border:1px solid #E4E8E6; }}
-.dn-body {{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:3px; }}
-.dn-body .abadge {{ font-size:.62rem; line-height:1.4; padding:0 .35rem; border-radius:5px; font-weight:700; }}
-.dn-name {{ max-width:100%; font-weight:800; font-size:.8rem; line-height:1.25; color:#1F2A27;
-           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
-.dn-item:hover .dn-name {{ color:var(--accent-deep); }}
-.dn-empty {{ color:#6B7672; text-align:center; padding:16px 4px; font-size:.76rem; margin-top:8px; }}
-/* 위의 보이지 않는 칸들(스타일·내 위치 칸) 사이 기본 간격 때문에 머리 상자가 16px 내려가 있었다.
-   칸 사이 간격을 없애서 지도·캘린더와 위쪽 선을 맞춘다 (목록과의 사이는 .dn-list 의 margin-top) */
-.st-key-map_daily {{ gap: 0 !important; }}
-.st-key-map_daily .dn-list {{ margin-top: 14px; }}
+/* A안 (11/25, A-Map · A-MMap · 웹 a-browse.css 의 데일리 팝업 노트): 회색 상자 안에 제목(Jua) · ‹ 날짜 › · ‹ 지역 › 흰 알약 · 안내 한 줄 · 카드 목록.
+   상자 · 3단 폭은 A_BROWSE_CSS 가 잡는다 */
+.st-key-daily_head { border: 0; border-radius: 0; padding: 0; background: none; gap: 10px !important; overflow: visible !important; }
+.st-key-daily_head [data-testid="stMarkdownContainer"] { margin: 0 !important; }
+.dn-title { display: flex; align-items: center; font-family: "Jua", sans-serif; font-weight: 400; font-size: 22px; line-height: 1.3; color: #26302d; }
+.st-key-daily_nav, .st-key-daily_areas { align-items: center !important; justify-content: space-between !important; gap: 2px !important;
+  flex-wrap: nowrap !important; padding: 4px; border-radius: 999px; background: #fff; }
+.st-key-daily_nav > div, .st-key-daily_areas > div { width: auto !important; flex: 0 0 auto !important; min-width: 0; }
+.st-key-daily_nav > div:has(.dn-date), .st-key-daily_areas > div:has(.dn-area) { flex: 0 1 auto !important; overflow: hidden; }
+.st-key-daily_nav button, .st-key-daily_areas button { min-height: 0 !important; width: 36px !important; height: 36px !important; padding: 0 !important;
+  border: 0 !important; border-radius: 50% !important; background: none !important; display: flex !important; align-items: center !important;
+  justify-content: center !important; }
+.st-key-daily_nav button:hover:not(:disabled), .st-key-daily_areas button:hover:not(:disabled) { background: #e6fbf7 !important; }
+.st-key-daily_nav button span[data-testid="stIconMaterial"], .st-key-daily_areas button span[data-testid="stIconMaterial"] {
+  font-size: 22px !important; color: #26302d !important; margin: 0 !important; }
+.st-key-daily_nav button:disabled span[data-testid="stIconMaterial"], .st-key-daily_areas button:disabled span[data-testid="stIconMaterial"] { color: #c5cdca !important; }
+.st-key-daily_nav button [data-testid="stMarkdownContainer"], .st-key-daily_areas button [data-testid="stMarkdownContainer"] { display: none !important; }
+.st-key-daily_nav [data-testid="stMarkdownContainer"], .st-key-daily_areas [data-testid="stMarkdownContainer"] {
+  display: flex; align-items: center; margin: 0 !important; }
+.st-key-daily_nav [data-testid="stMarkdownContainer"] p, .st-key-daily_areas [data-testid="stMarkdownContainer"] p { margin: 0; line-height: 1.4; }
+.dn-date { display: inline-flex; align-items: center; font-size: 14px; font-weight: 800; color: #26302d; white-space: nowrap; }
+.dn-today { margin-right: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 800; line-height: 1.5; color: #0b5e57;
+  background: #e6fbf7; }
+.dn-area { display: inline-block; max-width: 100%; font-size: 14px; font-weight: 800; color: #26302d; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.dn-area span { margin-left: 5px; color: #0f6b5c; font-weight: 800; }
+.dn-hint { font-size: 13px; line-height: 1.5; color: #5f6b68; }
+.dn-hint b { color: #0f6b5c; }
+/* 목록: 줄마다 썸네일 40×52 · 작품 · '지역 · ~ 12.15' · 상태 배지 */
+.dn-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0 0 2px; }
+.dn-item { display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 10px; row-gap: 3px; align-items: center; padding: 8px;
+  border: 1px solid #e3e9e7; border-radius: 12px; background: #fff; color: #26302d !important; text-decoration: none !important; }
+.dn-item:hover { border-color: #14b8a6; }
+.dn-item.on { padding: 7px; border: 2px solid #14b8a6; }
+.dn-thumb { grid-row: 1 / span 2; width: 40px; height: 52px; border-radius: 8px; background: #f4f6f5 center / cover no-repeat; }
+.dn-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; align-self: end; }
+.dn-name { max-width: 100%; font-size: 14px; font-weight: 800; line-height: 1.35; color: #26302d; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.dn-place { max-width: 100%; font-size: 12.5px; line-height: 1.4; color: #5f6b68; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dn-place b { font-weight: 700; }
+.dn-state { grid-column: 2; justify-self: start; align-self: start; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 800;
+  line-height: 1.5; white-space: nowrap; color: #0b5e57; background: #e6fbf7; }
+.dn-empty { margin: 0; padding: 24px 8px; border-radius: 12px; background: #fff; font-size: 13px; color: #5f6b68; text-align: center; }
 /* 내 위치를 묻는 칸은 보이지 않게 흐름에서 뺀다 (스크립트만 돈다) */
-.st-key-daily_loc {{ position:absolute !important; width:0 !important; height:0 !important; overflow:hidden; }}
+.st-key-daily_loc { position:absolute !important; width:0 !important; height:0 !important; overflow:hidden; }
 /* 제목 옆 ? : 커서를 올리거나(모바일은 누르면) 안내 말풍선 */
-.dn-help {{ position:relative; display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px;
-           margin-left:4px; border:1px solid #B5BDBA; border-radius:50%; color:#8A9490; font-size:.6rem; font-weight:700;
-           line-height:1; cursor:help; vertical-align:1px; }}
-.dn-tip {{ display:none; position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%); z-index:50;
-          width:170px; padding:7px 9px; border-radius:8px; background:#26302D; color:#fff; font-size:.7rem;
-          font-weight:500; line-height:1.4; text-align:left; word-break:keep-all; box-shadow:0 4px 12px rgba(0,0,0,.18); }}
-.dn-tip b {{ color:#7FE3D3; }}
-.dn-help:hover .dn-tip, .dn-help:focus .dn-tip {{ display:block; }}
-.st-key-daily_head {{ overflow:visible !important; }}
+.dn-help { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:none; width:17px; height:17px;
+           margin-left:6px; border:1.5px solid #9aa5a1; border-radius:50%; color:#7b8784; font-family:"NanumSquareRound", "Pretendard", sans-serif;
+           font-size:11px; font-weight:800; line-height:1; cursor:help; }
+.dn-tip { display:none; position:absolute; top:calc(100% + 6px); left:0; transform:translateX(-40%); z-index:50;
+          width:190px; padding:7px 9px; border-radius:8px; background:#26302D; color:#fff; font-size:12px;
+          font-weight:500; line-height:1.4; text-align:left; word-break:keep-all; box-shadow:0 4px 12px rgba(0,0,0,.18); }
+.dn-tip b { color:#7FE3D3; }
+.dn-help:hover .dn-tip, .dn-help:focus .dn-tip { display:block; }
 /* 지도보기: 지도는 화면에 붙어 따라 내려오지 않고 페이지와 함께 스크롤된다 */
-.st-key-map_row [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{ position: static !important; top: auto !important; }}
-/* 모바일: 데일리 팝업 노트(왼쪽 좁게)와 지도를 한 줄에, 내 캘린더는 그 아래 전체 폭 */
-@media (max-width: 640px) {{
-  /* 예전 모바일 규칙(지도를 맨 위로 세로 쌓기: flex-direction column + order -1)을 이 줄에서는 덮어쓴다 */
-  .st-key-map_row [data-testid="stHorizontalBlock"]:has(.st-key-map_daily) {{ flex-direction: row !important;
-    flex-wrap: wrap !important; gap: 8px !important; }}
-  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{ order: 0 !important; }}
-  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {{
-    flex: 0 0 38% !important; width: 38% !important; min-width: 38% !important; }}
-  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{
-    flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }}
-  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_cal) {{
-    flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important; }}
-  .st-key-daily_head {{ padding: 6px 2px; }}
-  .dn-today {{ display: none; }}
-  .dn-date {{ font-size: .76rem; }}
-  .dn-area {{ min-width: 0; font-size: .7rem; padding: .15rem .45rem; }}
-  .dn-name {{ font-size: .74rem; }}
-  .dn-thumb {{ flex-basis: 30px; height: 30px; }}
-  .dn-item {{ gap: 6px; }}
-  .dn-item:not(:last-child)::before {{ left: 14px; top: 32px; }}
-}}
+.st-key-map_row [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) { position: static !important; top: auto !important; }
+/* 모바일 (A-MMap): 지도 아래 전체 폭. 머리는 '제목 | ‹ 날짜 ›' · '안내 | ‹ 지역 ›' 두 줄 */
+@media (max-width: 640px) {
+  .st-key-map_daily { gap: 10px !important; }
+  .st-key-daily_head { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title day" "hint area";
+    align-items: center; gap: 6px 8px !important; }
+  .st-key-daily_head > * { width: auto !important; min-width: 0; }
+  .st-key-daily_head > :has(.dn-title) { grid-area: title; }
+  .st-key-daily_head > :has(.st-key-daily_nav) { grid-area: day; }
+  .st-key-daily_head > :has(.st-key-daily_areas) { grid-area: area; justify-self: end; }
+  .st-key-daily_head > :has(.dn-hint) { grid-area: hint; }
+  .dn-title { font-size: 21px; }
+  .dn-hint { font-size: 12.5px; }
+  .st-key-daily_nav, .st-key-daily_areas { padding: 2px; background: #f6f8f7; }
+  .st-key-daily_nav button, .st-key-daily_areas button { width: 40px !important; height: 40px !important; }
+  .st-key-daily_nav button span[data-testid="stIconMaterial"], .st-key-daily_areas button span[data-testid="stIconMaterial"] { font-size: 20px !important; }
+  .dn-date, .dn-area { font-size: 13.5px; }
+  .dn-area { max-width: 110px; }
+  .dn-list { gap: 10px; }
+  .dn-item { display: flex; gap: 12px; padding: 10px; border-width: 1.5px; border-radius: 14px; }
+  .dn-item.on { padding: 9.5px; }
+  .dn-thumb { width: 44px; height: 58px; flex: 0 0 44px; }
+  .dn-body { gap: 2px; align-self: center; flex: 1 1 auto; }
+  .dn-name { font-size: 14.5px; }
+  .dn-state { margin-left: auto; align-self: center; flex: none; padding: 2px 9px; }
+  .dn-empty { background: #f6f8f7; }
+}
 </style>
 """
 
@@ -6920,21 +7348,27 @@ def render_daily(df: pd.DataFrame) -> None:
         guide = "위치 권한을 허용하면 내 주변 지역 팝업부터 보여 줘요"
     else:
         guide = "내 위치를 확인하고 있어요"
+    wd = _WEEKDAYS[day.weekday()]
+    year = "" if day.year == TODAY.year else f"{day.year}년 "
     with st.container(key="daily_head"):
         st.markdown(f'<div class="dn-title">데일리 팝업 노트<span class="dn-help" tabindex="0">?'
                     f'<span class="dn-tip">{guide}</span></span></div>', unsafe_allow_html=True)
+        # ‹ 날짜 › · ‹ 지역 › 는 흰 알약 (A안 · 웹 DailyNote 와 같게). PC 는 '11월 25일 (수)', 모바일은 '11.25 (수)'
         with st.container(horizontal=True, key="daily_nav"):
-            st.button("‹", key="daily_prev", type="tertiary", on_click=_daily_shift, args=(-1,))
-            st.markdown(('<span class="dn-today">오늘</span>' if off == 0 else "")
-                        + f'<span class="dn-date">{day:%y. %m. %d.} {_WEEKDAYS[day.weekday()]}</span>',
-                        unsafe_allow_html=True)
-            st.button("›", key="daily_next", type="tertiary", on_click=_daily_shift, args=(1,))
+            st.button("", icon=":material/chevron_left:", key="daily_prev", type="tertiary", on_click=_daily_shift, args=(-1,))
+            st.markdown('<span class="dn-date">' + ('<span class="dn-today">오늘</span>' if off == 0 else "")
+                        + f'<span class="ab-pc">{year}{day.month}월 {day.day}일 ({wd})</span>'
+                        f'<span class="ab-m">{day.month}.{day.day} ({wd})</span></span>', unsafe_allow_html=True)
+            st.button("", icon=":material/chevron_right:", key="daily_next", type="tertiary", on_click=_daily_shift, args=(1,))
         with st.container(horizontal=True, key="daily_areas"):
-            st.button("‹", key="daily_area_prev", type="tertiary", on_click=_daily_area_shift,
+            st.button("", icon=":material/chevron_left:", key="daily_area_prev", type="tertiary", on_click=_daily_area_shift,
                       args=(-1, len(choices)), disabled=len(choices) < 2)
             st.markdown(f'<span class="dn-area">{escape(area)}<span>{count}</span></span>', unsafe_allow_html=True)
-            st.button("›", key="daily_area_next", type="tertiary", on_click=_daily_area_shift,
+            st.button("", icon=":material/chevron_right:", key="daily_area_next", type="tertiary", on_click=_daily_area_shift,
                       args=(1, len(choices)), disabled=len(choices) < 2)
+        if order:      # 어느 지역부터 보여 주는지 한 줄 (내 위치를 알면 가까운 곳부터, 모르면 그날 팝업이 많은 곳부터)
+            st.markdown(f'<div class="dn-hint">{"내 위치에서 가까운 " if near else "팝업이 많은 "}<b>{escape(str(order[0]))}</b>부터</div>',
+                        unsafe_allow_html=True)
 
     if area != "전체":
         open_ = open_[open_["area"].replace("", "기타") == area]
@@ -6943,14 +7377,19 @@ def render_daily(df: pd.DataFrame) -> None:
         return
     _, _, fcounts = _fav_state()
     rows = sorted(open_.to_dict("records"), key=lambda r: (-fcounts.get(str(r["entry_id"]), 0), r["start_date"]))
-    items = "".join(
-        f'<a class="dn-item" data-id="{escape(str(r["entry_id"]))}" href="./?cafe={quote(str(r["entry_id"]))}" target="_self"'
-        f'>'
-        f'<span class="dn-thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')"></span>'
-        f'<div class="dn-body">{_area_badge(r.get("address"))}'
-        f'<div class="dn-name">{escape(str(r["work"]))}</div></div></a>'
-        for r in rows)
-    st.markdown(f'<div class="dn-list">{items}</div>', unsafe_allow_html=True)
+
+    def item(r: dict) -> str:
+        """한 줄: 썸네일(40×52) · 작품 · '지역 · ~ 12.15' · 상태 배지."""
+        label, color, _ = _status(r)
+        place = geo.area_name(str(r.get("address") or ""))
+        where = (f'<b style="color:{_darken(_area_colors(r.get("address"))[0], 0.62)}">{escape(place)}</b> · ' if place else "")
+        return (f'<a class="dn-item" data-id="{escape(str(r["entry_id"]))}" href="./?cafe={quote(str(r["entry_id"]))}" target="_self">'
+                f'<span class="dn-thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')"></span>'
+                f'<span class="dn-body"><span class="dn-name">{escape(str(r["work"]))}</span>'
+                f'<span class="dn-place">{where}{escape(_abrowse_period_short(r))}</span></span>'
+                f'<span class="dn-state {color}">{escape(label)}</span></a>')
+
+    st.markdown(f'<div class="dn-list">{"".join(item(r) for r in rows)}</div>', unsafe_allow_html=True)
     # 목록을 누르면 상세로 가지 않고, 지도에서 그 팝업 자리를 보여 주며 지도 안 목록 창에 띄운다
     components.html(f"<script>window.parent.eval({json.dumps(_DAILY_PEEK_JS)});</script>", height=0)
 
@@ -6967,6 +7406,9 @@ _DAILY_PEEK_JS = """
     try { ok = !!(f && f.contentWindow.peek && f.contentWindow.peek(a.dataset.id)); } catch (err) {}
     if (!ok) return;            // 지도에 없는 팝업이면 원래대로 상세로 간다
     e.preventDefault();
+    // 고른 줄은 민트 테두리로 (A안)
+    document.querySelectorAll('a.dn-item.on').forEach(function (x) { x.classList.remove('on'); });
+    a.classList.add('on');
     // 모바일처럼 지도가 화면 밖에 있으면 지도가 보이게
     const r = f.getBoundingClientRect();
     if (r.top < 0 || r.bottom > window.innerHeight) f.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
