@@ -3,35 +3,38 @@
 <head>
 <meta charset="utf-8" />
 <style>
+  /* A안 상세 (11/25, 웹 a-detail.css 의 .ad-gal 과 같게): 3:4 큰 사진(민트 테두리) + 양옆 ‹ › + 아래 작은 사진 줄 */
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+  html, body { margin: 0; padding: 0; background: transparent; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
                       "Malgun Gothic", "Noto Sans KR", sans-serif; }
-  .stage { position: relative; height: 100%; border-radius: 18px; overflow: hidden;
-           background: #f4f6f5; }
-  .track { display: flex; height: 100%; transition: transform .45s ease; }
-  .slide { flex: 0 0 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-           cursor: zoom-in; }
-  .slide img { width: 100%; height: 100%; object-fit: contain; user-select: none; }  /* 작은 그림도 칸에 맞게 키운다 */
-  .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 38px; height: 38px;
-         border-radius: 50%; border: 0; background: rgba(255,255,255,.92); color: #2E9C82;
-         font-size: 20px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.15);
-         display: flex; align-items: center; justify-content: center; transition: background .15s; }
-  .nav:hover { background: #56C2A7; color: #fff; }
+  #gal { display: flex; flex-direction: column; gap: 10px; }
+  .stage { position: relative; aspect-ratio: 3 / 4; border-radius: 18px; overflow: hidden;
+           border: 2.5px solid #9EDDCC; background: #f4f6f5; }
+  .slide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+           cursor: zoom-in; opacity: 0; pointer-events: none; transition: opacity .35s ease; }
+  .slide.on { opacity: 1; pointer-events: auto; }
+  .slide img { width: 100%; height: 100%; object-fit: contain; user-select: none; display: block; }
+  .nav { position: absolute; top: 50%; width: 40px; height: 40px; margin-top: -20px;
+         border-radius: 50%; border: 0; background: rgba(255,255,255,.85); color: #26302D;
+         font-size: 22px; line-height: 1; padding: 0 0 3px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .nav:hover { background: #fff; }
   .prev { left: 10px; } .next { right: 10px; }
-  .dots { position: absolute; bottom: 10px; left: 0; right: 0; display: flex; gap: 6px;
-          justify-content: center; }
-  .dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(255,255,255,.85);
-         border: 1px solid #cfe5dd; cursor: pointer; transition: width .2s, background .2s; }
-  .dot.on { width: 20px; background: #56C2A7; border-color: #56C2A7; }
-  .count { position: absolute; top: 10px; right: 10px; background: rgba(38,48,45,.7); color: #fff;
-           font-size: 12px; padding: 3px 9px; border-radius: 999px; }
-  .zoomhint { position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,.92);
-              color: #2E9C82; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+  .count, .zoomhint { position: absolute; top: 10px; display: inline-flex; align-items: center; gap: 4px;
+           padding: 3px 10px; border-radius: 999px; background: rgba(31,42,39,.62); color: #fff;
+           font-size: 12px; font-weight: 700; pointer-events: none; }
+  .count { right: 10px; } .zoomhint { left: 10px; }
+  .thumbs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 1px; }
+  .thumbs::-webkit-scrollbar { display: none; }
+  .thumbs button { flex: 0 0 calc((100% - 24px) / 4); aspect-ratio: 1; border-radius: 10px; border: 2px solid transparent;
+           padding: 0; background: #f4f6f5; overflow: hidden; cursor: pointer; }
+  .thumbs button.on { border-color: #14b8a6; }
+  .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  @media (prefers-reduced-motion: reduce) { .slide { transition: none; } }
 </style>
 </head>
 <body>
-<div class="stage" id="stage"></div>
+<div id="gal"><div class="stage" id="stage"></div><div class="thumbs" id="thumbs" hidden></div></div>
 
 <script>
 /* ---------- Streamlit 연결 (빌드 없이 쓰는 기본 핸드셰이크) ---------- */
@@ -51,63 +54,68 @@ const abs = (u) => new URL(u, window.parent.location.href).href;
 
 function go(i) {
   idx = (i + urls.length) % urls.length;
-  document.querySelector(".track").style.transform = `translateX(-${idx * 100}%)`;
-  document.querySelectorAll(".dot").forEach((d, j) => d.classList.toggle("on", j === idx));
+  document.querySelectorAll(".slide").forEach((d, j) => d.classList.toggle("on", j === idx));
+  const row = document.getElementById("thumbs");
+  row.querySelectorAll("button").forEach((d, j) => d.classList.toggle("on", j === idx));
   const c = document.querySelector(".count");
   if (c) c.textContent = `${idx + 1} / ${urls.length}`;
+  // 지금 사진의 작은 그림이 줄 안에 보이게 (줄만 옆으로 민다)
+  const cur = row.children[idx];
+  if (cur) {
+    const left = cur.offsetLeft - row.offsetLeft;
+    if (left < row.scrollLeft || left + cur.offsetWidth > row.scrollLeft + row.clientWidth)
+      row.scrollTo({ left: Math.max(0, left - cur.offsetWidth), behavior: "smooth" });
+  }
 }
 
+const still = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
 function play() {
   stop();
-  if (urls.length > 1) timer = setInterval(() => go(idx + 1), AUTO_MS);
+  if (urls.length > 1 && !still()) timer = setInterval(() => go(idx + 1), AUTO_MS);
 }
 function stop() { if (timer) { clearInterval(timer); timer = null; } }
 
+// 사진이 안 열리면 깨진 그림 대신 기본 포스터
+const FALLBACK = "app/static/default_poster.png";
+function fallback(img) {
+  img.addEventListener("error", () => { if (!img.dataset.fb) { img.dataset.fb = "1"; img.src = abs(FALLBACK); } });
+}
+
 function render() {
-  const stage = document.getElementById("stage");
+  const stage = document.getElementById("stage"), row = document.getElementById("thumbs");
   const many = urls.length > 1;
   stage.innerHTML =
-    `<div class="track">${urls.map((u) => `<div class="slide"><img src="${abs(u)}" alt=""/></div>`).join("")}</div>` +
-    `<span class="zoomhint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="vertical-align:-1px;margin-right:3px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>눌러서 크게 보기</span>` +
+    urls.map((u) => `<div class="slide"><img src="${abs(u)}" alt=""/></div>`).join("") +
+    `<span class="zoomhint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>눌러서 크게 보기</span>` +
     (many ? `<span class="count"></span>
-             <button class="nav prev" aria-label="이전 이미지">‹</button>
-             <button class="nav next" aria-label="다음 이미지">›</button>
-             <div class="dots">${urls.map((_, j) => `<span class="dot" data-i="${j}"></span>`).join("")}</div>` : "");
+             <button class="nav prev" aria-label="이전 사진">‹</button>
+             <button class="nav next" aria-label="다음 사진">›</button>` : "");
+  row.hidden = !many;
+  row.innerHTML = many ? urls.map((u, j) => `<button type="button" aria-label="사진 ${j + 1}"><img src="${abs(u)}" alt="" loading="lazy"/></button>`).join("") : "";
+  document.querySelectorAll("#gal img").forEach(fallback);
   stage.querySelectorAll(".slide").forEach((s, j) => s.onclick = () => openZoom(j));
   if (many) {
     stage.querySelector(".prev").onclick = (e) => { e.stopPropagation(); go(idx - 1); play(); };
     stage.querySelector(".next").onclick = (e) => { e.stopPropagation(); go(idx + 1); play(); };
-    stage.querySelectorAll(".dot").forEach((d) => d.onclick = () => { go(+d.dataset.i); play(); });
-    stage.onmouseenter = stop;          // 보고 있는 동안은 멈춘다
-    stage.onmouseleave = play;
+    row.querySelectorAll("button").forEach((d, j) => d.onclick = () => { go(j); play(); });
+    const gal = document.getElementById("gal");
+    gal.onmouseenter = stop;          // 보고 있는 동안은 멈춘다
+    gal.onmouseleave = play;
   }
   go(0);
   play();
-  stage.querySelectorAll(".slide img").forEach((img) => {
-    if (img.complete) fit(); else img.addEventListener("load", fit);
-  });
+  fit();
 }
 
-/* 모바일(바깥 화면 폭 640px 이하)에서는 칸 높이를 이미지에 맞춘다.
-   폭이 좁으면 420px 칸에 이미지가 작게 들어가 위아래가 비고, 그게 제목과의 큰 간격처럼 보였다.
-   이미지 중 가장 긴 것이 칸 폭에 꽉 찰 때의 높이로 줄인다 (최대 maxH, 잘리는 이미지는 없다) */
-let maxH = 420, fitH = 0;
-function narrow() {
-  try { return window.parent.innerWidth <= 640; } catch (e) { return window.innerWidth <= 640; }
-}
+/* 칸 높이 = 내용 높이 (3:4 사진 + 작은 사진 줄). 폭이 바뀌면 다시 맞춘다.
+   수정하기 탭에서는 이 칸이 숨겨져 폭이 0 이 되는데, 그때는 높이를 그대로 둔다 */
 function fit() {
-  const stage = document.getElementById("stage");
-  const w = stage.clientWidth;
-  if (!narrow() || !w) { fitH = 0; Streamlit.height(maxH); return; }
-  let h = 0;
-  stage.querySelectorAll(".slide img").forEach((img) => {
-    if (img.naturalWidth) h = Math.max(h, w * img.naturalHeight / img.naturalWidth);
-  });
-  if (!h) return;
-  fitH = Math.min(maxH, Math.round(h));
-  Streamlit.height(fitH);
+  const gal = document.getElementById("gal");
+  if (!gal.clientWidth) return;
+  Streamlit.height(Math.ceil(gal.getBoundingClientRect().height) + 1);
 }
 window.addEventListener("resize", fit);
+try { new ResizeObserver(fit).observe(document.getElementById("gal")); } catch (e) {}
 
 /* ---------- 확대 보기: 바깥 페이지 전체를 덮는 창을 띄운다 ---------- */
 function openZoom(start) {
@@ -176,17 +184,15 @@ function openZoom(start) {
 window.addEventListener("message", (event) => {
   if (!event.data || event.data.type !== "streamlit:render") return;
   const args = event.data.args || {};
-  maxH = args.height || 420;
-  Streamlit.height(fitH || maxH);    // 모바일에서 이미지에 맞춘 높이가 있으면 그 높이를 유지한다
   const next = JSON.stringify(args.urls || []);
-  if (next === sig) return;          // 같은 이미지면 다시 그리지 않는다 (보던 위치 유지)
+  if (next === sig) { fit(); return; }          // 같은 이미지면 다시 그리지 않는다 (보던 위치 유지)
   sig = next;
   urls = args.urls || [];
   render();
 });
 
 Streamlit.ready();
-Streamlit.height(420);
+Streamlit.height(560);
 </script>
 </body>
 </html>
