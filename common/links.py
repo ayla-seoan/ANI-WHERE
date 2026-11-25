@@ -1,7 +1,7 @@
 """참고 웹사이트 링크 확인 (11/18 안정성).
 
 공식 링크가 깨졌으면 상세 화면에서 '링크 확인 필요' 로 알린다. 확실히 깨진 경우만 표시한다:
-  - 404 · 410 · 5xx, 주소를 못 찾음(DNS)·연결 거부
+  - 404 · 410 · 5xx, 주소를 못 찾음(DNS)·연결 거부 (HEAD 로 안 열리면 GET 으로 한 번 더 보고 정한다)
   - 401 · 403 · 405 · 429 (막아 둔 사이트), 시간 초과는 '모름' 으로 두고 표시하지 않는다 (멀쩡한 링크를 깨졌다고 하지 않게)
 ANIWHERE_LINKCHECK=0 이면 확인하지 않는다 (테스트·오프라인).
 """
@@ -22,7 +22,8 @@ def check(url: str) -> bool | None:
         return None
     try:
         res = requests.head(url, allow_redirects=True, timeout=TIMEOUT, headers=UA)
-        if res.status_code in (403, 405, 400, 501):          # HEAD 를 막는 사이트가 많다 → GET 으로 한 번 더
+        # HEAD 를 막거나 HEAD 에만 404 를 주는 사이트가 많다 (11/25 khgames.co.kr: HEAD 404 · GET 200) → 안 열리면 GET 으로 한 번 더
+        if res.status_code >= 400:
             res = requests.get(url, allow_redirects=True, timeout=TIMEOUT, headers=UA, stream=True)
             res.close()
         code = res.status_code

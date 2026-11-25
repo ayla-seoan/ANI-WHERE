@@ -135,7 +135,7 @@ intro, intro_src
 ```
 Notion 트래커 DB ──(매일 08:40 GitHub Actions + 예비 3번, scripts/notion_import.py)──▶ Supabase cafes (append-only INSERT)
                                                                          └─▶ data/cafes.json 거울 커밋
-Supabase popups_current ──▶ Next.js 공개 웹 (ISR 10분) · MCP 서버 · Streamlit(STORAGE_MODE=supabase)
+Supabase popups_current ──▶ Next.js 공개 웹 (ISR 10분, Notion 가져오기 직후엔 /api/revalidate 로 바로) · MCP 서버 · Streamlit(STORAGE_MODE=supabase)
 ```
 
 - 저장소 Secret 에 `SUPABASE_URL` · `SUPABASE_KEY` 를 넣으면 Actions 가 자동으로 `STORAGE_MODE=supabase` 로 돈다. 비우면 예전처럼 `data/cafes.json` 에만 쓴다.

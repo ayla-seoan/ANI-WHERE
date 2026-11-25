@@ -128,7 +128,7 @@ npm run start -- -p 3100
    - `WEB_STORAGE` · `WEB_DATA_DIR` · `WEB_OAUTH_MOCK` 은 **넣지 않습니다** (시험용)
    - (선택) `NEXT_PUBLIC_KAKAO_JS_KEY` = 카카오 개발자 콘솔 > 내 애플리케이션 > 앱 키 > **JavaScript 키**. 브라우저에 그대로 보이는 공개용 키라 `NEXT_PUBLIC_` 을 붙이는 유일한 값입니다 (REST API 키·Admin 키는 넣지 않음). 같은 콘솔 > 플랫폼 > **Web 사이트 도메인**에 `https://ani-where.vercel.app` 을 등록해야 지도가 뜹니다. 비우거나 도메인이 등록되지 않으면 `/map` 은 OpenStreetMap 지도로 대신 보입니다. 빌드 때 코드에 들어가므로 바꾼 뒤에는 다시 배포합니다.
    - (선택, 11/20) `GITHUB_TOKEN` = 저장소를 **비공개**로 바꿀 때만. 공개 백업 데이터 · 예전 사진(`/img/…`)을 서버가 읽을 때 쓰는 읽기 전용 토큰(Contents: Read). `GITHUB_RAW` 로 원본 주소도 바꿀 수 있다 (기본은 지금 저장소). 둘 다 서버 전용 — 브라우저에는 깃허브 주소가 나오지 않는다
-4. Deploy. 이후 `main` 에 push 하면 자동 배포됩니다. 데이터는 배포 없이도 10분마다 새로 읽습니다.
+4. Deploy. 이후 `main` 에 push 하면 자동 배포됩니다. 데이터는 배포 없이도 10분마다 새로 읽습니다. `WEB_REVALIDATE_SECRET` 을 넣어 두면 Streamlit · GitHub Actions 가 Notion 에서 새 팝업을 넣은 직후 `POST /api/revalidate` 로 캐시를 비워 바로 보입니다 (11/25).
 5. Supabase 를 쓴다면 `supabase/migrations/002_public_views.sql` 이 먼저 적용돼 있어야 합니다 (`popups_current`, `popup_ratings` 뷰). 없으면 자동으로 GitHub 데이터로 내려가고 화면 아래에 이유가 표시됩니다.
 
 `vercel.json` 은 필요 없습니다 (헤더 설정은 `next.config.ts` 에 있음).

@@ -1,6 +1,7 @@
 # 매일 아침 Notion 트래커 → 앱 데이터 가져오기
 # Notion 매일 수집(08:00 KST, 약 20~30분)이 끝난 뒤 08:40 KST 에 돌고, 바뀐 게 있으면 data/cafes.json · 포스터를 커밋한다.
-# 필요한 Secret: NOTION_TOKEN (필수), KAKAO_REST_API_KEY (선택 — Notion 에 좌표가 없는 곳의 위치 찾기)
+# 필요한 Secret: NOTION_TOKEN (필수), KAKAO_REST_API_KEY (선택 — Notion 에 좌표가 없는 곳의 위치 찾기),
+#   WEB_REVALIDATE_SECRET (선택 — 가져온 직후 공개 웹 캐시 비우기)
 name: Notion 매일 가져오기
 
 on:
@@ -43,6 +44,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           STORAGE_MODE: ${{ secrets.SUPABASE_URL != '' && 'supabase' || 'local' }}
+          # (선택) 새 팝업을 넣은 뒤 공개 웹의 10분 캐시를 바로 비운다. Vercel 의 WEB_REVALIDATE_SECRET 과 같은 값
+          WEB_REVALIDATE_SECRET: ${{ secrets.WEB_REVALIDATE_SECRET }}
         run: python scripts/notion_import.py
 
       - name: 쓰지 않는 사진 파일 지우기

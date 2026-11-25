@@ -33,7 +33,7 @@ import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 from common import (admin, ai, ask, auth, cafe, catalog, favorite, gallery, geo, guard, images, kakao_map,
-                    kakao_postcode, mycal, notice, notion_sync, review, share, stats)
+                    kakao_postcode, mycal, notice, notion_sync, review, share, stats, web_refresh)
 from common import blog     # 블로그 후기 (네이버 블로그 검색 · API HUB)
 from common import season   # 계절 배경 그림 (내 캘린더, 11/18)
 from common import favwork  # 스토리 줄 '내가 관심있는 작품' (11/18)
@@ -5240,7 +5240,9 @@ def page_map() -> None:
     if synced and synced.get("error"):
         st.session_state["_sync_failed"] = True       # 수집 실패: 기존 데이터를 그대로 보여 주고 아래 안내를 띄운다
     # 기간이 지난 카페는 자동으로 지도에서 내린다 (기록은 남아서 수정 이력에서 되돌릴 수 있다)
-    cafe.expire_ended(store, TODAY)    # 조용히 처리한다 (안내는 띄우지 않는다)
+    ended = cafe.expire_ended(store, TODAY)    # 조용히 처리한다 (안내는 띄우지 않는다)
+    if ended or (synced and (synced.get("added") or synced.get("images") or synced.get("intros"))):
+        web_refresh.ping(store)        # 공개 웹의 10분 캐시를 바로 비운다 (11/25). 실패해도 그대로 진행
     rows = store.current_rows()
     selected = st.session_state.get("selected")
     current = next((r for r in rows if str(r["entry_id"]) == selected), None)

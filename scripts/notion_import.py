@@ -23,7 +23,7 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(ROOT / ".env")
 
-from common import cafe, notion_sync, storage  # noqa: E402
+from common import cafe, notion_sync, storage, web_refresh  # noqa: E402
 
 KST = timezone(timedelta(hours=9))
 
@@ -65,6 +65,9 @@ def main() -> int:
         mirror = ROOT / "data" / "cafes.json"
         mirror.write_text(json.dumps(store.all_rows(), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         print(f"Supabase → {mirror.relative_to(ROOT)} 거울 저장")
+        if len(store.all_rows()) != before:
+            # 새로 쌓인 기록이 있으면 공개 웹의 10분 캐시를 바로 비운다 (11/25, common/web_refresh.py)
+            print("공개 웹 캐시 비우기:", "완료" if web_refresh.ping(store) else "건너뜀 (WEB_REVALIDATE_SECRET 없음 또는 실패 — 웹은 10분 뒤 스스로 갱신)")
     elif getattr(store, "fallback_reason", ""):
         print(f"주의: Supabase 대신 로컬에 저장했습니다 ({store.fallback_reason})")
     return 0
