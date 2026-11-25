@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- 카카오·Leaflet SDK 는 window 전역이라 타입 정의 없이 쓴다 */
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { periodDot, PLACEHOLDER_POSTER, type Item } from "@/lib/popup";
+import { periodDot, PLACEHOLDER_POSTER, stateOf, type Item } from "@/lib/popup";
 import { CloseIcon } from "../Icons";
 
 // 지도 (앱 components/kakao_map 과 같은 모양): 물방울 핀, 커서를 올리면 포스터 카드, 누르면 지도 안 미리보기 창.
@@ -319,6 +319,8 @@ export default function MapCanvas({
   focus,
   me = null,
   onMe,
+  today = "",
+  onSelect,
 }: {
   points: Item[];
   home: Bounds | null;
@@ -328,6 +330,10 @@ export default function MapCanvas({
   onMe?: (me: { lat: number; lng: number }) => void;
   /** 바깥(데일리 노트·목록)에서 고른 팝업: 그 자리로 옮기고 미리보기 창을 연다. n 이 바뀔 때마다 다시 */
   focus: { id: string; n: number } | null;
+  /** 미리보기 카드의 상태 배지(진행 중 · D-n · 마감임박)용 오늘 날짜 */
+  today?: string;
+  /** 미리보기가 열리거나 닫힐 때 (열린 팝업 번호, 닫히면 '') — 데일리 노트가 그 줄을 표시한다 */
+  onSelect?: (id: string) => void;
 }) {
   const el = useRef<HTMLDivElement>(null);
   const engine = useRef<Engine | null>(null);
@@ -343,6 +349,12 @@ export default function MapCanvas({
     setSpot([p, ...here.filter((q) => q.id !== p.id)]);
     setSelected(p.id);
   };
+
+  const openId = spot ? selected : "";
+  useEffect(() => {
+    onSelect?.(openId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
 
   // 지도 만들기 (처음 한 번)
   useEffect(() => {
@@ -413,7 +425,7 @@ export default function MapCanvas({
       const r = z.getBoundingClientRect();
       const b = box.getBoundingClientRect();
       if (!r.width) return;
-      setMePos({ top: Math.round(r.bottom - b.top + 8), left: Math.round(r.left - b.left + r.width / 2 - 17) });
+      setMePos({ top: Math.round(r.bottom - b.top + 8), left: Math.round(r.left - b.left + r.width / 2 - 20) });
     };
     const timers = [200, 800, 2000, 4000].map((ms) => setTimeout(place, ms)); // 확대 버튼이 늦게 붙어서 몇 번 맞춘다
     const ro = new ResizeObserver(() => setTimeout(place, 120));
@@ -496,27 +508,29 @@ export default function MapCanvas({
               <CloseIcon />
             </button>
           </div>
-          {spot.map((q) => (
-            <Link key={q.id} href={`/popup/${q.id}`} className="item" prefetch={false}>
-              <img
-                src={q.poster || PLACEHOLDER_POSTER}
-                alt=""
-                loading="lazy"
-                onError={(e) => {
-                  if (!e.currentTarget.src.endsWith(PLACEHOLDER_POSTER)) e.currentTarget.src = PLACEHOLDER_POSTER;
-                }}
-              />
-              <div>
-                <div className="w">{q.work}</div>
-                <div className="c">{q.name}</div>
-                <div className="a">{q.address}</div>
-                <div className="d">{periodDot(q)}</div>
-              </div>
-              <span className="go" aria-hidden>
-                ›
-              </span>
-            </Link>
-          ))}
+          {spot.map((q) => {
+            const st = today ? stateOf(q, today) : null;
+            return (
+              <Link key={q.id} href={`/popup/${q.id}`} className="item" prefetch={false}>
+                <img
+                  src={q.poster || PLACEHOLDER_POSTER}
+                  alt=""
+                  loading="lazy"
+                  onError={(e) => {
+                    if (!e.currentTarget.src.endsWith(PLACEHOLDER_POSTER)) e.currentTarget.src = PLACEHOLDER_POSTER;
+                  }}
+                />
+                <div>
+                  {st && <span className={`st ${st.color}`}>{st.label}</span>}
+                  <div className="w">{q.work}</div>
+                  <div className="c">{q.name}</div>
+                  <div className="a">{q.address}</div>
+                  <div className="d">{periodDot(q)}</div>
+                  {spot.length === 1 && <div className="go">한 번 더 누르면 상세</div>}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

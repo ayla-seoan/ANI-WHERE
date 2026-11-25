@@ -1,5 +1,5 @@
 "use client";
-import { submitWith } from "@/lib/submit";
+import Link from "next/link";
 import { startTransition, useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -11,21 +11,19 @@ import {
   withdrawAction,
   type FormState,
 } from "@/app/actions";
-import { avatarUrl } from "@/lib/avatar";
+import { submitWith } from "@/lib/submit";
 import { toast } from "@/components/member/Toast";
 
-// 마이페이지 '내 계정' (앱 _my_account): 프로필 사진 · 닉네임 · 로그인 수단 · 가입일 · 회원 번호,
-// 닉네임 바꾸기 + 로그아웃, (아이디 가입) 비밀번호 바꾸기, 개인정보처리방침, 탈퇴하기.
-// 사진은 서버가 줄이고 위치 정보를 지운 뒤 사진 저장소(Supabase Storage)에 올린다. 잘 되면 앱처럼 가운데 토스트로 알린다.
+// 마이페이지 '설정' (A-MyPage · A-MMyPage). 예전 /login '내 계정'(MyAccount)의 기능을 그대로 옮겼다 (앱 _my_account):
+// 닉네임 바꾸기 · 프로필 사진(선택 동의가 있어야 저장) · 기본 사진 · (아이디 가입) 비밀번호 바꾸기 · 처리방침 · 로그아웃 · 탈퇴.
+// 쓰기는 모두 기존 서버 액션(app/actions.ts)으로만 한다.
 
 export type Account = {
   nick: string;
-  avatar: string;
+  /** 지금 프로필 사진을 쓰고 있는지 (false = 기본 그림) */
+  hasPhoto: boolean;
   provider: string;
   providerLabel: string;
-  agreed: string;
-  key: string;
-  admin: boolean;
 };
 
 /** 실패는 칸 아래에, 성공은 앱(_avatar_saved · flash)처럼 가운데 토스트로 */
@@ -42,8 +40,8 @@ function Msg({ s }: { s: FormState }) {
   return null;
 }
 
-export default function MyAccount({ a, suggest }: { a: Account; suggest: string }) {
-  const router = useRouter();       // 사진을 바꾸면 화면(내 계정 카드 · 메뉴바 동그라미)을 바로 새 사진으로 (11/19 요청)
+export default function Settings({ a, suggest, notice }: { a: Account; suggest: string; notice: string }) {
+  const router = useRouter(); // 사진을 바꾸면 화면(프로필 · 메뉴바 동그라미)을 바로 새 사진으로 (11/19 요청)
   const [rs, renameForm, renaming] = useActionState(renameAction, null);
   const [ps, pwForm] = useActionState(changePasswordAction, null);
   const [ws, withdrawForm] = useActionState(withdrawAction, null);
@@ -57,33 +55,45 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
   const [openOut, setOpenOut] = useState(false);
   const local = a.provider === "local";
   return (
-    <div className="auth-wrap">
-      <div className="auth-title">내 계정</div>
-      <div className="auth-card me-card">
-        <img
-          className="me-avimg"
-          src={avatarUrl(a.avatar)}
-          alt=""
-          width={72}
-          height={72}
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            e.currentTarget.src = avatarUrl("");
-          }}
-        />
-        <div className="me-info">
-          <b>{a.nick}</b>
-          <br />
-          <span className="auth-note">
-            {a.providerLabel} 계정으로 로그인 중 · 가입 {a.agreed.slice(0, 10)}
-            <br />
-            회원 번호 <code>{a.key}</code>
-            {a.admin ? " · 관리자" : ""}
+    <section className="mp-set" id="mp-set" aria-labelledby="mp-set-h">
+      <h2 id="mp-set-h">설정</h2>
+
+      <form onSubmit={submitWith(renameForm)} className="mp-nick">
+        <label className="mp-fl">
+          <span>
+            닉네임 (10자, 비우면 랜덤)
+            <span className="help" tabIndex={0}>
+              ?<span className="tip">칸을 비워 두고 저장하면 흐리게 보이는 랜덤 닉네임으로 바꿔요 (가입할 때와 같게).</span>
+            </span>
           </span>
-        </div>
+          <span className="mp-nick-row">
+            <input name="nickname" aria-label="닉네임 바꾸기" defaultValue={a.nick.slice(0, 10)} maxLength={10} placeholder={suggest} />
+            <button type="submit" className="mp-btn go" disabled={renaming}>
+              저장
+            </button>
+          </span>
+        </label>
+        <Msg s={rs} />
+      </form>
+
+      <div className="mp-row">
+        <span className="mp-row-t">
+          <b>오픈 · 종료 알림</b>
+          <small>{notice}</small>
+        </span>
+        <Link href="/calendar" className="mp-btn">
+          알림 내역
+        </Link>
       </div>
 
-      <details className="exp" open={openPhoto} onToggle={(e) => setOpenPhoto((e.target as HTMLDetailsElement).open)}>
+      <div className="mp-row">
+        <span className="mp-row-t">
+          <b>프로필 사진 사용 [선택]</b>
+          <small>{a.hasPhoto ? "지금 내 사진을 쓰고 있어요" : "지금은 기본 그림이에요"}</small>
+        </span>
+        <span className={`mp-flag${a.hasPhoto ? " on" : ""}`}>{a.hasPhoto ? "사용 중" : "기본 그림"}</span>
+      </div>
+      <details className="exp" id="mp-photo" open={openPhoto} onToggle={(e) => setOpenPhoto((e.target as HTMLDetailsElement).open)}>
         <summary>프로필 사진 바꾸기</summary>
         <p className="cap">
           리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.
@@ -159,29 +169,6 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
         <Msg s={avs} />
       </details>
 
-      <form onSubmit={submitWith(renameForm)} className="auth-form">
-        <label className="fl">
-          <span>닉네임 바꾸기</span>
-          <input
-            name="nickname"
-            aria-label="닉네임 바꾸기"
-            defaultValue={a.nick.slice(0, 10)}
-            maxLength={10}
-            placeholder={suggest}
-          />
-        </label>
-        <p className="cap">칸을 비워 두고 저장하면 흐리게 보이는 랜덤 닉네임으로 바꿔요 (가입할 때와 같게)</p>
-        <Msg s={rs} />
-        <div className="two">
-          <button type="submit" className="btn-main" disabled={renaming}>
-            저장
-          </button>
-          <button type="button" className="btn-line" onClick={() => startTransition(() => logoutAction())}>
-            로그아웃
-          </button>
-        </div>
-      </form>
-
       {local && (
         <details className="exp" open={openPw} onToggle={(e) => setOpenPw((e.target as HTMLDetailsElement).open)}>
           <summary>비밀번호 바꾸기</summary>
@@ -210,24 +197,24 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
         </details>
       )}
 
-      <div className="consent-link">
-        <a href="/privacy">개인정보처리방침 · 이용약관</a>
-      </div>
-      <div className="withdraw">
-        <button type="button" className="withdraw-btn" onClick={() => setOpenOut((o) => !o)}>
+      <div className="mp-links">
+        <Link href="/privacy">개인정보처리방침 · 이용약관</Link>
+        <Link href="/guide">사용자 튜토리얼</Link>
+        <button type="button" onClick={() => startTransition(() => logoutAction())}>
+          로그아웃
+        </button>
+        <button type="button" className="danger" aria-expanded={openOut} onClick={() => setOpenOut((o) => !o)}>
           탈퇴하기
         </button>
-        {openOut && (
+        {openOut ? (
           <form onSubmit={submitWith(withdrawForm)} className="withdraw-pop">
             <p>
-              닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 <b>지난 기록까지 바로 지워요</b>. 쓴 리뷰는 다른 이용자를
-              위해 &apos;탈퇴한 회원&apos;으로 남아요 (지우고 싶은 글은 먼저 삭제해 주세요).
+              닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 <b>지난 기록까지 바로 지워요</b>. 후기 도장도 함께 없어져요. 쓴
+              리뷰는 다른 이용자를 위해 &apos;탈퇴한 회원&apos;으로 남아요 (지우고 싶은 글은 먼저 삭제해 주세요).
             </p>
             {local && (
               <>
-                <p className="cap">
-                  아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.
-                </p>
+                <p className="cap">아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.</p>
                 <input name="login_id" placeholder="아이디" autoComplete="username" />
                 <input name="password" type="password" placeholder="비밀번호" autoComplete="current-password" />
               </>
@@ -237,8 +224,12 @@ export default function MyAccount({ a, suggest }: { a: Account; suggest: string 
               탈퇴할게요
             </button>
           </form>
+        ) : (
+          <span className="mp-out-note">
+            탈퇴하면 닉네임 · 사진 · 접속 기록 · 도장이 바로 지워지고, 쓴 후기는 &apos;탈퇴한 회원&apos;으로 남아요.
+          </span>
         )}
       </div>
-    </div>
+    </section>
   );
 }

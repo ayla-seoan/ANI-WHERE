@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>A 모바일 지도로 보기</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0d9488}a:hover{color:#0b7a70}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 940px; overflow: hidden; background: #ffffff; font-family: 'Noto Sans KR', sans-serif; color: #26302d">
+
+  <header style="background: #e9f7f2; border-radius: 0 0 24px 24px; padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <a href="A-Mobile.dc.html" style="display: flex; align-items: center; text-decoration: none"><img src="../assets/aniwhere_logo.png" alt="ANI:WHERE 홈" style="height: 44px; width: auto; display: block"></a>
+      <button aria-label="알림" style="position: relative; width: 44px; height: 44px; border-radius: 50%; border: 0; background: #ffffff; color: #26302d; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0"></path></svg><span style="position: absolute; top: 10px; right: 11px; width: 8px; height: 8px; border-radius: 50%; background: #ff6b6b"></span></button>
+    </div>
+    <nav aria-label="주 메뉴" style="display: flex; gap: 4px">
+      <a href="A-Mobile.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">홈</a>
+      <a href="#" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; background: #ffffff; font-size: 14px; font-weight: 800; color: #1f2a27; text-decoration: none">지도</a>
+      <a href="A-MList.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">리스트</a>
+      <a href="A-MCal.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">캘린더</a>
+    </nav>
+  </header>
+
+  <section aria-label="지도" style="position: relative; height: 400px; margin: 12px 16px 0; border-radius: 18px; overflow: hidden; background: #eef3f1">
+    <div style="position: absolute; left: -10%; top: 60%; width: 130%; height: 54px; background: #cfe6ee; transform: rotate(-8deg)"></div>
+    <div style="position: absolute; left: 0; top: 30%; width: 100%; height: 8px; background: #ffffff"></div>
+    <div style="position: absolute; left: 36%; top: 0; width: 10px; height: 100%; background: #ffffff; transform: rotate(14deg)"></div>
+    <div style="position: absolute; left: 72%; top: 0; width: 7px; height: 100%; background: #ffffff"></div>
+    <div style="position: absolute; left: 6%; top: 7%; width: 96px; height: 62px; border-radius: 16px; background: #dcefe3"></div>
+    <span style="position: absolute; left: 9%; top: 24%; font-size: 12px; font-weight: 700; color: #5f6b68">연남동</span>
+    <span style="position: absolute; left: 50%; top: 36%; font-size: 12px; font-weight: 700; color: #5f6b68">서교동</span>
+
+    <sc-for list="{{pins}}" as="p" hint-placeholder-count="4">
+      <svg style="position: absolute; left: {{p.x}}; top: {{p.y}}" width="30" height="34" viewBox="0 0 64 72" role="img" aria-label="{{p.label}}"><path d="M32 4C17.6 4 7 14.6 7 28.5 7 45 32 68 32 68S57 45 57 28.5C57 14.6 46.4 4 32 4Z" fill="#14b8a6" stroke="#ffffff" stroke-width="4"></path><circle cx="25" cy="28" r="4.6" fill="#1f2a27"></circle><circle cx="39" cy="28" r="4.6" fill="#1f2a27"></circle></svg>
+    </sc-for>
+    <svg style="position: absolute; left: 42%; top: 30%" width="48" height="54" viewBox="0 0 64 72" role="img" aria-label="고른 팝업: 치이카와 팝업 스토어"><path d="M32 4C17.6 4 7 14.6 7 28.5 7 45 32 68 32 68S57 45 57 28.5C57 14.6 46.4 4 32 4Z" fill="#ff6b9a" stroke="#ffffff" stroke-width="4"></path><circle cx="25" cy="28" r="4" fill="#1f2a27"></circle><circle cx="39" cy="28" r="4" fill="#1f2a27"></circle></svg>
+    <span role="img" aria-label="내 위치" style="position: absolute; left: 24%; top: 56%; width: 14px; height: 14px; border-radius: 50%; background: #2c5bc5; border: 3px solid #ffffff; box-shadow: 0 0 0 7px rgba(44,91,197,.18)"></span>
+
+    <div style="position: absolute; left: 10px; top: 10px; display: flex; background: #ffffff; border-radius: 999px; padding: 3px; box-shadow: 0 2px 10px rgba(0,0,0,.06)">
+      <button style="font-family: inherit; font-size: 12px; font-weight: 800; border: 0; border-radius: 999px; padding: 6px 10px; background: #e6fbf7; color: #0b5e57">밝은 회색</button>
+      <button style="font-family: inherit; font-size: 12px; border: 0; border-radius: 999px; padding: 6px 10px; background: none; color: #26302d">컬러</button>
+      <button style="font-family: inherit; font-size: 12px; border: 0; border-radius: 999px; padding: 6px 10px; background: none; color: #26302d">다크</button>
+    </div>
+    <button aria-label="내 위치로" style="position: absolute; right: 10px; top: 10px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: #ffffff; color: #2c5bc5; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.14)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M12 2v3 M12 19v3 M2 12h3 M19 12h3"></path></svg></button>
+
+    <a href="A-Detail.dc.html" style="position: absolute; left: 10px; right: 10px; bottom: 10px; background: #ffffff; border-radius: 16px; padding: 10px; display: flex; gap: 12px; align-items: center; text-decoration: none; color: #26302d; box-shadow: 0 4px 14px rgba(0,0,0,.14)">
+      <span style="width: 54px; height: 70px; border-radius: 10px; background: #ffd6dc; flex: none"></span>
+      <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+        <span style="align-self: flex-start; font-size: 11.5px; font-weight: 800; color: #0b5e57; background: #e6fbf7; padding: 1px 8px; border-radius: 999px">진행 중</span>
+        <span style="font-family: 'Jua', sans-serif; font-size: 17px; line-height: 1.2">치이카와 팝업 스토어</span>
+        <span style="font-size: 12.5px; color: #5f6b68">홍대 · ~ 12.15 · 한 번 더 누르면 상세</span>
+      </span>
+    </a>
+  </section>
+
+  <section aria-labelledby="mm-note" style="padding: 18px 16px 0; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <h2 id="mm-note" style="margin: 0; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 21px">데일리 팝업 노트</h2>
+      <div style="display: flex; align-items: center; gap: 2px; background: #f6f8f7; border-radius: 999px; padding: 2px">
+        <button aria-label="전날" style="width: 40px; height: 40px; border-radius: 50%; border: 0; background: none; color: #26302d; transform: scaleX(-1)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button>
+        <span style="font-size: 13.5px; font-weight: 800">11.25 (수)</span>
+        <button aria-label="다음 날" style="width: 40px; height: 40px; border-radius: 50%; border: 0; background: none; color: #26302d"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button>
+      </div>
+    </div>
+    <span style="font-size: 12.5px; color: #5f6b68; margin-top: -4px">내 위치에서 가까운 <strong style="color: #0f6b5c">서울 마포구</strong>부터</span>
+    <sc-for list="{{notes}}" as="n" hint-placeholder-count="3">
+      <a href="A-Detail.dc.html" style="display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 14px; border: {{n.border}}; text-decoration: none; color: #26302d">
+        <span style="width: 44px; height: 58px; border-radius: 8px; background: {{n.bg}}; flex: none"></span>
+        <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+          <strong style="font-size: 14.5px">{{n.title}}</strong>
+          <span style="font-size: 12.5px; color: #5f6b68">{{n.place}}</span>
+        </span>
+        <span style="margin-left: auto; font-size: 11.5px; font-weight: 800; color: {{n.fg}}; background: {{n.sbg}}; padding: 2px 9px; border-radius: 999px; white-space: nowrap">{{n.state}}</span>
+      </a>
+    </sc-for>
+  </section>
+
+  <button aria-label="ANI:WHERE에게 물어보기" style="position: absolute; right: 16px; top: 868px; width: 56px; height: 56px; border-radius: 50%; border: 2px solid #14b8a6; background: #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.14)"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 36px; height: auto; display: block"></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      pins: [
+        { x: '14%', y: '34%', label: '원피스 굿즈 팝업' },
+        { x: '62%', y: '14%', label: '스파이 패밀리 카페' },
+        { x: '78%', y: '44%', label: '블루 아카이브 전시' },
+        { x: '56%', y: '58%', label: '주술회전 콜라보 카페' }
+      ],
+      notes: [
+        { title: '치이카와 팝업 스토어', place: '홍대 · ~ 12.15', bg: '#ffd6dc', state: '진행 중', fg: '#0b5e57', sbg: '#e6fbf7', border: '2px solid #14b8a6' },
+        { title: '원피스 굿즈 팝업', place: '홍대 · 11.28 ~', bg: '#d9e4ff', state: 'D-3', fg: '#2c5bc5', sbg: '#eaf0fc', border: '1.5px solid #e3e9e7' },
+        { title: '하이큐!! 굿즈', place: '연남 · 오늘 종료', bg: '#ffe6c2', state: '마감임박', fg: '#c0313f', sbg: '#fdecee', border: '1.5px solid #e3e9e7' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

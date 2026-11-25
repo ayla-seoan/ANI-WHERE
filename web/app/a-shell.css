@@ -1,0 +1,240 @@
+/* A안 공통 틀 (11/25, docs/design/handoff): 메뉴바 · 페이지 폭 · 후기 도장.
+   globals.css 뒤에 불러서 예전 규칙을 덮는다. 화면별 규칙은 a-home.css · a-browse.css · a-detail.css · a-member.css */
+
+:root {
+  --side: 24px;
+  --page-max: 1232px;
+  --logo-green: #21b287;
+  --purple: #6c5ce7;
+  --purple-deep: #5b3fae;
+  --purple-soft: #f1ecff;
+  --purple-line: #ddd3fb;
+  --ink-soft: #5f6b68;
+}
+
+/* ---------- 페이지 틀: 가운데 1232px, 양옆 24px (모바일 16px) ---------- */
+.page {
+  padding: 0;
+}
+.main {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 24px var(--side) 64px;
+  box-sizing: border-box;
+}
+/* 지도로 보기는 화면 폭을 다 쓴다 (A-Map) */
+body:has(.map-page) .main {
+  max-width: none;
+  padding: 16px var(--side) 24px;
+}
+.page > footer,
+.page > .aw-foot {
+  padding-left: var(--side);
+  padding-right: var(--side);
+}
+
+/* ---------- 메뉴바 (A-Home header): 연민트 · 아래 28px 둥글게 · 로고 52px · 알약 탭 ---------- */
+.gnb-wrap {
+  margin: 0;
+}
+.gnb {
+  gap: 12px;
+  padding: 12px max(var(--side), calc((100% - var(--page-max)) / 2 + var(--side)));
+  min-height: 76px;
+  box-sizing: border-box;
+}
+.gnb-logo {
+  width: auto;
+  height: 52px;
+}
+.gnb-logo img {
+  width: auto;
+  height: 52px;
+  display: block;
+}
+.gnb-tabs {
+  gap: 4px;
+}
+.gnb-tabs a {
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.gnb-tabs a:hover {
+  color: var(--ink-strong, #1f2a27);
+}
+.gnb-tabs a.on {
+  background: #fff;
+  color: #1f2a27;
+  font-weight: 800;
+  font-size: 15px;
+}
+.gnb-right {
+  gap: 6px;
+}
+/* 오른쪽 동그란 버튼 (검색 · 알림 · 프로필): 44px 흰 동그라미 */
+.gnb-search,
+.gnb .gnb-bell {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ink);
+}
+.gnb-search svg {
+  width: 22px;
+  height: 22px;
+}
+.gnb-search:hover {
+  background: #fff;
+}
+.gnb .gnb-me {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: block;
+  flex: none;
+}
+.gnb .gnb-me img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gnb-login {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: #fff;
+  color: #1f2a27;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+}
+.gnb-login:hover {
+  color: var(--accent-deep);
+}
+
+@media (max-width: 640px) {
+  :root {
+    --side: 16px;
+  }
+  .main {
+    padding: 20px var(--side) 48px;
+  }
+  body:has(.map-page) .main {
+    padding: 12px var(--side) 24px;
+  }
+  .gnb-wrap {
+    margin: 0;
+  }
+  .gnb {
+    row-gap: 10px;
+    padding: 14px 16px 10px;
+    border-radius: 0 0 24px 24px;
+  }
+  .gnb-logo,
+  .gnb-logo img {
+    width: auto;
+    height: 44px;
+  }
+  .gnb-tabs {
+    gap: 4px;
+    margin-top: 0;
+    justify-content: stretch;
+  }
+  .gnb-tabs a {
+    flex: 1;
+    text-align: center;
+    padding: 10px 0;
+    font-size: 14px;
+  }
+  .gnb-tabs a.on {
+    font-size: 14px;
+  }
+  .gnb-login {
+    height: 40px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+}
+
+/* ---------- 후기 도장 (components/RankStamp.tsx, A-Rank) ---------- */
+.rk-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  border-style: solid;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+.rk-stamp img {
+  width: 62%;
+  height: auto;
+  display: block;
+}
+.rk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 2px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.rk-big {
+  position: relative;
+  display: inline-block;
+  flex: none;
+}
+.rk-big svg {
+  position: absolute;
+  inset: 0;
+}
+.rk-big > img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 41%;
+  height: auto;
+  transform: translate(-50%, -50%);
+}
+.rk-ring-t {
+  font-family: "Titan One", "Jua", sans-serif;
+}
+.rk-lv {
+  position: absolute;
+  right: -2px;
+  bottom: 2px;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 3px solid #fff;
+  color: #fff;
+  font-family: "Titan One", "Jua", sans-serif;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+  box-sizing: border-box;
+}
+.rk-big.dim {
+  filter: grayscale(1);
+  opacity: 0.45;
+}

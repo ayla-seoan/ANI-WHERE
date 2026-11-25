@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>A 모바일 리스트로 보기</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0d9488}a:hover{color:#0b7a70}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 1340px; overflow: hidden; background: #ffffff; font-family: 'Noto Sans KR', sans-serif; color: #26302d">
+
+  <header style="background: #e9f7f2; border-radius: 0 0 24px 24px; padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <a href="A-Mobile.dc.html" style="display: flex; align-items: center; text-decoration: none"><img src="../assets/aniwhere_logo.png" alt="ANI:WHERE 홈" style="height: 44px; width: auto; display: block"></a>
+      <button aria-label="알림" style="position: relative; width: 44px; height: 44px; border-radius: 50%; border: 0; background: #ffffff; color: #26302d; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0"></path></svg><span style="position: absolute; top: 10px; right: 11px; width: 8px; height: 8px; border-radius: 50%; background: #ff6b6b"></span></button>
+    </div>
+    <nav aria-label="주 메뉴" style="display: flex; gap: 4px">
+      <a href="A-Mobile.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">홈</a>
+      <a href="A-MMap.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">지도</a>
+      <a href="#" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; background: #ffffff; font-size: 14px; font-weight: 800; color: #1f2a27; text-decoration: none">리스트</a>
+      <a href="A-MCal.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">캘린더</a>
+    </nav>
+  </header>
+
+  <div style="padding: 16px 16px 0; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <h1 style="margin: 0; font-size: 17px; font-weight: 800">팝업 카페 <span style="color: #0f6b5c">24곳</span></h1>
+      <button aria-label="필터 열기" style="position: relative; width: 44px; height: 44px; border-radius: 12px; border: 1.5px solid #e3e9e7; background: #ffffff; color: #26302d; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16 M7 12h10 M10 17h4"></path></svg><span style="position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; border-radius: 999px; background: #0b7a70; color: #ffffff; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center">2</span></button>
+    </div>
+    <div style="display: flex; gap: 6px; overflow: hidden">
+      <button style="flex: none; font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 999px; border: 1.5px solid #e3e9e7; background: #ffffff; color: #26302d; display: flex; align-items: center; gap: 4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.5L7 20z"></path></svg>북마크</button>
+      <button style="flex: none; font-family: inherit; font-size: 13px; font-weight: 800; padding: 8px 12px; border-radius: 999px; border: 1.5px solid #14b8a6; background: #e6fbf7; color: #0b5e57">서울 · 부산</button>
+      <button style="flex: none; font-family: inherit; font-size: 13px; font-weight: 800; padding: 8px 12px; border-radius: 999px; border: 1.5px solid #14b8a6; background: #e6fbf7; color: #0b5e57">진행 중</button>
+      <button style="flex: none; font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 999px; border: 1.5px solid #e3e9e7; background: #ffffff; color: #26302d">최신순</button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px">
+      <sc-for list="{{cards}}" as="p" hint-placeholder-count="6">
+        <a href="A-Detail.dc.html" style="display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: #26302d">
+          <span style="position: relative; display: block; aspect-ratio: 3 / 4; border: 2.5px solid #9eddcc; border-radius: 12px; background: {{p.bg}}; box-sizing: border-box">
+            <span style="position: absolute; left: 8px; top: 8px; font-size: 11.5px; font-weight: 800; color: {{p.fg}}; background: {{p.sbg}}; padding: 2px 8px; border-radius: 999px">{{p.state}}</span>
+            <span style="position: absolute; right: 8px; top: 8px; font-size: 11.5px; font-weight: 800; color: #ffffff; background: {{p.abg}}; border: 1.5px solid rgba(255,255,255,.85); padding: 1px 8px; border-radius: 999px">{{p.area}}</span>
+            <span style="position: absolute; left: 8px; bottom: 8px; max-width: 96px; font-size: 11.5px; font-weight: 700; color: #26302d; background: rgba(255,255,255,.9); padding: 2px 8px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{p.chip}}</span>
+            <span style="position: absolute; right: 8px; bottom: 8px; width: 34px; height: 34px; border-radius: 8px; background: {{p.bmBg}}; color: {{p.bmFg}}; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="{{p.bmFill}}" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.5L7 20z"></path></svg></span>
+          </span>
+          <span style="font-family: 'Jua', sans-serif; font-size: 16px; line-height: 1.25; color: #0f6b5c">{{p.title}}</span>
+          <span style="font-size: 12.5px; color: #5f6b68; margin-top: -4px">{{p.place}} · {{p.period}}</span>
+        </a>
+      </sc-for>
+    </div>
+    <button style="height: 46px; border-radius: 999px; border: 0; background: #e6fbf7; color: #0b5e57; font-family: inherit; font-size: 14px; font-weight: 800">+18곳 더보기</button>
+  </div>
+
+  <button aria-label="ANI:WHERE에게 물어보기" style="position: absolute; right: 16px; top: 1196px; width: 56px; height: 56px; border-radius: 50%; border: 2px solid #14b8a6; background: #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.14)"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 36px; height: auto; display: block"></button>
+  <button aria-label="팝업 등록하기" style="position: absolute; right: 16px; top: 1264px; width: 56px; height: 56px; border-radius: 50%; border: 0; background: #ff6b6b; color: #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.14)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"></path></svg></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1340}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const live = { state: '진행 중', fg: '#0b5e57', sbg: '#e6fbf7' };
+    const end = { state: '마감임박', fg: '#c0313f', sbg: '#fdecee' };
+    const on = { bmBg: '#14b8a6', bmFg: '#ffffff', bmFill: 'currentColor' };
+    const off = { bmBg: 'rgba(255,255,255,.75)', bmFg: '#26302d', bmFill: 'none' };
+    const seoul = '#2e9c82', busan = '#2f6fae';
+    return {
+      cards: [
+        Object.assign({ title: '치이카와 팝업 스토어', place: '홍대', period: '~12.15', area: '서울', abg: seoul, chip: '특전 · 엽서', bg: '#ffd6dc' }, live, on),
+        Object.assign({ title: '주술회전 콜라보 카페', place: '성수', period: '~12.08', area: '서울', abg: seoul, chip: '코스터 증정', bg: '#d9e4ff' }, live, on),
+        Object.assign({ title: '하이큐!! 팝업', place: '서면', period: '~12.22', area: '부산', abg: busan, chip: '포토존', bg: '#ffe6c2' }, live, off),
+        Object.assign({ title: '포켓몬 콜라보 디저트', place: '해운대', period: '~11.27', area: '부산', abg: busan, chip: '한정 메뉴', bg: '#fff3b8' }, end, off),
+        Object.assign({ title: '블루 아카이브 전시', place: '성수', period: '~12.31', area: '서울', abg: seoul, chip: '아크릴 스탠드', bg: '#efe0ff' }, live, off),
+        Object.assign({ title: '귀멸의 칼날 전시', place: '강남', period: '~11.30', area: '서울', abg: seoul, chip: '입장 특전', bg: '#d6f2e9' }, live, on)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

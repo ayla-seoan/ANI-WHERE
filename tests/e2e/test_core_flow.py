@@ -151,7 +151,7 @@ def test_3_카드를_누르면_상세가_열리고_탭으로_돌아올_수_있�
     target = pick_cafe(data_dir, with_links=True)
     open_detail(page, target["entry_id"])
     expect(page.locator(".dtitle")).to_have_text(str(target["work"]))
-    expect(page.get_by_text("방문 전 확인", exact=True)).to_be_visible()
+    expect(page.locator(".ad-check .ad-box")).to_have_count(2)      # 방문 전 확인: 위치 칸 · 일정 칸 (A안, 11/25)
     expect(page.get_by_text("참고 웹사이트", exact=True).first).to_be_visible()
 
     # 상세에서 돌아가기는 메뉴바의 '리스트로 보기' 탭 ('리스트로 돌아가기' 버튼은 11/18 에 뺐다)
@@ -213,7 +213,7 @@ def test_5_리뷰에_전화번호를_넣으면_막힌다(page: Page, app_url, da
     # 상세가 막 열린 직후엔 입력칸이 다시 그려지며 넣은 글이 사라질 때가 있다 → 경고가 뜰 때까지 몇 번 다시 넣는다
     for _ in range(3):
         wait_idle(page)
-        body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
+        body = page.get_by_placeholder(re.compile("웨이팅, 특전 남은 수")).first
         body.scroll_into_view_if_needed()
         body.fill("대기 줄 길어요. 문의는 010-1234-5678 로 주세요")
         body.press("Tab")                  # 칸을 벗어나야 값이 서버로 넘어간다
@@ -224,11 +224,11 @@ def test_5_리뷰에_전화번호를_넣으면_막힌다(page: Page, app_url, da
         except AssertionError:
             continue
     expect(warn).to_be_visible(timeout=LONG)
-    send = page.get_by_role("button", name="리뷰 등록")
+    send = page.get_by_role("button", name=re.compile("^(리뷰 등록|등록하고 도장 받기)$"))
     # 다시 그리는 동안 예전 탭의 버튼이 잠깐 같이 남아 있을 수 있다 → 하나만 남을 때까지 기다린다
     expect(send).to_have_count(1, timeout=LONG)
     expect(send).to_be_disabled()
-    send.click(force=True)             # 눌러도 저장되지 않아야 한다
+    send.dispatch_event("click")       # 눌러도 저장되지 않아야 한다 (리뷰 칸이 화면 아래쪽이라 좌표 대신 이벤트로 누른다, 11/25)
     wait_idle(page)
     assert (data_dir / "reviews.json").read_text(encoding="utf-8") == before, "리뷰 저장소가 바뀌었습니다"
 
@@ -381,11 +381,11 @@ def test_13_내_리뷰는_고칠때_사진을_붙이고_직접_지울_수_있다
     target = pick_cafe(data_dir)
     open_detail(page, target["entry_id"])
     text = "e2e 사진 추가 확인용 리뷰"
-    send = page.get_by_role("button", name="리뷰 등록")
+    send = page.get_by_role("button", name=re.compile("^(리뷰 등록|등록하고 도장 받기)$"))
     # 상세가 막 열린 직후엔 입력칸이 다시 그려지며 넣은 글이 사라질 때가 있다 → 등록 버튼이 켜질 때까지 다시 넣는다
     for _ in range(3):
         wait_idle(page)
-        body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
+        body = page.get_by_placeholder(re.compile("웨이팅, 특전 남은 수")).first
         body.fill(text)
         body.press("Tab")
         wait_idle(page)
@@ -434,17 +434,17 @@ def test_14_디자인_시스템_페이지는_로그인_없이_열린다(page: Pa
 
 # ------------------------------------------------------------------ 15. 대댓글 (11/20)
 def test_15_대댓글은_ㄴ_표시_사진_첨부_접어_두기(page: Page, app_url, data_dir):
-    """리뷰 등록은 빨라야 하고(조각만 다시 그림), 답글은 'ㄴ' 표시 · 사진 첨부 · '+N건의 댓글' 로 접었다 펼친다."""
+    """리뷰 등록은 빨라야 하고(조각만 다시 그림), 답글은 'ㄴ' 표시 · 사진 첨부 · 'ㄴ 댓글 N개' 로 접었다 펼친다."""
     import time as _t
     sign_up(page, app_url)
     open_list(page, app_url)
     target = pick_cafe(data_dir)
     open_detail(page, target["entry_id"])
     text = "e2e 대댓글 확인용 원글"
-    send = page.get_by_role("button", name="리뷰 등록")
+    send = page.get_by_role("button", name=re.compile("^(리뷰 등록|등록하고 도장 받기)$"))
     for _ in range(3):
         wait_idle(page)
-        body = page.get_by_placeholder(re.compile("다녀온 후기나 기대하는 점")).first
+        body = page.get_by_placeholder(re.compile("웨이팅, 특전 남은 수")).first
         body.fill(text)
         body.press("Tab")
         wait_idle(page)
@@ -464,12 +464,13 @@ def test_15_대댓글은_ㄴ_표시_사진_첨부_접어_두기(page: Page, app_
     wait_idle(page)
 
     # 답글: 칸을 누르면 '+ 사진 첨부' 가 보이고, 사진과 함께 등록할 수 있다
-    th = page.locator('[class*="st-key-rpbox_"]').first
-    reply_box = th.get_by_placeholder("답글을 남겨 주세요")
-    reply_box.click()
+    # (A안, 11/25) 답글 칸은 '답글 쓰기' 를 눌러야 열린다
+    page.get_by_role("button", name="답글 쓰기").first.click()
+    wait_idle(page)
+    th = page.locator('[class*="st-key-rvrep_"]').first
     th.get_by_role("button", name="+ 사진 첨부").click()
     wait_idle(page)
-    th = page.locator('[class*="st-key-rpbox_"]').first
+    th = page.locator('[class*="st-key-rvrep_"]').first
     th.locator('input[type="file"]').set_input_files(
         str(Path(__file__).resolve().parents[2] / "static" / "default_poster.png"))
     wait_idle(page)
@@ -487,20 +488,20 @@ def test_15_대댓글은_ㄴ_표시_사진_첨부_접어_두기(page: Page, app_
     stored = [json.loads(json.dumps(r)) for r in json.loads((data_dir / "reviews.json").read_text(encoding="utf-8"))]
     reply = next(r for r in stored if r.get("body") == "e2e 사진 붙인 대댓글")
     assert reply["parent_id"] and reply["images"], reply
-    # 접으면 '+1건의 댓글' 만 남고, 누르면 다시 아래로 보인다
+    # 접으면 'ㄴ 댓글 1개' 만 남고, 누르면 다시 아래로 보인다
     fold.click()
     wait_idle(page)
     expect(page.get_by_text("e2e 사진 붙인 대댓글")).to_have_count(0, timeout=LONG)
-    more = page.get_by_role("button", name="+1건의 댓글")
+    more = page.get_by_role("button", name="ㄴ 댓글 1개")
     expect(more).to_be_visible(timeout=LONG)
     more.click()
     wait_idle(page)
     expect(page.get_by_text("e2e 사진 붙인 대댓글")).to_be_visible(timeout=LONG)
-    # 사진 있는 글은 사진 옆에 글 (11/20): 같은 줄(.rv-content) 안에 사진과 글이 함께
+    # 사진 있는 글은 글 아래에 사진 (A안, 11/25 — 웹과 같게): 같은 칸(.rv-content) 안에 글과 사진이 함께
     content = page.locator(".rv-content", has_text="e2e 사진 붙인 대댓글")
     expect(content.locator(".rv-pics img")).to_have_count(1)
     pic, txt = content.locator(".rv-pics").bounding_box(), content.locator(".rv-body").bounding_box()
-    assert txt["x"] > pic["x"] + pic["width"] - 1 and txt["y"] < pic["y"] + pic["height"], (pic, txt)
+    assert pic["y"] >= txt["y"] + txt["height"] - 1, (pic, txt)
     if os.getenv("E2E_SHOTS"):
         page.locator(".rv-content", has_text="e2e 사진 붙인 대댓글").locator("xpath=ancestor::div[contains(@class,'stVerticalBlock')][2]").first.screenshot(
             path=os.path.join(os.getenv("E2E_SHOTS"), "st_reply.png"))

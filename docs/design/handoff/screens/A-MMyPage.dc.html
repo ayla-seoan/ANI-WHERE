@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>A 모바일 마이페이지</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Titan+One&amp;family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0d9488}a:hover{color:#0b7a70}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 1640px; overflow: hidden; background: #ffffff; font-family: 'Noto Sans KR', sans-serif; color: #26302d">
+
+  <header style="background: #e9f7f2; border-radius: 0 0 24px 24px; padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <a href="A-Mobile.dc.html" style="display: flex; align-items: center; text-decoration: none"><img src="../assets/aniwhere_logo.png" alt="ANI:WHERE 홈" style="height: 44px; width: auto; display: block"></a>
+      <button aria-label="알림" style="width: 44px; height: 44px; border-radius: 50%; border: 0; background: #ffffff; color: #26302d; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0"></path></svg></button>
+    </div>
+    <nav aria-label="주 메뉴" style="display: flex; gap: 4px">
+      <a href="A-Mobile.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">홈</a>
+      <a href="A-MMap.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">지도</a>
+      <a href="A-MList.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">리스트</a>
+      <a href="A-MCal.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">캘린더</a>
+    </nav>
+  </header>
+
+  <div style="padding: 18px 16px 0; display: flex; flex-direction: column; gap: 18px">
+
+    <section aria-label="내 프로필" style="display: flex; align-items: center; gap: 14px">
+      <span style="position: relative; width: 76px; height: 76px; border-radius: 50%; background: #ffd6dc; border: 3px solid #ffffff; box-shadow: 0 0 0 2px #e3e9e7; flex: none">
+        <span role="img" aria-label="Lv.2 단골 팬 도장" style="position: absolute; right: -6px; bottom: -4px; width: 32px; height: 32px; border-radius: 50%; background: #e9f7f2; border: 2.5px solid #21b287; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span>
+      </span>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0">
+        <h1 style="margin: 0; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 23px">느긋한 우사기</h1>
+        <span style="align-self: flex-start; font-size: 12.5px; font-weight: 800; color: #0f6b5c; background: #e9f7f2; padding: 3px 10px; border-radius: 999px">Lv.2 단골 팬</span>
+        <span style="font-size: 12px; color: #5f6b68">카카오로 로그인 · 2026.10.28 가입</span>
+      </div>
+      <button style="height: 40px; padding: 0 12px; border-radius: 999px; border: 1px solid #e3e9e7; background: #ffffff; color: #26302d; font-family: inherit; font-size: 13px; font-weight: 700">수정</button>
+    </section>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: #f6f8f7; border-radius: 16px; padding: 12px 0; text-align: center">
+      <a href="A-MCal.dc.html" style="display: flex; flex-direction: column; text-decoration: none; color: #26302d"><strong style="font-family: 'Titan One', sans-serif; font-size: 20px; font-weight: 400; color: #0f6b5c">7</strong><span style="font-size: 12px; color: #5f6b68">북마크</span></a>
+      <a href="A-MVisited.dc.html" style="display: flex; flex-direction: column; text-decoration: none; color: #26302d; border-left: 1px solid #e3e9e7; border-right: 1px solid #e3e9e7"><strong style="font-family: 'Titan One', sans-serif; font-size: 20px; font-weight: 400; color: #0f6b5c">5</strong><span style="font-size: 12px; color: #5f6b68">다녀온 팝업</span></a>
+      <a href="#mm-rv" style="display: flex; flex-direction: column; text-decoration: none; color: #26302d"><strong style="font-family: 'Titan One', sans-serif; font-size: 20px; font-weight: 400; color: #0f6b5c">4</strong><span style="font-size: 12px; color: #5f6b68">후기 도장</span></a>
+    </div>
+
+    <section aria-labelledby="mm-rank" style="border: 1.5px solid #9eddcc; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <h2 id="mm-rank" style="margin: 0; font-size: 16px; font-weight: 800">내 후기 도장</h2>
+        <a href="A-Rank.dc.html" style="font-size: 12.5px; font-weight: 700; padding: 8px 0">랭크 안내</a>
+      </div>
+      <div style="display: flex; align-items: center; gap: 14px">
+        <span style="position: relative; width: 72px; height: 72px; flex: none">
+          <svg width="72" height="72" viewBox="0 0 80 80" role="img" aria-label="Lv.2 단골 팬 도장" style="position: absolute; left: 0; top: 0">
+            <circle cx="40" cy="40" r="38" fill="#e9f7f2"></circle>
+            <circle cx="40" cy="40" r="38" fill="none" stroke="#21b287" stroke-width="4"></circle>
+            <circle cx="40" cy="40" r="24" fill="#ffffff" stroke="#21b287" stroke-width="1.4"></circle>
+          </svg>
+          <img src="../assets/aniwhere_mascot.png" alt="" style="position: absolute; left: 20px; top: 21px; width: 32px; height: auto; display: block">
+          <span style="position: absolute; right: -4px; bottom: 0; min-width: 24px; height: 22px; border-radius: 999px; background: #21b287; border: 2px solid #ffffff; color: #ffffff; font-family: 'Titan One', sans-serif; font-size: 11px; line-height: 18px; text-align: center; box-sizing: border-box">2</span>
+        </span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+          <span style="font-family: 'Jua', sans-serif; font-size: 21px; color: #0f6b5c">단골 팬</span>
+          <span style="font-size: 12.5px">후기 <strong>4개</strong> · <strong style="color: #2c5bc5">성지순례러</strong>까지 6개</span>
+          <div role="progressbar" aria-label="Lv.3까지 진행도" aria-valuenow="4" aria-valuemin="0" aria-valuemax="10" style="height: 10px; border-radius: 999px; background: #eef2f1; overflow: hidden"><span style="display: block; width: 40%; height: 100%; border-radius: 999px; background: #21b287"></span></div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px">
+        <sc-for list="{{tiers}}" as="t" hint-placeholder-count="5">
+          <span style="display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: {{t.op}}; filter: {{t.filter}}">
+            <span style="width: 36px; height: 36px; border-radius: 50%; background: {{t.fill}}; border: 2.5px {{t.lineStyle}} {{t.ring}}; display: flex; align-items: center; justify-content: center; box-sizing: border-box; box-shadow: {{t.glow}}"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span>
+            <span style="font-size: 11px; font-weight: 800; color: {{t.fg}}; text-align: center; line-height: 1.25; white-space: pre-line">{{t.label}}</span>
+          </span>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-labelledby="mm-rv" style="display: flex; flex-direction: column; gap: 10px">
+      <h2 id="mm-rv" style="margin: 0; font-size: 16px; font-weight: 800">내가 쓴 후기 <span style="color: #0f6b5c">4</span></h2>
+      <sc-for list="{{reviews}}" as="r" hint-placeholder-count="2">
+        <article style="display: flex; gap: 12px; padding: 12px; border: 1.5px solid #e3e9e7; border-radius: 14px">
+          <span style="width: 46px; height: 60px; border-radius: 8px; background: {{r.bg}}; flex: none"></span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0">
+            <a href="A-Detail.dc.html" style="font-family: 'Jua', sans-serif; font-size: 16px; color: #0f6b5c; text-decoration: none">{{r.t}}</a>
+            <span style="font-size: 12px; font-weight: 800; color: #9a6a00">{{r.stars}} <span style="font-weight: 500; color: #5f6b68">· {{r.date}}</span></span>
+            <p style="margin: 0; font-size: 13.5px; line-height: 1.55">{{r.text}}</p>
+          </div>
+          <span role="img" aria-label="도장 받은 후기" style="align-self: center; width: 32px; height: 32px; border-radius: 50%; background: #e9f7f2; border: 2.5px solid #21b287; display: flex; align-items: center; justify-content: center; box-sizing: border-box; transform: rotate(-10deg); flex: none"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span>
+        </article>
+      </sc-for>
+      <button style="height: 44px; border-radius: 999px; border: 0; background: #e6fbf7; color: #0b5e57; font-family: inherit; font-size: 14px; font-weight: 800">+2건 더보기</button>
+    </section>
+
+    <section aria-labelledby="mm-set" style="display: flex; flex-direction: column">
+      <h2 id="mm-set" style="margin: 0 0 6px; font-size: 16px; font-weight: 800">설정</h2>
+      <sc-for list="{{toggles}}" as="g" hint-placeholder-count="4">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef2f1">
+          <span style="display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 700">{{g.t}}</span><span style="font-size: 12px; color: #5f6b68">{{g.s}}</span></span>
+          <button role="switch" aria-checked="{{g.on}}" aria-label="{{g.t}}" style="position: relative; width: 48px; height: 28px; border-radius: 999px; border: 0; background: {{g.bg}}; flex: none"><span style="position: absolute; top: 3px; left: {{g.knob}}; width: 22px; height: 22px; border-radius: 50%; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,.2)"></span></button>
+        </div>
+      </sc-for>
+      <a href="#" style="padding: 13px 0; border-bottom: 1px solid #eef2f1; font-size: 14px; color: #26302d; text-decoration: none">닉네임 · 프로필 사진 바꾸기</a>
+      <a href="#" style="padding: 13px 0; border-bottom: 1px solid #eef2f1; font-size: 14px; color: #26302d; text-decoration: none">개인정보처리방침</a>
+      <a href="#" style="padding: 13px 0; border-bottom: 1px solid #eef2f1; font-size: 14px; color: #26302d; text-decoration: none">사용자 튜토리얼</a>
+      <button style="text-align: left; padding: 13px 0; border: 0; border-bottom: 1px solid #eef2f1; background: none; font-family: inherit; font-size: 14px; color: #26302d">로그아웃</button>
+      <button style="text-align: left; padding: 13px 0; border: 0; background: none; font-family: inherit; font-size: 14px; color: #c0313f; font-weight: 700">탈퇴하기</button>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const got = { op: '1', filter: 'none', lineStyle: 'solid' };
+    const lock = { op: '.45', filter: 'grayscale(1)', lineStyle: 'dashed' };
+    const on = { on: 'true', bg: '#14b8a6', knob: '23px' };
+    const off = { on: 'false', bg: '#c6d0cd', knob: '3px' };
+    return {
+      tiers: [
+        Object.assign({ label: 'Lv.1\n새싹 팬', ring: '#5fbf9f', fill: '#f0faf6', fg: '#0f6b5c', glow: 'none' }, got),
+        Object.assign({ label: 'Lv.2\n단골 팬', ring: '#21b287', fill: '#e9f7f2', fg: '#0f6b5c', glow: '0 0 0 4px #d7f3e8' }, got),
+        Object.assign({ label: 'Lv.3\n성지순례러', ring: '#2c5bc5', fill: '#eaf0fc', fg: '#26302d', glow: 'none' }, lock),
+        Object.assign({ label: 'Lv.4\n덕질 마스터', ring: '#7656c4', fill: '#f1ecff', fg: '#26302d', glow: 'none' }, lock),
+        Object.assign({ label: 'Lv.5\n전설의 덕후', ring: '#c99a00', fill: '#fff6d6', fg: '#26302d', glow: 'none' }, lock)
+      ],
+      reviews: [
+        { t: '귀멸의 칼날 전시', stars: '★★★★★', date: '11.23', text: '평일 오후엔 줄 없이 들어갔어요. 입장 특전 카드 예뻐요!', bg: '#d6f2e9' },
+        { t: '하이큐!! 굿즈', stars: '★★★★☆', date: '11.15', text: '스티커는 금방 없어져요. 오전 추천!', bg: '#ffe6c2' }
+      ],
+      toggles: [
+        Object.assign({ t: '오픈 · 종료 알림', s: '북마크한 팝업, 3일 전부터' }, on),
+        Object.assign({ t: '내 주변 추천', s: '위치를 허용했을 때만' }, on),
+        Object.assign({ t: '랭크 승급 알림', s: '다음 도장 단계에 오르면' }, on),
+        Object.assign({ t: '프로필 사진 사용 [선택]', s: '끄면 기본 그림으로 보여요' }, off)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

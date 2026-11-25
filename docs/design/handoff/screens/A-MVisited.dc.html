@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>A 모바일 다녀온 팝업</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Titan+One&amp;family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0d9488}a:hover{color:#0b7a70}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 1300px; overflow: hidden; background: #ffffff; font-family: 'Noto Sans KR', sans-serif; color: #26302d">
+
+  <header style="background: #e9f7f2; border-radius: 0 0 24px 24px; padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <a href="A-Mobile.dc.html" style="display: flex; align-items: center; text-decoration: none"><img src="../assets/aniwhere_logo.png" alt="ANI:WHERE 홈" style="height: 44px; width: auto; display: block"></a>
+      <a href="A-MMyPage.dc.html" aria-label="마이페이지" style="position: relative; width: 44px; height: 44px; border-radius: 50%; background: #ffd6dc; border: 2px solid #ffffff; box-sizing: border-box; display: block"><span style="position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; background: #e9f7f2; border: 2px solid #21b287; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span></a>
+    </div>
+    <nav aria-label="주 메뉴" style="display: flex; gap: 4px">
+      <a href="A-Mobile.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">홈</a>
+      <a href="A-MMap.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">지도</a>
+      <a href="A-MList.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; font-size: 14px; font-weight: 600; color: #26302d; text-decoration: none">리스트</a>
+      <a href="A-MCal.dc.html" style="flex: 1; text-align: center; padding: 10px 0; border-radius: 999px; background: #ffffff; font-size: 14px; font-weight: 800; color: #1f2a27; text-decoration: none">캘린더</a>
+    </nav>
+  </header>
+
+  <div style="padding: 16px 16px 0; display: flex; flex-direction: column; gap: 18px">
+
+    <section aria-labelledby="mv-rank" style="border: 1.5px solid #9eddcc; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: center; gap: 14px">
+        <span style="position: relative; width: 60px; height: 60px; border-radius: 50%; background: #e9f7f2; border: 3px solid #21b287; display: flex; align-items: center; justify-content: center; box-sizing: border-box; flex: none"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"><span style="position: absolute; right: -6px; bottom: -4px; min-width: 22px; height: 20px; border-radius: 999px; background: #21b287; border: 2px solid #ffffff; color: #ffffff; font-family: 'Titan One', sans-serif; font-size: 11px; line-height: 16px; text-align: center; box-sizing: border-box">2</span></span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0">
+          <h1 id="mv-rank" style="margin: 0; font-size: 13px; font-weight: 700; color: #5f6b68">내 후기 도장</h1>
+          <span style="font-family: 'Jua', sans-serif; font-size: 21px; color: #0f6b5c">Lv.2 단골 팬</span>
+          <span style="font-size: 12.5px; color: #26302d">다녀온 후기 <strong>4개</strong> · Lv.3까지 <strong style="color: #0f6b5c">6개</strong> 남았어요</span>
+        </div>
+      </div>
+      <div role="progressbar" aria-label="Lv.3까지 진행도" aria-valuenow="4" aria-valuemin="0" aria-valuemax="10" style="height: 10px; border-radius: 999px; background: #eef2f1; overflow: hidden"><span style="display: block; width: 40%; height: 100%; border-radius: 999px; background: #21b287"></span></div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px">
+        <sc-for list="{{tiers}}" as="t" hint-placeholder-count="5">
+          <span style="display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: {{t.op}}; filter: {{t.filter}}">
+            <span style="width: 36px; height: 36px; border-radius: 50%; background: {{t.fill}}; border: 2.5px {{t.lineStyle}} {{t.ring}}; display: flex; align-items: center; justify-content: center; box-sizing: border-box; box-shadow: {{t.glow}}"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span>
+            <span style="font-size: 11px; font-weight: 800; color: {{t.fg}}; text-align: center; line-height: 1.25; white-space: pre-line">{{t.label}}</span>
+          </span>
+        </sc-for>
+      </div>
+    </section>
+
+    <div role="tablist" style="display: flex; gap: 4px; background: #f4f6f5; border-radius: 999px; padding: 4px">
+      <button role="tab" aria-selected="false" style="flex: 1; font-family: inherit; font-size: 14px; border: 0; border-radius: 999px; padding: 12px 4px; background: none; color: #5f6b68">북마크 7</button>
+      <button role="tab" aria-selected="true" style="flex: 1; font-family: inherit; font-size: 14px; font-weight: 800; border: 0; border-radius: 999px; padding: 12px 4px; background: #ffffff; color: #26302d">다녀온 팝업 5</button>
+      <button role="tab" aria-selected="false" style="flex: 1; font-family: inherit; font-size: 14px; border: 0; border-radius: 999px; padding: 12px 4px; background: none; color: #5f6b68">최근 본</button>
+    </div>
+
+    <sc-for list="{{visited}}" as="p" hint-placeholder-count="3">
+      <article style="display: flex; gap: 14px; padding: 12px; border: 1.5px solid #e3e9e7; border-radius: 16px">
+        <span style="position: relative; width: 84px; aspect-ratio: 3 / 4; border-radius: 12px; border: 2.5px solid #9eddcc; background: {{p.bg}}; flex: none; box-sizing: border-box">
+          <sc-if value="{{p.reviewed}}" hint-placeholder-val="{{ true }}">
+            <span role="img" aria-label="후기 도장 받음" style="position: absolute; right: -10px; bottom: -10px; width: 40px; height: 40px; border-radius: 50%; background: #e9f7f2; border: 3px solid #21b287; display: flex; align-items: center; justify-content: center; box-sizing: border-box; transform: rotate(-10deg); box-shadow: 0 2px 6px rgba(0,0,0,.12)"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span>
+          </sc-if>
+          <sc-if value="{{p.noReview}}" hint-placeholder-val="{{ false }}">
+            <span aria-hidden="true" style="position: absolute; right: -10px; bottom: -10px; width: 40px; height: 40px; border-radius: 50%; background: #ffffff; border: 2px dashed #5f6b68; color: #5f6b68; font-size: 20px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-sizing: border-box">+</span>
+          </sc-if>
+        </span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0">
+          <span style="align-self: flex-start; font-size: 11.5px; font-weight: 800; padding: 2px 9px; border-radius: 999px; color: #0b5e57; background: #e6fbf7">{{p.visit}} 방문</span>
+          <a href="A-Detail.dc.html" style="font-family: 'Jua', sans-serif; font-size: 18px; line-height: 1.25; color: #0f6b5c; text-decoration: none">{{p.t}}</a>
+          <span style="font-size: 13px; color: #5f6b68">{{p.place}}</span>
+          <sc-if value="{{p.reviewed}}" hint-placeholder-val="{{ true }}">
+            <span style="font-size: 12.5px; font-weight: 800; color: #0f6b5c">{{p.stars}} · 도장 받았어요</span>
+          </sc-if>
+          <sc-if value="{{p.noReview}}" hint-placeholder-val="{{ false }}">
+            <a href="A-Detail.dc.html" style="align-self: flex-start; margin-top: 2px; padding: 9px 14px; border-radius: 999px; background: #14b8a6; color: #ffffff; font-size: 13px; font-weight: 800; text-decoration: none">후기 쓰고 도장 받기</a>
+          </sc-if>
+        </div>
+      </article>
+    </sc-for>
+    <button style="height: 46px; border-radius: 999px; border: 0; background: #e6fbf7; color: #0b5e57; font-family: inherit; font-size: 14px; font-weight: 800">+2건 더보기</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const got = { op: '1', filter: 'none', lineStyle: 'solid' };
+    const lock = { op: '.45', filter: 'grayscale(1)', lineStyle: 'dashed' };
+    return {
+      tiers: [
+        Object.assign({ label: 'Lv.1\n새싹 팬', ring: '#5fbf9f', fill: '#f0faf6', fg: '#0f6b5c', glow: 'none' }, got),
+        Object.assign({ label: 'Lv.2\n단골 팬', ring: '#21b287', fill: '#e9f7f2', fg: '#0f6b5c', glow: '0 0 0 4px #d7f3e8' }, got),
+        Object.assign({ label: 'Lv.3\n성지순례러', ring: '#2c5bc5', fill: '#eaf0fc', fg: '#26302d', glow: 'none' }, lock),
+        Object.assign({ label: 'Lv.4\n덕질 마스터', ring: '#7656c4', fill: '#f1ecff', fg: '#26302d', glow: 'none' }, lock),
+        Object.assign({ label: 'Lv.5\n전설의 덕후', ring: '#c99a00', fill: '#fff6d6', fg: '#26302d', glow: 'none' }, lock)
+      ],
+      visited: [
+        { t: '귀멸의 칼날 전시', place: '강남 · 11.10 ~ 11.30', visit: '11.23', bg: '#d6f2e9', stars: '★★★★★', reviewed: true, noReview: false },
+        { t: '치이카와 팝업 스토어', place: '홍대 · 11.20 ~ 12.15', visit: '11.22', bg: '#ffd6dc', stars: '', reviewed: false, noReview: true },
+        { t: '하이큐!! 굿즈', place: '연남 · 11.10 ~ 11.25', visit: '11.15', bg: '#ffe6c2', stars: '★★★★☆', reviewed: true, noReview: false }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

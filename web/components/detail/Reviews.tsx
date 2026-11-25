@@ -7,12 +7,14 @@ import { avatarUrl, uploadUrl } from "@/lib/avatar";
 import { sensitiveWarning } from "@/lib/guard";
 import { goLogin, useMember } from "../member/MemberContext";
 import { toast } from "../member/Toast";
-import { StarIcon } from "../Icons";
-import BlogTab, { useBlogCount } from "./BlogTab";
+import { nextTier, tierOf } from "@/lib/stamp";
+import { CloseIcon } from "../Icons";
+import { RankChip, RankStamp } from "../RankStamp";
+import { useObjectUrls } from "../edit/Fields";
 
-// 상세 오른쪽 '리뷰' 탭 내용 (앱 render_reviews · _review_card): 맨 위 리뷰 쓰기(회원만, 사진 첨부 4장까지),
-// 그 아래 '리뷰 후기 / 블로그 후기', 평균 별점, 종류별 보기, 원글 + 답글. 내 글은 ⋯ 로 수정·삭제,
-// 관리자는 모든 글을 사유를 적고 삭제 (쓴 회원에게 알림). '리뷰 n / 수정하기' 탭 머리는 SideTabs 가 그린다.
+// 상세 '리뷰' 탭 (A-Detail 시안 · 앱 render_reviews · _review_card): 왼쪽 리뷰 쓰기(회원만 — 종류 · 별점 · 사진 4장 · 내 후기 도장),
+// 오른쪽 평균 별점 · 점수 분포 · 사진 모아 보기 · 종류별 보기 · 리뷰 카드(닉네임 옆 랭크, 사진 120px, 답글).
+// 내 글은 ⋯ 로 수정·삭제, 관리자는 모든 글을 사유를 적고 삭제 (쓴 회원에게 알림). 탭 머리 · 블로그 후기 탭은 SideTabs 가 그린다.
 const MAX_IMAGES = 4; // review.MAX_IMAGES
 const IMAGE_MB = 10; // review.IMAGE_MB
 
@@ -27,12 +29,22 @@ export type RView = {
   when: string;
   edited: boolean;
   mine: boolean;
+  /** 글쓴이 후기 도장 랭크 (0 · 없음 = 도장 없음) */
+  lv?: number;
 };
 export type TView = { post: RView; replies: RView[] };
 
 const KINDS = ["다녀온 후기", "기대평", "기타"];
 const RATED = "다녀온 후기";
 const KIND_COLOR: Record<string, string> = { "다녀온 후기": "green", 기대평: "blue", 기타: "gray" };
+const PAGE = 8; // 처음 보여 주는 리뷰 수 ('리뷰 더보기' 로 이만큼씩 더)
+const PHOTO_NOTE = "얼굴·영수증·연락처가 보이는 사진은 올리지 말아 주세요. 사진의 위치 정보는 지우고 저장해요.";
+
+const XMark = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" aria-hidden>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
 
 function whenText(stamp: string): string {
   const t = Date.parse(stamp);
@@ -109,11 +121,19 @@ function WriteBox({
   parentId = "",
   me,
   onPosted,
+  onClose,
+  stamps = 0,
+  stampedHere = false,
 }: {
   cafeId: string;
   parentId?: string;
   me: { nick: string; avatar: string };
   onPosted?: (p: Posted) => void;
+  /** 답글 칸: '취소' 를 누르거나 등록이 끝나면 칸을 닫는다 */
+  onClose?: () => void;
+  /** 내 후기 도장 수 · 이 팝업에서 이미 도장을 받았는지 (리뷰 쓰기 칸) */
+  stamps?: number;
+  stampedHere?: boolean;
 }) {
   const [kind, setKind] = useState(KINDS[0]);
   const [rating, setRating] = useState<number | null>(null);
@@ -133,7 +153,11 @@ function WriteBox({
     setPicOpen(false);
     setPics([]);
     setN((k) => k + 1);
+    onClose?.();
   });
+  const urls = useObjectUrls(pics);
+  const tier = tierOf(stamps);
+  const next = nextTier(stamps);
   const warn = sensitiveWarning(body);
   const heavy = pics.filter((p) => p.size > IMAGE_MB * 1024 * 1024).map((p) => p.name);
   const allowEmpty = !parentId && kind === RATED && (rating !== null || pics.length > 0);
@@ -161,33 +185,53 @@ function WriteBox({
         };
         action(fd);
       })}
-      className={`write${reply ? " reply" : ""}${focus || body || pics.length ? " open" : ""}`}
+      className={`write${reply ? " reply open" : " ad-write"}${!reply && (focus || body || pics.length) ? " open" : ""}`}
       key={n}
     >
       <input type="hidden" name="cafe_id" value={cafeId} />
       <input type="hidden" name="parent_id" value={parentId} />
       <input type="hidden" name="kind" value={reply ? "" : kind} />
       <input type="hidden" name="rating" value={rating ?? ""} />
-      {(!reply || focus || body) && (
+      {reply ? (
         <div className="rv-me">
           <Av v={me.avatar} size={28} />
           <b>{me.nick}</b>
         </div>
+      ) : (
+        // 작성자 줄: 내 32px 후기 도장 + 닉네임 · 랭크 · 다음 랭크까지 남은 수
+        <div className="ad-me">
+          {tier ? (
+            <RankStamp lv={tier.lv} size={32} />
+          ) : (
+            <span className="ad-nostamp" aria-hidden>
+              <img src="/mascot.png" alt="" />
+            </span>
+          )}
+          <span className="ad-me-t">
+            <span>
+              <b>{me.nick}</b>
+              <strong>{tier ? `내 도장 Lv.${tier.lv} ${tier.name}` : "아직 도장이 없어요"}</strong>
+            </span>
+            <span>
+              {stampedHere ? "이 팝업 도장은 이미 받았어요" : "다녀온 후기를 남기면 도장 +1"}
+              {next ? ` · Lv.${next.tier.lv}까지 ${next.left}개` : " · 가장 높은 랭크예요"}
+            </span>
+          </span>
+        </div>
       )}
       {!reply && (
-        <div className="pills kind-pills" role="radiogroup" aria-label="종류">
+        <div className="ad-seg" role="radiogroup" aria-label="리뷰 종류">
           {KINDS.map((k) => (
-            <button key={k} type="button" className="pill" aria-pressed={kind === k} onClick={() => setKind(k)}>
+            <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)}>
               {k}
             </button>
           ))}
         </div>
       )}
       {!reply && kind === RATED && (
-        <div className="rate-box">
-          <div className="rv-rate-q">이 팝업 방문하셨나요?</div>
-          <div className="rv-rate-sub">방문 예정인 분들에게 도움이 되는 후기를 작성해주세요</div>
+        <div className="ad-rate">
           <Stars value={rating} onChange={setRating} />
+          <span>별점만 골라도 등록돼요</span>
         </div>
       )}
       <textarea
@@ -195,11 +239,10 @@ function WriteBox({
         value={body}
         maxLength={1000}
         rows={reply ? 2 : 4}
+        autoFocus={reply}
         onFocus={() => setFocus(true)}
         onChange={(e) => setBody(e.target.value)}
-        placeholder={
-          reply ? "답글을 남겨 주세요" : "다녀온 후기나 기대하는 점을 남겨 주세요 (대기 시간, 특전 소진 여부 등)"
-        }
+        placeholder={reply ? "답글을 남겨 주세요" : "웨이팅, 특전 남은 수, 굿즈 꿀팁을 알려 주세요"}
         aria-label={reply ? "답글" : "리뷰 내용"}
       />
       {warn && (
@@ -212,8 +255,50 @@ function WriteBox({
           {s.error}
         </div>
       )}
-      {/* 사진 첨부: 원글 · 답글 모두 (11/20). 답글 칸은 칸을 눌러 열었을 때만 보인다 (.write.reply:not(.open) .pic-btn) */}
-      {!picOpen ? (
+      {/* 사진: 리뷰 쓰기는 네 칸이 늘 보이고(시안), 답글은 '+ 사진 첨부' 를 눌러 연다 (11/20) */}
+      {!reply ? (
+        <div className="ad-pics">
+          <span className="ad-pics-t">
+            사진{" "}
+            <span>
+              {pics.length} / {MAX_IMAGES} · 한 장 {IMAGE_MB}MB
+            </span>
+          </span>
+          <div className="ad-pics-grid">
+            {pics.map((f, i) => (
+              <span key={`${f.name}-${i}`} className="pic-one">
+                {urls[i] && <img src={urls[i]} alt="" />}
+                <button type="button" aria-label={`사진 ${i + 1} 빼기`} onClick={() => setPics(pics.filter((_, j) => j !== i))}>
+                  {XMark}
+                </button>
+              </span>
+            ))}
+            {pics.length < MAX_IMAGES && (
+              <label className="pic-drop ad-pic-add">
+                <span className="sr-only">사진 추가</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={(e) => {
+                    const add = Array.from(e.target.files || []);
+                    e.target.value = "";
+                    if (pics.length + add.length > MAX_IMAGES) toast(`사진은 ${MAX_IMAGES}장까지 올릴 수 있어요.`, "error");
+                    setPics([...pics, ...add].slice(0, MAX_IMAGES));
+                  }}
+                />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden>
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </label>
+            )}
+            {Array.from({ length: Math.max(0, MAX_IMAGES - pics.length - 1) }, (_, k) => (
+              <span key={k} className="ad-pic-empty" />
+            ))}
+          </div>
+          <span className="ad-pics-note">{PHOTO_NOTE}</span>
+        </div>
+      ) : !picOpen ? (
           <button
             type="button"
             className="pic-btn"
@@ -227,7 +312,7 @@ function WriteBox({
           </button>
         ) : (
           <PicPicker
-            label={`최대 ${MAX_IMAGES}장 · 한 장 ${IMAGE_MB}MB · 다른 사람 얼굴·영수증·연락처가 보이는 사진은 올리지 말아 주세요 (사진 속 위치 정보는 자동으로 지워요)`}
+            label={`최대 ${MAX_IMAGES}장 · 한 장 ${IMAGE_MB}MB · ${PHOTO_NOTE}`}
             room={MAX_IMAGES}
             files={pics}
             onChange={setPics}
@@ -244,7 +329,7 @@ function WriteBox({
           className="btn-main"
           disabled={busy || !!warn || heavy.length > 0 || (!body.trim() && !allowEmpty)}
         >
-          {reply ? "답글 등록" : "리뷰 등록"}
+          {reply ? "답글 등록" : kind === RATED && !stampedHere ? "등록하고 도장 받기" : "리뷰 등록"}
         </button>
         {reply && (
           <button
@@ -255,6 +340,7 @@ function WriteBox({
               setFocus(false);
               setPics([]);
               setPicOpen(false);
+              onClose?.();
             }}
           >
             취소
@@ -346,9 +432,9 @@ function EditBox({ r, isReply, onClose }: { r: RView; isReply: boolean; onClose:
       <input type="hidden" name="kind" value={isReply ? "" : kind} />
       <input type="hidden" name="rating" value={rating ?? ""} />
       {!isReply && (
-        <div className="pills kind-pills">
+        <div className="ad-seg" role="radiogroup" aria-label="리뷰 종류">
           {KINDS.map((k) => (
-            <button key={k} type="button" className="pill" aria-pressed={kind === k} onClick={() => setKind(k)}>
+            <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)}>
               {k}
             </button>
           ))}
@@ -405,7 +491,17 @@ function EditBox({ r, isReply, onClose }: { r: RView; isReply: boolean; onClose:
   );
 }
 
-function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; replies?: number }) {
+function Card({
+  r,
+  reply = false,
+  replies = 0,
+  onZoom,
+}: {
+  r: RView;
+  reply?: boolean;
+  replies?: number;
+  onZoom: (list: string[], i: number) => void;
+}) {
   const router = useRouter();
   const { me } = useMember();
   const admin = !!me?.admin && !r.mine; // 관리자가 남의 글을 지울 땐 사유를 적는다
@@ -422,13 +518,14 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
             ㄴ
           </span>
         )}
-        {r.kind && <span className={`kb ${KIND_COLOR[r.kind] || "gray"}`}>{r.kind}</span>}
-        <Av v={r.avatar} size={26} />
+        <Av v={r.avatar} size={reply ? 28 : 34} />
         <b>{r.name}</b>
+        <RankChip lv={r.lv ?? 0} />
         <span className="rv-when">
-          · {whenText(r.when)}
+          {whenText(r.when)}
           {r.edited ? " (수정됨)" : ""}
         </span>
+        {r.kind && <span className={`kb ${KIND_COLOR[r.kind] || "gray"}`}>{r.kind}</span>}
         {(r.mine || admin) && !r.id.startsWith("pending-") && (
           <span className="rv-more">
             <button type="button" aria-label={r.mine ? "내 글 수정·삭제" : "글 삭제 (관리자)"} onClick={() => setMenu((m) => !m)}>
@@ -466,20 +563,21 @@ function Card({ r, reply = false, replies = 0 }: { r: RView; reply?: boolean; re
       )}
       {editing ? (
         <EditBox r={r} isReply={reply} onClose={() => setEditing(false)} />
-      ) : r.images.length > 0 ? (
-        // 사진이 있으면 왼쪽 사진 · 오른쪽 글 (11/20 요청, 앱 .rv-content 와 같게)
-        <div className="rv-content">
-          <div className="rv-pics">
-            {r.images.map((x) => (
-              <a key={x} href={picSrc(x)} target="_blank" rel="noopener noreferrer">
-                <img src={picSrc(x)} alt="리뷰 사진" loading="lazy" />
-              </a>
-            ))}
-          </div>
-          {r.body.trim() && <p className="rv-body">{r.body}</p>}
-        </div>
       ) : (
-        r.body.trim() && <p className="rv-body">{r.body}</p>
+        <>
+          {r.body.trim() && <p className="rv-body">{r.body}</p>}
+          {/* 사진: 120px 로 최대 4장, 더 있으면 넷째 칸에 +N. 누르면 크게 본다 */}
+          {r.images.length > 0 && (
+            <div className="rv-pics">
+              {r.images.slice(0, MAX_IMAGES).map((x, k) => (
+                <button key={x} type="button" aria-label={`사진 ${k + 1} 크게 보기`} onClick={() => onZoom(r.images.map(picSrc), k)}>
+                  <img src={picSrc(x)} alt="리뷰 사진" loading="lazy" />
+                  {k === MAX_IMAGES - 1 && r.images.length > MAX_IMAGES && <span>+{r.images.length - MAX_IMAGES}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
       {asking && (
         <div className="dlg-bg" onClick={() => setAsking(false)}>
@@ -533,29 +631,46 @@ export default function Reviews({
   cafeId,
   threads,
   me,
+  stamps = 0,
 }: {
   cafeId: string;
   threads: TView[];
   me: { nick: string; avatar: string } | null;
+  /** 내 후기 도장 수 (lib/server/stamp.ts myStamps) */
+  stamps?: number;
 }) {
   const router = useRouter();
-  const [sub, setSub] = useState<"review" | "blog">("review");
   const [pick, setPick] = useState("전체");
-  const blogN = useBlogCount(cafeId); // 앱처럼 탭 이름에 글 수 (모르면 0)
+  const [sort, setSort] = useState<"new" | "star">("new");
+  const [limit, setLimit] = useState(PAGE);
   // 방금 쓴 글: 서버가 저장했다고 답하면 바로 붙여 보여 주고, 새 목록(router.refresh)이 오면 비운다 (11/20 등록 속도)
   const [pending, setPending] = useState<Posted[]>([]);
-  // 대댓글은 처음엔 접어 두고 '+N건의 댓글' 로 펼친다 (11/20 요청). 방금 답글을 단 글은 펼쳐 둔다
+  // 답글은 처음엔 접어 두고 '댓글 N개' 로 펼친다 (11/20 요청). 방금 답글을 단 글은 펼쳐 둔다
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [replyTo, setReplyTo] = useState("");
+  const [zoom, setZoom] = useState<{ list: string[]; i: number } | null>(null);
   useEffect(() => {
     setPending((cur) => {
       cur.forEach((p) => p.view.images.forEach((x) => x.startsWith("blob:") && URL.revokeObjectURL(x)));
       return cur.length ? [] : cur;
     });
   }, [threads]);
+  useEffect(() => {
+    if (!zoom) return;
+    const n = zoom.list.length;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoom(null);
+      if (e.key === "ArrowRight") setZoom((z) => z && { ...z, i: (z.i + 1) % n });
+      if (e.key === "ArrowLeft") setZoom((z) => z && { ...z, i: (z.i - 1 + n) % n });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoom]);
   const posted = (p: Posted) => {
     setPending((cur) => [...cur, p]);
     if (p.parentId) setOpen((o) => ({ ...o, [p.parentId]: true }));
   };
+  const onZoom = (list: string[], i: number) => setZoom({ list, i });
   const all: TView[] = [
     ...pending.filter((p) => !p.parentId).map((p) => ({ post: p.view, replies: [] as RView[] })).reverse(),
     ...threads.map((t) => {
@@ -563,107 +678,202 @@ export default function Reviews({
       return more.length ? { ...t, replies: [...t.replies, ...more] } : t;
     }),
   ];
-  const n = all.reduce((a, t) => a + 1 + t.replies.length, 0);
   const rated = all.filter((t) => t.post.kind === RATED && t.post.rating).map((t) => t.post.rating as number);
   const avg = rated.length ? Math.round((rated.reduce((a, b) => a + b, 0) / rated.length) * 10) / 10 : 0;
+  const dist = [5, 4, 3, 2, 1].map((s) => ({ s, n: rated.filter((x) => x === s).length }));
   const count = Object.fromEntries(KINDS.map((k) => [k, all.filter((t) => t.post.kind === k).length]));
-  const shown = all.filter((t) => pick === "전체" || t.post.kind === pick);
+  const withPhoto = all.filter((t) => t.post.images.length > 0);
+  const photos = withPhoto.flatMap((t) => t.post.images.map(picSrc));
+  // 도장은 같은 팝업에 1개: 이 팝업에 내 '다녀온 후기'가 이미 있으면 더 받지 않는다
+  const stampedHere = all.some((t) => t.post.mine && t.post.kind === RATED);
+  const chips: [string, number][] = [
+    ["전체", all.length],
+    ["사진 후기만", withPhoto.length],
+    ...KINDS.map((k) => [k, count[k]] as [string, number]),
+  ];
+  const filtered = all.filter((t) => pick === "전체" || (pick === "사진 후기만" ? t.post.images.length > 0 : t.post.kind === pick));
+  const sorted =
+    sort === "star"
+      ? filtered
+          .map((t, i) => ({ t, i }))
+          .sort((a, b) => (b.t.post.rating ?? 0) - (a.t.post.rating ?? 0) || a.i - b.i)
+          .map((x) => x.t)
+      : filtered;
+  const shown = sorted.slice(0, limit);
 
   return (
-    <div className="rv-pane">
-      <div className="side-box rvbox">
+    <div className="rv-pane ad-rv">
+      <section className="rvbox ad-rv-write" aria-labelledby="ad-write-h">
+        <h2 id="ad-write-h">리뷰 쓰기</h2>
         {me ? (
-          <WriteBox cafeId={cafeId} me={me} onPosted={posted} />
+          <WriteBox cafeId={cafeId} me={me} onPosted={posted} stamps={stamps} stampedHere={stampedHere} />
         ) : (
           <>
-            <p className="side-note">리뷰는 로그인하면 쓸 수 있어요.</p>
+            <p className="side-note">리뷰는 로그인하면 쓸 수 있어요. 다녀온 후기를 남기면 후기 도장도 받아요.</p>
             <button
               type="button"
-              className="side-cta"
+              className="btn-main"
               onClick={() => goLogin(router, "리뷰는 로그인하면 쓸 수 있어요.", `/popup/${cafeId}`)}
             >
               로그인하고 계속하기
             </button>
           </>
         )}
-      </div>
-      <div className="rv-subtabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={sub === "review"}
-          className={sub === "review" ? "on" : ""}
-          onClick={() => setSub("review")}
-        >
-          리뷰 후기 ({n})
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={sub === "blog"}
-          className={sub === "blog" ? "on" : ""}
-          onClick={() => setSub("blog")}
-        >
-          블로그 후기 ({blogN ?? 0})
-        </button>
-      </div>
-      {sub === "blog" ? (
-        <BlogTab cafeId={cafeId} />
-      ) : !all.length ? (
-        <p className="rv-none center">아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</p>
-      ) : (
-        <>
-          {rated.length > 0 && (
-            <div className="rv-avg">
-              <span className="rv-avg-num">{avg.toFixed(1)}</span>
-              <span className="rv-avg-stars" aria-label={`5점 만점에 ${avg.toFixed(1)}점`}>
-                <span className="rv-avg-bg">
-                  {[0, 1, 2, 3, 4].map((k) => (
-                    <StarIcon key={k} />
-                  ))}
-                </span>
-                <span className="rv-avg-fg" style={{ width: `${(avg / 5) * 100}%` }}>
-                  {[0, 1, 2, 3, 4].map((k) => (
-                    <StarIcon key={k} />
-                  ))}
-                </span>
-              </span>
-              <span className="rv-avg-cnt">다녀온 후기 {rated.length}개 평균</span>
+      </section>
+
+      <section className="ad-rv-list" aria-labelledby="ad-list-h">
+        <h2 id="ad-list-h" className="sr-only">
+          리뷰 목록
+        </h2>
+        {!all.length ? (
+          <p className="rv-none center">아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</p>
+        ) : (
+          <>
+            {(rated.length > 0 || photos.length > 0) && (
+              <div className="ad-sum">
+                {rated.length > 0 && (
+                  <>
+                    <div className="ad-sum-avg">
+                      <span className="rv-avg-num">{avg.toFixed(1)}</span>
+                      <span className="ad-stars" role="img" aria-label={`5점 만점에 ${avg.toFixed(1)}점`}>
+                        <span>★★★★★</span>
+                        <span style={{ width: `${(avg / 5) * 100}%` }}>★★★★★</span>
+                      </span>
+                      <span className="rv-avg-cnt">다녀온 후기 {rated.length}개 평균</span>
+                    </div>
+                    <div className="ad-sum-dist" aria-label="점수 분포">
+                      {dist.map((b) => (
+                        <div key={b.s}>
+                          <span>{b.s}점</span>
+                          <span className="ad-bar">
+                            <span style={{ width: `${(b.n / rated.length) * 100}%` }} />
+                          </span>
+                          <span>{b.n}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {photos.length > 0 && (
+                  <div className="ad-sum-pics" aria-label="사진 후기 모아 보기">
+                    {photos.slice(0, 3).map((x, k) => (
+                      <button key={`${x}-${k}`} type="button" aria-label={`사진 후기 ${k + 1} 크게 보기`} onClick={() => onZoom(photos, k)}>
+                        <img src={x} alt="" loading="lazy" />
+                        {k === 2 && photos.length > 3 && <span>+{photos.length - 3}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="ad-filter">
+              <div className="ad-fchips" role="group" aria-label="리뷰 보기">
+                {chips.map(([k, n]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-pressed={pick === k}
+                    className={pick === k ? "on" : ""}
+                    onClick={() => {
+                      setPick(k);
+                      setLimit(PAGE);
+                    }}
+                  >
+                    {k} {n}
+                  </button>
+                ))}
+              </div>
+              <label className="ad-sort">
+                정렬
+                <select value={sort} onChange={(e) => setSort(e.target.value === "star" ? "star" : "new")}>
+                  <option value="new">최신순</option>
+                  <option value="star">별점 높은 순</option>
+                </select>
+              </label>
             </div>
-          )}
-          <div className="seg small" role="tablist" aria-label="리뷰 보기">
-            {["전체", ...KINDS].map((k) => (
-              <button key={k} type="button" className={pick === k ? "on" : ""} onClick={() => setPick(k)}>
-                {k} {k === "전체" ? all.length : count[k]}
-              </button>
+            {!shown.length && (
+              <p className="rv-none center">
+                {pick === "사진 후기만" ? "아직 사진 후기가 없어요." : `아직 ${pick}${pick === "기대평" ? "이" : "가"} 없어요.`} 처음으로 남겨 보세요.
+              </p>
+            )}
+            {shown.map((t) => (
+              <article key={t.post.id} className="rv-thread">
+                <Card r={t.post} replies={t.replies.length} onZoom={onZoom} />
+                {(t.replies.length > 0 || (me && !t.post.id.startsWith("pending-"))) && (
+                  <div className="ad-rv-foot">
+                    {t.replies.length > 0 && (
+                      <button
+                        type="button"
+                        className="ad-rv-replies"
+                        aria-expanded={!!open[t.post.id]}
+                        onClick={() => setOpen((o) => ({ ...o, [t.post.id]: !o[t.post.id] }))}
+                      >
+                        {open[t.post.id] ? "댓글 접기" : `ㄴ 댓글 ${t.replies.length}개`}
+                      </button>
+                    )}
+                    {me && !t.post.id.startsWith("pending-") && (
+                      <button
+                        type="button"
+                        className="ad-rv-reply"
+                        aria-expanded={replyTo === t.post.id}
+                        onClick={() => setReplyTo((cur) => (cur === t.post.id ? "" : t.post.id))}
+                      >
+                        답글 쓰기
+                      </button>
+                    )}
+                  </div>
+                )}
+                {open[t.post.id] && t.replies.map((r) => <Card key={r.id} r={r} reply onZoom={onZoom} />)}
+                {me && replyTo === t.post.id && (
+                  <WriteBox cafeId={cafeId} parentId={t.post.id} me={me} onPosted={posted} onClose={() => setReplyTo("")} />
+                )}
+              </article>
             ))}
-          </div>
-          {!shown.length && (
-            <p className="rv-none">
-              아직 {pick}
-              {pick === "기대평" ? "이" : "가"} 없어요. 위에서 처음으로 남겨 보세요.
-            </p>
+            {sorted.length > limit && (
+              <button type="button" className="ad-more" onClick={() => setLimit((n) => n + PAGE)}>
+                리뷰 더보기
+              </button>
+            )}
+          </>
+        )}
+      </section>
+
+      {zoom && (
+        <div className="lightbox" role="dialog" aria-label="사진 크게 보기" onClick={() => setZoom(null)}>
+          <img src={zoom.list[zoom.i]} alt="리뷰 사진" />
+          <button type="button" className="lb-x" aria-label="닫기" onClick={() => setZoom(null)}>
+            <CloseIcon />
+          </button>
+          {zoom.list.length > 1 && (
+            <>
+              <span className="lb-count">
+                {zoom.i + 1} / {zoom.list.length}
+              </span>
+              <button
+                type="button"
+                className="ad-gal-arrow l"
+                aria-label="이전 사진"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setZoom({ ...zoom, i: (zoom.i - 1 + zoom.list.length) % zoom.list.length });
+                }}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="ad-gal-arrow r"
+                aria-label="다음 사진"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setZoom({ ...zoom, i: (zoom.i + 1) % zoom.list.length });
+                }}
+              >
+                ›
+              </button>
+            </>
           )}
-          {shown.map((t) => (
-            <div key={t.post.id} className="rv-thread">
-              <Card r={t.post} replies={t.replies.length} />
-              {t.replies.length > 0 && (
-                <button
-                  type="button"
-                  className="rv-more-replies"
-                  aria-expanded={!!open[t.post.id]}
-                  onClick={() => setOpen((o) => ({ ...o, [t.post.id]: !o[t.post.id] }))}
-                >
-                  {open[t.post.id] ? "댓글 접기" : `+${t.replies.length}건의 댓글`}
-                </button>
-              )}
-              {open[t.post.id] && t.replies.map((r) => <Card key={r.id} r={r} reply />)}
-              {me && !t.post.id.startsWith("pending-") && (
-                <WriteBox cafeId={cafeId} parentId={t.post.id} me={me} onPosted={posted} />
-              )}
-            </div>
-          ))}
-        </>
+        </div>
       )}
     </div>
   );

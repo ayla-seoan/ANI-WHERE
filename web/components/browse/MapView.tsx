@@ -2,11 +2,12 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { Item } from "@/lib/popup";
-import { TuneIcon } from "../Icons";
 import FilterBar from "./FilterBar";
 import DailyNote from "./DailyNote";
 import MapCanvas, { type Bounds } from "./MapCanvas";
 import NoResult from "./NoResult";
+import CondChips, { condChips } from "./CondChips";
+import { FilterLines } from "./BrowseIcons";
 import AskPanel from "../ask/AskPanel";
 import AskFab from "../ask/AskFab";
 import { activeCount, applyCond, sortItems, useAreas, useCond, useFilterToggle } from "./filters";
@@ -45,6 +46,8 @@ export default function MapView({ items, today }: { items: Item[]; today: string
   const firstMe = useMyLocation();
   const [btnMe, setBtnMe] = useState<{ lat: number; lng: number } | null>(null);
   const me = btnMe ?? firstMe; // '내 위치' 버튼으로 받은 위치가 있으면 그걸로
+  const [picked, setPicked] = useState(""); // 지도에서 미리보기가 열린 팝업 (데일리 노트 줄 표시)
+  const hasChips = condChips(cond, true).length > 0;
 
   const pick = (id: string) => {
     if (mapped.some((p) => p.id === id)) {
@@ -69,31 +72,52 @@ export default function MapView({ items, today }: { items: Item[]; today: string
         onClose={() => setSheet(false)}
         count={view.length}
       />
-      <div className="map-tools m-only">
-        <span className="map-count">
-          지도에 <b>{mapped.length}</b>곳
+      {/* 모바일: '지도에 N곳' + 필터 버튼. 걸린 필터 칩은 PC · 모바일 모두 여기 */}
+      <div className={`map-tools${hasChips ? " has" : ""}`}>
+        <span className="map-count m-only">
+          지도에 <b>{mapped.length}곳</b>
         </span>
-        <button type="button" className="m-filter" aria-label="필터 열기" onClick={() => setSheet((o) => !o)}>
-          <TuneIcon />
+        <button
+          type="button"
+          className="m-filter m-only"
+          aria-label="필터 열기"
+          aria-expanded={sheet}
+          onClick={() => setSheet((o) => !o)}
+        >
+          <FilterLines />
           {act ? <span>{act}</span> : null}
         </button>
-      </div>
-      {/* 앱 지도로 보기와 같은 칸: 왼쪽 큰 칸(데일리 팝업 노트 · 지도, 그 아래 팝업 목록) | 오른쪽 물어보기 */}
-      <div className="map-layout">
-        <div className="map-left">
-          <div className="map-row">
-            <div className="daily-col">
-              <DailyNote items={view} today={today} onPick={pick} me={me} />
-            </div>
-            <div className="map-col">
-              {mapped.length || view.length ? (
-                <MapCanvas points={mapped} home={home} focus={focus} me={me} onMe={setBtnMe} />
-              ) : (
-                <NoResult items={items} cond={cond} set={set} reset={reset} today={today} />
-              )}
-            </div>
+        {hasChips && (
+          <div className="tool-chips">
+            <CondChips cond={cond} set={set} withArea />
           </div>
-        </div>
+        )}
+      </div>
+      {/* A-Map 3단: 왼쪽 데일리 팝업 노트 | 가운데 지도 | 오른쪽 물어보기. 모바일(A-MMap)은 지도 → 노트 순서 */}
+      <div className="map-layout">
+        <aside className="daily-col" aria-label="데일리 팝업 노트">
+          <DailyNote items={view} today={today} onPick={pick} me={me} picked={picked} />
+        </aside>
+        <section className="map-col" aria-label="지도">
+          {mapped.length || view.length ? (
+            <>
+              <span className="map-count over pc-only">
+                지도에 <b>{mapped.length}곳</b>
+              </span>
+              <MapCanvas
+                points={mapped}
+                home={home}
+                focus={focus}
+                me={me}
+                onMe={setBtnMe}
+                today={today}
+                onSelect={setPicked}
+              />
+            </>
+          ) : (
+            <NoResult items={items} cond={cond} set={set} reset={reset} today={today} />
+          )}
+        </section>
         <div className="map-right pc-only">
           <AskPanel items={items} today={today} />
         </div>

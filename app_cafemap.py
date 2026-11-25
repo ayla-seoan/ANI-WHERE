@@ -838,59 +838,72 @@ def _link_status(urls: tuple[str, ...]) -> dict:
         return {}
 
 
+def _ad_left_text(current: dict) -> str:
+    """일정 칸 둘째 줄: 남은 날 (웹 popup/[id]/page.tsx 의 left 와 같은 규칙). 운영 시간은 데이터에 없어서 넣지 않는다."""
+    tags = _split(current.get("tags") or "")
+    s_, e_ = mycal._day(current.get("start_date")), mycal._day(current.get("end_date"))
+    if pdates.TAG_CHECK in tags or not s_ or not e_:
+        text = "공식 공지에서 기간을 확인해 주세요"
+    elif e_ < TODAY:
+        text = "끝난 팝업이에요"
+    elif s_ > TODAY:
+        text = f"시작까지 {(s_ - TODAY).days}일"
+    elif pdates.TAG_ALWAYS in tags or pdates.is_always(e_):
+        text = "상시 운영"
+    elif e_ == TODAY:
+        text = "오늘까지예요"
+    else:
+        text = f"끝나는 날까지 {(e_ - TODAY).days}일"
+    return text + (" · 사전 예약" if _is_reserve(current) else "")
+
+
 def _detail_info_html(current: dict) -> str:
-    """상세 정보 블록: 위치(주소 + 지도에서 확인하기) · 일정 → 혜택(특전·굿즈·이벤트) → 참고 웹사이트 카드 → 팝업 소개."""
-    # 위치 · 일정: 왼쪽에 항목 이름, 오른쪽에 내용 (오른쪽 정렬)
+    """상세 정보 블록 (A안, 웹 .ad-check / .ad-sec 과 같게): 위치 칸 · 일정 칸 → 혜택 칩 → 참고 웹사이트 → 팝업 소개."""
     addr = str(current.get("address") or "-")
     start, end = pd.to_datetime(current.get("start_date")), pd.to_datetime(current.get("end_date"))
     span = f"{_day(start, True)} - {_day(end, end.year != start.year)}"
     if pdates.is_always(end) or pdates.TAG_CHECK in _split(current.get("tags") or ""):
-        span = _period(current, lambda d: _day(d, True))
-    # 위치: 카페 이름을 크고 굵게 맨 위에, 그 아래 주소, 그 아래 '지도에서 확인하기'
-    # '방문 전 확인' 회색 상자: 왼쪽 항목 이름(고정 폭), 오른쪽 내용(왼쪽 정렬)
-    rows = (
-        '<div class="dinfo-title">방문 전 확인</div>'
-        # 위치 줄: 항목 이름 | 카페 이름·주소 | (같은 줄 오른쪽 끝) 지도에서 확인하기
-        '<div class="drow"><div class="dlabel">위치</div><div class="dval">'
-        f'<div class="dcafe">{escape(str(current.get("cafe_name") or "-"))}</div>'
-        f'<div class="daddr">{escape(addr)}</div></div>'
-        f'<a class="dbtn" href="{escape(_map_link(current))}" target="_blank" rel="noopener">{_mi("location_on")}지도에서 확인하기</a>'
-        '</div>'
-        f'<div class="drow"><div class="dlabel">일정</div><div class="dval">{escape(span)}</div></div>'
+        span = _period(current, lambda d: _day(d, True))      # 상시 팝업은 '26.11.20(금) ~ 상시'
+    # 방문 전 확인: 위치 칸(카페 이름 · 주소 · 지도에서 확인하기) + 일정 칸(기간 · 남은 날)
+    check = (
+        '<div class="ad-check" aria-label="방문 전 확인">'
+        f'<div class="ad-box">{_mi("location_on")}<div>'
+        f'<strong class="dcafe">{escape(str(current.get("cafe_name") or "-"))}</strong>'
+        f'<span class="daddr">{escape(addr)}</span>'
+        f'<a href="{escape(_map_link(current))}" target="_blank" rel="noopener">지도에서 확인하기</a></div></div>'
+        f'<div class="ad-box">{_mi("calendar_month")}<div><strong>{escape(span)}</strong>'
+        f'<span>{escape(_ad_left_text(current))}</span></div></div></div>'
     )
-    # 혜택: 특전 · 굿즈 · 이벤트마다 검은 알약 라벨, 그 옆에 회색 상자 안 목록 (라벨 | 내용 한 줄)
-    groups = [("특전", _mi("redeem"), _split(current.get("perks") or "")),
-              ("굿즈", _mi("shopping_bag"), _split(current.get("goods") or "")),
-              ("이벤트", _mi("celebration"), _split(current.get("tags") or ""))]
-    perks = "".join(
-        f'<div class="dgroup"><span class="dpill">{name}</span><ul class="dbox">'
-        + "".join(f"<li>{icon} {escape(x)}</li>" for x in items) + "</ul></div>"
-        for name, icon, items in groups if items)
-    perks_html = (f'<div class="dsec"><div class="dsec-title">혜택</div>{perks}</div>' if perks else
-                  '<div class="dsec"><div class="dsec-title">혜택</div><div class="dnone">등록된 특전·굿즈가 없어요</div></div>')
-    # 참고 웹사이트: 연회색 카드 (사이트 이름 + 주소 + ↗), 카드 전체를 누르면 새 탭
-    # recal.kr 은 맨 뒤로 (다른 사이트가 없으면 그대로 첫 번째) — 예전에 가져온 행사에도 같은 순서로 보인다
+    # 혜택: 특전 · 굿즈 · 이벤트를 칩으로 ('특전 · 랜덤 코스터'). 상시 · 기간 확인 필요 표시는 혜택이 아니라서 뺀다
+    groups = [("특전", _split(current.get("perks") or "")),
+              ("굿즈", _split(current.get("goods") or "")),
+              ("이벤트", [t for t in _split(current.get("tags") or "") if t not in cafe.PERIOD_TAGS])]
+    chips = "".join(f'<span class="{"perk" if name == "특전" else "etc"}"><b>{name}</b>{escape(x)}</span>'
+                    for name, items in groups for x in items)
+    perks_html = ('<div class="ad-sec"><div class="ad-h2">혜택</div>'
+                  + (f'<div class="ad-chips">{chips}</div>' if chips else '<div class="ad-none">등록된 특전·굿즈가 없어요</div>')
+                  + '</div>')
+    # 참고 웹사이트: 사이트 이름 + ↗. recal.kr 은 맨 뒤로 (다른 사이트가 없으면 그대로 첫 번째)
     links = cafe.order_links(cafe.parse_links(current.get("links") or "")[0])
     link_html = ""
     if links:
         status = _link_status(tuple(links))      # 깨진 공식 링크는 '링크 확인 필요' (하루 동안 기억)
         cards = "".join(
             f'<a class="dlink{" broken" if status.get(u) is False else ""}" href="{escape(u)}" target="_blank" rel="noopener">'
-            f'<div class="dlink-text"><div class="dlink-title">{escape(_site_name(u))}'
-            + (f' <span class="dlink-warn">{_mi("link_off")} 링크 확인 필요</span>' if status.get(u) is False else "")
-            + f'</div><div class="dlink-url">{escape(u)}</div></div><span class="dlink-go">↗</span></a>'
+            f'<span>{escape(_site_name(u))}</span>'
+            + (f'<span class="dlink-warn">{_mi("link_off")} 링크 확인 필요</span>' if status.get(u) is False else "")
+            + f'{_mi("open_in_new")}</a>'
             for u in links)
-        link_html = f'<div class="dsec"><div class="dsec-title">참고 웹사이트</div>{cards}</div>'
+        link_html = f'<div class="ad-sec"><div class="ad-h2">참고 웹사이트</div><div class="ad-links">{cards}</div></div>'
     # 팝업 소개: 쓴 글(간편등록은 공지)을 줄바꿈 그대로. 없으면 칸을 만들지 않는다
     intro = str(current.get("intro") or "").strip()
     src = str(current.get("intro_src") or "").strip()
     src_btn = (f'<a class="dsrc" href="{escape(src)}" target="_blank" rel="noopener">'
                f'{_mi("open_in_new")}출처 보기</a>' if src.startswith(("http://", "https://")) else "")
-    # 출처 보기는 소개 상자 안 오른쪽 맨 아래
     src_foot = f'<div class="dintro-foot">{src_btn}</div>' if src_btn else ""
-    intro_html = (f'<div class="dsec"><div class="dsec-title">팝업 소개</div>'
-                  f'<div class="dintro">{_intro_body(intro)}{src_foot}</div></div>' if intro else "")
-    return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
+    intro_html = (f'<div class="ad-sec"><div class="ad-h2">팝업 소개</div>'
+                  f'<div class="ad-intro">{_intro_body(intro)}{src_foot}</div></div>' if intro else "")
+    return f'<div class="ad-info">{check}{perks_html}{link_html}{intro_html}</div>'
 
 
 def _blog_row(current: dict) -> dict:
@@ -990,45 +1003,52 @@ def _render_blog_tab(current: dict, posts: list[dict]) -> None:
 
 
 def render_detail(current: dict) -> None:
-    """상세 화면 왼쪽: 이미지 슬라이드 · 작품(+캐릭터) · 위치(카페명·주소)·일정 · 혜택 · 참고 웹사이트 · 공유.
+    """상세 화면 위쪽 2단 (A안, 웹 .ad-hero): 왼쪽 3:4 사진(넘기기 · 작은 사진 줄 · 눌러서 크게 보기),
+    오른쪽 상태 · 지역 배지 → 제목 + 공유 · 북마크 → 평균 별점 → 위치 · 일정 칸 → 혜택 → 참고 웹사이트 → 팝업 소개.
+    수정하기 탭에서는 이 2단을 숨기고 작은 머리(포스터 60×80 + 제목)만 보인다 (A_DETAIL_CSS 가 탭 상태를 보고 바꾼다).
     지도는 상세에 따로 그리지 않고, 위치의 '지도에서 확인하기' 로 카카오맵을 연다."""
     entry_id = str(current["entry_id"])
-    # 포스터와 추가 이미지를 한 슬라이드로: 몇 초마다 넘어가고, 버튼으로 넘기고, 누르면 크게 본다.
-    # 포스터가 없으면 기본 그림을 보여 준다 (저장소에는 넣지 않는다)
     pics = images.paths(current.get("images"))
-    gallery.gallery([images.url(p) for p in pics] or [images.DEFAULT_POSTER_URL],
-                    key=f"gallery_{entry_id}")
-    # 머리글 (LIST_CSS 의 .dhead):
-    #   1줄 📍 지역 ······························· 진행 상태 배지(작게)
-    #   2줄 작품 이름(크게) ························ [공유][♡]
-    #   3줄 캐릭터(포인트 색)
-    top, title_html, chars_html = _detail_head_html(current)
-    st.markdown(top, unsafe_allow_html=True)
-    # 2줄: 작품 이름 칸이 남는 폭을 쓰고, 오른쪽에 공유·찜 버튼 칸 (공유를 누르면 공유 칸이 넓어지며 왼쪽으로 펼쳐진다)
-    with st.container(key="detail_actions"):
-        title_col, share_col, fav_col = st.columns([6, 1, 1], vertical_alignment="center")
-    with title_col:
-        st.markdown(title_html, unsafe_allow_html=True)
-    with fav_col:
-        _heart(entry_id, "d")      # 하트만 (글자·찜 수 없이)
-    with share_col:
-        # 받은 사람이 누르면 이 카페 상세가 바로 열린다 (?cafe=...)
-        share.share_buttons(
-            entry_id,
-            title=f"{current.get('work', '')} · {current.get('cafe_name', '')}",
-            text=f"{current.get('start_date')} ~ {current.get('end_date')} · {current.get('address') or ''}",
-            image=images.url(pics[0]) if pics else images.DEFAULT_POSTER_URL,
-            key=f"share_{entry_id}",
-        )
-    if chars_html:
-        st.markdown(chars_html, unsafe_allow_html=True)
-    # 위치(카페명·주소) · 일정 · 혜택 · 참고 웹사이트 (LIST_CSS 의 .dinfo / .dsec / .dlink)
-    st.markdown(_detail_info_html(current), unsafe_allow_html=True)
+    poster = images.url(pics[0]) if pics else images.DEFAULT_POSTER_URL
+    badges_html, title_html, sub_html = _detail_head_html(current)
+    # 수정하기 탭의 작은 머리 (평소엔 숨김). A_DETAIL_CSS 도 여기서 한 번 내보낸다 (LIST_CSS 뒤라서 같은 규칙을 덮는다)
+    with st.container(key="ad_mini"):
+        st.markdown(A_DETAIL_CSS, unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="ad-mini"><img src="{poster}" alt="" onerror="this.onerror=null;this.src=\'{images.DEFAULT_POSTER_URL}\'">'
+              f'<div><span>팝업 상세 · {escape(str(current.get("cafe_name") or ""))}</span>'
+              f'<div class="ad-title">{escape(str(current.get("work") or ""))}</div></div></div>',
+            unsafe_allow_html=True)
+    with st.container(key="ad_hero"):
+        col_pic, col_info = st.columns([42, 92], gap="large")
+    with col_pic:
+        # 포스터와 추가 이미지를 한 슬라이드로. 포스터가 없으면 기본 그림을 보여 준다 (저장소에는 넣지 않는다)
+        gallery.gallery([images.url(p) for p in pics] or [images.DEFAULT_POSTER_URL], key=f"gallery_{entry_id}")
+    with col_info:
+        st.markdown(badges_html, unsafe_allow_html=True)
+        # 제목 칸이 남는 폭을 쓰고, 오른쪽에 공유 · 북마크 (44px). 공유를 누르면 공유 칸이 넓어지며 왼쪽으로 펼쳐진다
+        with st.container(key="detail_actions"):
+            title_col, share_col, fav_col = st.columns([6, 1, 1], vertical_alignment="top")
+        with title_col:
+            st.markdown(title_html, unsafe_allow_html=True)
+        with fav_col:
+            _heart(entry_id, "d")      # 북마크 아이콘만 (글자·수 없이)
+        with share_col:
+            # 받은 사람이 누르면 이 카페 상세가 바로 열린다 (?cafe=...)
+            share.share_buttons(
+                entry_id,
+                title=f"{current.get('work', '')} · {current.get('cafe_name', '')}",
+                text=f"{current.get('start_date')} ~ {current.get('end_date')} · {current.get('address') or ''}",
+                image=poster,
+                key=f"share_{entry_id}",
+            )
+        # 캐릭터 · 평균 별점 · 위치 · 일정 · 혜택 · 참고 웹사이트 · 팝업 소개
+        st.markdown(sub_html + _detail_info_html(current), unsafe_allow_html=True)
 
 
 def _detail_head_html(current: dict) -> tuple[str, str, str]:
-    """상세 머리글 세 조각: (📍 지역 + 진행 상태 배지 줄, 작품 이름, 캐릭터 줄).
-    일정 날짜는 아래 '일정' 줄에만 둔다. 캐릭터가 없으면 셋째는 빈 문자열."""
+    """상세 머리글 세 조각: (상태 · 지역 배지 줄, 작품 이름, 캐릭터 + 평균 별점 줄).
+    일정 날짜는 아래 '일정' 칸에만 둔다. 캐릭터도 별점도 없으면 셋째는 빈 문자열."""
     area = geo.area_name(str(current.get("address") or ""))
     color, _ = _area_colors(current.get("address"))
     start = pd.to_datetime(current.get("start_date")).date()
@@ -1042,11 +1062,20 @@ def _detail_head_html(current: dict) -> tuple[str, str, str]:
     else:
         state = "진행 중"
     chars = str(current.get("characters") or "").strip()
-    top = ('<div class="dhead dtop">'
-           + f'<span class="dregion" style="color:{color}">{_mi("location_on") + escape(area) if area else ""}</span>'
-           + f'<span class="dstate{" ended" if state == "종료" else ""}">{state}</span></div>')
-    title = f'<div class="dtitle">{escape(str(current.get("work") or ""))}</div>'
-    sub = f'<div class="dsub"><span class="dchars">{escape(chars)}</span></div>' if chars else ""
+    top = ('<div class="ad-badges">'
+           + f'<span class="ad-state{" ended" if state == "종료" else ""}">{state}</span>'
+           + (f'<span class="ad-area" style="background:{color}">{escape(area)}</span>' if area else "")
+           + '</div>')
+    title = f'<div class="dtitle ad-title">{escape(str(current.get("work") or ""))}</div>'
+    sub = f'<div class="ad-chars">{escape(chars)}</div>' if chars else ""
+    # 평균 별점 줄: 다녀온 후기에 별점이 있을 때만 (리뷰를 막 쓴 직후에는 화면을 다시 열어야 바뀐다 — 리뷰 탭의 평균은 바로 바뀐다)
+    try:
+        avg, n_rated = review.average_rating(review.threads(reviews.current_rows(), str(current["entry_id"])))
+    except Exception:
+        avg, n_rated = 0.0, 0
+    if n_rated:
+        sub += (f'<div class="ad-avg">{_ad_stars_html(avg)}<strong>{avg:.1f}</strong>'
+                f'<span>다녀온 후기 {n_rated}개 평균</span></div>')
     return top, title, sub
 
 
@@ -1152,7 +1181,7 @@ def render_similar(current: dict, df: pd.DataFrame) -> None:
 
 @st.fragment
 def render_detail_tabs(current: dict) -> None:
-    """상세 화면 오른쪽: 리뷰 / 수정하기 탭.
+    """상세 화면 아래쪽, 화면 폭 전체 탭 (A안): 리뷰 n · 블로그 후기 n · 수정하기.
 
     조각(fragment)이라 리뷰 · 답글을 쓰거나 댓글을 펼칠 때 이 칸만 다시 그린다 (11/20 리뷰 등록 1초 안에).
     팝업 정보 수정처럼 화면 전체가 바뀌는 일은 그쪽에서 st.rerun() 으로 전체를 다시 그린다."""
@@ -1163,28 +1192,25 @@ def render_detail_tabs(current: dict) -> None:
     n = review.counts(reviews.current_rows()).get(entry_id, 0)
     # 키를 주고 고른 탭을 서버가 기억하게 한다. 그렇지 않으면 수정하기에서 이미지를 지우거나 올려
     # 다시 그릴 때마다 첫 탭(리뷰)으로 돌아가 버린다
-    tab_review, tab_edit = st.tabs([f":material/chat_bubble: 리뷰 {n}", ":material/edit: 수정하기"], key=f"detail_tabs_{entry_id}",
-                                   on_change="rerun")
+    tab_key = f"detail_tabs_{entry_id}"
+    names = ("리뷰", "블로그 후기", "수정하기")
+    picked = str(st.session_state.get(tab_key) or "")
+    cur = next((name for name in reversed(names) if name in picked), "리뷰")
+    # 블로그 글은 저장해 둔 것(blog_posts)에서 바로 읽는다. 건수도 저장된 글 수 (11/19 요청: 불러온 건 저장해 두고
+    # 추가된 것만 새로). 아직 저장된 게 없거나 '블로그 후기' 탭을 열면 그 자리에서 오늘 새 글을 확인한다
+    saved_n = _blog_counts().get(entry_id)
+    posts = _blog_list(current) if cur == "블로그 후기" or not saved_n else None
+    n_blog = len(posts) if posts is not None else saved_n
+    labels = {"리뷰": f"리뷰 {n}", "블로그 후기": f"블로그 후기 {n_blog or 0}", "수정하기": ":material/edit: 수정하기"}
+    # 탭 이름에 건수가 들어 있어서, 건수가 바뀌어도(리뷰 등록 · 새 블로그 글) 보고 있던 탭에 그대로 머물게 한다
+    if picked and picked != labels[cur]:
+        st.session_state[tab_key] = labels[cur]
+    tab_review, tab_blog, tab_edit = st.tabs(list(labels.values()), key=tab_key, on_change="rerun")
     with tab_review:
-        sub = st.session_state.get(f"rvsub_{entry_id}", "review")
-        # 블로그 글은 저장해 둔 것(blog_posts)에서 바로 읽는다. 건수도 저장된 글 수 (11/19 요청: 불러온 건 저장해 두고
-        # 추가된 것만 새로). 아직 저장된 게 없거나 '블로그 후기' 탭을 열면 그 자리에서 오늘 새 글을 확인한다
-        saved_n = _blog_counts().get(entry_id)
-        posts = _blog_list(current) if sub == "blog" or not saved_n else None
-        n_blog = len(posts) if posts is not None else saved_n
-
-        def subtabs() -> bool:
-            # 리뷰 쓰기 칸 아래에 '리뷰 후기 / 블로그 후기' (11/18 요청)
-            with st.container(horizontal=True, key="rv_subtabs"):
-                for k, label in (("review", f"리뷰 후기 ({n})"), ("blog", f"블로그 후기 ({n_blog or 0})")):
-                    st.button(label, key=f"rvsub_{'on_' if sub == k else ''}{k}_{entry_id}",
-                              on_click=lambda k=k: st.session_state.update({f"rvsub_{entry_id}": k}))
-            if sub == "blog":
-                _render_blog_tab(current, posts)
-                return False
-            return True
-
-        render_reviews(entry_id, after_write=subtabs)
+        render_reviews(entry_id)
+    with tab_blog:
+        if posts is not None:
+            _render_blog_tab(current, posts)
     with tab_edit:
         render_edit(current)
 
@@ -1223,55 +1249,74 @@ def _rerun_reviews() -> None:
         st.rerun()
 
 
-def _write_box(cafe_id: str, parent_id: str = "") -> None:
-    """글쓰기 칸. parent_id 가 있으면 답글 칸이다.
+AD_PHOTO_NOTE = "얼굴·영수증·연락처가 보이는 사진은 올리지 말아 주세요. 사진의 위치 정보는 지우고 저장해요."
+
+
+def _ad_me_html(nick: str, stamps: int, stamped_here: bool) -> str:
+    """리뷰 쓰기 칸의 작성자 줄: 내 32px 후기 도장 + 닉네임 · 내 랭크 · 다음 랭크까지 남은 수 (웹 .ad-me)."""
+    from common import stamp
+    tier, nxt = stamp.tier_of(stamps), stamp.next_tier(stamps)
+    mark = _ad_stamp(tier.lv, 32) if tier else f'<span class="ad-nostamp" aria-hidden="true"><img src="{AD_MASCOT}" alt=""></span>'
+    rank = f"내 도장 Lv.{tier.lv} {tier.name}" if tier else "아직 도장이 없어요"
+    more = ("이 팝업 도장은 이미 받았어요" if stamped_here else "다녀온 후기를 남기면 도장 +1")         + (f" · Lv.{nxt[0].lv}까지 {nxt[1]}개" if nxt else " · 가장 높은 랭크예요")
+    return (f'<div class="ad-me">{mark}<span class="ad-me-t"><span><b>{escape(_nick_only(nick))}</b><strong>{rank}</strong></span>'
+            f'<span>{more}</span></span></div>')
+
+
+def _write_box(cafe_id: str, parent_id: str = "", stamps: int = 0, stamped_here: bool = False) -> None:
+    """글쓰기 칸. parent_id 가 있으면 답글 칸이다 ('답글 쓰기' 를 눌렀을 때만 그린다).
+    stamps: 내 후기 도장 수, stamped_here: 이 팝업에 내 다녀온 후기가 이미 있는지 (도장은 팝업마다 1개).
 
     입력이 끝나면 칸을 비워야 해서, 저장할 때마다 키 번호(n)를 올려 새 입력칸을 그린다.
     """
-    if _login_gate("리뷰는 로그인하면 쓸 수 있어요.", f"lg_rv_{cafe_id}_{parent_id}"):
+    if not _member():
+        if not parent_id:
+            # 손님: 안내 + '로그인하고 계속하기' (웹 .side-note)
+            st.markdown('<p class="side-note">리뷰는 로그인하면 쓸 수 있어요. 다녀온 후기를 남기면 후기 도장도 받아요.</p>',
+                        unsafe_allow_html=True)
+            st.button("로그인하고 계속하기", type="primary", width="stretch", key=f"lg_rv_{cafe_id}_",
+                      on_click=_need_login, args=("리뷰는 로그인하면 쓸 수 있어요.",))
         return
     slot = f"rv_{cafe_id}_{parent_id or 'top'}"
     n = st.session_state.get(f"{slot}_n", 0)
     kind = ""
     nick = _me()
-    # 닉네임 → 종류 → 내용 순으로 한 줄씩, 같은 왼쪽 선에 맞춰 둔다
-    me_row = _member() or {}
-    st.markdown(f'<div class="rv-me">{_avatar_img(me_row.get("avatar"), 28, "rv-av")}<b>{escape(_nick_only(nick))}</b></div>',
-                unsafe_allow_html=True)
     rating = None
-    if not parent_id:
+    if parent_id:
+        me_row = _member() or {}
+        st.markdown(f'<div class="rv-me">{_avatar_img(me_row.get("avatar"), 28, "rv-av")}<b>{escape(_nick_only(nick))}</b></div>',
+                    unsafe_allow_html=True)
+    else:
+        # 내 도장 + 닉네임 → 종류 → 별점 → 내용 → 사진 순으로
+        st.markdown(_ad_me_html(nick, stamps, stamped_here), unsafe_allow_html=True)
         kind = st.pills("종류", review.KINDS, default=review.KINDS[0], key=f"{slot}_kind_{n}",
                         label_visibility="collapsed")
         # 다녀온 후기는 별점(1~5)을 고를 수 있다. st.feedback 은 0~4 를 돌려줘서 1 을 더한다
         if kind == review.RATED_KIND:
             with st.container(key=f"{slot}_rate_box_{n}"):
-                st.markdown('<div class="rv-rate-q">이 팝업 방문하셨나요?</div>'
-                            '<div class="rv-rate-sub">방문 예정인 분들에게 도움이 되는 후기를 작성해주세요</div>',
-                            unsafe_allow_html=True)
                 picked = st.feedback("stars", key=f"{slot}_rating_{n}")
+                st.markdown('<span class="ad-rate-note">별점만 골라도 등록돼요</span>', unsafe_allow_html=True)
             rating = picked + 1 if picked is not None else None
     body = st.text_area(
-        "내용", key=f"{slot}_body_{n}", height=80 if parent_id else 100, label_visibility="collapsed",
+        "내용", key=f"{slot}_body_{n}", height=80 if parent_id else 120, label_visibility="collapsed",
         max_chars=review.MAX_BODY,
-        placeholder="답글을 남겨 주세요" if parent_id else
-        "다녀온 후기나 기대하는 점을 남겨 주세요 (대기 시간, 특전 소진 여부 등)",
+        placeholder="답글을 남겨 주세요" if parent_id else "웨이팅, 특전 남은 수, 굿즈 꿀팁을 알려 주세요",
     )
     bad = _block_sensitive(body)
-    # 사진 첨부 (선택, 원글 · 답글 모두 — 11/20 답글에도). 처음엔 작은 '사진 첨부' 버튼만, 누르면 올리는 칸이 열린다.
-    # 답글 칸에서는 칸을 눌러 열었을 때만 버튼이 보인다 (CSS .st-key-rpbox_ … _pics_off_). 저장은 등록을 누를 때 한다
+    # 사진 첨부 (선택, 원글 · 답글 모두 — 11/20 답글에도). 리뷰 쓰기 칸은 올리는 칸이 늘 보이고,
+    # 답글 칸은 작은 '+ 사진 첨부' 버튼을 누르면 열린다. 저장은 등록을 누를 때 한다
     photos = []
     open_key = f"{slot}_pic_open_{n}"
-    opened = st.session_state.get(open_key, False)
+    opened = not parent_id or st.session_state.get(open_key, False)
     with st.container(key=f"{slot}_pics_{'on' if opened else 'off'}_{n}"):
-        # 열고 나면 버튼은 감추고 올리는 칸만 둔다
         if not opened:
             st.button("+ 사진 첨부", key=f"{slot}_pic_btn_{n}", type="tertiary",
                       on_click=lambda: st.session_state.update({open_key: True}))
         else:
             photos = list(st.file_uploader(
-                f"최대 {review.MAX_IMAGES}장 · 한 장 {review.IMAGE_MB}MB · 다른 사람 얼굴·영수증·연락처가 보이는 사진은 올리지 말아 주세요 "
-                "(사진 속 위치 정보는 자동으로 지워요)", type=images.TYPES,
+                f"사진 · 최대 {review.MAX_IMAGES}장 · 한 장 {review.IMAGE_MB}MB", type=images.TYPES,
                 accept_multiple_files=True, key=f"{slot}_img_{n}") or [])
+            st.markdown(f'<div class="ad-pics-note">{AD_PHOTO_NOTE}</div>', unsafe_allow_html=True)
     if len(photos) > review.MAX_IMAGES:
         st.caption(f":red[사진은 {review.MAX_IMAGES}장까지 올릴 수 있어요. 앞의 {review.MAX_IMAGES}장만 올라갑니다.]")
         photos = photos[:review.MAX_IMAGES]
@@ -1283,14 +1328,16 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
     c1, c2 = st.columns(2) if parent_id else (st.container(), None)
     with c1:
         # 입력칸이 비었는지는 화면에서 바로 본다 (_live_send). 입력칸은 칸을 벗어나야 값이 넘어와서
-        # 여기서 막으면 한 글자를 써도 버튼이 계속 꺼져 있다
-        clicked = st.button("답글 등록" if parent_id else "리뷰 등록", type="primary",
-                            width="stretch", disabled=bad, key=f"{slot}_send_{n}")
+        # 여기서 막으면 한 글자를 써도 버튼이 계속 꺼져 있다.
+        # 도장은 팝업마다 1개: 다녀온 후기이고 이 팝업에 내 다녀온 후기가 아직 없을 때만 '등록하고 도장 받기'
+        label = "답글 등록" if parent_id else ("등록하고 도장 받기" if kind == review.RATED_KIND and not stamped_here else "리뷰 등록")
+        clicked = st.button(label, type="primary", width="stretch", disabled=bad, key=f"{slot}_send_{n}")
     if c2 is not None:
         with c2:
-            # 답글 칸 비우기 (키 번호를 올려 빈 입력칸으로 다시 그린다)
+            # 답글 칸 닫기 (키 번호를 올려 다음에 열면 빈 입력칸으로 그린다)
             if st.button("취소", width="stretch", key=f"{slot}_cancel_{n}"):
                 st.session_state[f"{slot}_n"] = n + 1
+                st.session_state.pop(f"rv_reply_{cafe_id}", None)
                 _rerun_reviews()
 
     if clicked:
@@ -1310,7 +1357,8 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
         st.session_state[f"{slot}_n"] = n + 1
         if parent_id:
             st.session_state[f"rv_open_{parent_id}"] = True     # 방금 단 답글이 보이게 댓글을 펼쳐 둔다
-        # 조각만 다시 그리면 화면 맨 위의 flash 는 돌지 않아서, 상세 오른쪽 칸 첫머리에서 띄운다 (render_detail_tabs)
+            st.session_state.pop(f"rv_reply_{cafe_id}", None)   # 답글 칸은 닫는다
+        # 조각만 다시 그리면 화면 맨 위의 flash 는 돌지 않아서, 상세 탭 첫머리에서 띄운다 (render_detail_tabs)
         st.session_state["rv_flash"] = "답글을 남겼습니다." if parent_id else "리뷰를 남겼습니다."
         _rerun_reviews()
 
@@ -1384,57 +1432,66 @@ def confirm_review_delete(entry_id: str, replies: int, as_admin: bool = False) -
         st.rerun()
 
 
-def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
+def _review_card(r: dict, reply: bool = False, replies: int = 0, lv_table: dict | None = None) -> None:
+    """리뷰 카드 하나 (A안, 웹 Reviews.tsx 의 Card): 프로필 · 닉네임 · 20px 도장 + Lv.n 칩 · 시각 · 종류 → 별점 → 글 → 사진(120px).
+    lv_table: stamp.counts(리뷰 현재 행) — 닉네임 옆 후기 도장 랭크를 정한다."""
+    from common import stamp
     who, pic = _author(r.get("nickname"))
-    head = _avatar_img(pic, 26, "rv-av") + f" **{_plain(who)}**"
-    if r.get("kind"):
-        head = f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] " + head
-    if reply:
-        # 대댓글 표시 (11/20 요청): 앞에 'ㄴ' — 위 댓글에 단 답글이라는 뜻 (웹 .rv-re 와 같게)
-        head = '<span class="rv-re" aria-label="답글">ㄴ</span> ' + head
     eid = str(r["entry_id"])
-    when = f" · :gray[{_when(r.get('updated_at'))}]"
-    if int(r.get("revision") or 1) > 1:
-        when += " :gray[(수정됨)]"
-    # 내가 쓴 글(접속 IP 로 정해진 닉네임이 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
+    if lv_table is None:
+        lv_table = stamp.counts(reviews.current_rows())
+    lv = 0 if who == auth.WITHDRAWN else stamp.lv_of(str(r.get("nickname") or ""), lv_table)
+    when = _when(r.get("updated_at")) + (" (수정됨)" if int(r.get("revision") or 1) > 1 else "")
+    kind = str(r.get("kind") or "")
+    head = ('<div class="rv-head">'
+            # 대댓글 표시 (11/20 요청): 앞에 'ㄴ' — 위 댓글에 단 답글이라는 뜻 (웹 .rv-re 와 같게)
+            + ('<span class="rv-re" aria-label="답글">ㄴ</span>' if reply else "")
+            + _avatar_img(pic, 28 if reply else 34, "rv-av") + f'<b>{escape(who)}</b>' + _ad_rank_chip(lv)
+            + f'<span class="rv-when">{when}</span>'
+            + (f'<span class="kb {KIND_COLORS.get(kind, "gray")}">{escape(kind)}</span>' if kind else "")
+            + '</div>')
+    # 내가 쓴 글(닉네임 끝 꼬리표가 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
     mine = bool(_member()) and review.can_delete(r, _me())
     is_admin = _is_admin()
     if mine or is_admin:
         # 권한 (11/18 요청): 수정·삭제는 내가 쓴 글만. 관리자는 모든 글을 삭제할 수 있고, 사유를 적으면 쓴 사람에게 알림
-        t, b = st.columns([6, 1], vertical_alignment="center")
-        t.markdown(head + when, unsafe_allow_html=True)
-        with b.popover("⋯", key=f"rv_more_{eid}", type="tertiary"):
-            if mine and st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
-                st.session_state["rv_editing"] = eid
-                st.rerun()
-            # 창은 '⋯' 칸 밖에서 연다 (칸 안 버튼으로 열면 창 안의 '삭제' 누름이 다음 그리기에서 사라졌다)
-            if mine:
-                st.button("삭제", key=f"rv_delmine_{eid}", width="stretch",
-                          on_click=lambda: st.session_state.update(_rv_del=(eid, replies, False)))
-            if is_admin and not mine:
-                st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch",
-                          on_click=lambda: st.session_state.update(_rv_del=(eid, replies, True)))
+        with st.container(horizontal=True, key=f"rvhd_{eid}"):
+            st.markdown(head, unsafe_allow_html=True)
+            with st.popover("⋯", key=f"rv_more_{eid}", type="tertiary"):
+                if mine and st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
+                    st.session_state["rv_editing"] = eid
+                    st.rerun()
+                # 창은 '⋯' 칸 밖에서 연다 (칸 안 버튼으로 열면 창 안의 '삭제' 누름이 다음 그리기에서 사라졌다)
+                if mine:
+                    st.button("삭제", key=f"rv_delmine_{eid}", width="stretch",
+                              on_click=lambda: st.session_state.update(_rv_del=(eid, replies, False)))
+                if is_admin and not mine:
+                    st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch",
+                              on_click=lambda: st.session_state.update(_rv_del=(eid, replies, True)))
         pend = st.session_state.get("_rv_del")
         if pend and pend[0] == eid:
             confirm_review_delete(eid, pend[1], as_admin=pend[2])
     else:
-        st.markdown(head + when, unsafe_allow_html=True)
-    # 다녀온 후기 별점: 머리 줄 다음 줄에, 내용보다 위에 크게
-    rated = review.stars(r.get("rating")) if r.get("kind") == review.RATED_KIND else ""
-    if rated and not (mine and st.session_state.get("rv_editing") == eid):
-        st.markdown(f'<div class="rv-stars">{rated}</div>', unsafe_allow_html=True)
-    text = str(r.get("body") or "").strip()
-    pics = images.paths(r.get("images"))
+        st.markdown(head, unsafe_allow_html=True)
     if mine and st.session_state.get("rv_editing") == eid:
         _review_edit_box(r)            # 고치는 동안 사진은 수정 칸의 '붙어 있는 사진' 으로 본다
-    elif pics:
-        # 사진이 있으면 사진 옆에 글 (11/20 요청, 웹 .rv-content 와 같게). 사진을 누르면 확대 보기(.rv-pics a)
-        body_html = f'<div class="rv-body">{escape(text).replace(chr(10), "<br>")}</div>' if text else ""
-        st.markdown('<div class="rv-content"><div class="rv-pics">' + "".join(
-            f'<a href="{images.url(p)}" target="_blank" rel="noopener"><img src="{images.url(p)}" alt="리뷰 사진"/></a>'
-            for p in pics) + "</div>" + body_html + "</div>", unsafe_allow_html=True)
-    elif text:
-        st.markdown(_plain(r.get("body", "")))
+        return
+    # 다녀온 후기 별점 → 글 → 사진 (120px 로 최대 4장, 더 있으면 넷째 칸에 +N. 누르면 확대 보기 — .rv-pics a)
+    rated = review.stars(r.get("rating")) if kind == review.RATED_KIND else ""
+    text = str(r.get("body") or "").strip()
+    pics = [images.url(p) for p in images.paths(r.get("images"))]
+    html = f'<div class="rv-stars">{rated}</div>' if rated else ""
+    if text:
+        html += f'<div class="rv-body">{escape(text).replace(chr(10), "<br>")}</div>'
+    if pics:
+        more = len(pics) - review.MAX_IMAGES
+        html += '<div class="rv-pics">' + "".join(
+            f'<a href="{u}" target="_blank" rel="noopener"{" hidden" if i >= review.MAX_IMAGES else ""}>'
+            f'<img src="{u}" alt="리뷰 사진" loading="lazy"/>'
+            + (f'<span>+{more}</span>' if more > 0 and i == review.MAX_IMAGES - 1 else "") + '</a>'
+            for i, u in enumerate(pics)) + '</div>'
+    if html:
+        st.markdown(f'<div class="rv-content">{html}</div>', unsafe_allow_html=True)
 
 
 def _review_edit_box(r: dict) -> None:
@@ -1593,64 +1650,128 @@ _REVIEW_LIGHTBOX_JS = """
 """
 
 
-def _avg_rating_html(avg: float, n: int) -> str:
-    """평균 별점 요약: 큰 숫자 + 평균만큼 채운 별 다섯 개 + '다녀온 후기 N개 평균'."""
+def _ad_stars_html(avg: float) -> str:
+    """별 다섯 개: 회색 위에 평균만큼 노랑을 덮는다 (웹 .ad-stars)."""
     pct = max(0.0, min(100.0, avg / 5 * 100))
-    return (f'<div class="rv-avg"><span class="rv-avg-num">{avg:.1f}</span>'
-            f'<span class="rv-avg-stars" aria-label="5점 만점에 {avg:.1f}점">'
-            f'<span class="rv-avg-bg">★★★★★</span><span class="rv-avg-fg" style="width:{pct:.0f}%">★★★★★</span></span>'
-            f'<span class="rv-avg-cnt">다녀온 후기 {n}개 평균</span></div>')
+    return (f'<span class="ad-stars" role="img" aria-label="5점 만점에 {avg:.1f}점"><span>★★★★★</span>'
+            f'<span style="width:{pct:.0f}%">★★★★★</span></span>')
 
 
-def render_reviews(cafe_id: str, after_write=None) -> None:
-    """after_write: 리뷰 쓰기 칸 바로 아래에 그릴 것 ('리뷰 후기 / 블로그 후기' 탭). False 를 돌려주면 리뷰 목록은 그리지 않는다."""
+def _avg_rating_html(threads: list) -> str:
+    """리뷰 목록 위 요약 (웹 .ad-sum): 평균 별점 + 점수 분포 막대 + 사진 후기 모아 보기(3칸, 더 있으면 +N).
+    별점도 사진도 없으면 빈 문자열."""
+    rated = []
+    for t in threads:
+        try:
+            n = int(t.post.get("rating"))
+        except (TypeError, ValueError):
+            continue
+        if t.post.get("kind") == review.RATED_KIND and 1 <= n <= 5:
+            rated.append(n)
+    photos = [images.url(p) for t in threads for p in images.paths(t.post.get("images"))]
+    if not rated and not photos:
+        return ""
+    out = ""
+    if rated:
+        avg = round(sum(rated) / len(rated), 1)
+        bars = "".join(
+            f'<div><span>{s}점</span><span class="ad-bar"><span style="width:{rated.count(s) / len(rated) * 100:.0f}%"></span></span>'
+            f'<span>{rated.count(s)}</span></div>' for s in (5, 4, 3, 2, 1))
+        out += (f'<div class="ad-sum-avg"><span class="rv-avg-num">{avg:.1f}</span>{_ad_stars_html(avg)}'
+                f'<span class="rv-avg-cnt">다녀온 후기 {len(rated)}개 평균</span></div>'
+                f'<div class="ad-sum-dist" aria-label="점수 분포">{bars}</div>')
+    if photos:
+        # .rv-pics 안의 <a> 는 누르면 확대 보기로 열린다 (_REVIEW_LIGHTBOX_JS). 넷째부터는 숨겨 두고 확대 보기에서 넘겨 본다
+        out += '<div class="rv-pics ad-sum-pics" aria-label="사진 후기 모아 보기">' + "".join(
+            f'<a href="{u}" target="_blank" rel="noopener"{" hidden" if i >= 3 else ""}><img src="{u}" alt="리뷰 사진" loading="lazy"/>'
+            + (f'<span>+{len(photos) - 3}</span>' if i == 2 and len(photos) > 3 else "") + '</a>'
+            for i, u in enumerate(photos)) + '</div>'
+    return f'<div class="ad-sum">{out}</div>'
+
+
+AD_RV_PAGE = 8       # 처음 보여 주는 리뷰 수 ('리뷰 더보기' 로 이만큼씩 더, 웹 Reviews.tsx 의 PAGE)
+AD_RV_SORTS = ["최신순", "별점 높은 순"]
+
+
+def render_reviews(cafe_id: str) -> None:
+    """리뷰 탭 (A안, 웹 .ad-rv): 왼쪽 리뷰 쓰기(내 도장 · 종류 · 별점 · 사진), 오른쪽 평균 · 점수 분포 · 사진 모아 보기 →
+    보기 칩 · 정렬 → 리뷰 카드(처음 8개 + 더보기). 모바일은 한 단으로 쌓인다."""
+    from common import stamp
     _review_lightbox()      # 리뷰 사진을 누르면 확대 보기 팝업
-    # 맨 위 리뷰 쓰기: 닉네임·종류·별점·입력칸·리뷰 등록 버튼을 처음부터 펼쳐 둔다. 그 아래에 리뷰를 보여 준다
-    with st.container(border=True, key=f"rvbox_{cafe_id}"):
-        _write_box(cafe_id)
-    if after_write is not None and after_write() is False:
-        return
+    rows = reviews.current_rows()
+    threads = review.threads(rows, cafe_id)
+    table = stamp.counts(rows)           # {글쓴이 꼬리표: 후기 도장 수} — 닉네임 옆 도장 칩
+    me = _me() if _member() else ""
+    # 도장은 같은 팝업에 1개: 이 팝업에 내 '다녀온 후기'가 이미 있으면 더 받지 않는다
+    stamped_here = bool(me) and any(t.post.get("kind") == review.RATED_KIND and review.can_delete(t.post, me) for t in threads)
+    with st.container(key="ad_rv"):
+        col_write, col_list = st.columns([38, 96], gap="medium")
+    with col_write, st.container(border=True, key=f"rvbox_{cafe_id}"):
+        st.markdown('<div class="ad-rv-h">리뷰 쓰기</div>', unsafe_allow_html=True)
+        _write_box(cafe_id, stamps=stamp.stamps_of(me, table), stamped_here=stamped_here)
 
-    threads = review.threads(reviews.current_rows(), cafe_id)
-    if not threads:
-        # 가운데 정렬 (11/19 요청, 웹 .rv-none.center 와 같게)
-        st.markdown('<div style="text-align:center;color:#8A9592;font-size:.88rem;padding:10px 0;">'
-                    '아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</div>', unsafe_allow_html=True)
-        return
+    with col_list, st.container(key="ad_rv_list"):
+        if not threads:
+            st.markdown('<div class="rv-none center">아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</div>',
+                        unsafe_allow_html=True)
+            return
+        summary = _avg_rating_html(threads)
+        if summary:
+            st.markdown(summary, unsafe_allow_html=True)
 
-    # 다녀온 후기에 별점이 있으면 목록 위에 평균 별점
-    avg, n_rated = review.average_rating(threads)
-    if n_rated:
-        st.markdown(_avg_rating_html(avg, n_rated), unsafe_allow_html=True)
+        # 보기 칩: 전체 / 사진 후기만 / 종류 3개 (개수 함께) + 정렬
+        count = {"전체": len(threads), "사진 후기만": sum(1 for t in threads if images.paths(t.post.get("images"))),
+                 **{k: sum(1 for t in threads if t.post.get("kind") == k) for k in review.KINDS}}
+        limit_key = f"rv_limit_{cafe_id}"
 
-    # 다녀온 후기와 기대평을 따로 볼 수 있게 나눈다 (개수 함께 표시)
-    count = {k: sum(1 for t in threads if t.post.get("kind") == k) for k in review.KINDS}
-    labels = {"전체": f"전체 {len(threads)}", **{k: f"{k} {count[k]}" for k in review.KINDS}}
-    pick = st.segmented_control("리뷰 보기", list(labels), default="전체", key=f"rv_filter_{cafe_id}",
-                                format_func=lambda k: labels[k], label_visibility="collapsed")
-    shown = [t for t in threads if pick in (None, "전체") or t.post.get("kind") == pick]
-    if not shown:
-        st.caption(f"아직 {pick}이 없어요. 위에서 처음으로 남겨 보세요." if pick == "기대평"
-                   else f"아직 {pick}가 없어요. 위에서 처음으로 남겨 보세요.")
+        def first_page() -> None:
+            st.session_state.pop(limit_key, None)
 
-    for t in shown:
-        pid = str(t.post["entry_id"])
-        with st.container(border=True):
-            _review_card(t.post, replies=len(t.replies))
-            # 대댓글은 처음엔 접어 두고 '+N건의 댓글' 버튼만 (11/20 요청). 누르면 아래로 펼치고 '댓글 접기' 로 바뀐다
-            if t.replies:
+        with st.container(horizontal=True, key="ad_filter", vertical_alignment="center"):
+            pick = st.pills("리뷰 보기", list(count), default="전체", key=f"rv_filter_{cafe_id}",
+                            format_func=lambda k: f"{k} {count[k]}", label_visibility="collapsed", on_change=first_page)
+            sort = st.selectbox("정렬", AD_RV_SORTS, key=f"rv_sort_{cafe_id}", label_visibility="collapsed", width=150)
+        pick = pick or "전체"
+        shown = [t for t in threads if pick == "전체"
+                 or (bool(images.paths(t.post.get("images"))) if pick == "사진 후기만" else t.post.get("kind") == pick)]
+        if sort == AD_RV_SORTS[1]:
+            # 별점 높은 순 (별점 없는 글은 뒤로, 같은 별점끼리는 최신순 그대로)
+            shown = sorted(shown, key=lambda t: -(int(t.post.get("rating")) if str(t.post.get("rating") or "").isdigit() else 0))
+        if not shown:
+            st.markdown('<div class="rv-none center">'
+                        + ("아직 사진 후기가 없어요." if pick == "사진 후기만" else f"아직 {pick}{'이' if pick == '기대평' else '가'} 없어요.")
+                        + ' 처음으로 남겨 보세요.</div>', unsafe_allow_html=True)
+
+        limit = st.session_state.get(limit_key, AD_RV_PAGE)
+        reply_key = f"rv_reply_{cafe_id}"
+        for t in shown[:limit]:
+            pid = str(t.post["entry_id"])
+            with st.container(border=True, key=f"rvth_{pid}"):
+                _review_card(t.post, replies=len(t.replies), lv_table=table)
+                # 대댓글은 처음엔 접어 두고 'ㄴ 댓글 N개' 만 (11/20 요청). 누르면 아래로 펼치고 '댓글 접기' 로 바뀐다.
+                # 답글 칸은 회원이 '답글 쓰기' 를 눌렀을 때만 연다 (한 번에 한 곳)
                 open_key = f"rv_open_{pid}"
                 opened = st.session_state.get(open_key, False)
-                st.button("댓글 접기" if opened else f"+{len(t.replies)}건의 댓글", key=f"rv_tog_{pid}",
-                          type="tertiary", width="stretch", icon=":material/expand_less:" if opened else ":material/subdirectory_arrow_right:",
-                          on_click=lambda k=open_key: st.session_state.update({k: not st.session_state.get(k, False)}))
+                if t.replies or me:
+                    with st.container(horizontal=True, key=f"rvfoot_{pid}"):
+                        if t.replies:
+                            st.button("댓글 접기" if opened else f"ㄴ 댓글 {len(t.replies)}개", key=f"rv_tog_{pid}", type="tertiary",
+                                      on_click=lambda k=open_key: st.session_state.update({k: not st.session_state.get(k, False)}))
+                        if me:
+                            st.button("답글 쓰기", key=f"rv_rep_{pid}", type="tertiary",
+                                      on_click=lambda p=pid: st.session_state.update(
+                                          {reply_key: "" if st.session_state.get(reply_key) == p else p}))
                 if opened:
                     for r in t.replies:
-                        _review_card(r, reply=True)
-            # 답글은 입력칸만 보여 주고, 칸을 누르면(또는 글이 있으면) 닉네임과 등록·취소 버튼이 나온다
-            # (LIST_CSS 의 .st-key-rpbox_ — 칸을 눌렀는지는 브라우저만 알아서 CSS 로 처리한다)
-            with st.container(key=f"rpbox_{pid}"):
-                _write_box(cafe_id, parent_id=pid)
+                        with st.container(key=f"rvre_{r['entry_id']}"):
+                            _review_card(r, reply=True, lv_table=table)
+                if me and st.session_state.get(reply_key) == pid:
+                    with st.container(key=f"rvrep_{pid}"):
+                        _write_box(cafe_id, parent_id=pid)
+        if len(shown) > limit:
+            with st.container(key="ad_more"):
+                st.button("리뷰 더보기", key=f"rvlist_more_{cafe_id}",
+                          on_click=lambda: st.session_state.update({limit_key: limit + AD_RV_PAGE}))
 
 
 # ================================================================ 수정하기
@@ -1702,39 +1823,45 @@ def _poster_upload(slot: str, label: str, has_poster: bool, **kw):
     return up.name, data
 
 
-def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]], list[str]]:
-    """수정하기의 이미지 칸. 지금 이미지를 보여 주고 포스터 바꾸기·추가·지우기를 받는다.
+def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]], list[str], dict]:
+    """수정하기의 이미지 묶음 (A안, 웹 .ade-imgs). 지금 이미지를 3:4 작은 그림으로 보여 주고 포스터 바꾸기·추가·지우기를 받는다.
 
     돌려주는 목록은 (이름, 바이트) 이고 첫 번째가 포스터다. 바이트가 None 이면 이미 저장된 파일 이름이다.
+    셋째 값은 무엇이 바뀌는지 {"before": 지금 장 수, "after": 저장 뒤 장 수, "note": ["포스터 변경", "1장 삭제", …]}.
     """
     current_files = images.split(current.get("images"))
-    st.markdown("**이미지**")
-    # '삭제' 를 누른 이미지는 화면에서 바로 빠지고, '수정 저장' 을 눌러야 실제로 반영된다
+    # '삭제' 를 누른 이미지는 화면에서 바로 빠지고, '저장하기' 를 눌러야 실제로 반영된다
     removed: set[str] = st.session_state.setdefault(f"img_removed_{k}", set())
     keep = [(name, None) for name in current_files if name not in removed]
     if keep:
-        st.caption("첫 번째가 포스터예요.")
-        cols = st.columns(4)
-        for i, (name, _) in enumerate(keep):
-            with cols[i % 4]:
-                found = images.paths(name)      # 사진 저장소(https) 주소도 받는다 (공개 웹 · 11/19 부터 앱에서 올린 사진)
-                _show_pic(found[0] if found else None)
-                if st.button("삭제", key=f"img_del_{k}_{name}", width="stretch"):
-                    removed.add(name)
-                    st.rerun()
+        with st.container(horizontal=True, key="ade_imgs"):
+            for i, (name, _) in enumerate(keep):
+                with st.container(key=f"ade_im_{i}"):
+                    found = images.paths(name)      # 사진 저장소(https) 주소도 받는다 (공개 웹 · 11/19 부터 앱에서 올린 사진)
+                    pic = (f'<img src="{images.url(found[0])}" alt="" loading="lazy">' if found
+                           else '<span class="ed-nofile">(파일 없음)</span>')
+                    st.markdown(f'<div class="ade-img {"is-poster" if i == 0 else "is-extra"}">{pic}'
+                                f'<span class="ade-tag">{"포스터" if i == 0 else "추가"}</span></div>', unsafe_allow_html=True)
+                    if st.button("삭제", key=f"img_del_{k}_{name}", width="stretch"):
+                        removed.add(name)
+                        _rerun_reviews()      # 수정하기 탭(조각)만 다시 그린다
     else:
         st.caption("아직 이미지가 없어요.")
     if removed:
-        note, undo = st.columns([3, 1], vertical_alignment="center")
-        note.caption(f":material/delete: {len(removed)}장 삭제 예정 · **수정 저장**을 눌러야 반영돼요.")
-        if undo.button("삭제 취소", key=f"img_undo_{k}", width="stretch"):
-            removed.clear()
-            st.rerun()
+        with st.container(horizontal=True, key="ade_img_undo", vertical_alignment="center"):
+            st.caption(f":material/delete: {len(removed)}장 삭제 예정 · **저장하기**를 눌러야 반영돼요.")
+            if st.button("삭제 취소", key=f"img_undo_{k}"):
+                removed.clear()
+                _rerun_reviews()      # 수정하기 탭(조각)만 다시 그린다
 
-    poster = _poster_upload(f"img_poster_{k}", f"포스터 바꾸기 (1장, ~ {images.POSTER_MB} MB)",
-                            has_poster=bool(keep))
-    extras = st.file_uploader("이미지 추가", type=images.TYPES, accept_multiple_files=True,
-                              key=f"img_extras_{k}")
+    with st.container(key="ade_img_up"):
+        up1, up2 = st.columns(2)
+        with up1:
+            poster = _poster_upload(f"img_poster_{k}", f"포스터 바꾸기 (1장, ~ {images.POSTER_MB} MB)",
+                                    has_poster=bool(keep))
+        with up2:
+            extras = st.file_uploader(f"이미지 추가 (한 장 ~ {images.EXTRA_MB} MB)", type=images.TYPES,
+                                      accept_multiple_files=True, key=f"img_extras_{k}")
 
     errors = []
     if poster and images.too_big(poster[1], images.POSTER_MB):
@@ -1744,14 +1871,17 @@ def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]],
 
     # 포스터는 한 장: 새 포스터로 변경하면 원래 포스터(맨 앞)를 빼고 그 자리에 둔다
     if poster:
-        st.caption(":material/check_circle: 새 포스터로 변경돼요. **수정 저장**을 눌러야 반영돼요.")
-        st.image(poster[1], width=160)
+        st.caption(":material/check_circle: 새 포스터로 변경돼요. **저장하기**를 눌러야 반영돼요.")
+        st.image(poster[1], width=120)
     result = (([poster] + keep[1:]) if poster else keep) + [(f.name, f.getvalue()) for f in extras or []]
     if len(result) - 1 > images.MAX_EXTRAS:
         errors.append(f"추가 이미지는 {images.MAX_EXTRAS}장까지 둘 수 있습니다. 몇 장 지워 주세요.")
     for e in errors:
         st.error(e)
-    return result, errors
+    st.markdown('<div class="ed-cap">첫 번째가 포스터예요. 사진 속 위치 정보는 지우고 저장해요.</div>', unsafe_allow_html=True)
+    note = (["포스터 변경"] if poster else []) + ([f"{len(removed)}장 삭제"] if removed else []) \
+        + ([f"{len(extras)}장 추가"] if extras else [])
+    return result, errors, {"before": len(current_files), "after": len(result), "note": note}
 
 
 def _clear_buttons() -> None:
@@ -1822,121 +1952,261 @@ def _keep_notion(note: str, current: dict) -> str:
     return f"{out} | {pdates.RAW_MARK}{raw}" if raw else out
 
 
+def _ad_legend(no: int, title: str, changed: bool, small: str = "") -> str:
+    """수정하기 묶음 제목: '2 · 카페 정보' + (바뀌었으면) '수정함' 표시."""
+    return (f'<div class="ade-legend">{no} · {escape(title)}'
+            + (f' <small>{escape(small)}</small>' if small else "")
+            + (' <span class="ade-mark">수정함</span>' if changed else "") + '</div>')
+
+
+def _ad_cut(text: str, n: int = 60) -> str:
+    text = str(text or "").strip() or "없음"
+    return text if len(text) <= n else text[:n] + "…"
+
+
+# 수정하기에서 바뀐 칸을 민트로 칠할 때 쓰는 선택자 (칸 이름 → 그 입력칸의 테두리 상자). 위젯 키는 render_edit 참고
+_AD_CHG_SEL = {
+    "work": '[class*="st-key-work_edit_"] .react-aria-ComboBox > div',
+    "chars": '[class*="st-key-chars_edit_"] .react-aria-ComboBox > div',
+    "name": '[class*="st-key-name_"] [data-testid="stTextInputRootElement"]',
+    "addr": '[class*="st-key-edit_"][class*="_addr"] [data-testid="stTextInputRootElement"]',
+    "start": '[class*="st-key-start_"] [data-testid="stDateInputField"]',
+    "end": '[class*="st-key-end_"] [data-testid="stDateInputField"]',
+    "perks": '[class*="st-key-perks_"] [data-testid="stTextInputRootElement"]',
+    "goods": '[class*="st-key-goods_"] [data-testid="stTextInputRootElement"]',
+    "links": '[class*="st-key-links_"] [data-testid="stTextAreaRootElement"]',
+    "intro": '[class*="st-key-intro_"] [data-testid="stTextAreaRootElement"]',
+}
+# 칸 이름 → 묶음 번호 (등록 단계와 같은 순서)
+_AD_CHG_SET = {"work": 1, "chars": 1, "name": 2, "addr": 2, "img": 3, "start": 4, "end": 4, "always": 4,
+               "perks": 5, "goods": 5, "tags": 5, "links": 6, "intro": 7}
+AD_HISTORY_FIRST = 4      # 수정 이력: 처음 4개, 나머지는 '이력 더보기' (웹 HistoryList 의 FIRST)
+
+
 def render_edit(current: dict) -> None:
+    """수정하기 탭 (A안, 웹 EditPanel.tsx): 등록 단계와 같은 순서의 묶음 7개로 저장 로직이 받는 모든 칸을 고친다.
+    바뀐 칸은 민트 + '수정함', 아래 저장 줄(바뀐 칸 수 · 되돌리기 · 저장하기), 오른쪽에 '저장하면 이렇게 바뀌어요' + 수정 이력.
+    저장은 지금처럼 append-only 새 행 + editor=_me(). 저장 로직이 받지 않는 칸(운영 시간 · 예약처 등)은 만들지 않는다."""
     entry_id = str(current["entry_id"])
-    if _login_gate("팝업 정보 수정은 로그인하면 할 수 있어요.", f"lg_ed_{entry_id}"):
+    if not _member():
+        msg = "팝업 정보 수정은 로그인하면 할 수 있어요."
+        with st.container(key="ade_gate"):
+            st.markdown(f'<div class="ntf-empty">{escape(msg)}</div>', unsafe_allow_html=True)
+            st.button("로그인하고 계속하기", icon=":material/login:", type="primary", key=f"lg_ed_{entry_id}",
+                      on_click=_need_login, args=(msg,))
         return
-    st.caption("누구나 수정할 수 있습니다. 기존 기록은 남기고 새 줄로 쌓여서 언제든 되돌릴 수 있습니다.")
+    st.markdown(f'<div class="ade-info">{_mi("info")}<span>회원이면 누구나 모든 칸을 고칠 수 있어요. 기존 기록은 남기고 새 줄로 쌓여서, '
+                '잘못 고쳐도 <strong>수정 이력</strong>에서 언제든 되돌릴 수 있어요.</span></div>', unsafe_allow_html=True)
 
-    # revision 을 키에 넣어야 되돌리기 후 입력칸이 새 값으로 다시 채워진다
-    k = f"{entry_id}_{current.get('revision')}"
-    new_work, new_chars = pick_work_and_characters(
-        str(current.get("work", "")), _split(current.get("characters") or ""), key=f"edit_{k}")
-    # 주소 검색·지도가 들어가서 st.form 을 쓰지 않는다 (폼 안에서는 검색 버튼·지도를 쓸 수 없다)
-    new_name = st.text_input("카페명", value=str(current.get("cafe_name", "")), key=f"name_{k}")
-
-    # 검색·우편번호로 고른 주소: 입력칸을 새 값으로 다시 그리려고 번호(ver)를 올리고 좌표를 보관한다
-    slot = f"edit_pick_{k}"
-    pick_state = st.session_state.setdefault(slot, {"ver": 0, "picked": None})
-
-    def pick(c: geo.Candidate) -> None:
-        pick_state["picked"] = _picked(c)
-        pick_state["ver"] += 1
-
-    picked = pick_state["picked"]
-    new_addr = address_field(
-        picked["address"] if picked else str(current.get("address", "")),
-        key=f"edit_{k}_{pick_state['ver']}", on_pick=pick,
-    )
-    d1, d2 = st.columns(2)
-    with d1:
-        new_start = st.date_input("시작", value=pd.to_datetime(current["start_date"]).date(),
-                                  key=f"start_{k}")
+    # revision 을 키에 넣어야 되돌리기 후 입력칸이 새 값으로 다시 채워진다.
+    # '되돌리기'(고치던 내용 버리기)는 번호(ver)를 올려 모든 입력칸을 처음 값으로 새로 그린다
+    ver_key = f"ade_ver_{entry_id}_{current.get('revision')}"
+    ver = st.session_state.get(ver_key, 0)
+    k = f"{entry_id}_{current.get('revision')}" + (f"_{ver}" if ver else "")
+    old_work = str(current.get("work", ""))
+    old_work = (catalog.canonical_work(old_work) if old_work else "").strip()
+    old_chars = _split(current.get("characters") or "")
+    old_name, old_addr = str(current.get("cafe_name", "")), str(current.get("address", ""))
     old_start, old_end = pd.to_datetime(current["start_date"]).date(), pd.to_datetime(current["end_date"]).date()
     was_always = pdates.is_always(old_end)
-    always = st.checkbox("종료일 없음 (상시)", value=was_always, key=f"always_{k}")
-    with d2:
-        new_end = st.date_input("종료", value=(old_start + timedelta(days=30)) if was_always else old_end,
-                                key=f"end_{k}", disabled=always)
-    if always:
-        new_end = pdates.ALWAYS_END
-    old_flags = [t for t in _split(current.get("tags") or "") if t in cafe.PERIOD_TAGS]
-    if pdates.TAG_CHECK in old_flags:
-        raw = pdates.raw_from_note(current.get("note"))
-        st.warning("기간을 정확히 읽지 못한 팝업이에요" + (f" (원문: '{raw}')" if raw and not raw.startswith("(") else "")
-                   + ". 공식 공지를 보고 시작·종료일을 고쳐 주세요.", icon=":material/event_busy:")
-    new_perks = st.text_input("특전", value=str(current.get("perks", "")), key=f"perks_{k}",
-                              help="쉼표로 구분")
-    new_goods = st.text_input("굿즈", value=str(current.get("goods", "")), key=f"goods_{k}",
-                              help="쉼표로 구분")
-    new_tags = st.pills("이벤트 추가 정보", cafe.EVENT_TAGS, selection_mode="multi",
-                        default=[t for t in _split(current.get("tags") or "") if t in cafe.EVENT_TAGS],
-                        key=f"tags_{k}")
-    new_links, bad_links = _links_field("\n".join(cafe.parse_links(current.get("links") or "")[0]),
-                                        key=f"links_{k}")
-    new_intro = _intro_field(str(current.get("intro") or ""), key=f"intro_{k}")
-    new_images, img_errors = _edit_images(current, k)
-    _clear_buttons()
-    bad = _block_sensitive(new_name, new_addr, new_perks, new_goods, new_intro)
-    # 수정 저장 · 지도에서 내리기를 한 줄에 (가로 묶음이라 모바일에서도 세로로 쌓이지 않는다)
-    with st.container(horizontal=True, key=f"edit_btns_{k}"):
-        submitted = st.button("수정 저장", type="primary", width="stretch", key=f"save_{k}",
-                              disabled=bad or bool(img_errors) or bad_links)
-        if _is_admin() and st.button("지도에서 내리기 (관리자)", width="stretch", key=f"delete_{k}"):
-            confirm_delete(entry_id)
-        if not _is_admin() and st.button("삭제 요청", width="stretch", key=f"dreq_{k}"):
-            delete_request_dialog("cafe", entry_id, f'{current.get("work") or ""} · {current.get("cafe_name") or ""}')
+    old_perks, old_goods = str(current.get("perks", "")), str(current.get("goods", ""))
+    old_tags = [t for t in _split(current.get("tags") or "") if t in cafe.EVENT_TAGS]
+    old_links = cafe.parse_links(current.get("links") or "")[0]
+    old_intro = str(current.get("intro") or "")[:cafe.MAX_INTRO]
 
-    if submitted:
-        entry = CafeEntry(
-            cafe_name=new_name, work=new_work, characters=new_chars, address=new_addr,
-            start_date=new_start, end_date=new_end,
-            perks=_split(new_perks), goods=_split(new_goods),
-            confidence="high",
-        )
-        # 기간 표시: 상시면 '상시', 사람이 기간을 고쳤으면 '기간 확인 필요' 를 지운다 (안 고쳤으면 그대로)
-        dates_changed = (new_start, new_end) != (old_start, old_end)
-        new_tags = list(new_tags) + ([pdates.TAG_ALWAYS] if always else []) \
-            + ([pdates.TAG_CHECK] if pdates.TAG_CHECK in old_flags and not dates_changed else [])
-        v = guard.validate_cafe(entry, today=TODAY)
-        g = locate(entry.address, picked)
-        if not g.ok:
-            v.fail(g.note)
-        if v.ok:
-            # 새로 올린 파일만 저장한다. 지운 이미지 파일은 남겨 둔다 (되돌리기가 옛 행을 쓸 수 있다)
-            try:
-                saved = [name if data is None else images.save(name, data) for name, data in new_images]
-            except ValueError as err:          # 그림으로 읽을 수 없는 파일 (위치 정보 지우기 단계에서 걸림)
-                st.error(str(err), icon=":material/error:")
-                return
-            store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=_keep_notion(g.badge, current), editor=_me(), intro=new_intro,
-                                           intro_src=str(current.get("intro_src") or "") if new_intro.strip() else "",
-                                           images=saved, tags=new_tags, links=new_links),
-                         entry_id=entry_id)
-            # 저장해도 상세에 그대로 머물고, 맨 위로 올려 바뀐 내용을 처음부터 보여 준다
-            st.session_state["flash"] = "수정했습니다."
-            st.session_state["scroll_top"] = True
-            st.rerun()
-        for err in v.errors:
-            st.error(err)
+    with st.container(key="ade_cols"):
+        col_form, col_side = st.columns([100, 54], gap="medium")
+    with col_form, st.container(key="ade_form"):
+        # 묶음 제목은 아래 칸을 다 그린 뒤에야 '수정함' 을 알 수 있어서, 자리만 잡아 두고 나중에 채운다
+        legends = {}
+        with st.container(border=True, key="ade_set1"):
+            legends[1] = st.empty()
+            with st.container(key="ade_work"):
+                new_work, new_chars = pick_work_and_characters(old_work, old_chars, key=f"edit_{k}")
+        with st.container(border=True, key="ade_set2"):
+            legends[2] = st.empty()
+            # 주소 검색·지도가 들어가서 st.form 을 쓰지 않는다 (폼 안에서는 검색 버튼·지도를 쓸 수 없다)
+            new_name = st.text_input("카페명 · 장소 이름", value=old_name, key=f"name_{k}")
+            # 검색·우편번호로 고른 주소: 입력칸을 새 값으로 다시 그리려고 번호(ver)를 올리고 좌표를 보관한다
+            slot = f"edit_pick_{k}"
+            pick_state = st.session_state.setdefault(slot, {"ver": 0, "picked": None})
 
-    with st.expander("수정 이력"):
+            def pick(c: geo.Candidate) -> None:
+                pick_state["picked"] = _picked(c)
+                pick_state["ver"] += 1
+
+            picked = pick_state["picked"]
+            with st.container(key="ade_addr"):
+                new_addr = address_field(picked["address"] if picked else old_addr,
+                                         key=f"edit_{k}_{pick_state['ver']}", on_pick=pick)
+        with st.container(border=True, key="ade_set3"):
+            legends[3] = st.empty()
+            new_images, img_errors, img_note = _edit_images(current, k)
+        with st.container(border=True, key="ade_set4"):
+            legends[4] = st.empty()
+            d1, d2 = st.columns(2)
+            with d1:
+                new_start = st.date_input("시작일", value=old_start, key=f"start_{k}")
+            always = st.checkbox("종료일 없음 (상시)", value=was_always, key=f"always_{k}")
+            with d2:
+                new_end = st.date_input("종료일", value=(old_start + timedelta(days=30)) if was_always else old_end,
+                                        key=f"end_{k}", disabled=always)
+            end_changed = always != was_always or (not always and new_end != old_end)
+            if always:
+                new_end = pdates.ALWAYS_END
+            old_flags = [t for t in _split(current.get("tags") or "") if t in cafe.PERIOD_TAGS]
+            if pdates.TAG_CHECK in old_flags:
+                raw = pdates.raw_from_note(current.get("note"))
+                st.warning("기간을 정확히 읽지 못한 팝업이에요" + (f" (원문: '{raw}')" if raw and not raw.startswith("(") else "")
+                           + ". 공식 공지를 보고 시작·종료일을 고쳐 주세요.", icon=":material/event_busy:")
+        with st.container(border=True, key="ade_set5"):
+            legends[5] = st.empty()
+            new_perks = st.text_input("특전", value=old_perks, key=f"perks_{k}", help="쉼표로 구분")
+            new_goods = st.text_input("굿즈", value=old_goods, key=f"goods_{k}", help="쉼표로 구분")
+            new_tags = st.pills("이벤트 추가 정보", cafe.EVENT_TAGS, selection_mode="multi", default=old_tags, key=f"tags_{k}")
+        with st.container(border=True, key="ade_set6"):
+            legends[6] = st.empty()
+            new_links, bad_links = _links_field("\n".join(old_links), key=f"links_{k}")
+        with st.container(border=True, key="ade_set7"):
+            legends[7] = st.empty()
+            new_intro = _intro_field(old_intro, key=f"intro_{k}", label="collapsed")   # 묶음 제목이 이미 '팝업 소개'
+            st.markdown('<div class="ed-cap">전화번호 · 이메일 · 계좌번호가 들어 있으면 저장되지 않아요.</div>', unsafe_allow_html=True)
+        _clear_buttons()
+
+        # ---- 바뀐 칸 (이전 → 이후). 입력칸은 칸을 벗어나거나 Enter 를 눌러야 값이 넘어와서, 그때 표시가 바뀐다 ----
+        nl = lambda v: str(v or "").replace("\r\n", "\n")     # noqa: E731
+        day = lambda d: "상시" if pdates.is_always(d) else f"{d:%Y.%m.%d}"     # noqa: E731
+        sites = lambda xs: ", ".join(_site_name(u) for u in xs)     # noqa: E731
+        diffs: list[tuple[str, str, str, str]] = []      # (칸 이름, 화면 이름, 이전, 이후)
+        if new_work != old_work:
+            diffs.append(("work", "작품", _ad_cut(old_work), _ad_cut(new_work)))
+        if list(new_chars) != old_chars:
+            diffs.append(("chars", "캐릭터", _ad_cut(", ".join(old_chars)), _ad_cut(", ".join(new_chars))))
+        if new_name != old_name:
+            diffs.append(("name", "카페명", _ad_cut(old_name), _ad_cut(new_name)))
+        if new_addr != old_addr:
+            diffs.append(("addr", "주소", _ad_cut(old_addr), _ad_cut(new_addr)))
+        if img_note["note"]:
+            diffs.append(("img", "이미지", f'{img_note["before"]}장', f'{img_note["after"]}장 ({" · ".join(img_note["note"])})'))
+        if new_start != old_start:
+            diffs.append(("start", "시작일", day(old_start), day(new_start)))
+        if end_changed:
+            diffs.append(("always" if always != was_always else "end", "종료일", day(old_end), day(new_end)))
+        if _split(new_perks) != _split(old_perks):
+            diffs.append(("perks", "특전", _ad_cut(", ".join(_split(old_perks)), 300), _ad_cut(", ".join(_split(new_perks)), 300)))
+        if _split(new_goods) != _split(old_goods):
+            diffs.append(("goods", "굿즈", _ad_cut(", ".join(_split(old_goods)), 300), _ad_cut(", ".join(_split(new_goods)), 300)))
+        if sorted(new_tags) != sorted(old_tags):
+            diffs.append(("tags", "이벤트", _ad_cut(", ".join(old_tags)), _ad_cut(", ".join(new_tags))))
+        if list(new_links) != old_links or bad_links:
+            diffs.append(("links", "참고 웹사이트", _ad_cut(sites(old_links)), _ad_cut(sites(new_links))))
+        if nl(new_intro) != nl(old_intro):
+            diffs.append(("intro", "팝업 소개", _ad_cut(old_intro), _ad_cut(new_intro)))
+        changed = {d[0] for d in diffs}
+        on_sets = {_AD_CHG_SET[c] for c in changed}
+        titles = {1: ("작품 · 캐릭터", ""), 2: ("카페 정보", ""), 3: ("이미지", f'{img_note["after"]}장'), 4: ("기간", ""),
+                  5: ("특전 · 굿즈 · 이벤트", ""), 6: ("참고 웹사이트", "http:// 또는 https:// 로 시작하는 주소"), 7: ("팝업 소개", "")}
+        for no, slot_ in legends.items():
+            slot_.markdown(_ad_legend(no, titles[no][0], no in on_sets, titles[no][1]), unsafe_allow_html=True)
+        # 바뀐 묶음은 민트 테두리, 바뀐 칸은 민트 테두리 + 연한 민트 바탕 (웹 .ade-set.chg · .ade-f.chg)
+        css = [f".st-key-ade_set{no}" + "{border-color:var(--accent)!important}" for no in sorted(on_sets)]
+        boxes = [f".st-key-ade_form {_AD_CHG_SEL[c]}" for c in sorted(changed) if c in _AD_CHG_SEL]
+        if boxes:
+            css.append(",".join(boxes) + "{border:2px solid var(--accent)!important;background:#f3fcfa!important}")
+        if "tags" in changed:
+            css.append('.st-key-ade_form [class*="st-key-tags_"] button[aria-checked="true"],'
+                       '.st-key-ade_form [class*="st-key-tags_"] button[aria-pressed="true"]'
+                       '{border-color:var(--accent)!important;background:#f3fcfa!important}')
+        if "always" in changed:
+            css.append('.st-key-ade_form [class*="st-key-always_"] label p{color:#0b5e57!important;font-weight:700!important}')
+        if css:
+            st.markdown("<style>" + "".join(css) + "</style>", unsafe_allow_html=True)
+
+        bad = _block_sensitive(new_name, new_addr, new_perks, new_goods, new_intro)
+        errors_box = st.container()
+        # 아래 저장 줄 (화면 아래에 붙어 따라온다): 바뀐 칸 수 · 되돌리기 · 저장하기. 바뀐 칸이 없으면 저장 버튼이 꺼진다
+        with st.container(horizontal=True, key="ade_bar", vertical_alignment="center"):
+            st.markdown('<div class="ade-bar-t">' + (
+                f'바뀐 칸 <strong>{len(diffs)}곳</strong> · {escape(", ".join(d[1] for d in diffs))}' if diffs
+                else "아직 바꾼 칸이 없어요") + '</div>', unsafe_allow_html=True)
+            if st.button("되돌리기", key=f"ade_reset_{k}", disabled=not diffs):
+                st.session_state[ver_key] = ver + 1
+                _rerun_reviews()
+            submitted = st.button("저장하기", type="primary", key=f"save_{k}",
+                                  disabled=not diffs or bad or bool(img_errors) or bad_links)
+        # 맨 아래: 삭제 요청 (관리자는 지도에서 내리기)
+        with st.container(horizontal=True, key="ade_del", vertical_alignment="center"):
+            st.markdown('<span class="ade-del-t">끝난 팝업이거나 잘못 올라온 팝업인가요?</span>', unsafe_allow_html=True)
+            if _is_admin() and st.button("지도에서 내리기 (관리자)", type="tertiary", key=f"delete_{k}"):
+                confirm_delete(entry_id)
+            if not _is_admin() and st.button("삭제 요청", type="tertiary", key=f"dreq_{k}"):
+                delete_request_dialog("cafe", entry_id, f'{current.get("work") or ""} · {current.get("cafe_name") or ""}')
+
+        if submitted:
+            entry = CafeEntry(
+                cafe_name=new_name, work=new_work, characters=new_chars, address=new_addr,
+                start_date=new_start, end_date=new_end,
+                perks=_split(new_perks), goods=_split(new_goods),
+                confidence="high",
+            )
+            # 기간 표시: 상시면 '상시', 사람이 기간을 고쳤으면 '기간 확인 필요' 를 지운다 (안 고쳤으면 그대로)
+            dates_changed = (new_start, new_end) != (old_start, old_end)
+            new_tags = list(new_tags) + ([pdates.TAG_ALWAYS] if always else []) \
+                + ([pdates.TAG_CHECK] if pdates.TAG_CHECK in old_flags and not dates_changed else [])
+            v = guard.validate_cafe(entry, today=TODAY)
+            g = locate(entry.address, picked)
+            if not g.ok:
+                v.fail(g.note)
+            if v.ok:
+                # 새로 올린 파일만 저장한다. 지운 이미지 파일은 남겨 둔다 (되돌리기가 옛 행을 쓸 수 있다)
+                try:
+                    saved = [name if data is None else images.save(name, data) for name, data in new_images]
+                except ValueError as err:          # 그림으로 읽을 수 없는 파일 (위치 정보 지우기 단계에서 걸림)
+                    errors_box.error(str(err), icon=":material/error:")
+                    return
+                store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=_keep_notion(g.badge, current), editor=_me(), intro=new_intro,
+                                               intro_src=str(current.get("intro_src") or "") if new_intro.strip() else "",
+                                               images=saved, tags=new_tags, links=new_links),
+                             entry_id=entry_id)
+                # 저장해도 상세에 그대로 머물고, 맨 위로 올려 바뀐 내용을 처음부터 보여 준다
+                st.session_state["flash"] = "수정했습니다."
+                st.session_state["scroll_top"] = True
+                st.rerun()
+            for err in v.errors:
+                errors_box.error(err)
+
+    with col_side, st.container(key="ade_side"):
+        # 저장하면 이렇게 바뀌어요 (이전 → 이후)
+        with st.container(border=True, key="ade_diff"):
+            st.markdown('<div class="ade-h">저장하면 이렇게 바뀌어요</div>' + ("".join(
+                f'<div class="ade-diff-one"><span>{escape(name)}</span><del>{escape(a)}</del><ins>→ {escape(b)}</ins></div>'
+                for _, name, a, b in diffs) if diffs else
+                '<div class="ed-cap">칸을 고치면 이전 내용과 바뀐 내용을 여기에서 나란히 볼 수 있어요.</div>'), unsafe_allow_html=True)
+        # 수정 이력: 기록 하나가 카드 하나, 최근 것이 위. 지금 것 말고는 카드 안에 '이 버전으로 돌아가기'
+        from common import stamp
         history = [r for r in store.all_rows() if str(r["entry_id"]) == entry_id]
         history.sort(key=lambda r: int(r["revision"]), reverse=True)
-        # 기록 하나가 카드 하나. 지금 것 말고는 카드 안에 '이 버전으로 돌아가기' 버튼을 둔다
-        with st.container(key=f"hx_{entry_id}"):
-            for i, r in enumerate(history):
+        table = stamp.counts(reviews.current_rows())       # 고친 사람 이름 앞 20px 후기 도장
+        all_key = f"ade_hx_all_{entry_id}"
+        show_all = st.session_state.get(all_key, False)
+        with st.container(border=True, key="ade_hist"):
+            st.markdown(f'<div class="ade-h">수정 이력 <span>{len(history)}</span></div>', unsafe_allow_html=True)
+            for i, r in enumerate(history if show_all else history[:AD_HISTORY_FIRST]):
                 rev = int(r["revision"])
                 older = history[i + 1] if i + 1 < len(history) else None
-                with st.container(key=f"{'hxnow' if i == 0 else 'hxi'}_{entry_id}_{rev}"):
-                    st.markdown(_history_card_html(r, older, now=i == 0), unsafe_allow_html=True)
+                with st.container(key=f"{'ahxnow' if i == 0 else 'ahxi'}_{entry_id}_{rev}"):
+                    st.markdown(_history_card_html(r, older, now=i == 0, lv=stamp.lv_of(str(r.get("editor") or ""), table)),
+                                unsafe_allow_html=True)
                     if i > 0 and r.get("status") != "deleted" and st.button(
-                            "이 버전으로 돌아가기", icon=":material/restore:", type="tertiary",
-                            key=f"restore_{entry_id}_{rev}"):
+                            "이 버전으로 돌아가기", icon=":material/restore:", key=f"restore_{entry_id}_{rev}"):
                         store.restore(entry_id, rev, extra={"source": f"{rev}번째로 되돌리기", "editor": _me()})
                         st.session_state["flash"] = (f"{rev}번째 버전으로 되돌렸어요.", ":material/restore:")
                         st.session_state["scroll_top"] = True
                         st.rerun()
+            if not show_all and len(history) > AD_HISTORY_FIRST:
+                with st.container(key="ade_hx_more"):
+                    st.button(f"이력 더보기 ({len(history) - AD_HISTORY_FIRST})", key=f"ade_hx_more_{entry_id}",
+                              on_click=lambda: st.session_state.update({all_key: True}))
 
 
 # 수정 이력에 보이는 '방법' 이름과 아이콘. 저장된 값은 그대로 두고(append-only) 보여 줄 때만 바꾼다
@@ -2009,9 +2279,10 @@ def _image_changes(old, new) -> list[tuple[str, str, str]]:
     return out
 
 
-def _history_card_html(r: dict, older: dict | None, now: bool) -> str:
+def _history_card_html(r: dict, older: dict | None, now: bool, lv: int = 0) -> str:
     """수정 이력 카드 안쪽. 처음 기록만 카페·기간·주소를 다 보여 주고,
-    그다음 기록부터는 바로 앞 기록과 달라진 칸만 '(이전) → (이후)' 로 보여 준다."""
+    그다음 기록부터는 바로 앞 기록과 달라진 칸만 '(이전) → (이후)' 로 보여 준다.
+    lv: 고친 회원의 후기 도장 랭크 (있으면 이름 앞에 20px 도장, 없으면 사람 아이콘)."""
     source = str(r.get("source") or "")
     label, icon = _SOURCE_VIEW.get(source, (source or "기록", "undo" if source.endswith("되돌리기") else "history"))
     when = pd.to_datetime(r["updated_at"], utc=True).tz_convert("Asia/Seoul").strftime("%Y.%m.%d %H:%M")
@@ -2040,10 +2311,484 @@ def _history_card_html(r: dict, older: dict | None, now: bool) -> str:
         body = "".join(rows) or '<div class="hx-meta">바뀐 내용 없음</div>'
     return (f'<div class="hx-card">'
             f'<div class="hx-top"><b>{int(r["revision"])}번째</b><span class="hx-when">{when}</span>'
-            + ('<span class="hx-now">지금</span>' if now else "")
-            + f'<span class="hx-src">{_mi(icon)}{escape(label)}</span></div>'
-            f'<div class="hx-who">{_mi("person")}{escape(_nick_only(_editor(r)))}</div>'
+            + f'<span class="hx-src">{_mi(icon)}{escape(label)}</span>'
+            + ('<span class="hx-now">지금 내용</span>' if now else "") + '</div>'
+            f'<div class="hx-who">{_ad_stamp(lv, 20) or _mi("person")}{escape(_nick_only(_editor(r)))}</div>'
             f'{body}</div>')
+
+
+# ================================================================ A안 팝업 상세 (11/25)
+# docs/design/handoff 의 A-Detail · A-DetailEdit 시안을 웹(web/app/a-detail.css 의 .ad* · .ade*)과 같은 값으로 옮긴 것.
+# render_detail 이 한 번 내보낸다 (LIST_CSS 뒤라서 예전 상세 규칙을 덮는다). 위 = 사진 + 정보 2단, 아래 = 화면 폭 전체 탭.
+AD_MASCOT = "app/static/mascot.png"
+
+
+def _ad_tier(lv: int):
+    from common import stamp
+    return next((t for t in stamp.TIERS if t.lv == lv), None)
+
+
+def _ad_stamp(lv: int, size: int = 20) -> str:
+    """후기 도장 (웹 RankStamp): 색 테두리 동그라미 + 마스코트. 20px 리뷰 닉네임 옆 · 32px 리뷰 쓰기 칸. 도장이 없으면 빈 문자열."""
+    t = _ad_tier(lv)
+    if not t:
+        return ""
+    border = {20: 2, 32: 2.5, 40: 3}.get(size, 2)
+    return (f'<span class="rk-stamp" role="img" aria-label="Lv.{t.lv} {t.name} 도장" style="width:{size}px;height:{size}px;'
+            f'border-width:{border}px;border-color:{t.ring};background:{"#fff" if size == 20 else t.fill}">'
+            f'<img src="{AD_MASCOT}" alt=""></span>')
+
+
+def _ad_rank_chip(lv: int) -> str:
+    """리뷰 닉네임 옆: 20px 도장 + 'Lv.2' 알약 (웹 RankChip)."""
+    t = _ad_tier(lv)
+    if not t:
+        return ""
+    return (f'<span class="rk-chip" style="background:{t.fill}" aria-label="Lv.{t.lv} {t.name}">{_ad_stamp(lv, 20)}'
+            f'<span style="color:{t.fg}">Lv.{t.lv}</span></span>')
+
+
+A_DETAIL_CSS = """
+<style>
+/* ---------------------------------------------------------------- 틀: 위 2단 + 아래 화면 폭 전체 탭
+   page_map 이 만든 두 칸(왼쪽 정보 · 오른쪽 탭)을 위아래로 쌓는다 */
+.stHorizontalBlock:has(> .stColumn > .stVerticalBlock > [data-testid="stLayoutWrapper"] > .st-key-detail_left) {
+  flex-direction: column !important; flex-wrap: nowrap !important; gap: 28px !important; color: #26302d; }
+.stHorizontalBlock:has(> .stColumn > .stVerticalBlock > [data-testid="stLayoutWrapper"] > .st-key-detail_left) > .stColumn {
+  width: 100% !important; flex: 0 0 auto !important; min-width: 0 !important; }
+/* 수정하기 탭(셋째 탭)이 열려 있으면 위 2단 대신 작은 머리(포스터 60×80 + 제목)만 */
+[data-testid="stLayoutWrapper"]:has(> .st-key-ad_mini) { display: none; }
+.stHorizontalBlock:has([class*="st-key-detail_tabs_"] [data-testid="stTab"]:nth-child(3)[aria-selected="true"])
+  [data-testid="stLayoutWrapper"]:has(> .st-key-ad_mini) { display: block; }
+.stHorizontalBlock:has([class*="st-key-detail_tabs_"] [data-testid="stTab"]:nth-child(3)[aria-selected="true"])
+  [data-testid="stLayoutWrapper"]:has(> .st-key-ad_hero) { display: none; }
+/* 이 화면의 HTML 조각은 칸 아래 음수 여백(-1rem)을 쓰지 않는다 (아래 버튼 · 칸과 겹치지 않게) */
+.st-key-detail_left [data-testid="stMarkdownContainer"], [class*="st-key-detail_tabs_"] [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important; }
+.ad-mini { display: flex; align-items: center; gap: 16px; }
+.ad-mini img { flex: none; width: 60px; height: 80px; border-radius: 10px; border: 2px solid #9eddcc; object-fit: cover;
+  background: #f4f6f5; box-sizing: border-box; }
+.ad-mini > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ad-mini span { font-size: 13px; color: #5f6b68; }
+.ad-mini .ad-title { font-size: 30px; }
+
+/* ---------------------------------------------------------------- 위쪽 2단: 사진 | 정보 */
+.st-key-detail_left { gap: 0 !important; }
+.st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) { gap: 32px !important; align-items: flex-start !important; }
+@media (min-width: 641px) {
+  .st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) { flex-wrap: nowrap !important; }
+  .st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) > .stColumn:first-child {
+    flex: 0 1 420px !important; width: 420px !important; max-width: 420px; min-width: 280px !important; }
+  .st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) > .stColumn:last-child {
+    flex: 1 1 0 !important; min-width: 0 !important; }
+}
+.st-key-ad_hero .stColumn:has(.st-key-detail_actions) > .stVerticalBlock { gap: 10px !important; }
+html body .st-key-detail_left [data-testid="stElementContainer"]:has(iframe[title*="gallery"]) { margin-bottom: 0 !important; }
+.st-key-ad_hero iframe[title*="gallery"] { display: block; }
+.ad-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+html body .st-key-detail_actions [data-testid="stColumn"]:first-child { margin-top: 0; }
+.ad-state, .ad-area { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; line-height: 1.5; }
+.ad-state { color: #0b5e57; background: var(--accent-soft); }
+.ad-state.ended { color: #5f6b68; background: #f4f6f5; }
+.ad-area { color: #fff; }
+html body .ad-title { font-family: "Jua", sans-serif; font-weight: 400; font-size: 38px; line-height: 1.2; color: #1f2a27;
+  word-break: keep-all; overflow-wrap: anywhere; }
+.ad-chars { font-size: 14px; color: #5f6b68; line-height: 1.6; }
+.ad-avg { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; margin-top: 10px; }
+.ad-avg > span:last-child { color: #5f6b68; }
+/* 별 다섯 개: 회색 위에 평균만큼 노랑을 덮는다 */
+.ad-stars { position: relative; display: inline-block; color: #d3dad8; letter-spacing: 1px; line-height: 1.2; white-space: nowrap; }
+.ad-stars > span:last-child { position: absolute; left: 0; top: 0; overflow: hidden; color: #f4b63f; }
+/* 공유 · 북마크: 44px (공유 = 동그라미, 북마크 = 모서리 12px, 북마크하면 포인트 색으로 채움) */
+html body .st-key-detail_actions { margin-bottom: 0; }
+html body .st-key-detail_actions [data-testid="stHorizontalBlock"] { gap: 10px !important; }
+html body .st-key-detail_actions [data-testid="stColumn"]:not(:first-child) { margin-top: 1px; flex: 0 0 44px !important;
+  width: 44px !important; }
+html body .st-key-detail_actions [data-testid="stColumn"]:last-child { flex: 0 0 44px !important; width: 44px !important; }
+html body .st-key-detail_actions [data-testid="stColumn"]:not(:first-child) [data-testid="stElementContainer"] { height: 44px; }
+html body .st-key-detail_actions [class*="st-key-fav_"] button { width: 44px !important; min-width: 44px !important;
+  height: 44px !important; min-height: 44px !important; border-radius: 12px !important; border: 1px solid #e3e9e7 !important; }
+html body .st-key-detail_actions [class*="st-key-fav_on_"] button { border-color: var(--accent) !important; }
+html body .st-key-detail_actions [class*="st-key-fav_"] button span { font-size: 1.5rem !important; }
+
+/* 방문 전 확인: 위치 칸 · 일정 칸 */
+.ad-info { display: flex; flex-direction: column; gap: 20px; margin-top: 10px; }
+.ad-chars + .ad-info, .ad-avg + .ad-info { margin-top: 20px; }
+.ad-check { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.ad-box { background: #f6f8f7; border-radius: 16px; padding: 16px; display: flex; gap: 12px; min-width: 0; }
+.ad-box > .mi { flex: none; font-size: 22px; line-height: 1; color: var(--accent-deep); margin: 0; }
+.ad-box > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ad-box strong { font-size: 15px; line-height: 1.5; color: #26302d; overflow-wrap: anywhere; }
+.ad-box span { font-size: 13.5px; line-height: 1.5; color: #5f6b68; overflow-wrap: anywhere; }
+.ad-box a { align-self: flex-start; font-size: 13.5px; font-weight: 700; color: var(--accent-deep) !important; padding: 4px 0;
+  text-decoration: none; }
+.ad-box a:hover { text-decoration: underline; }
+.ad-sec { display: flex; flex-direction: column; gap: 10px; }
+.ad-h2 { font-family: "Jua", sans-serif; font-weight: 400; font-size: 21px; line-height: 1.3; color: #1f2a27; }
+.ad-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ad-chips > span { font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: #f4f6f5;
+  line-height: 1.5; overflow-wrap: anywhere; color: #26302d; }
+.ad-chips > span.perk { background: var(--accent-soft); color: #0b5e57; }
+.ad-chips b { font-weight: 700; }
+.ad-chips b::after { content: " · "; }
+.ad-none { font-size: 14px; color: #5f6b68; }
+.ad-links { display: flex; flex-wrap: wrap; gap: 8px; }
+html body .ad-links a.dlink { display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px; max-width: 100%;
+  min-height: 44px; margin: 0; padding: 0 14px; border-radius: 12px; border: 1px solid #e3e9e7; background: #fff;
+  color: #26302d !important; font-size: 14px; font-weight: 700; box-sizing: border-box; text-decoration: none !important; }
+.ad-links a.dlink > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-links a.dlink > .mi { flex: none; font-size: 15px; color: #5f6b68; margin: 0; }
+html body .ad-links a.dlink:hover { border-color: var(--accent); color: var(--accent-deep) !important; background: #fff; }
+html body .ad-links a.dlink.broken { background: #fff4ea; border-color: #f5c9a6; }
+.ad-links .dlink-warn { margin-left: 0; flex: none; }
+.ad-intro { background: #f6f8f7; border-radius: 14px; padding: 16px 18px; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere;
+  color: #26302d; }
+.ad-intro .dintro-gap { display: block; height: .7em; }
+.ad-intro .dintro-h { color: #0f6b5c; font-weight: 700; margin-right: 4px; }
+.ad-intro .dintro-h::before { content: "["; }
+.ad-intro .dintro-h::after { content: "]"; }
+
+/* ---------------------------------------------------------------- 후기 도장 (웹 a-shell.css 의 .rk-*) */
+.rk-stamp { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%;
+  border-style: solid; box-sizing: border-box; vertical-align: middle; }
+.rk-stamp img { width: 62%; height: auto; display: block; }
+.rk-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 2px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 800; line-height: 1.4; white-space: nowrap; vertical-align: middle; }
+
+/* ---------------------------------------------------------------- 화면 폭 전체 탭 */
+[class*="st-key-detail_tabs_"] [role="tablist"] { gap: 4px !important; border-bottom: 2px solid #eef2f1 !important;
+  box-shadow: none !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"] { height: auto !important; padding: 14px 22px !important;
+  margin: 0 0 -2px !important; border-bottom: 3px solid transparent !important; background: none !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"] p { font-size: 16px !important; font-weight: 600 !important;
+  color: #5f6b68 !important; white-space: nowrap; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"]:hover p { color: #1f2a27 !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"][aria-selected="true"] { border-bottom-color: var(--accent) !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"][aria-selected="true"] p { font-weight: 800 !important; color: #1f2a27 !important; }
+[class*="st-key-detail_tabs_"] .react-aria-SelectionIndicator { display: none !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTabPanel"] { padding-top: 28px !important; }
+
+/* ---------------------------------------------------------------- 리뷰 탭: 왼쪽 쓰기 | 오른쪽 목록 */
+.st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) { gap: 28px !important; align-items: flex-start !important; }
+@media (min-width: 641px) {
+  .st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) { flex-wrap: nowrap !important; }
+  .st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) > .stColumn:first-child {
+    flex: 0 1 380px !important; width: 380px !important; max-width: 380px; min-width: 300px !important; }
+  .st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) > .stColumn:last-child {
+    flex: 1 1 0 !important; min-width: 0 !important; }
+}
+html body [class*="st-key-rvbox_"] { border: 1.5px solid #9eddcc !important; border-radius: 20px !important;
+  padding: 20px !important; gap: 14px !important; box-sizing: border-box; background: #fff; }
+.ad-rv-h { font-size: 17px; font-weight: 800; color: #1f2a27; line-height: 1.4; }
+.side-note { margin: 0 !important; font-size: 14px; line-height: 1.6; color: #5f6b68; }
+/* 작성자 줄: 32px 도장 + 닉네임 · 내 랭크 */
+.ad-me { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #f6f8f7; }
+.ad-nostamp { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 2px dashed #c6d0cd; background: #fff;
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.ad-nostamp img { width: 62%; height: auto; opacity: .45; filter: grayscale(1); }
+.ad-me-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 12.5px; line-height: 1.4; color: #5f6b68; }
+.ad-me-t > span:first-child { display: flex; flex-wrap: wrap; gap: 0 8px; }
+.ad-me-t b { color: #26302d; font-size: 13px; overflow-wrap: anywhere; }
+.ad-me-t strong { color: #0f6b5c; }
+/* 종류 고르기: 회색 알약 안에 세 칸, 고른 칸만 흰색 */
+[class*="st-key-rv_"][class*="_kind_"], [class*="st-key-rv_"][class*="_kind_"] [data-testid="stButtonGroup"] { width: 100% !important; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] { width: 100% !important; min-width: 100% !important; max-width: none !important; box-sizing: border-box; display: flex !important; flex-wrap: nowrap !important; gap: 4px !important;
+  background: #f4f6f5; border-radius: 999px; padding: 4px; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] button { flex: 1 1 0 !important; min-width: 0 !important; border: 0 !important;
+  border-radius: 999px !important; padding: 10px 4px !important; min-height: 0 !important; height: auto !important;
+  background: none !important; box-shadow: none !important; justify-content: center !important; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] button p { font-size: 13.5px !important; font-weight: 500 !important;
+  color: #5f6b68 !important; white-space: nowrap; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] button[aria-checked="true"] { background: #fff !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08) !important; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] button[aria-checked="true"] p { font-weight: 800 !important; color: #26302d !important; }
+/* 별점: 왼쪽 정렬 40px 버튼 · 28px 별 (회색, 고른 별까지 노랑) + 안내 한 줄 */
+html body [class*="_rate_box_"] { flex-direction: row !important; flex-wrap: wrap !important; align-items: center !important;
+  justify-content: flex-start !important; text-align: left; gap: 2px 8px !important; padding: 0 !important; }
+html body [class*="_rate_box_"] > div, html body [class*="_rate_box_"] [data-testid="stElementContainer"] {
+  width: auto !important; flex: 0 0 auto !important; justify-content: flex-start; }
+html body [class*="_rate_box_"] [data-testid="stFeedback"] { margin-top: 0; }
+html body [class*="_rate_box_"] [data-testid="stFeedback"] [role="radiogroup"] { gap: 2px !important; justify-content: flex-start; }
+html body [class*="_rate_box_"] [data-testid^="stFeedbackButton"] { height: 40px !important; width: 40px !important; min-width: 40px !important; }
+html body [class*="_rate_box_"] [data-testid="stFeedbackButtonActive"] > span::before { font-size: 28px; color: #f4b63f; }
+html body [class*="_rate_box_"] [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"]::before { font-size: 28px; }
+html body [class*="_rate_box_"] [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"] { color: #d3dad8 !important; }
+html body [class*="_rate_box_"] [data-testid="stFeedbackButton"][aria-checked="true"] [data-testid="stIconMaterial"],
+html body [class*="_rate_box_"] [data-testid="stFeedbackButton"]:has(~ [aria-checked="true"]) [data-testid="stIconMaterial"],
+html body [class*="_rate_box_"] [role="radiogroup"]:hover [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"] {
+  color: #f4b63f !important; }
+html body [class*="_rate_box_"] [role="radiogroup"]:hover [data-testid="stFeedbackButton"]:hover ~ [data-testid="stFeedbackButton"]
+  [data-testid="stIconMaterial"] { color: #d3dad8 !important; }
+html body [class*="_rate_box_"] [role="radiogroup"]:hover [data-testid^="stFeedbackButton"]:hover
+  ~ [data-testid="stFeedbackButtonActive"] > span::before { color: #d3dad8; }
+.ad-rate-note { font-size: 13px; color: #5f6b68; }
+/* 입력칸: 흰 바탕 · 연회색 테두리 12px (리뷰 쓰기 · 수정하기) */
+.st-key-ad_rv [data-testid="stTextAreaRootElement"], .st-key-ade_form [data-testid="stTextAreaRootElement"], .st-key-ade_form [data-testid="stTextInputRootElement"], .st-key-ade_form [data-testid="stDateInputField"],
+.st-key-ade_form .react-aria-ComboBox > div { border: 1px solid #e3e9e7 !important; border-radius: 12px !important;
+  background: #fff !important; box-sizing: border-box; }
+.st-key-ad_rv textarea, .st-key-ade_form textarea { font-size: 14px !important; line-height: 1.6 !important; color: #26302d !important; }
+.st-key-ad_rv [data-testid="stTextAreaRootElement"]:focus-within, .st-key-ade_form [data-testid="stTextAreaRootElement"]:focus-within, .st-key-ade_form [data-testid="stTextInputRootElement"]:focus-within,
+.st-key-ade_form [data-testid="stDateInputField"]:focus-within, .st-key-ade_form .react-aria-ComboBox > div:focus-within { border-color: var(--accent) !important; }
+/* 사진 올리는 칸: 점선 테두리 작은 칸 + 주의 문구 */
+.st-key-ad_rv [class*="st-key-rv_"][class*="_img_"] label p { font-size: 13px !important; font-weight: 700; color: #26302d !important; }
+.st-key-ad_rv [data-testid="stFileUploaderDropzone"], .st-key-ade_form [data-testid="stFileUploaderDropzone"] {
+  border: 2px dashed #c6d0cd !important; border-radius: 12px !important; background: #fff !important; padding: .6rem .8rem !important;
+  min-height: 0 !important; }
+.st-key-ad_rv [data-testid="stFileUploaderDropzone"]:hover, .st-key-ade_form [data-testid="stFileUploaderDropzone"]:hover {
+  border-color: var(--accent) !important; }
+.ad-pics-note { font-size: 12px; color: #5f6b68; line-height: 1.5; }
+[class*="st-key-rv_"][class*="_pics_on_"] { gap: 8px !important; }
+.st-key-ad_rv [class*="st-key-rv_"][class*="_send_"] button { min-height: 48px !important; }
+.st-key-ad_rv [class*="st-key-rv_"][class*="_send_"] button p { font-size: 15px !important; font-weight: 800 !important; }
+[class*="st-key-lg_rv_"] button { min-height: 48px !important; }
+
+/* 오른쪽: 평균 · 분포 · 사진 모아 보기 */
+.st-key-ad_rv_list { gap: 16px !important; }
+html body .st-key-ad_rv_list .rv-none.center, [class*="st-key-detail_tabs_"] .blog-empty { padding: 40px 16px; border-radius: 18px;
+  background: #f6f8f7; font-size: 14px; color: #5f6b68; text-align: center; }
+.ad-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 18px 20px; border-radius: 18px; background: #f6f8f7; }
+.ad-sum-avg { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+html body .ad-sum-avg .rv-avg-num { font-family: "Jua", sans-serif; font-size: 44px; font-weight: 400; line-height: 1; color: #1f2a27; }
+html body .ad-sum-avg .rv-avg-cnt { margin: 0; font-size: 12px; color: #5f6b68; }
+.ad-sum-dist { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 5px; }
+.ad-sum-dist > div { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #5f6b68; }
+.ad-sum-dist > div > span:first-child { width: 26px; }
+.ad-sum-dist > div > span:last-child { width: 18px; text-align: right; }
+.ad-bar { flex: 1; height: 8px; border-radius: 999px; background: #e3e9e7; overflow: hidden; }
+.ad-bar span { display: block; height: 100%; background: #f4b63f; border-radius: 999px; }
+html body .rv-pics.ad-sum-pics { display: grid; grid-template-columns: repeat(3, 64px); gap: 6px; margin: 0; max-width: none; }
+html body .rv-pics a { position: relative; display: block; overflow: hidden; background: #f4f6f5; cursor: zoom-in; }
+html body .rv-pics a[hidden] { display: none; }
+html body .rv-pics a img { width: 100%; height: 100%; object-fit: cover; display: block; border: 0; border-radius: 0; }
+html body .rv-pics a span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(31,42,39,.55); color: #fff; font-size: 16px; font-weight: 800; }
+html body .ad-sum-pics a { aspect-ratio: 1; border-radius: 10px; }
+html body .ad-sum-pics a span { font-size: 13px; }
+/* 보기 칩 · 정렬 */
+.st-key-ad_filter { flex-wrap: wrap !important; gap: 8px !important; align-items: center !important; }
+.st-key-ad_filter > div:first-child { flex: 1 1 320px !important; width: auto !important; min-width: 0 !important; }
+.st-key-ad_filter > div:last-child { flex: 0 0 150px !important; width: 150px !important; margin-left: auto; }
+.st-key-ad_filter [role="radiogroup"] { gap: 6px !important; flex-wrap: wrap !important; }
+.st-key-ad_filter [role="radiogroup"] button { min-height: 36px !important; padding: 0 14px !important; border-radius: 999px !important;
+  border: 1px solid #e3e9e7 !important; background: #fff !important; box-shadow: none !important; }
+.st-key-ad_filter [role="radiogroup"] button p { font-size: 13px !important; font-weight: 500 !important; color: #26302d !important; }
+.st-key-ad_filter [role="radiogroup"] button[aria-checked="true"] { border-color: var(--accent) !important;
+  background: var(--accent-soft) !important; }
+.st-key-ad_filter [role="radiogroup"] button[aria-checked="true"] p { font-weight: 800 !important; color: #0b5e57 !important; }
+.st-key-ad_filter .react-aria-ComboBox > div { min-height: 38px !important; border: 1px solid #e3e9e7 !important;
+  border-radius: 999px !important; background: #fff !important; font-size: 13px !important; font-weight: 700; }
+/* 리뷰 카드 */
+html body [class*="st-key-rvth_"] { border: 1.5px solid #e3e9e7 !important; border-radius: 18px !important; padding: 18px !important;
+  gap: 12px !important; box-shadow: none !important; background: #fff; }
+.rv-head { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 14px; min-height: 36px;
+  color: #26302d; }
+.rv-head b { font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+html body .rv-head .rv-av { width: 34px; height: 34px; margin: 0; flex: none; }
+html body .rv-head .rv-re ~ .rv-av { width: 28px; height: 28px; }
+.rv-head .rv-when { font-size: 12.5px; color: #5f6b68; }
+.rv-head .kb { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 2px 9px; line-height: 1.5; }
+.rv-head .kb.green { background: var(--accent-soft); color: #0b5e57; }
+.rv-head .kb.blue { background: #eaf0fc; color: #2c5bc5; }
+.rv-head .kb.gray { background: #f4f6f5; color: #5f6b68; }
+/* ⋯ 버튼은 늘 오른쪽 위 (닉네임 줄이 두 줄로 넘어가도) */
+[class*="st-key-rvhd_"] { flex-wrap: nowrap !important; align-items: flex-start !important; gap: 8px !important; }
+[class*="st-key-rvhd_"] > div:first-child { flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; }
+[class*="st-key-rvhd_"] > div:last-child { flex: 0 0 36px !important; width: 36px !important; }
+[class*="st-key-rv_more_"] button { width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important;
+  border-radius: 50% !important; background: #f4f6f5 !important; padding: 0 !important; border: 0 !important; }
+[class*="st-key-rv_more_"] button p { font-size: 16px !important; color: #26302d !important; }
+[class*="st-key-rv_more_"] button [data-testid="stIconMaterial"] { display: none !important; }
+html body .rv-content { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin: 0; }
+html body .rv-content .rv-stars { display: block; margin: 0; font-size: 14px; font-weight: 800; letter-spacing: 0; line-height: 1.4;
+  color: #9a6a00; background: none; -webkit-background-clip: border-box; background-clip: border-box;
+  -webkit-text-fill-color: currentColor; animation: none; filter: none; }
+html body .rv-content .rv-body { flex: none; margin: 0; font-size: 15px; line-height: 1.7; color: #26302d; word-break: break-word; }
+html body .rv-content .rv-pics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; max-width: none; }
+html body .rv-content .rv-pics a { width: 120px; height: 120px; border-radius: 12px; }
+/* 카드 아래: 'ㄴ 댓글 n개' · '답글 쓰기' (글자 버튼) */
+[class*="st-key-rvfoot_"] { gap: 14px !important; align-items: center !important; }
+[class*="st-key-rvfoot_"] > div { width: auto !important; flex: 0 0 auto !important; }
+html body [class*="st-key-rvfoot_"] button { width: auto !important; min-height: 0 !important; padding: 6px 0 !important; border: 0 !important;
+  background: none !important; border-radius: 0 !important; justify-content: flex-start !important; }
+html body [class*="st-key-rvfoot_"] button p { font-size: 13px !important; font-weight: 500 !important; color: #5f6b68 !important; }
+html body [class*="st-key-rvfoot_"] [class*="st-key-rv_tog_"] { width: auto !important; }
+html body [class*="st-key-rvfoot_"] [class*="st-key-rv_tog_"] button p { font-weight: 700 !important; color: #0f6b5c !important; }
+html body [class*="st-key-rvfoot_"] button:hover { background: none !important; }
+html body [class*="st-key-rvfoot_"] button:hover p { text-decoration: underline; }
+[class*="st-key-rvre_"] { border-top: 1px dashed #e3e9e7; padding: 12px 0 0 14px !important; gap: 10px !important; }
+[class*="st-key-rvrep_"] { border-top: 1px dashed #e3e9e7; padding-top: 12px !important; gap: 10px !important; }
+.st-key-ad_more { align-items: center; }
+.st-key-ad_more button { height: 46px !important; padding: 0 28px !important; border-radius: 999px !important; border: 0 !important;
+  background: var(--accent-soft) !important; }
+.st-key-ad_more button p { font-size: 14px !important; font-weight: 800 !important; color: #0b5e57 !important; }
+.st-key-ad_more button:hover { background: #d3f5ee !important; }
+
+/* 블로그 후기 탭: 넓은 폭에서는 두 줄로 */
+[class*="st-key-detail_tabs_"] .bcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 12px; }
+[class*="st-key-detail_tabs_"] .bcard { margin: 0; }
+[class*="st-key-detail_tabs_"] .blog-note { margin-bottom: 2px; }
+
+/* ---------------------------------------------------------------- 수정하기 탭 */
+.st-key-ade_gate { align-items: center; gap: 14px !important; padding: 40px 16px !important; border-radius: 18px; background: #f6f8f7;
+  text-align: center; }
+.st-key-ade_gate .ntf-empty { padding: 0 !important; font-size: 14px; color: #5f6b68; }
+.st-key-ade_gate [data-testid="stElementContainer"] { width: auto !important; }
+.st-key-ade_gate button { height: 46px !important; padding: 0 24px !important; }
+.ade-info { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-radius: 14px; background: var(--accent-soft);
+  font-size: 14px; line-height: 1.6; color: #0b5e57; }
+.ade-info .mi { flex: none; font-size: 20px; line-height: 1.1; margin: 1px 0 0; }
+.st-key-ade_cols .stHorizontalBlock:has(> .stColumn .st-key-ade_side) { gap: 24px !important; align-items: flex-start !important; }
+@media (min-width: 641px) {
+  .st-key-ade_cols .stHorizontalBlock:has(> .stColumn .st-key-ade_side) { flex-wrap: nowrap !important; }
+  .st-key-ade_cols .stHorizontalBlock:has(> .stColumn .st-key-ade_side) > .stColumn:first-child { flex: 1 1 0 !important; min-width: 0 !important; }
+  .st-key-ade_cols .stHorizontalBlock:has(> .stColumn .st-key-ade_side) > .stColumn:last-child {
+    flex: 0 1 360px !important; width: 360px !important; max-width: 360px; min-width: 280px !important; }
+}
+.st-key-ade_form { gap: 16px !important; }
+html body [class*="st-key-ade_set"] { border: 1.5px solid #e3e9e7 !important; border-radius: 18px !important;
+  padding: 14px 20px 20px !important; gap: 14px !important; background: #fff; }
+.ade-legend { font-size: 16px; font-weight: 800; color: #1f2a27; line-height: 1.5; }
+.ade-legend small { font-size: 13px; font-weight: 500; color: #5f6b68; margin-left: 4px; }
+.ade-mark { display: inline-block; font-size: 12px; font-weight: 800; color: #fff; background: var(--accent); padding: 1px 8px;
+  border-radius: 999px; margin-left: 4px; vertical-align: 1px; }
+.st-key-ade_form [data-testid="stWidgetLabel"] p { font-size: 13px !important; font-weight: 700 !important; color: #5f6b68 !important; }
+.st-key-ade_form [data-testid="stTextInputRootElement"], .st-key-ade_form [data-testid="stDateInputField"] { min-height: 44px; }
+.st-key-ade_form .react-aria-ComboBox > div { min-height: 44px; }
+.st-key-ade_form [data-testid="stCheckbox"] p { font-size: 14px !important; font-weight: 500 !important; color: #26302d !important; }
+@media (min-width: 641px) {
+  .st-key-ade_work { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px !important; align-items: start; }
+  .st-key-ade_work > div { width: auto !important; min-width: 0; }
+}
+.ed-cap { font-size: 12.5px; color: #5f6b68; line-height: 1.5; }
+/* 이벤트 칩 */
+.st-key-ade_form [class*="st-key-tags_"] [role="group"] button, .st-key-ade_form [class*="st-key-tags_"] button[data-variant="pills"] {
+  min-height: 36px !important; }
+/* 이미지: 한 줄 6칸 (모바일 3칸), 3:4 작은 그림 + '포스터' · '추가' 표시 + 삭제 */
+.st-key-ade_imgs { flex-wrap: wrap !important; gap: 10px !important; align-items: flex-start !important; }
+.st-key-ade_imgs > div { flex: 0 0 calc((100% - 50px) / 6) !important; width: calc((100% - 50px) / 6) !important; min-width: 0 !important; }
+[class*="st-key-ade_im_"] { gap: 6px !important; }
+.ade-img { position: relative; aspect-ratio: 3 / 4; border-radius: 12px; background: #f4f6f5; overflow: hidden; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; }
+.ade-img.is-poster { border: 2.5px solid #0b7a70; }
+.ade-img > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ade-img .ed-nofile { font-size: 12px; color: #5f6b68; }
+.ade-tag { position: absolute; left: 6px; top: 6px; font-size: 11px; font-weight: 800; line-height: 1.5; color: #fff; background: #0b7a70;
+  padding: 1px 7px; border-radius: 999px; }
+.ade-img.is-extra .ade-tag { background: var(--accent-deep); }
+[class*="st-key-ade_im_"] button { min-height: 30px !important; padding: 0 !important; border-radius: 999px !important;
+  border: 1px solid #e3e9e7 !important; background: #fff !important; }
+[class*="st-key-ade_im_"] button p { font-size: 12px !important; font-weight: 700 !important; color: #5f6b68 !important; }
+[class*="st-key-ade_im_"] button:hover { border-color: #c0313f !important; }
+[class*="st-key-ade_im_"] button:hover p { color: #c0313f !important; }
+.st-key-ade_img_undo { gap: 8px !important; flex-wrap: wrap !important; }
+.st-key-ade_img_undo > div { width: auto !important; flex: 0 1 auto !important; }
+.st-key-ade_img_undo button { min-height: 34px !important; padding: 0 12px !important; }
+.st-key-ade_img_undo button p { font-size: 12.5px !important; }
+/* 아래 저장 줄: 화면 아래에 붙어 따라온다 */
+[data-testid="stLayoutWrapper"]:has(> .st-key-ade_bar) { position: sticky; bottom: 12px; z-index: 30; }
+html body .st-key-ade_bar { flex-wrap: wrap !important; align-items: center !important;
+  gap: 12px !important; padding: 14px 18px !important; border-radius: 18px !important; background: #1f2a27 !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); border: 0 !important; }
+.st-key-ade_bar > div { width: auto !important; flex: 0 0 auto !important; }
+.st-key-ade_bar > div:first-child { flex: 1 1 200px !important; min-width: 0 !important; }
+.ade-bar-t { font-size: 14px; line-height: 1.5; color: #fff; overflow-wrap: anywhere; }
+.ade-bar-t strong { color: #5eead4; }
+html body .st-key-ade_bar button { height: 46px !important; min-height: 46px !important; border-radius: 999px !important; }
+html body .st-key-ade_bar [class*="st-key-ade_reset_"] button { padding: 0 18px !important; border: 1px solid #5f6b68 !important;
+  background: none !important; }
+html body .st-key-ade_bar [class*="st-key-ade_reset_"] button p { color: #fff !important; font-size: 14px !important; font-weight: 700 !important; }
+html body .st-key-ade_bar [class*="st-key-save_"] button { padding: 0 24px !important; border: 0 !important; background: var(--accent) !important; }
+html body .st-key-ade_bar [class*="st-key-save_"] button p { color: #fff !important; font-size: 15px !important; font-weight: 800 !important; }
+html body .st-key-ade_bar button:disabled { opacity: .45; }
+/* 수정하기 탭이 열려 있을 때: 떠 있는 '맨 위로' 버튼이 아래 저장 줄을 가리지 않게 위로 올린다 */
+body:has([class*="st-key-detail_tabs_"] [data-testid="stTab"]:nth-child(3)[aria-selected="true"]) #aw-top { bottom: 104px !important; }
+@media (max-width: 640px) {
+  body:has([class*="st-key-detail_tabs_"] [data-testid="stTab"]:nth-child(3)[aria-selected="true"]) #aw-top { bottom: 132px !important; }
+}
+/* 맨 아래: 삭제 요청 · 관리자 지도에서 내리기 */
+.st-key-ade_del { justify-content: space-between !important; flex-wrap: wrap !important; gap: 4px 12px !important; padding: 0 4px !important; }
+.st-key-ade_del > div { width: auto !important; flex: 0 1 auto !important; }
+.ade-del-t { font-size: 13px; color: #5f6b68; }
+html body .st-key-ade_del button { min-height: 44px !important; padding: 0 4px !important; border: 0 !important; background: none !important; }
+html body .st-key-ade_del button p { font-size: 14px !important; font-weight: 700 !important; color: #c0313f !important; }
+html body .st-key-ade_del button:hover p { text-decoration: underline; }
+/* 오른쪽: 바뀌는 내용 + 수정 이력 */
+.st-key-ade_side { gap: 14px !important; }
+html body .st-key-ade_diff, html body .st-key-ade_hist { border: 1.5px solid #e3e9e7 !important; border-radius: 18px !important;
+  padding: 18px !important; gap: 10px !important; background: #fff; }
+html body .st-key-ade_diff { border-color: var(--accent) !important; }
+.ade-h { font-size: 16px; font-weight: 800; color: #1f2a27; line-height: 1.5; margin-bottom: 10px; }
+.st-key-ade_hist .ade-h { margin-bottom: 0; }
+.ade-h span { color: #5f6b68; font-weight: 500; }
+.ade-diff-one { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 12px; background: #f6f8f7;
+  overflow-wrap: anywhere; margin-bottom: 10px; }
+.ade-diff-one:last-child { margin-bottom: 0; }
+.ade-diff-one span { font-size: 12.5px; font-weight: 800; color: #5f6b68; }
+.ade-diff-one del { font-size: 13.5px; color: #5f6b68; }
+.ade-diff-one ins { font-size: 13.5px; font-weight: 800; color: #0b5e57; text-decoration: none; }
+[class*="st-key-ahxi_"], [class*="st-key-ahxnow_"] { border-radius: 14px; padding: 12px !important; background: #f6f8f7; gap: 8px !important; }
+[class*="st-key-ahxnow_"] { background: #f3fcfa; }
+.st-key-ade_hist .hx-top { gap: 4px 6px; font-size: 13.5px; }
+.st-key-ade_hist .hx-when { font-size: 12px; color: #5f6b68; }
+.st-key-ade_hist .hx-src { margin: 0; padding: 0; background: none; color: #5f6b68; font-size: 12px; font-weight: 500; }
+.st-key-ade_hist .hx-src .mi { display: none; }
+.st-key-ade_hist .hx-src::before { content: "· "; }
+.st-key-ade_hist .hx-now { margin-left: auto; font-size: 11.5px; font-weight: 800; color: #0b5e57; background: var(--accent-soft); }
+.st-key-ade_hist .hx-who { margin: 4px 0; display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: #26302d; }
+.st-key-ade_hist .hx-who .mi { font-size: 18px; margin: 0; color: #9aa5a1; }
+.st-key-ade_hist .hx-chg, .st-key-ade_hist .hx-meta, .st-key-ade_hist .hx-diff { font-size: 13px; }
+.st-key-ade_hist .hx-k { min-width: 0; }
+html body .st-key-ade_hist [class*="st-key-restore_"] { justify-content: flex-start; margin-top: 0; }
+html body .st-key-ade_hist [class*="st-key-restore_"] .stButton { margin-left: 0; }
+html body .st-key-ade_hist [class*="st-key-restore_"] button { height: 36px !important; min-height: 36px !important; padding: 0 12px !important;
+  border: 1px solid #e3e9e7 !important; border-radius: 999px !important; background: none !important; }
+html body .st-key-ade_hist [class*="st-key-restore_"] button p { font-size: 12.5px !important; font-weight: 700 !important; color: #26302d !important; }
+html body .st-key-ade_hist [class*="st-key-restore_"] button:hover { border-color: var(--accent) !important; background: #fff !important; }
+.st-key-ade_hx_more { align-items: center; }
+.st-key-ade_hx_more button { height: 38px !important; min-height: 38px !important; padding: 0 14px !important; border-radius: 999px !important;
+  border: 1px dashed #9eddcc !important; background: #fff !important; }
+.st-key-ade_hx_more button p { font-size: 13px !important; font-weight: 700 !important; color: var(--accent-deep) !important; }
+
+/* ---------------------------------------------------------------- 비슷한 팝업 · 이 근처 다른 팝업 (카드 180px, 민트 테두리) */
+html body .st-key-similar { margin-top: 28px; border-top: 1px solid #eef2f1; padding-top: 28px; gap: 24px !important; }
+html body [class*="st-key-simsec_"] { margin-bottom: 0; }
+html body .sim-head { font-size: 19px; font-weight: 800; margin-bottom: 6px; color: #1f2a27; }
+html body [class*="st-key-sim_row_"] { gap: 14px !important; }
+html body [class*="st-key-sim_row_"] > div { flex: 0 0 180px !important; width: 180px !important; min-width: 180px !important; }
+html body .simc .simp { border-radius: 12px; border: 2.5px solid #9eddcc; box-sizing: border-box; }
+html body .simc .simt { margin-top: 8px; font-family: "Jua", sans-serif; font-weight: 400; font-size: 16px; color: #0f6b5c; }
+html body .simc .simm { font-size: 12.5px; color: #5f6b68; }
+
+/* ---------------------------------------------------------------- 모바일 (≤640px): 한 단으로 */
+@media (max-width: 640px) {
+  .stHorizontalBlock:has(> .stColumn > .stVerticalBlock > [data-testid="stLayoutWrapper"] > .st-key-detail_left) { gap: 22px !important; }
+  .st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) { gap: 20px !important; }
+  html body .ad-title { font-size: 28px; }
+  .ad-mini .ad-title { font-size: 22px; }
+  .ad-check { grid-template-columns: minmax(0, 1fr); }
+  [class*="st-key-detail_tabs_"] [role="tablist"] { overflow-x: auto; scrollbar-width: none; }
+  [class*="st-key-detail_tabs_"] [data-testid="stTab"] { padding: 13px 14px !important; }
+  [class*="st-key-detail_tabs_"] [data-testid="stTab"] p { font-size: 15px !important; }
+  [class*="st-key-detail_tabs_"] [data-testid="stTabPanel"] { padding-top: 20px !important; }
+  .st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) { gap: 20px !important; }
+  html body [class*="st-key-rvbox_"] { padding: 16px !important; }
+  .ad-sum { gap: 16px; padding: 16px; }
+  .ad-sum-dist { min-width: 150px; }
+  .st-key-ad_filter > div:last-child { margin-left: 0; }
+  html body [class*="st-key-rvth_"] { padding: 14px !important; }
+  html body .rv-content .rv-pics a { width: calc((100% - 24px) / 4); height: auto; aspect-ratio: 1; }
+  html body [class*="st-key-ade_set"] { padding: 12px 14px 16px !important; }
+  .st-key-ade_imgs > div { flex-basis: calc((100% - 20px) / 3) !important; width: calc((100% - 20px) / 3) !important; }
+  [data-testid="stLayoutWrapper"]:has(> .st-key-ade_bar) { bottom: 8px; }
+  html body .st-key-ade_bar { padding: 12px 14px !important; gap: 8px !important; }
+  .st-key-ade_bar > div:first-child { flex-basis: 100% !important; }
+  .ade-bar-t { font-size: 13px; }
+  .st-key-ade_bar > div:not(:first-child) { flex: 1 1 0 !important; }
+  .st-key-ade_bar > div:not(:first-child) button { width: 100% !important; padding: 0 12px !important; }
+  html body [class*="st-key-sim_row_"] > div { flex-basis: 140px !important; width: 140px !important; min-width: 140px !important; }
+}
+</style>
+"""
 
 
 # ================================================================ 카드 리스트
@@ -2173,17 +2918,45 @@ def _home_area(mapped: pd.DataFrame) -> dict | None:
     return _busiest_area(mapped)
 
 
+def _abrowse_period_short(r) -> str:
+    """모바일 카드 · 데일리 노트의 짧은 기간 (웹 periodShort 와 같게): 열린 뒤 '~ 12.15', 열리기 전 '11.28 ~'."""
+    tags = _split(r.get("tags") or "") if not isinstance(r.get("tags"), list) else r.get("tags")
+    start, end = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+    if pdates.TAG_CHECK in tags or not start:
+        return "기간 확인 필요"
+    if start > TODAY:
+        return f"{start:%m.%d} ~"
+    return "상시" if not end or pdates.is_always(end) else f"~ {end:%m.%d}"
+
+
+def _abrowse_chip(r) -> str:
+    """포스터 왼쪽 아래 칩 하나 (이벤트 정보가 먼저, 없으면 굿즈 — _chips 의 카드 규칙과 같게). 없으면 빈 문자열."""
+    tags = [t for t in _split(r.get("tags") or "") if t not in (pdates.TAG_ALWAYS, pdates.TAG_CHECK)]
+    goods = _split(r.get("goods") or "")
+    if tags:
+        return f'<span class="bc-chip tag">{escape(tags[0])}</span>'
+    return f'<span class="bc-chip">{escape(goods[0])}</span>' if goods else ""
+
+
 def _poster_card(r, label: str, color: str = "green") -> str:
+    """리스트로 보기 카드 (A안 · 웹 BrowseCard 와 같게): 포스터(3:4, 민트 테두리) 위에 상태 · 지역 · 칩,
+    아래에 작품(Jua) · '매장 · 기간'. PC 에서 마우스를 올리면 캐릭터 · 주소 · 특전이 포스터 아래쪽에 겹쳐 보인다."""
+    one = lambda v: " ".join(str(v or "").split())
+    over = "".join(f"<span>{k} · {escape(v)}</span>" for k, v in (
+        ("캐릭터", one(r.get("characters"))), ("주소", one(r.get("address"))),
+        ("특전", " · ".join(_split(r.get("perks") or "")))) if v)
+    area = geo.area_name(str(r.get("address") or ""))
+    badge = (f'<span class="bc-area" style="background:{_area_colors(r.get("address"))[0]}">{escape(area)}</span>'
+             if area else "")
     return f"""
-<div class="pcard" style="background-image:url('{_poster_url(r.get("images"))}'), url('{images.DEFAULT_POSTER_URL}')">
-  {_area_badge(r.get("address"), cls="area")}
-  <span class="state {color}">{escape(label)}</span>
-  <div class="info">
-    <div class="t">{escape(str(r['work']))}</div>
-    <div class="s">{_mi("local_cafe")}{escape(str(r['cafe_name']))}</div>
-    <div class="d"><span class="d-long">{escape(_period(r, lambda d: f"{d:%m월 %d일}", show_raw=False))}</span><span class="d-short">{escape(_period(r, lambda d: f"{d:%m/%d}", show_raw=False))}</span></div>
-    <div class="chips short">{_chips(r)}</div>
-    <div class="more">{_card_more(r)}</div>
+<div class="bc">
+  <div class="bc-poster" style="background-image:url('{_poster_url(r.get("images"))}'), url('{images.DEFAULT_POSTER_URL}')">
+    <span class="bc-state {color}">{escape(label)}</span>{badge}
+    {f'<span class="bc-over">{over}</span>' if over else ""}{_abrowse_chip(r)}
+  </div>
+  <div class="bc-text">
+    <span class="t bc-title">{escape(str(r['work']))}</span>
+    <span class="bc-sub"><span class="bc-name">{escape(str(r['cafe_name']))}</span><span class="bc-date ab-pc"> · {escape(_period(r, lambda d: f"{d:%m.%d}", show_raw=False))}</span><span class="bc-date ab-m"> · {escape(_abrowse_period_short(r))}</span></span>
   </div>
 </div>"""
 
@@ -2230,7 +3003,7 @@ def _list_bar(count: int, wide: bool, note: str = "") -> None:
     with head:
         # 지도보기에서는 개수 제목을 두지 않는다 (리스트 전체보기에서만)
         if wide:
-            st.markdown(f"#### 팝업 카페 :green[**{count}**]곳", help=note or None)   # 숫자만 굵게
+            st.markdown(f"#### 팝업 카페 :green[**{count}곳**]", help=note or None)   # A안: 'N곳' 을 진한 민트로
     # 리스트 전체보기 ↔ 지도보기 전환은 정렬(최신순) 칸 위 오른쪽 끝의 아이콘 버튼 (_view_icon_button)
 
 
@@ -2244,16 +3017,7 @@ def _view_icon_button(wide: bool, active: int = 0, m_open: bool = False) -> None
                     " html:not(.aw-scrolled) body [data-testid=\"stElementContainer\"]:has(.upd:not(.warn)) { margin-top: -36px !important; padding-right: 52px; } }</style>",
                     unsafe_allow_html=True)
     if wide:
-        # 모바일 리스트 보기: 필터 아이콘을 '팝업 카페 N곳' 줄 오른쪽 위에, 글자 높이만큼 작게 (11/18 요청)
-        st.markdown("<style>@media (max-width: 640px) { html:not(.aw-scrolled) body .st-key-view_tools { margin-top: -70px !important; }"
-                    # '팝업 카페 N곳' ↔ 정렬 ↔ 카드 사이 여백 반으로 (11/18 요청)
-                    " .st-key-sort { margin-top: -31px !important; }"
-                    " [data-testid='stLayoutWrapper']:has(> .st-key-listtools) { margin-bottom: -13px !important; }"
-                    " html body .st-key-view_tools .st-key-m_filter_btn button { width: 30px !important; min-width: 30px !important;"
-                    "   height: 26px !important; border-radius: 8px !important; }"
-                    " html body .st-key-view_tools .st-key-m_filter_btn button span { font-size: 1rem !important; }"
-                    " html body .st-key-view_tools .st-key-m_filter_btn { width: 30px !important; min-width: 30px !important; flex: 0 0 30px !important; } }</style>",
-                    unsafe_allow_html=True)
+        pass      # 모바일 리스트 보기: 필터 버튼(44px)은 '팝업 카페 N곳' 줄 오른쪽 끝 (A_BROWSE_CSS, A-MList)
     else:
         # 모바일 지도 보기: 필터 아이콘은 뺐다 (11/18 요청)
         st.markdown("<style>@media (max-width: 640px) { html body .st-key-view_tools { display: none !important; } }</style>",
@@ -2313,23 +3077,39 @@ def _home_areas(rows: list[dict], n: int = 3) -> list[str]:
     return [a for a, _ in sorted(cnt.items(), key=lambda t: -t[1])[:n]]
 
 
+def _ahome_period(r: dict) -> str:
+    """카드 아래 기간 한 줄 (A안, 웹 FreshCard.shortPeriod): 열기 전이면 '11.28 ~', 열렸으면 '~ 12.20'."""
+    full = _period(r, lambda d: f"{d:%m.%d}", show_raw=False)
+    if full.startswith("기간 확인"):
+        return "기간 확인 필요"
+    start = pd.to_datetime(r["start_date"]).date()
+    if start > TODAY:
+        return f"{start:%m.%d} ~"
+    return "상시" if full.endswith("상시") else f"~ {pd.to_datetime(r['end_date']).date():%m.%d}"
+
+
+def _ahome_bg(url: str) -> str:
+    """포스터를 바탕 그림으로 (안 열리면 기본 포스터가 보이게 두 장을 겹친다)."""
+    return f"background-image:url(&quot;{url}&quot;), url(&quot;{images.DEFAULT_POSTER_URL}&quot;)"
+
+
 def _home_card(sec: str, r: dict, rank: int | None = None, badge: str = "", tall: bool = False) -> None:
-    """홈 포스터 카드: 포스터(순위 숫자 · 배지 · 북마크) · 이름 · 기간 · 지역/상태 칩. 누르면 상세."""
+    """홈 포스터 카드 (A안, 웹 FreshCard): 3:4 포스터(민트 테두리) 위에 상태(왼쪽 위) · 지역(오른쪽 위) · 북마크(오른쪽 아래),
+    아래 Jua 제목 + '장소 · 기간'. 누르면 상세. (rank · badge · tall 은 예전 모양의 것 — 이제 쓰지 않는다)"""
     eid = str(r["entry_id"])
     label, color, _ = _status(r)
     area = geo.area_name(str(r.get("address") or ""))
+    name = str(r.get("cafe_name") or "").strip()
+    chip = (f'<span class="ah-area" style="background:{_darken(_area_colors(r.get("address"))[0])}">{escape(area)}</span>'
+            if area else "")
     with st.container(key=f"card_h{sec}_{eid}"):
         st.markdown(
-            f'<div class="hc{" tall" if tall else ""}"><div class="hcp" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')">'
-            + (f'<span class="hcbadge{" res" if badge.startswith("사전예약") else " today" if badge == "오늘 종료" else ""}">{escape(badge)}</span>' if badge else "")
-            + (f'<span class="hcrank">{rank}</span>' if rank else "")
-            + f'</div><div class="hct">{escape(str(r.get("work") or ""))}</div>'
-            f'<div class="hcd">{escape(_period(r, lambda d: f"{d:%m.%d}", show_raw=False))}</div>'
-            f'<div class="hcchips">' + _area_chip(r.get("address"))
-            + f'<span class="st {color}">{escape(label)}</span></div></div>', unsafe_allow_html=True)
-        if st.button("자세히 보기", key=f"open_h{sec}_{eid}", width="stretch"):
-            st.session_state.update(selected=eid, scroll_top=True)
-            st.rerun()
+            f'<div class="ah-pc"><div class="ah-pc-pic" style="{_ahome_bg(_poster_url(r.get("images")))}">'
+            f'<span class="ah-st {color}">{escape(label)}</span>{chip}</div>'
+            f'<div class="ah-pc-t">{escape(str(r.get("work") or ""))}</div>'
+            f'<div class="ah-pc-m"><span class="ah-pco">{escape(name or area)}</span><span class="ah-mo">{escape(area or name)}</span>'
+            f' · {escape(_ahome_period(r))}</div></div>', unsafe_allow_html=True)
+        st.button("자세히 보기", key=f"open_h{sec}_{eid}", width="stretch", on_click=_story_open, args=(eid,))
         _heart(eid, f"h{sec}")
 
 
@@ -2378,70 +3158,139 @@ WEEKDAYS = "월화수목금토일"
 
 def _home_week(df: pd.DataFrame) -> None:
     """곧 끝나는 팝업 (11/20 요청, 예전 '이번 주' 월~일): 어제부터 7일 — 금요일이면 목 ~ 다음 주 수 (웹 WeekCalendar 와 같음).
-    칸 머리: 요일 · (오늘) · 그날 끝나는 팝업 수. 어제 칸은 이미 끝난 팝업이라 흐리게."""
+    A안 모양: 7칸(오늘은 연민트, 지난 날은 흐리게), 칸 머리 '어제 11.24' · '오늘 11.25' · '목 11.26' + 'N곳',
+    칸 안에 작은 포스터 + 이름 줄. 모바일은 팝업 하나에 한 줄(날짜 · 포스터 · 이름 · 지역), 끝나는 팝업이 없는 날은 줄이 없다."""
     first = TODAY - timedelta(days=1)
     rows = df.to_dict("records")
-    with st.container(horizontal=True, key="home_week"):
-        for i in range(7):
-            day = first + timedelta(days=i)
-            ends = sorted([r for r in rows if pd.to_datetime(r["end_date"]).date() == day
-                           and pd.to_datetime(r["start_date"]).date() <= day], key=lambda r: str(r.get("work") or ""))
+    days = []
+    for i in range(7):
+        day = first + timedelta(days=i)
+        days.append((day, sorted([r for r in rows if pd.to_datetime(r["end_date"]).date() == day
+                                  and pd.to_datetime(r["start_date"]).date() <= day], key=lambda r: str(r.get("work") or ""))))
+    with st.container(horizontal=True, key="ah_week"):
+        for i, (day, ends) in enumerate(days):
             cls = "today" if day == TODAY else ("past" if day < TODAY else "")
-            with st.container(key=f"wk_{i}"):
-                st.markdown(f'<div class="wkh {cls}"><b>{WEEKDAYS[day.weekday()]}{" · 오늘" if day == TODAY else ""}</b>'
-                            f'<span class="wkd">{day.month}.{day.day}</span><span class="wkn">{len(ends)}</span></div>',
-                            unsafe_allow_html=True)
-                # 칸이 너무 길어지지 않게 요일마다 3곳까지, 나머지는 '+N건 더보기' 를 누르면 그 칸에서 펼친다 (11/18 요청)
+            name = "오늘" if day == TODAY else ("어제" if day == first else WEEKDAYS[day.weekday()])
+            when = f"{day:%m.%d}"
+            with st.container(key=f"ahwk_{i}"):
+                st.markdown(f'<div class="ah-wk-h {cls}{"" if ends else " none"}"><span>{name} {when}</span>'
+                            + (f'<span class="ah-wk-n">{len(ends)}곳</span>' if ends else "") + '</div>', unsafe_allow_html=True)
+                # 칸이 너무 길어지지 않게 하루 WEEK_MAX 곳까지, 나머지는 '+N건 더보기' 를 누르면 그 칸에서 펼친다 (11/18 요청)
                 opened = bool(st.session_state.get(f"wk_open_{i}"))
                 for r in ends if opened else ends[:WEEK_MAX]:
-                    d = (day - TODAY).days
-                    _home_card("w", r, badge="오늘 종료" if d == 0 else ("종료" if d < 0 else f"D-{d}"), tall=True)
+                    eid = str(r["entry_id"])
+                    sub = geo.area_name(str(r.get("address") or "")) or str(r.get("cafe_name") or "")
+                    with st.container(key=f"card_hw_{eid}"):
+                        st.markdown(
+                            f'<div class="ah-wk-i {cls}"><span class="ah-wk-d">{name}<br>{when}</span>'
+                            f'<span class="ah-wk-p" style="{_ahome_bg(_poster_url(r.get("images")))}"></span>'
+                            f'<span class="ah-wk-b"><span class="ah-wk-t">{escape(str(r.get("work") or ""))}</span>'
+                            f'<span class="ah-wk-s">{escape(sub)}</span></span></div>', unsafe_allow_html=True)
+                        st.button("자세히 보기", key=f"open_hw_{eid}", width="stretch", on_click=_story_open, args=(eid,))
                 if len(ends) > WEEK_MAX and not opened:
                     st.button(f"+{len(ends) - WEEK_MAX}건 더보기", key=f"wk_more_{i}", icon=":material/expand_more:",
                               on_click=lambda i=i: st.session_state.update({f"wk_open_{i}": True}))
+    if not any(ends for _, ends in days):          # 모바일에서만 보인다 (PC 는 빈 칸 7개가 그대로 달력)
+        st.markdown('<div class="home-empty ah-wk-none">이번 주에 끝나는 팝업이 없어요.</div>', unsafe_allow_html=True)
 
 
 RV_KIND_CLASS = {"다녀온 후기": "visit", "기대평": "hope", "기타": "etc"}     # 후기 모음 카드의 종류 칩 (11/18 요청)
+AH_RV_STEP, AH_RV_MAX = 6, 30        # 후기 모음: 처음 6개, '후기 더보기' 로 6개씩 30개까지 (웹 ReviewWall 과 같음)
+AH_PRE_MAX = 8                       # 사전예약 타임라인: 빨리 여는 8곳까지 (웹 ReserveSection 과 같음)
 
 
-def _home_reviews(df: pd.DataFrame, limit: int = 12) -> None:
-    """꿀팁 가득! 실시간 후기 모음 (11/18 요청): 최신 리뷰 순, 사진 있는 리뷰가 먼저. 답글은 빼고, 지금 있는 팝업 것만.
-    카드: 팝업(포스터 · 작품 · 상태 · 지역) + 리뷰(사진 · 닉네임 · 날짜 · 별점 · 본문 · 사진 2장). 누르면 그 팝업 상세."""
+def _ahome_stamp(lv: int) -> str:
+    """리뷰 닉네임 옆 랭크 칩 (A안 후기 도장, 웹 RankChip): 20px 도장(색 테두리 + 마스코트) + 'Lv.n' 알약. 도장이 없으면 빈 문자열."""
+    from common import stamp
+    t = next((x for x in stamp.TIERS if x.lv == lv), None)
+    if not t:
+        return ""
+    return (f'<span class="rk-chip" style="background:{t.fill}"><span class="rk-stamp" style="border-color:{t.ring}">'
+            f'<img src="app/static/mascot.png" alt=""></span><span style="color:{t.fg}">Lv.{t.lv}</span></span>')
+
+
+def _ahome_ago(stamp_: str) -> str:
+    """'방금 전' · '10분 전' · '3시간 전' · '2일 전', 일주일이 넘으면 날짜 (웹 ReviewWall.whenText 와 같음)."""
+    try:
+        at = datetime.fromisoformat(str(stamp_)).astimezone()
+    except ValueError:
+        return ""
+    mins = int((datetime.now().astimezone() - at).total_seconds() // 60)
+    if mins < 1:
+        return "방금 전"
+    if mins < 60:
+        return f"{mins}분 전"
+    if mins < 60 * 24:
+        return f"{mins // 60}시간 전"
+    if mins < 60 * 24 * 7:
+        return f"{mins // (60 * 24)}일 전"
+    return f"{at:%m.%d}"
+
+
+def _ahome_rv_reset() -> None:
+    st.session_state["ah_rv_n"] = AH_RV_STEP       # 종류를 바꾸면 다시 처음 6개부터
+
+
+def _home_reviews(df: pd.DataFrame, limit: int = AH_RV_MAX) -> None:
+    """꿀팁 가득! 실시간 후기 모음 (11/18 요청): 사진 있는 리뷰 먼저 → 최신순. 답글은 빼고, 지금 있는 팝업 것만.
+    A안 모양 (웹 ReviewWall): 높이가 제각각인 3단(모바일 2단) 카드 — 사진(+N) · 종류 배지 · 아바타 · 닉네임 · 랭크 칩 · 시간 ·
+    별점 · 본문 · 아래 팝업 줄(누르면 그 팝업 상세). 제목 오른쪽 칩은 리뷰 종류, '후기 더보기' 로 6개씩 더."""
+    from common import stamp
     by_id = {str(r["entry_id"]): r for r in df.to_dict("records")}
-    rows = [r for r in reviews.current_rows() if not str(r.get("parent_id") or "") and str(r.get("cafe_id")) in by_id
+    cur = reviews.current_rows()
+    rows = [r for r in cur if not str(r.get("parent_id") or "") and str(r.get("cafe_id")) in by_id
             and str(r.get("body") or "").strip()]
     rows.sort(key=lambda r: (bool(images.paths(r.get("images"))), str(r.get("updated_at") or "")), reverse=True)
     rows = rows[:limit]
+    kind = _home_head("꿀팁 가득! 실시간 후기 모음", "forum", key="rv",
+                      pills=review.KINDS if rows else None, pill_label="후기 종류", on_pick=_ahome_rv_reset)
     if not rows:
         st.markdown('<div class="home-empty">아직 후기가 없어요. 다녀온 팝업에 첫 후기를 남겨 보세요.</div>', unsafe_allow_html=True)
         return
-    with st.container(horizontal=True, key="home_row_rv"):
-        for rv in rows:
+    shown = rows if kind == "전체" else [r for r in rows if str(r.get("kind") or "") == kind]
+    if not shown:
+        st.markdown(f'<div class="home-empty">아직 \'{escape(kind)}\' 후기가 없어요.</div>', unsafe_allow_html=True)
+        return
+    n = int(st.session_state.get("ah_rv_n", AH_RV_STEP))
+    table = stamp.counts(cur)
+    with st.container(key="ah_wall"):
+        for rv in shown[:n]:
             pop = by_id[str(rv["cafe_id"])]
             label, color, _ = _status(pop)
-            area = geo.area_name(str(pop.get("address") or ""))
             who, pic = _author(rv.get("nickname"))
-            pics = images.paths(rv.get("images"))[:2]
+            pics = images.paths(rv.get("images"))
+            photo = ""
+            if pics:
+                photo = (f'<div class="ah-rv-ph"><img src="{escape(images.url(pics[0]))}" alt="후기 사진" loading="lazy" '
+                         f'referrerpolicy="no-referrer">'
+                         + (f'<span class="ah-rv-cnt">+{len(pics) - 1}</span>' if len(pics) > 1 else "") + '</div>')
             stars = ""
             if rv.get("rating") not in (None, ""):
                 try:
-                    n = max(0, min(5, int(float(rv["rating"]))))
-                    stars = (f'<div class="rvs">{"★" * n}<span class="off">{"★" * (5 - n)}</span>'
-                             f'<b>{n:.1f}</b><span class="of"> / 5.0</span></div>')
+                    k = max(0, min(5, round(float(rv["rating"]))))
+                    stars = f'<span class="ah-rv-stars">{"★" * k}{"☆" * (5 - k)}</span>' if k else ""
                 except (TypeError, ValueError):
                     stars = ""
-            photos = "".join(f'<div class="rvp" style="background-image:url(&quot;{images.url(x)}&quot;)"></div>' for x in pics)
+            body = escape(str(rv.get("body") or "").strip()).replace("\r", "").replace("\n", "<br>")
             with st.container(key=f"card_hv_{rv['entry_id']}"):
                 st.markdown(
-                    f'<div class="rvc"><div class="rvtop"><div class="rvth" style="background-image:url(&quot;{_poster_url(pop.get("images"))}&quot;)"></div>'
-                    f'<div class="rvtt"><div class="rvw">{escape(str(pop.get("work") or ""))}</div><div class="rvchips">'
-                    f'<span class="st {color}">{escape(label)}</span>' + _area_chip(pop.get("address"))
-                    + '</div></div></div><div class="rvbox"><div class="rvme">' + _avatar_img(pic, 34, "rv-av")
-                    + f'<div class="rvwho"><b>{escape(_nick_only(who))}</b>{stars}</div><span class="rvdate">{escape(_when(rv.get("updated_at")))}</span></div>'
-                    + (f'<span class="rvkind {RV_KIND_CLASS.get(str(rv.get("kind")), "etc")}">{escape(str(rv.get("kind")))}</span>' if rv.get("kind") else "")
-                    + f'<div class="rvbody">{escape(str(rv.get("body") or ""))}</div>'
-                    + (f'<div class="rvpics">{photos}</div>' if photos else "") + '</div></div>', unsafe_allow_html=True)
-                _open_btn(f"open_hv_{rv['entry_id']}", str(rv["cafe_id"]))
+                    f'<div class="ah-rv">{photo}<div class="ah-rv-in">'
+                    + (f'<span class="ah-rv-kind {RV_KIND_CLASS.get(str(rv.get("kind")), "etc")}">{escape(str(rv.get("kind")))}</span>'
+                       if rv.get("kind") else "")
+                    + '<div class="ah-rv-who">' + _avatar_img(pic, 26, "ah-rv-av") + f'<strong>{escape(who)}</strong>'
+                    + _ahome_stamp(stamp.lv_of(str(rv.get("nickname") or ""), table))
+                    + f'<span class="ah-rv-time">{escape(_ahome_ago(rv.get("updated_at")))}</span></div>{stars}'
+                    f'<div class="ah-rv-body">{body}</div>'
+                    f'<div class="ah-rv-pop"><span class="ah-rv-pp" style="{_ahome_bg(_poster_url(pop.get("images")))}"></span>'
+                    f'<span class="ah-rv-pn">{escape(str(pop.get("work") or pop.get("cafe_name") or ""))}</span>'
+                    f'<span class="ah-st {color}">{escape(label)}</span></div></div></div>', unsafe_allow_html=True)
+                # 아래 팝업 줄만 덮는 투명 버튼 (A_HOME_CSS) → 그 팝업 상세
+                st.button("이 팝업 자세히 보기", key=f"open_hv_{rv['entry_id']}", width="stretch",
+                          on_click=_story_open, args=(str(rv["cafe_id"]),))
+    if len(shown) > n:
+        with st.container(horizontal=True, horizontal_alignment="center", key="ah_rv_morebox"):
+            st.button("후기 더보기", key="ah_rv_more",
+                      on_click=lambda: st.session_state.update(ah_rv_n=n + AH_RV_STEP))
 
 
 def _home_more(sort: str, reserve: bool = False) -> None:
@@ -2449,32 +3298,75 @@ def _home_more(sort: str, reserve: bool = False) -> None:
     st.session_state.update(home_view=False, list_only=True, sort=sort, selected=None, scroll_top=True, res_only=reserve)
 
 
-def _home_head(title: str, icon: str, more_sort: str = "", key: str = "", reserve: bool = False) -> None:
+def _home_head(title: str, icon: str, more_sort: str = "", key: str = "", reserve: bool = False,
+               pills: list[str] | None = None, pill_label: str = "지역", on_pick=None) -> str:
+    """섹션 제목 줄 (A안, 웹 SecHead): 왼쪽 포인트색 아이콘 + 제목, 오른쪽에 칩(pills) 또는 '더보기'. 고른 칩을 돌려준다."""
+    pick = "전체"
     with st.container(horizontal=True, vertical_alignment="center", key=f"hh_{key}"):
-        st.markdown(f'<div class="home-h">{_mi(icon)}{escape(title)}</div>', unsafe_allow_html=True)
-        if more_sort:
+        st.markdown(f'<div class="home-h ah-h">{_mi(icon)}{escape(title)}</div>', unsafe_allow_html=True)
+        if pills:
+            pick = _home_area_pills(key, pills, label=pill_label, on_pick=on_pick)
+        elif more_sort:
             st.button("더보기", key=f"hmore_{key}", type="tertiary", on_click=_home_more, args=(more_sort, reserve))
+    return pick
 
 
-def _home_area_pills(key: str, areas: list[str], rows: list[dict] | None = None) -> str:
-    """지역 알약 (전체 + 팝업 많은 지역). 지역마다 색 (11/20 요청): 평소엔 시 색 테두리 · 글자, 고르면 진한 시 색 바탕 + 흰 글자
-    (웹 NewSection areaPill 과 같게). st.pills 의 단추는 순서대로 놓여서 n번째 단추에 색을 준다."""
-    pick = st.pills("지역", ["전체"] + areas, default="전체", key=f"hp_{key}", label_visibility="collapsed")
-    css = []
-    for i, a in enumerate(["전체"] + areas, start=1):    # 1번째 '전체' 는 포인트 색 (--accent)
-        addr = next((r.get("address") for r in rows or [] if geo.area_name(str(r.get("address") or "")) == a), "")
-        c = "#14b8a6" if i == 1 else _area_colors(addr)[0]
-        sel = f".st-key-hp_{key} button:nth-child({i})"
-        css.append(f"{sel}{{border-color:{c} !important;color:{c} !important}} {sel} *{{color:{c} !important}}"
-                   f"{sel}[aria-checked=\"true\"]{{background:{c} !important;border-color:{c} !important}}"
-                   f"{sel}[aria-checked=\"true\"] *{{color:#fff !important}}")
-    if css:
-        st.markdown("<style>" + "".join(css) + "</style>", unsafe_allow_html=True)
+def _home_area_pills(key: str, areas: list[str], rows: list[dict] | None = None, label: str = "지역", on_pick=None) -> str:
+    """제목 오른쪽 칩 (전체 + 팝업 많은 지역 / 후기 종류). A안: 모두 같은 모양 — 고른 칩만 민트 테두리 + 연민트 바탕
+    (웹 .ah-chip. 예전의 지역마다 다른 색은 뺐다). 모양은 A_HOME_CSS 의 .st-key-hp_*. (rows 는 예전 색칠용 — 이제 쓰지 않는다)"""
+    pick = st.pills(label, ["전체"] + list(areas), default="전체", key=f"hp_{key}", label_visibility="collapsed",
+                    on_change=on_pick)
     return pick or "전체"
 
 
+def _ahome_reserve(res: list[dict]) -> None:
+    """사전예약 팝업 (A안, 보라 #6c5ce7 · 웹 ReserveSection): 왼쪽 요약 카드 + 오른쪽 타임라인 (모바일은 세로 타임라인).
+    데이터에 '예약이 열리는 시각' · '예약하는 곳' 칸이 없어서 타임라인 날짜는 팝업 오픈일이다.
+    알림 버튼은 새 알림을 만들지 않고 기존 북마크에 잇는다 — 북마크한 팝업은 오픈 전에 종 알림이 온다 (손님은 로그인으로)."""
+    me, mine, _ = _fav_state()
+    with st.container(horizontal=True, key="ah_pre"):
+        with st.container(key="ah_pre_sum"):
+            st.markdown(
+                f'<div class="ah-pre-sum"><div class="home-h ah-h">{_mi("event_available")}사전예약 팝업</div>'
+                '<div class="ah-pre-p">예약해야 들어갈 수 있는 팝업이에요. <span>팝업이 열리는 날 순서로 모았어요.</span></div>'
+                f'<div class="ah-pre-n">{len(res)}<span> 곳 예약 대기</span></div></div>', unsafe_allow_html=True)
+            st.button("사전예약 팝업만 보기", key="ah_pre_all", width="stretch", on_click=_home_more, args=("오픈 임박순", True))
+        if not res:
+            st.markdown('<div class="home-empty ah-pre-none">곧 열리는 팝업 중 사전예약을 받는 곳이 없어요.</div>',
+                        unsafe_allow_html=True)
+            return
+        with st.container(horizontal=True, key="home_row_res"):
+            for i, r in enumerate(res[:AH_PRE_MAX]):
+                eid = str(r["entry_id"])
+                sd = pd.to_datetime(r["start_date"]).date()
+                badge = f"사전예약 D-{(sd - TODAY).days}"
+                place = str(r.get("cafe_name") or "").strip() or geo.area_name(str(r.get("address") or ""))
+                on = eid in mine
+                with st.container(key=f"ah_pre_i_{eid}"):
+                    st.markdown(f'<div class="ah-pre-top{" first" if i == 0 else ""}"><span class="ah-pre-date">{sd:%m.%d} '
+                                f'({WEEKDAYS[sd.weekday()]}) 팝업 오픈</span><span class="ah-pre-dot"></span></div>',
+                                unsafe_allow_html=True)
+                    with st.container(key=f"ah_pre_b_{eid}"):
+                        with st.container(key=f"card_hp_{eid}"):
+                            st.markdown(
+                                f'<div class="ah-pre-card"><div class="ah-pre-pic" style="{_ahome_bg(_poster_url(r.get("images")))}">'
+                                f'<span class="ah-pre-badge">{badge}</span></div><div class="ah-pre-txt">'
+                                f'<span class="ah-pre-badge m">{badge}</span>'
+                                f'<span class="ah-pre-t">{escape(str(r.get("work") or ""))}</span>'
+                                f'<span class="ah-pre-m">{escape(place)} · {escape(_period(r, lambda d: f"{d:%m.%d}", show_raw=False))}</span>'
+                                '</div></div>', unsafe_allow_html=True)
+                            st.button("자세히 보기", key=f"open_hp_{eid}", width="stretch", on_click=_story_open, args=(eid,))
+                        st.button("오픈 알림 받는 중" if on else "북마크하고 오픈 알림 받기",
+                                  icon=":material/check:" if on else ":material/notifications:",
+                                  key=f"ahal_{'on' if on else 'off'}_{eid}", width="stretch",
+                                  on_click=_toggle_fav, args=(eid, me, not on))
+
+
 def render_home(df: pd.DataFrame) -> None:
-    """홈 (11/18 요청): 내가 관심있는 작품 · 실시간 인기 급상승 랭킹 · 따끈따끈 신규 등록 · 곧 끝나는 · 사전예약 팝업."""
+    """홈 (11/18 요청 · 11/25 A안 모양): 북마크 팝업(손님은 특전 있는 작품들) · 실시간 인기 급상승 랭킹 · 따끈따끈 신규 등록 ·
+    곧 끝나는 · 사전예약 팝업 · 후기 모음. 섹션마다 레이아웃이 다르다 (docs/design/handoff A-Home · A-Mobile, 웹 app/page.tsx).
+    실시간 랭킹은 사용자 요청으로 예전 모양 · 동작 그대로 (_home_slide · _home_rank_rows 와 HOME_CSS 의 그 규칙은 고치지 않는다)."""
+    st.markdown(A_HOME_CSS, unsafe_allow_html=True)      # HOME_CSS · STORY_CSS (page_map 에서 먼저 나감) 뒤에 나가 덮는다
     live = _live_rows(df)
     areas = _home_areas(live)
     by_area = lambda rows, a: rows if a == "전체" else [r for r in rows if geo.area_name(str(r.get("address") or "")) == a]
@@ -2492,34 +3384,35 @@ def render_home(df: pd.DataFrame) -> None:
             with lst, st.container(key="home_ranklist"):
                 _home_rank_rows(top)
 
-        # 따끈따끈 신규 등록 (먼저 등록한 시각이 늦은 순)
-        _home_head("따끈따끈 신규 등록 팝업", "fiber_new", more_sort="최신순", key="new")
-        a = _home_area_pills("new", areas, live)
-        made = _created_map()
-        new = sorted(by_area(live, a), key=lambda r: made.get(str(r["entry_id"]), ""), reverse=True)[:12]
-        with st.container(horizontal=True, key="home_row_new"):
-            for r in new:
-                _home_card("n", r)
+        # 따끈따끈 신규 등록 (먼저 등록한 시각이 늦은 순): 제목 오른쪽 지역 칩, 196px 포스터 카드 줄, 끝에 점선 '더보기' 카드
+        with st.container(key="ahs_new"):
+            a = _home_head("따끈따끈 신규 등록 팝업", "auto_awesome", key="new", pills=areas)
+            made = _created_map()
+            new = sorted(by_area(live, a), key=lambda r: made.get(str(r["entry_id"]), ""), reverse=True)[:12]
+            if new:
+                with st.container(horizontal=True, key="home_row_new"):
+                    for r in new:
+                        _home_card("n", r)
+                    with st.container(key="card_hx_new"):
+                        st.markdown('<div class="ah-morecard">더보기<span>리스트 최신순으로</span></div>', unsafe_allow_html=True)
+                        st.button("신규 등록 팝업 더보기", key="open_hx_new", width="stretch", on_click=_home_more, args=("최신순",))
+            else:
+                st.markdown('<div class="home-empty">이 지역에 새로 등록된 팝업이 없어요.</div>', unsafe_allow_html=True)
 
         # 곧 끝나는 팝업: 어제부터 7일 칸 (11/20 요청, 예전 '이번 주에 끝나는 팝업' 월~일). 그날 끝나는 팝업을 그 날짜 칸에, 오늘 칸은 강조
-        _home_head("곧 끝나는 팝업", "hourglass_bottom", more_sort="종료 임박순", key="week")
-        _home_week(df)
+        with st.container(key="ahs_week"):
+            _home_head("곧 끝나는 팝업", "schedule", more_sort="종료 임박순", key="week")
+            _home_week(df)
 
         # 사전예약 팝업 (태그·특전·소개에 '사전 예약')
         # 아직 열기 전(오픈 예정)인 팝업만 — 이미 진행 중인 건 뺀다 (11/18 요청). 빨리 여는 순
         res = sorted([r for r in live if _is_reserve(r) and _status(r)[2] == 1], key=lambda r: str(r.get("start_date")))
-        _home_head("사전예약 팝업", "event_available", more_sort="오픈 임박순", key="res", reserve=True)
-        if res:
-            with st.container(horizontal=True, key="home_row_res"):
-                for r in res:
-                    sd = pd.to_datetime(r["start_date"]).date()
-                    _home_card("p", r, badge=f"사전예약 D-{(sd - TODAY).days}")
-        else:
-            st.markdown('<div class="home-empty">곧 열리는 팝업 중 사전예약을 받는 곳이 없어요.</div>', unsafe_allow_html=True)
+        with st.container(key="ahs_res"):
+            _ahome_reserve(res)
 
         # 꿀팁 가득! 실시간 후기 모음 (11/18 요청)
-        _home_head("꿀팁 가득! 실시간 후기 모음", "rate_review", key="rv")
-        _home_reviews(df)
+        with st.container(key="ahs_rv"):
+            _home_reviews(df)
 
 
 HOME_CSS = """
@@ -2691,6 +3584,406 @@ HOME_CSS = """
 """
 
 
+# A안 홈 (11/25, docs/design/handoff/screens/A-Home · A-Mobile · 웹 web/app/a-home.css 의 값을 그대로 옮김).
+# render_home 맨 앞에서 내보내 HOME_CSS · STORY_CSS 를 덮는다 (그래서 선택자를 html body … 로 세게).
+# 실시간 랭킹(.hb · .hl · .hls-wrap · .aw-dots · .st-key-home_banner · .st-key-home_ranklist)은 사용자 요청으로 그대로 —
+# 여기에 그 선택자를 쓰지 않는다. 화살표(.aw-arrow)도 신규 · 사전예약 줄 것만 바꾼다.
+A_HOME_CSS = """
+<style>
+/* ---------- 틀: 섹션 사이 44px (모바일 28px), 섹션 안 14px (모바일 10px) ---------- */
+html body .st-key-home { gap: 44px !important; padding-top: 4px;
+  --ah-ink: #26302d; --ah-soft: #5f6b68; --ah-line: #e3e9e7; --ah-surface: #f6f8f7; --ah-mint-line: #9eddcc;
+  --ah-purple: #6c5ce7; --ah-purple-deep: #5b3fae; --ah-purple-soft: #f1ecff; --ah-purple-line: #ddd3fb; }
+html body .st-key-home [class*="st-key-ahs_"], html body .st-key-home .st-key-stories { gap: 14px !important; margin: 0 !important; min-width: 0; }
+/* 마크다운 칸의 아래 음수 여백(-1rem)을 없애 조각 높이가 보이는 그대로 잡히게 (내 섹션 안에서만) */
+html body .st-key-home [class*="st-key-ahs_"] [data-testid="stMarkdownContainer"],
+html body .st-key-home .st-key-stories [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
+/* 섹션 제목 줄: 포인트색 아이콘 + 19px/800, 오른쪽에 칩 · 더보기 */
+html body .st-key-home [class*="st-key-hh_"] { margin: 0 !important; min-height: 0 !important; gap: 12px !important;
+  flex-wrap: wrap !important; justify-content: space-between !important; align-items: center !important; }
+html body .st-key-home .ah-h { margin: 0; font-size: 19px; font-weight: 800; line-height: 1.4; color: var(--ah-ink);
+  display: flex; align-items: center; gap: 8px; }
+html body .st-key-home .ah-h .mi { color: var(--accent); font-size: 22px; margin: 0; vertical-align: 0; }
+html body .st-key-home .ah-h .story-head { font-size: 19px; font-weight: 800; line-height: 1.4 !important; color: var(--ah-ink); }
+html body .st-key-home [class*="st-key-hmore_"] button { min-height: 0 !important; padding: 0 !important; }
+html body .st-key-home [class*="st-key-hmore_"] button p { font-size: 13px !important; color: var(--ah-soft) !important; }
+html body .st-key-home [class*="st-key-hmore_"] button:hover p { color: var(--accent-deep) !important; }
+html body .st-key-home .home-empty { font-size: 14px; color: var(--ah-soft); padding: 6px 2px; }
+/* 칩 (지역 · 후기 종류): 고른 것은 민트 테두리 + 연민트 바탕 */
+html body .st-key-home [class*="st-key-hp_"] { margin: 0 !important; }
+html body .st-key-home [class*="st-key-hp_"] [role="radiogroup"] { gap: 6px !important; flex-wrap: wrap; }
+html body .st-key-home [class*="st-key-hp_"] button { min-height: 0 !important; height: auto !important; padding: 6px 14px !important;
+  border-radius: 999px !important; border: 1px solid var(--ah-line) !important; background: #fff !important;
+  color: var(--ah-ink) !important; white-space: nowrap; }
+html body .st-key-home [class*="st-key-hp_"] button p, html body .st-key-home [class*="st-key-hp_"] button * {
+  font-size: 13px !important; font-weight: 500 !important; line-height: 1.5 !important; color: var(--ah-ink) !important; }
+html body .st-key-home [class*="st-key-hp_"] button:hover { border-color: var(--accent) !important; }
+html body .st-key-home [class*="st-key-hp_"] button[aria-checked="true"] { border-color: var(--accent) !important;
+  background: var(--accent-soft) !important; }
+html body .st-key-home [class*="st-key-hp_"] button[aria-checked="true"] p,
+html body .st-key-home [class*="st-key-hp_"] button[aria-checked="true"] * { color: #0b5e57 !important; font-weight: 700 !important; }
+/* 상태 배지 (진행 중 · D-n · 마감임박 · 종료) */
+.ah-st { font-size: 12px; font-weight: 800; line-height: 1.5; padding: 2px 10px; border-radius: 999px; white-space: nowrap;
+  color: #0b5e57; background: #e6fbf7; }
+.ah-st.blue { color: #2c5bc5; background: #eaf0fc; }
+.ah-st.red { color: #c0313f; background: #fdecee; }
+.ah-st.gray { color: #5f6b68; background: #eef2f1; }
+
+/* ---------- 북마크 팝업 / 특전 있는 작품들: 72px 동그라미 줄, 배지는 위쪽 ---------- */
+html body .st-key-home .st-key-story_row:has(.story.hot) { gap: 14px !important; padding: 8px 2px 4px !important; }
+html body .st-key-home .story.hot { padding-bottom: 0; gap: 6px; }
+html body .st-key-home .story.hot .ring {
+  width: 72px; height: 72px; padding: 3px; background: var(--accent); }
+html body .st-key-home .story.hot .pic { border: 3px solid #fff; }
+html body .st-key-home .story.hot .rg { top: -8px; bottom: auto; font-size: 10px; font-weight: 800; line-height: 1.5; color: #fff;
+  background: var(--accent-deep); padding: 1px 7px; border: 1.5px solid #fff; }
+html body .st-key-home .story.hot .nm { margin: 0; width: auto; max-width: 84px;
+  font-size: 12.5px; font-weight: 700; line-height: 1.4; white-space: nowrap; color: var(--ah-ink); }
+/* (11/25 요청) 회원 북마크 줄은 예전 모양 그대로 — 최애 추가하기 · 지역 배지 규칙은 STORY_CSS */
+
+html body .st-key-home .story-empty { font-size: 13px; color: var(--ah-soft); padding-top: 26px; }
+
+/* ---------- 따끈따끈 신규 등록 팝업: 196px 포스터 카드 줄 ---------- */
+html body .st-key-home .st-key-home_row_new { gap: 16px !important; padding: 2px 2px 6px !important; scrollbar-width: none;
+  align-items: flex-start !important; }
+html body .st-key-home .st-key-home_row_new::-webkit-scrollbar { display: none; }
+html body .st-key-home .st-key-home_row_new > div { flex: 0 0 196px !important; width: 196px !important; min-width: 196px !important; }
+.ah-pc { display: flex; flex-direction: column; gap: 10px; color: var(--ah-ink); min-width: 0; }
+.ah-pc-pic { position: relative; aspect-ratio: 3 / 4; border: 2.5px solid var(--ah-mint-line); border-radius: 12px; box-sizing: border-box;
+  background-color: #eef3f1; background-size: cover; background-position: center; transition: border-color .15s ease; }
+[class*="st-key-card_hn_"]:hover .ah-pc-pic { border-color: var(--accent); }
+.ah-pc-pic .ah-st { position: absolute; left: 10px; top: 10px; }
+.ah-area { position: absolute; right: 10px; top: 10px; font-size: 12px; font-weight: 800; line-height: 1.5; color: #fff;
+  border: 1.5px solid rgba(255,255,255,.85); padding: 1px 9px; border-radius: 999px; white-space: nowrap; }
+.ah-pc-t { font-family: "Jua", sans-serif; font-size: 17px; line-height: 1.25; color: #0f6b5c; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ah-pc-m { margin-top: -6px; font-size: 13px; line-height: 1.5; color: var(--ah-soft); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.ah-mo { display: none; }
+/* 북마크 버튼: 포스터 오른쪽 아래 (포스터 높이 = 폭 × 4/3) */
+html body .st-key-home .st-key-home_row_new [class*="st-key-fav_"] { top: calc(196px * 4 / 3 - 44px) !important; right: 10px !important;
+  bottom: auto !important; }
+html body .st-key-home .st-key-home_row_new [class*="st-key-fav_"] button { width: 34px; height: 34px; border-radius: 8px !important;
+  box-shadow: none; }
+html body .st-key-home .st-key-home_row_new [class*="st-key-fav_off_"] button { background: rgba(255,255,255,.75) !important; }
+html body .st-key-home .st-key-home_row_new [class*="st-key-fav_off_"] button:hover { background: #fff !important;
+  box-shadow: 0 0 0 2px var(--accent); }
+html body .st-key-home .st-key-home_row_new [class*="st-key-fav_"] button span { font-size: 18px !important; }
+/* 맨 끝 점선 '더보기' 카드 */
+.ah-morecard { aspect-ratio: 3 / 4; border-radius: 12px; border: 2px dashed var(--ah-mint-line); box-sizing: border-box; display: flex;
+  flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #0f6b5c; font-size: 15px; font-weight: 800; }
+.ah-morecard span { font-size: 12.5px; font-weight: 500; color: var(--ah-soft); }
+.st-key-card_hx_new:hover .ah-morecard { border-color: var(--accent); background: var(--accent-soft); }
+/* 넘기기 버튼: 44px 흰 동그라미 (신규 · 사전예약 줄만 — 랭킹 배너의 버튼은 그대로) */
+html body .st-key-home .st-key-ahs_new .aw-arrow, html body .st-key-home .st-key-ahs_res .aw-arrow { top: 120px !important;
+  width: 44px; height: 44px; border: 0; background: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.14); color: var(--ah-ink);
+  font-size: 0; line-height: 0; align-items: center; justify-content: center; }
+html body .st-key-home .st-key-ahs_res .aw-arrow { top: 150px !important; }
+html body .st-key-home .st-key-ahs_new .aw-arrow.show, html body .st-key-home .st-key-ahs_res .aw-arrow.show { display: flex; }
+html body .st-key-home .st-key-ahs_new .aw-arrow::before, html body .st-key-home .st-key-ahs_res .aw-arrow::before { content: "";
+  width: 9px; height: 9px; border-top: 2.4px solid currentColor; border-right: 2.4px solid currentColor; border-radius: 1px;
+  transform: translateX(-2px) rotate(45deg); }
+html body .st-key-home .st-key-ahs_new .aw-arrow.l::before, html body .st-key-home .st-key-ahs_res .aw-arrow.l::before {
+  transform: translateX(2px) rotate(-135deg); }
+html body .st-key-home .st-key-ahs_new .aw-arrow.l, html body .st-key-home .st-key-ahs_res .aw-arrow.l { left: -8px; }
+html body .st-key-home .st-key-ahs_new .aw-arrow.r, html body .st-key-home .st-key-ahs_res .aw-arrow.r { right: -8px; }
+html body .st-key-home .st-key-ahs_new .aw-arrow:hover, html body .st-key-home .st-key-ahs_res .aw-arrow:hover { color: var(--accent-deep); }
+
+/* ---------- 곧 끝나는 팝업: 7일 칸 ---------- */
+html body .st-key-home .st-key-ahs_week > div:has(> .st-key-ah_week) { overflow-x: auto; }
+html body .st-key-home .st-key-ah_week { display: grid !important; grid-template-columns: repeat(7, minmax(140px, 1fr));
+  gap: 8px !important; min-width: 1000px; align-items: stretch !important; }
+html body .st-key-home .st-key-ah_week > div { min-width: 0 !important; width: auto !important; }
+html body .st-key-home [class*="st-key-ahwk_"] { border-radius: 14px; padding: 12px; background: var(--ah-surface); gap: 8px !important;
+  min-height: 170px; height: 100%; box-sizing: border-box; min-width: 0; }
+html body .st-key-home [class*="st-key-ahwk_"]:has(.ah-wk-h.today) { background: var(--accent-soft); }
+html body .st-key-home [class*="st-key-ahwk_"]:has(.ah-wk-h.past) { opacity: .55; }
+.ah-wk-h { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; font-size: 13px; font-weight: 800;
+  line-height: 1.5; color: var(--ah-ink); }
+.ah-wk-h.today { color: #0b5e57; }
+.ah-wk-h.past { color: var(--ah-soft); }
+.ah-wk-n { font-size: 12px; font-weight: 700; color: var(--ah-soft); }
+.ah-wk-i { display: flex; gap: 8px; align-items: center; background: #fff; border-radius: 10px; padding: 6px; color: var(--ah-ink);
+  min-width: 0; }
+[class*="st-key-card_hw_"]:hover .ah-wk-i { box-shadow: 0 0 0 1.5px var(--accent); }
+.ah-wk-d, .ah-wk-s { display: none; }
+.ah-wk-p { flex: none; width: 32px; height: 42px; border-radius: 6px; background-color: #eef3f1; background-size: cover;
+  background-position: center; }
+.ah-wk-b { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ah-wk-t { font-size: 12.5px; font-weight: 700; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden; }
+/* '+N건 더보기': 칸 안 왼쪽의 글자 버튼 */
+html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] { padding: 0 !important; border: 0 !important; height: auto !important;
+  width: auto !important; justify-content: flex-start !important; background: none !important; }
+html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] > div,
+html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] .stButton { justify-content: flex-start !important; }
+html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] button { background: none !important; border: 0 !important;
+  padding: 2px !important; min-height: 0 !important; margin: 0 !important; border-radius: 4px !important; gap: 2px; }
+html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] button p,
+html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] button span { font-size: 12.5px !important; font-weight: 800 !important;
+  color: #0b5e57 !important; }
+html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] button:hover { background: none !important; }
+html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] button:hover p { text-decoration: underline; }
+html body .st-key-home [data-testid="stElementContainer"]:has(.ah-wk-none) { display: none; }
+
+/* ---------- 사전예약 팝업 (보라): 요약 카드 + 타임라인 ---------- */
+html body .st-key-home .st-key-ah_pre { flex-wrap: wrap !important; gap: 16px !important; align-items: stretch !important; min-width: 0; }
+html body .st-key-home .st-key-ah_pre > div:has(> .st-key-ah_pre_sum) { flex: 1 1 240px !important; max-width: 280px;
+  min-width: 0 !important; width: auto !important; }
+html body .st-key-home .st-key-ah_pre > div:has(> .st-key-home_row_res) { flex: 999 1 560px !important; min-width: 0 !important;
+  width: auto !important; }
+html body .st-key-home .st-key-ah_pre > [data-testid="stElementContainer"]:has(.ah-pre-none) { flex: 999 1 300px !important;
+  align-self: center; padding: 0 8px; width: auto !important; }
+html body .st-key-home .st-key-ah_pre_sum { background: var(--ah-purple-soft); border-radius: 18px; padding: 22px; gap: 12px !important;
+  height: 100%; box-sizing: border-box; }
+.ah-pre-sum { display: flex; flex-direction: column; gap: 12px; }
+html body .st-key-home .ah-pre-sum .ah-h .mi { color: var(--ah-purple); }
+.ah-pre-p { font-size: 14px; line-height: 1.6; color: var(--ah-ink); }
+.ah-pre-n { font-family: "Jua", sans-serif; font-size: 40px; line-height: 1; color: var(--ah-purple-deep); }
+.ah-pre-n span { font-size: 18px; color: var(--ah-ink); }
+html body .st-key-home .st-key-ah_pre_all { margin-top: auto !important; }
+html body .st-key-home .st-key-ah_pre_all button { height: 44px; min-height: 0 !important; border-radius: 999px !important; border: 0 !important;
+  background: var(--ah-purple) !important; }
+html body .st-key-home .st-key-ah_pre_all button p { color: #fff !important; font-size: 14px !important; font-weight: 800 !important; }
+html body .st-key-home .st-key-ah_pre_all button:hover { background: var(--ah-purple-deep) !important; }
+html body .st-key-home .st-key-home_row_res { gap: 14px !important; padding: 0 0 4px !important; align-items: stretch !important;
+  scrollbar-width: thin; }
+html body .st-key-home .st-key-home_row_res > div { flex: 0 0 calc((100% - 42px) / 4) !important; width: calc((100% - 42px) / 4) !important;
+  min-width: 0 !important; }
+html body .st-key-home [class*="st-key-ah_pre_i_"] { position: relative; gap: 10px !important; height: 100%; min-width: 0; }
+/* 가로 줄: 점 가운데 높이 (날짜 알약 28 + 사이 10 + 점 반 7) */
+html body .st-key-home [class*="st-key-ah_pre_i_"]::before { content: ""; position: absolute; left: 0; right: -14px; top: 43.5px;
+  height: 3px; background: var(--ah-purple-line); }
+html body .st-key-home .st-key-home_row_res > div:first-child [class*="st-key-ah_pre_i_"]::before { border-radius: 2px 0 0 2px; }
+html body .st-key-home .st-key-home_row_res > div:last-child [class*="st-key-ah_pre_i_"]::before { right: 0; border-radius: 0 2px 2px 0; }
+.ah-pre-top { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
+.ah-pre-date { max-width: 100%; height: 28px; box-sizing: border-box; display: inline-flex; align-items: center; font-size: 12.5px;
+  font-weight: 800; color: var(--ah-purple-deep); background: #fff; border: 1.5px solid var(--ah-purple-line); padding: 0 10px;
+  border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ah-pre-dot { flex: none; width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%; background: #a99cf2;
+  border: 3px solid #fff; box-shadow: 0 0 0 2px #a99cf2; margin-left: 12px; }
+.ah-pre-top.first .ah-pre-dot { background: var(--ah-purple); box-shadow: 0 0 0 2px var(--ah-purple); }
+html body .st-key-home [class*="st-key-ah_pre_b_"] { gap: 10px !important; flex: 1 1 auto; min-width: 0; }
+html body .st-key-home [class*="st-key-ah_pre_i_"] > div:has(> [class*="st-key-ah_pre_b_"]) { flex: 1 1 auto !important; }
+html body .st-key-home [class*="st-key-ah_pre_b_"] > div:has(> [class*="st-key-card_hp_"]) { flex: 1 1 auto !important; }
+html body .st-key-home [class*="st-key-card_hp_"] { height: 100%; }
+html body .st-key-home [class*="st-key-card_hp_"] > [data-testid="stElementContainer"]:first-child,
+html body .st-key-home [class*="st-key-card_hp_"] [data-testid="stMarkdown"],
+html body .st-key-home [class*="st-key-card_hp_"] [data-testid="stMarkdownContainer"] { height: 100%; }
+.ah-pre-card { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; border: 1.5px solid var(--ah-line);
+  border-radius: 16px; overflow: hidden; background: #fff; color: var(--ah-ink); min-width: 0; }
+[class*="st-key-card_hp_"]:hover .ah-pre-card { border-color: var(--ah-purple); }
+.ah-pre-pic { position: relative; aspect-ratio: 4 / 3; background-color: #eef3f1; background-size: cover; background-position: center top; }
+.ah-pre-badge { position: absolute; left: 10px; top: 10px; font-size: 12px; font-weight: 800; line-height: 1.5; color: #fff;
+  background: var(--ah-purple); padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.ah-pre-badge.m { display: none; }
+.ah-pre-txt { padding: 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ah-pre-t { font-family: "Jua", sans-serif; font-size: 17px; line-height: 1.25; color: #0f6b5c; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ah-pre-m { font-size: 12.5px; line-height: 1.5; color: var(--ah-soft); }
+/* 알림 버튼 (기존 북마크에 연결): 북마크하고 오픈 알림 받기 ↔ 오픈 알림 받는 중 */
+html body .st-key-home [class*="st-key-ahal_"] button { min-height: 40px !important; padding: 4px 10px !important; border-radius: 999px !important;
+  border: 1.5px solid var(--ah-purple) !important; background: #fff !important; gap: 6px; }
+html body .st-key-home [class*="st-key-ahal_"] button p { color: var(--ah-purple-deep) !important; font-size: 13px !important;
+  font-weight: 800 !important; line-height: 1.3 !important; }
+html body .st-key-home [class*="st-key-ahal_"] button span { color: var(--ah-purple-deep) !important; }
+html body .st-key-home [class*="st-key-ahal_off_"] button:hover { background: var(--ah-purple-soft) !important; }
+html body .st-key-home [class*="st-key-ahal_on_"] button { background: var(--ah-purple) !important; }
+html body .st-key-home [class*="st-key-ahal_on_"] button p, html body .st-key-home [class*="st-key-ahal_on_"] button span { color: #fff !important; }
+
+/* ---------- 꿀팁 가득! 실시간 후기 모음: 높이 제각각 3단 ---------- */
+html body .st-key-home .st-key-ah_wall { display: block !important; columns: 3 300px; column-gap: 16px; }
+html body .st-key-home .st-key-ah_wall > div { break-inside: avoid; width: 100% !important; margin: 0 0 16px !important; }
+html body .st-key-home [class*="st-key-card_hv_"] { cursor: default; }
+.ah-rv { border: 1.5px solid var(--ah-line); border-radius: 16px; overflow: hidden; background: #fff; }
+.ah-rv-ph { position: relative; background: var(--ah-surface); line-height: 0; }
+.ah-rv-ph img { display: block; width: 100%; height: auto; min-height: 140px; max-height: 300px; object-fit: cover; }
+.ah-rv-cnt { position: absolute; right: 10px; bottom: 10px; font-size: 12px; font-weight: 800; line-height: 1.5; color: #fff;
+  background: rgba(31,42,39,.7); padding: 2px 8px; border-radius: 999px; }
+.ah-rv-in { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.ah-rv-kind { align-self: flex-start; font-size: 12px; font-weight: 800; line-height: 1.5; padding: 2px 10px; border-radius: 999px;
+  color: #0b5e57; background: #e6fbf7; }
+.ah-rv-kind.hope { color: #2c5bc5; background: #eaf0fc; }
+.ah-rv-kind.etc { color: #9a6a00; background: #fff6d6; }
+.ah-rv-who { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+img.ah-rv-av { flex: none; width: 26px; height: 26px; border-radius: 50%; object-fit: cover; background: var(--ah-surface); }
+.ah-rv-who strong { font-size: 13.5px; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ah-ink); }
+.ah-rv-time { margin-left: auto; font-size: 12px; color: var(--ah-soft); white-space: nowrap; }
+.ah-rv-stars { font-size: 12.5px; font-weight: 800; line-height: 1.4; color: #9a6a00; letter-spacing: 1px; }
+.ah-rv-body { font-size: 14px; line-height: 1.65; color: var(--ah-ink); display: -webkit-box; -webkit-line-clamp: 8;
+  -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ah-rv-pop { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 12px; background: var(--ah-surface);
+  color: var(--ah-ink); min-width: 0; }
+.ah-rv-pp { flex: none; width: 28px; height: 36px; border-radius: 6px; background-color: #eef3f1; background-size: cover;
+  background-position: center; }
+.ah-rv-pn { flex: 1; min-width: 0; font-size: 13px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ah-rv-pop .ah-st { font-size: 11.5px; padding: 1px 8px; }
+/* 카드 전체가 아니라 아래 팝업 줄만 누를 수 있다 (투명 버튼을 그 줄 위에만) */
+html body .st-key-home .st-key-ah_wall [class*="st-key-open_hv_"] { inset: auto 15.5px 15.5px 15.5px !important; height: 52px; }
+html body .st-key-home [class*="st-key-card_hv_"]:has([class*="st-key-open_hv_"]:hover) .ah-rv-pop { background: var(--accent-soft); }
+html body .st-key-home .st-key-ah_rv_more button { height: 46px; min-height: 0 !important; padding: 0 28px !important;
+  border-radius: 999px !important; border: 0 !important; background: var(--accent-soft) !important; }
+html body .st-key-home .st-key-ah_rv_more button p { font-size: 14px !important; font-weight: 800 !important; color: #0b5e57 !important; }
+html body .st-key-home .st-key-ah_rv_more button:hover { background: #d3f6ee !important; }
+/* 후기 도장 (리뷰 닉네임 옆 20px 도장 + Lv.n, 웹 a-shell.css .rk-*) */
+.st-key-home .rk-stamp { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; height: 20px;
+  border-radius: 50%; border: 2px solid; box-sizing: border-box; background: #fff; vertical-align: middle; }
+.st-key-home .rk-stamp img { width: 62%; height: auto; display: block; }
+.st-key-home .rk-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 2px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 800; line-height: 1.4; white-space: nowrap; vertical-align: middle; }
+
+/* 좁은 PC: 사전예약 타임라인 칸을 3 · 2칸으로 */
+@media (max-width: 1100px) and (min-width: 641px) {
+  html body .st-key-home .st-key-home_row_res > div { flex-basis: calc((100% - 28px) / 3) !important; width: calc((100% - 28px) / 3) !important; }
+}
+@media (max-width: 860px) and (min-width: 641px) {
+  html body .st-key-home .st-key-home_row_res > div { flex-basis: calc((100% - 14px) / 2) !important; width: calc((100% - 14px) / 2) !important; }
+}
+
+/* ================= 모바일 (A-Mobile) ================= */
+@media (max-width: 640px) {
+  html body .st-key-home { gap: 28px !important; padding-top: 0; }
+  html body .st-key-home [class*="st-key-ahs_"], html body .st-key-home .st-key-stories { gap: 10px !important; }
+  html body .st-key-home [class*="st-key-hh_"] { gap: 8px !important; }
+  /* 줄 높이를 정수 px 로 (아래 랭킹 배너가 반 픽셀 자리에 놓여 글자가 1px 밀려 보이지 않게) */
+  html body .st-key-home .ah-h, html body .st-key-home .ah-h .story-head { font-size: 17px; line-height: 24px !important; }
+  html body .st-key-home .ah-h .mi { display: none; }
+  /* 칩은 한 줄로, 넘치면 옆으로 민다 */
+  html body .st-key-home [class*="st-key-hp_"] { width: 100% !important; min-width: 0; }
+  html body .st-key-home [class*="st-key-hp_"] [role="radiogroup"] { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; }
+  html body .st-key-home [class*="st-key-hp_"] [role="radiogroup"]::-webkit-scrollbar { display: none; }
+  html body .st-key-home [class*="st-key-hp_"] button { flex: none; padding: 7px 12px !important; }
+  html body .st-key-home [class*="st-key-hp_"] button p, html body .st-key-home [class*="st-key-hp_"] button * { font-size: 12.5px !important; }
+
+  /* 동그라미 62px */
+  html body .st-key-home .st-key-story_row:has(.story.hot) { gap: 10px !important; padding: 8px 2px 2px !important; }
+  html body .st-key-home .st-key-story_row:has(.story.hot) > div { flex: 0 0 66px !important; width: 66px !important; min-width: 66px !important; }
+  html body .st-key-home .st-key-story_row > div:has(.story-empty) { flex: 0 1 auto !important; width: auto !important; min-width: 0 !important; }
+  html body .st-key-home .story.hot .ring {
+    width: 62px; height: 62px; }
+  html body .st-key-home .story.hot .rg { padding: 1px 6px; }
+  html body .st-key-home .story.hot .nm { max-width: 66px; font-size: 12px; line-height: 17px; }
+  
+
+  /* 신규: 150px 카드, 상태 배지만 */
+  html body .st-key-home .st-key-home_row_new { gap: 12px !important; padding: 2px 0 4px !important; }
+  html body .st-key-home .st-key-home_row_new > div { flex: 0 0 150px !important; width: 150px !important; min-width: 150px !important; }
+  .ah-pc { gap: 6px; }
+  .ah-pc-pic .ah-st { left: 8px; top: 8px; font-size: 11px; padding: 1px 8px; }
+  .ah-area { display: none; }
+  .ah-pc-t { font-size: 15.5px; }
+  .ah-pc-m { margin-top: -4px; font-size: 12px; }
+  .ah-pco { display: none; }
+  .ah-mo { display: inline; }
+  html body .st-key-home .st-key-home_row_new [class*="st-key-fav_"] { top: calc(150px * 4 / 3 - 38px) !important; right: 8px !important; }
+  html body .st-key-home .st-key-home_row_new [class*="st-key-fav_"] button { width: 30px; height: 30px; }
+  .ah-morecard { font-size: 14px; }
+  html body .st-key-home .st-key-ahs_new .aw-arrow, html body .st-key-home .st-key-ahs_res .aw-arrow,
+  html body .st-key-home .st-key-ahs_new .aw-arrow.show, html body .st-key-home .st-key-ahs_res .aw-arrow.show { display: none; }
+
+  /* 곧 끝나는: 팝업 하나에 한 줄 (날짜 · 포스터 · 이름 · 지역). 끝나는 팝업이 없는 날은 줄이 없다 */
+  html body .st-key-home .st-key-ahs_week > div:has(> .st-key-ah_week) { overflow: visible; }
+  html body .st-key-home .st-key-ah_week { display: flex !important; flex-direction: column !important; flex-wrap: nowrap !important;
+    gap: 10px !important; min-width: 0; }
+  html body .st-key-home .st-key-ah_week > div { width: 100% !important; flex: none !important; }
+  html body .st-key-home .st-key-ah_week > div:has(.ah-wk-h.none) { display: none !important; }
+  html body .st-key-home [class*="st-key-ahwk_"], html body .st-key-home [class*="st-key-ahwk_"]:has(.ah-wk-h.today) {
+    padding: 0; background: none; min-height: 0; height: auto; gap: 10px !important; border-radius: 0; }
+  html body .st-key-home [class*="st-key-ahwk_"]:has(.ah-wk-h.past) { opacity: 1; }
+  html body .st-key-home [class*="st-key-ahwk_"] > [data-testid="stElementContainer"]:has(.ah-wk-h) { display: none !important; }
+  .ah-wk-i { gap: 12px; padding: 10px; border-radius: 14px; background: var(--ah-surface); }
+  .ah-wk-i.today { background: var(--accent-soft); }
+  .ah-wk-i.past { opacity: .55; }
+  .ah-wk-d { display: block; flex: none; width: 52px; text-align: center; font-size: 12.5px; font-weight: 800; line-height: 1.45;
+    color: var(--ah-ink); }
+  .ah-wk-i.today .ah-wk-d { color: #0b5e57; }
+  .ah-wk-p { width: 40px; height: 52px; border-radius: 8px; }
+  .ah-wk-t { font-size: 14px; font-weight: 800; -webkit-line-clamp: 1; }
+  .ah-wk-s { display: block; font-size: 12.5px; line-height: 1.4; color: var(--ah-soft); }
+  html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"],
+  html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] > div,
+  html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] .stButton { justify-content: center !important; width: 100% !important; }
+  html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] button p,
+  html body .st-key-home .st-key-ah_week [class*="st-key-wk_more_"] button span { font-size: 13px !important; }
+  html body .st-key-home [data-testid="stElementContainer"]:has(.ah-wk-none) { display: block; }
+
+  /* 사전예약: 요약 띠 + 세로 타임라인 */
+  html body .st-key-home .st-key-ah_pre { flex-direction: column !important; flex-wrap: nowrap !important; gap: 12px !important; }
+  html body .st-key-home .st-key-ah_pre > div:has(> .st-key-ah_pre_sum),
+  html body .st-key-home .st-key-ah_pre > div:has(> .st-key-home_row_res),
+  html body .st-key-home .st-key-ah_pre > [data-testid="stElementContainer"]:has(.ah-pre-none) { flex: none !important; max-width: none;
+    width: 100% !important; align-self: stretch; padding: 0; }
+  html body .st-key-home .st-key-ah_pre_sum { padding: 14px 16px; gap: 10px !important; height: auto; }
+  .ah-pre-sum { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 10px; row-gap: 2px; }
+  .ah-pre-sum .ah-h, .ah-pre-p { grid-column: 1; }
+  .ah-pre-p { font-size: 12.5px; line-height: 1.5; }
+  .ah-pre-p span { display: none; }
+  .ah-pre-n { grid-column: 2; grid-row: 1 / span 2; font-size: 30px; white-space: nowrap; }
+  .ah-pre-n span { font-size: 14px; }
+  html body .st-key-home .st-key-ah_pre_all button { height: 40px; }
+  html body .st-key-home .st-key-ah_pre_all button p { font-size: 13px !important; }
+  html body .st-key-home .st-key-home_row_res { flex-direction: column !important; flex-wrap: nowrap !important; gap: 0 !important;
+    padding: 0 0 0 4px !important; overflow: visible !important; cursor: default; }
+  html body .st-key-home .st-key-home_row_res > div { flex: none !important; width: 100% !important; min-width: 0 !important; }
+  html body .st-key-home [class*="st-key-ah_pre_i_"] { gap: 8px !important; padding: 0 0 14px 22px; height: auto; }
+  html body .st-key-home .st-key-home_row_res > div:last-child [class*="st-key-ah_pre_i_"] { padding-bottom: 0; }
+  html body .st-key-home [class*="st-key-ah_pre_i_"]::before,
+  html body .st-key-home .st-key-home_row_res > div:first-child [class*="st-key-ah_pre_i_"]::before,
+  html body .st-key-home .st-key-home_row_res > div:last-child [class*="st-key-ah_pre_i_"]::before { left: 6px; right: auto; top: 6px;
+    bottom: 0; width: 2px; height: auto; border-radius: 0; }
+  .ah-pre-top { position: relative; }
+  .ah-pre-top { overflow: visible; }
+  .ah-pre-dot { position: absolute; left: -22px; top: 2px; margin: 0; }   /* 기준 = 마크다운 칸 (줄 안쪽 22px 들여쓰기만큼 왼쪽으로) */
+  .ah-pre-date { height: auto; padding: 0; border: 0; background: none; line-height: 1.45; }
+  html body .st-key-home [class*="st-key-ah_pre_b_"] { flex-direction: row !important; align-items: center !important; padding: 10px;
+    border: 1.5px solid var(--ah-line); border-radius: 14px; background: #fff; gap: 10px !important; box-sizing: border-box; }
+  html body .st-key-home [class*="st-key-ah_pre_b_"] > div:has(> [class*="st-key-card_hp_"]) { flex: 1 1 0 !important; min-width: 0 !important;
+    width: auto !important; }
+  .ah-pre-card { flex-direction: row; align-items: center; gap: 10px; border: 0; border-radius: 0; overflow: visible; }
+  .ah-pre-pic { flex: none; width: 46px; height: 60px; aspect-ratio: auto; border-radius: 8px; }
+  .ah-pre-pic .ah-pre-badge { display: none; }
+  .ah-pre-badge.m { display: inline-block; position: static; align-self: flex-start; font-size: 11px; padding: 1px 8px; }
+  .ah-pre-txt { flex: 1; padding: 0; gap: 2px; }
+  .ah-pre-t { font-family: inherit; font-size: 14px; font-weight: 800; line-height: 1.4; color: var(--ah-ink); -webkit-line-clamp: 1; }
+  .ah-pre-m { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html body .st-key-home [class*="st-key-ah_pre_b_"] > [class*="st-key-ahal_"] { flex: 0 0 44px !important; width: 44px !important; min-width: 44px !important; }
+  html body .st-key-home [class*="st-key-ahal_"] button { width: 44px !important; height: 44px; min-height: 0 !important; padding: 0 !important;
+    border-radius: 50% !important; }
+  html body .st-key-home [class*="st-key-ahal_"] button [data-testid="stMarkdownContainer"] { display: none; }
+  html body .st-key-home [class*="st-key-ahal_"] button span { font-size: 18px !important; margin: 0 !important; }
+
+  /* 후기: 2단, 간단한 카드 */
+  html body .st-key-home .st-key-ah_wall { columns: 2; column-gap: 10px; }
+  html body .st-key-home .st-key-ah_wall > div { margin-bottom: 10px !important; }
+  .ah-rv { border-radius: 14px; }
+  .ah-rv-ph img { min-height: 110px; max-height: 190px; }
+  .ah-rv-cnt { right: 6px; bottom: 6px; font-size: 11px; padding: 1px 6px; }
+  .ah-rv-in { padding: 10px; gap: 6px; }
+  .ah-rv-kind { font-size: 11px; padding: 1px 8px; }
+  .ah-rv-who { gap: 5px; flex-wrap: nowrap; }
+  img.ah-rv-av, .ah-rv-time { display: none; }
+  .ah-rv-who strong { font-size: 12.5px; }
+  /* 랭크는 20px 도장만, 닉네임 앞에 */
+  .st-key-home .ah-rv-who .rk-chip { order: -1; padding: 0; background: none !important; }
+  .st-key-home .ah-rv-who .rk-chip > span:last-child { display: none; }
+  .ah-rv-stars { font-size: 11.5px; }
+  .ah-rv-body { font-size: 13px; line-height: 1.55; -webkit-line-clamp: 7; }
+  .ah-rv-pop { padding: 0; background: none; }
+  .ah-rv-pp, .ah-rv-pop .ah-st { display: none; }
+  .ah-rv-pn { font-size: 11.5px; font-weight: 700; color: #0f6b5c; }
+  html body .st-key-home .st-key-ah_wall [class*="st-key-open_hv_"] { inset: auto 6px 6px 6px !important; height: 26px; }
+  html body .st-key-home [class*="st-key-card_hv_"]:has([class*="st-key-open_hv_"]:hover) .ah-rv-pop { background: none; }
+  html body .st-key-home .st-key-ah_rv_morebox, html body .st-key-home .st-key-ah_rv_more { width: 100% !important; flex: 1 1 100% !important; }
+  html body .st-key-home .st-key-ah_rv_more .stButton, html body .st-key-home .st-key-ah_rv_more button { width: 100% !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ah-pc-pic { transition: none; }
+}
+</style>
+"""
+
+
 # ================================================================ 스토리 줄 (11/18 요청)
 def _live_rows(df: pd.DataFrame) -> list[dict]:
     """진행 중·오픈 예정 팝업만 (끝난 건 뺌)."""
@@ -2730,7 +4023,8 @@ def _story_open(eid: str) -> None:
 
 def _guest_stories(rows: list[dict], limit: int = 12) -> None:
     """로그인 전 홈: '특전 있는 작품들' (11/20 요청, 예전 '요즘 일정 많은 작품') — 진행 중·예정 팝업 중
-    특전(perks)이 적힌 팝업이 많은 작품 순. 숫자 = 그 작품의 특전 있는 팝업 수. 누르면 그 작품만 걸러진 리스트 보기로."""
+    특전(perks)이 적힌 팝업이 많은 작품 순. 동그라미 위 배지 '특전 N' = 그 작품의 특전 있는 팝업 수 (A안).
+    누르면 그 작품만 걸러진 리스트 보기로."""
     perk_rows = [r for r in rows if _split(r.get("perks") or "")]
     count: dict[str, int] = {}
     for r in perk_rows:
@@ -2740,7 +4034,7 @@ def _guest_stories(rows: list[dict], limit: int = 12) -> None:
     works = sorted(count, key=lambda w: (-count[w], w))[:limit]
     posters = _work_posters(rows)      # 포스터는 그 작품의 진행 중·예정 팝업 아무거나 (특전 팝업에 포스터가 없을 수 있음)
     with st.container(key="stories"):
-        st.markdown('<div class="story-head">특전 있는 작품들</div>', unsafe_allow_html=True,
+        st.markdown(f'<div class="ah-h">{_mi("redeem")}<span class="story-head">특전 있는 작품들</span></div>', unsafe_allow_html=True,
                     help="지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요. "
                          "로그인하고 팝업을 북마크하면 여기가 내 '북마크 팝업' 으로 바뀌어요.")
         with st.container(horizontal=True, key="story_row"):
@@ -2748,14 +4042,16 @@ def _guest_stories(rows: list[dict], limit: int = 12) -> None:
             for i, w in enumerate(works):
                 with st.container(key=f"card_story_{i}"):
                     st.markdown(
-                        f'<div class="story hot"><div class="ring"><div class="pic" style="background-image:url(&quot;{posters.get(w, images.DEFAULT_POSTER_URL)}&quot;)"></div>'
-                        f'<span class="cnt">{count[w]}</span></div><div class="nm">{escape(w)}</div></div>', unsafe_allow_html=True)
+                        f'<div class="story hot"><div class="ring"><span class="rg">{count[w]}</span>'
+                        f'<div class="pic" style="background-image:url(&quot;{posters.get(w, images.DEFAULT_POSTER_URL)}&quot;)"></div>'
+                        f'</div><div class="nm">{escape(w)}</div></div>', unsafe_allow_html=True)
                     st.button("보기", key=f"open_story_{i}", on_click=_story_pick, args=(w,))
 
 
 def render_stories(df: pd.DataFrame) -> None:
     """홈 '북마크 팝업' (11/18 요청): 인스타 스토리처럼 동그란 포스터 줄. 내가 북마크한 (진행 중·예정) 팝업 하나에 동그라미 하나,
-    위에는 지역, 아래는 작품 이름. 누르면 그 팝업 상세. 맨 앞 '최애 추가하기' 로 팝업을 골라 한 번에 북마크한다."""
+    위에는 지역, 아래는 작품 이름. 누르면 그 팝업 상세. 맨 앞 '최애 추가하기' 로 팝업을 골라 한 번에 북마크한다.
+    A안 모양: 72px(모바일 62px) 민트 테두리 + 흰 안쪽 테두리, 배지는 위쪽 (모양은 A_HOME_CSS)."""
     rows = _live_rows(df)
     if not _member():
         _guest_stories(rows)       # 로그인 전: '특전 있는 작품들' (11/20 요청)
@@ -2950,13 +4246,13 @@ def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | N
                   on_click=_gnb_open, args=(str(r["entry_id"]),))
 
     if wide:
-        # 전체보기: dukplace 처럼 포스터가 꽉 찬 카드를 4열로. 카드 비율이 같아 높이가 늘 맞는다
-        # 모바일에서는 4개 칸을 하나의 격자로 풀어 2~3열로 작게 보인다 (LIST_CSS 의 .st-key-wide_grid).
+        # 전체보기 (A안): 포스터 카드 격자. 4개 칸을 하나의 격자로 풀어 PC 는 폭에 맞게(auto-fill 190px~), 모바일은 2열
+        # (A_BROWSE_CSS 의 .st-key-wide_grid).
         # 칸마다 i%4 번째 카드가 들어가 있어서, 원래 순서대로 놓이게 카드마다 순번(order)을 준다
         order_css = "".join(f'[data-testid="stLayoutWrapper"]:has(> .st-key-card_w_{r["entry_id"]}),'
                             f'.st-key-card_w_{r["entry_id"]}{{order:{i}}}'
                             for i, (_, r) in enumerate(view.iterrows()))
-        st.markdown(f"<style>@media (max-width: 640px) {{ {order_css} }}</style>", unsafe_allow_html=True)
+        st.markdown(f"<style>{order_css}</style>", unsafe_allow_html=True)      # A안: PC 도 한 격자 (auto-fill)
         with st.container(key="wide_grid"):
             # 속도 (11/18): 카드를 한꺼번에 100장 넘게 그리면 클릭마다 화면 조각 400여 개·150KB 를 다시 보낸다 →
             # 처음엔 LIST_PAGE 장만, 아래 '더 보기' 로 더. 조건(검색·지역·정렬)이 바뀌면 다시 처음 장수로
@@ -2972,7 +4268,7 @@ def render_list(view: pd.DataFrame, wide: bool = False, df_all: pd.DataFrame | N
                     _heart(r["entry_id"], "w")
             if len(view) > n_show:
                 with st.container(horizontal=True, horizontal_alignment="center", key="list_more"):
-                    st.button(f"{len(view) - n_show}건 더보기", icon=":material/expand_more:", key="list_more_btn",
+                    st.button(f"{len(view) - n_show}건 더보기", key="list_more_btn",
                               on_click=lambda: st.session_state.update(list_n=n_show + LIST_PAGE, _more_from=n_show))
             # 방금 '더보기' 로 불러왔으면 새로 나온 첫 카드가 화면 위쪽에 오게 내린다 (11/18 요청)
             first = st.session_state.pop("_more_from", None)
@@ -3594,6 +4890,355 @@ iframe[src*="kakao_map"] {{
 """
 
 
+# A안 리스트로 보기 · 지도로 보기 (11/25, docs/design/handoff A-List · A-MList · A-Map · A-MMap): 기존 CSS 뒤에 불러서 덮는다
+# (웹 web/app/a-browse.css 와 같은 값. 데일리 팝업 노트 안쪽은 DAILY_CSS, 모바일 필터 시트는 MOBILE_SHEET_CSS)
+A_BROWSE_CSS = """
+<style>
+/* ===== A안: 리스트로 보기 · 지도로 보기 (11/25, docs/design/handoff A-List · A-MList · A-Map · A-MMap) =====
+   공개 웹 web/app/a-browse.css 와 같은 값. 예전 규칙(GLOBAL_CSS · LIST_CSS · GNB_CSS · ASK_PANEL_CSS · ASK_FAB_CSS)은
+   그대로 두고 page_map 이 그 뒤에 내보내 덮는다 (선택자를 html body 로 세게). */
+.ab-m { display: none; }
+@media (max-width: 640px) { .ab-pc { display: none !important; } .ab-m { display: inline; } }
+
+/* ---------- 1. 검색 필터 상자: PC 는 메뉴바 검색 아이콘에서 펼쳐지는 말풍선, 모바일은 아래 시트(MOBILE_SHEET_CSS) ---------- */
+@media (min-width: 641px) {
+  html body .st-key-topbar .st-key-filters { margin-top: 14px; padding: 16px !important; border: 1.5px solid #9eddcc;
+    border-radius: 18px; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+  /* 꼬리: 16px 네모를 45도 돌려 위 · 왼쪽 테두리만 */
+  html body .st-key-topbar .st-key-filters::before { top: -9.5px; right: calc(var(--bubble-tail, 85px) + 2px); width: 16px; height: 16px;
+    border: 0; border-left: 1.5px solid #9eddcc; border-top: 1.5px solid #9eddcc; background: #fff; transform: rotate(45deg); }
+  html body .st-key-topbar .st-key-filters::after { display: none; }
+  html body .st-key-filters > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { gap: 10px !important; }
+}
+html body .st-key-filters [data-testid="stWidgetLabel"] p { font-size: 12.5px !important; font-weight: 700 !important;
+  color: #5f6b68 !important; line-height: 1.5; }
+html body .st-key-filters [data-testid="stTextInputRootElement"], html body .st-key-filters [data-testid="stDateInputField"],
+html body .st-key-filters [data-testid="stSelectbox"] > div:not([data-testid]) > div,
+html body .st-key-filters [data-testid="stMultiSelect"] > div:not([data-testid]) > div {
+  min-height: 44px !important; border: 1px solid #e3e9e7 !important; border-radius: 12px !important;
+  background: #fff !important; box-shadow: none !important; }
+html body .st-key-filters [data-testid="stTextInputRootElement"], html body .st-key-filters [data-testid="stDateInputField"],
+html body .st-key-filters [data-testid="stSelectbox"] > div:not([data-testid]) > div { height: 44px !important; }
+html body .st-key-filters [data-testid="stTextInputRootElement"]:focus-within, html body .st-key-filters [data-testid="stDateInputField"]:focus-within,
+html body .st-key-filters [data-testid="stSelectbox"] > div:not([data-testid]) > div:focus-within,
+html body .st-key-filters [data-testid="stMultiSelect"] > div:not([data-testid]) > div:focus-within { border-color: #14b8a6 !important; }
+html body .st-key-filters input { font-size: 14px !important; background: transparent !important; }
+html body .st-key-filter_reset button { height: 44px !important; min-height: 44px !important; padding: 0 16px !important; border: 0 !important;
+  border-radius: 999px !important; background: #f4f6f5 !important; box-shadow: none !important; }
+html body .st-key-filter_reset button p { font-size: 14px !important; font-weight: 700 !important; color: #26302d !important; white-space: nowrap; }
+html body .st-key-filter_reset button:hover { background: #e6fbf7 !important; }
+html body .st-key-filter_reset button:hover p { color: #0b5e57 !important; }
+
+/* ---------- 2. 목록 위 줄: 팝업 카페 N곳 · 북마크 · 지역 고르기 · 정렬, 그 아래 걸린 필터 칩 ---------- */
+html body .st-key-listbar h4 { font-family: "NanumSquareRound", "Pretendard", sans-serif !important; font-size: 18px !important;
+  font-weight: 800 !important; line-height: 1.4 !important; color: #26302d !important; padding: 0 !important; margin: 0 !important;
+  white-space: nowrap; }
+html body .st-key-listbar h4 span, html body .st-key-listbar h4 strong { color: #0f6b5c !important; font-weight: 800 !important; }
+/* 북마크 (목록 위 · 필터 시트): 알약. 켜지면 민트 테두리 + 연한 민트 바탕 */
+html body [class*="st-key-folsw"] button { height: 40px !important; min-height: 40px !important; padding: 0 14px !important; gap: 6px;
+  border: 1.5px solid #e3e9e7 !important; border-radius: 999px !important; background: #fff !important; box-shadow: none !important; }
+html body [class*="st-key-folsw"] button p { font-size: 13.5px !important; font-weight: 700 !important; color: #26302d !important; }
+html body [class*="st-key-folsw"] button span[data-testid="stIconMaterial"] { font-size: 18px !important; color: #26302d !important; }
+html body [class*="st-key-folsw"][class*="_off"] button:hover { border-color: #14b8a6 !important; }
+html body [class*="st-key-folsw"][class*="_on"] button { border-color: #14b8a6 !important; background: #e6fbf7 !important; }
+html body [class*="st-key-folsw"][class*="_on"] button p { color: #0b5e57 !important; font-weight: 800 !important; }
+html body [class*="st-key-folsw"][class*="_on"] button span[data-testid="stIconMaterial"] { color: #0b5e57 !important; }
+/* 지역 고르기 · 정렬: 40px 알약 */
+html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]),
+html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) { min-height: 40px !important; height: auto !important; }
+html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]) > div,
+html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div {
+  min-height: 40px !important; border: 1.5px solid #e3e9e7 !important; border-radius: 20px !important; background: #fff !important;
+  box-shadow: none !important; align-items: center; }
+html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div { height: 40px !important; padding-left: 4px; }
+html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]) > div:focus-within,
+html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div:focus-within { border-color: #14b8a6 !important; }
+html body .st-key-listtools .st-key-sort input, html body .st-key-listtools .st-key-regions input {
+  font-size: 13.5px !important; font-weight: 700 !important; color: #26302d !important; background: transparent !important; }
+html body .st-key-listtools .st-key-regions input::placeholder { color: #26302d !important; opacity: 1 !important; font-weight: 700; }
+html body .st-key-listtools .st-key-regions [data-testid="stMultiSelectTagsContainer"] { padding: 3px 4px 3px 8px !important; gap: 4px; align-items: center !important; }
+/* 고른 지역 = 민트 칩 */
+html body .st-key-listtools .st-key-regions [data-tag] { height: 28px !important; margin: 0 !important; padding: 0 4px 0 10px !important;
+  border: 1.5px solid #14b8a6 !important; border-radius: 999px !important; background: #e6fbf7 !important; color: #0b5e57 !important;
+  font-size: 13px !important; font-weight: 800 !important; display: inline-flex !important; align-items: center !important; }
+html body .st-key-listtools .st-key-regions [data-tag] span { color: #0b5e57 !important; line-height: 1.2 !important; }
+html body .st-key-listtools .st-key-regions [data-tag] svg { color: #0b5e57 !important; fill: #0b5e57 !important; }
+@media (min-width: 641px) {
+  html body .st-key-listtools { margin-bottom: 14px !important; }
+  html body .st-key-listtools > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important;
+    align-items: center !important; gap: 8px !important; }
+  html body .st-key-listtools [data-testid="stColumn"]:has(.st-key-listbar) { margin-right: 8px; }
+  html body .st-key-listtools [data-testid="stColumn"]:has([class*="st-key-folsw_"]) { margin-left: 0 !important; }
+  html body .st-key-listtools [data-testid="stColumn"]:has(.st-key-regions) { min-width: 150px !important; max-width: calc(100% - 170px); }
+  html body .st-key-listtools .st-key-regions, html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] {
+    min-width: 150px !important; margin-left: 0 !important; }
+  html body .st-key-listtools [data-testid="stColumn"]:has(.st-key-sort) { margin-left: auto !important; flex: 0 0 140px !important; width: 140px !important; }
+}
+/* 걸린 필터 칩 (_abrowse_cond_chips): 민트 알약 + ×, 사전예약은 보라 */
+html body .st-key-abrowse_chips { flex-wrap: wrap !important; align-items: center !important; gap: 8px !important; margin: 0 0 14px; }
+html body .st-key-abrowse_chips > div { width: auto !important; flex: 0 0 auto !important; max-width: 100%; }
+html body .st-key-abrowse_chips button { height: 40px !important; min-height: 40px !important; max-width: 100%; padding: 0 12px 0 14px !important;
+  border: 1.5px solid #14b8a6 !important; border-radius: 999px !important; background: #e6fbf7 !important; box-shadow: none !important; }
+html body .st-key-abrowse_chips button > div { flex-direction: row-reverse; gap: 6px !important; min-width: 0; }
+html body .st-key-abrowse_chips button p { font-size: 13.5px !important; font-weight: 800 !important; color: #0b5e57 !important; line-height: 1 !important;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+html body .st-key-abrowse_chips button span[data-testid="stIconMaterial"] { font-size: 16px !important; color: #0b5e57 !important; margin: 0 !important; }
+html body .st-key-abrowse_chips button:hover { background: #d3f5ee !important; }
+html body .st-key-abrowse_chips .st-key-res_only_chip button { border-color: #6c5ce7 !important; background: #f1ecff !important; }
+html body .st-key-abrowse_chips .st-key-res_only_chip button p,
+html body .st-key-abrowse_chips .st-key-res_only_chip button span[data-testid="stIconMaterial"] { color: #5b3fae !important; }
+/* 물어보기 '더보기' 로 온 목록 표시 줄 */
+html body .st-key-ask_only_bar { margin: 0 0 14px; padding: 10px 14px !important; border: 0 !important; border-radius: 14px !important; background: #e9f7f2 !important; }
+html body .ask-only { font-size: 14px; color: #26302d; }
+html body .ask-only b, html body .ask-only span:not(.mi) { color: #0f6b5c; }
+html body .ask-only .mi { color: #0f6b5c; }
+html body .st-key-ask_only_clear button { height: 36px !important; min-height: 36px !important; padding: 0 12px !important; border-radius: 999px !important; background: #fff !important; }
+html body .st-key-ask_only_clear button p { font-size: 13px !important; font-weight: 700 !important; }
+
+/* ---------- 3. 포스터 카드(_poster_card) + 격자 ---------- */
+html body .st-key-wide_grid { gap: 0 !important; padding-bottom: 0 !important; margin-bottom: 0 !important; }
+html body .st-key-wide_grid > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px 16px !important; height: auto !important; align-items: start; }
+html body .st-key-wide_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+html body .st-key-wide_grid [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] { display: contents !important; }
+html body .st-key-wide_grid [data-testid="stLayoutWrapper"]:has(> [class*="st-key-card_w_"]) { height: auto !important; min-height: 0 !important;
+  min-width: 0 !important; width: auto !important; position: relative; }
+html body .st-key-wide_grid [class*="st-key-card_w_"] { position: relative; height: auto !important; min-height: 0 !important; min-width: 0 !important;
+  width: 100% !important; gap: 0 !important; container-type: inline-size; }
+.bc { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: #26302d; }
+.bc-poster { position: relative; display: block; box-sizing: border-box; aspect-ratio: 3 / 4; border: 2.5px solid #9eddcc; border-radius: 12px;
+  overflow: hidden; background-color: #f4f6f5; background-size: cover; background-position: center;
+  transition: border-color .15s ease, box-shadow .15s ease; }
+.bc-state, .bc-area, .bc-chip { position: absolute; z-index: 2; font-size: 12px; line-height: 1.5; border-radius: 999px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.bc-state { left: 10px; top: 10px; padding: 2px 10px; font-weight: 800; color: #0b5e57; background: #e6fbf7; }
+.bc-state.blue, .dn-state.blue { color: #2c5bc5; background: #eaf0fc; }
+.bc-state.red, .dn-state.red { color: #c0313f; background: #fdecee; }
+.bc-state.gray, .dn-state.gray { color: #5f6b68; background: #f4f6f5; }
+.bc-area { right: 10px; top: 10px; max-width: 48%; padding: 1px 9px; font-weight: 800; color: #fff; border: 1.5px solid rgba(255,255,255,.85); }
+.bc-chip { left: 10px; bottom: 12px; max-width: calc(100% - 64px); padding: 2px 9px; font-weight: 700; color: #26302d; background: rgba(255,255,255,.92); }
+.bc-chip.tag { color: #0b5e57; }
+/* 마우스를 올렸을 때만 보이는 겹침 판 (캐릭터 · 주소 · 특전). 터치 기기에서는 띄우지 않는다 */
+.bc-over { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .bc-over { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; display: flex; flex-direction: column; gap: 1px;
+    padding: 40px 12px 54px; background: linear-gradient(transparent, rgba(31,42,39,.86) 45%); color: #fff; font-size: 12px; line-height: 1.6;
+    opacity: 0; visibility: hidden; transition: opacity .15s ease, visibility .15s; }
+  .bc-over span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  [class*="st-key-card_w_"]:hover .bc-over, [class*="st-key-card_w_"]:focus-within .bc-over { opacity: 1; visibility: visible; }
+  [class*="st-key-card_w_"]:hover .bc-poster, [class*="st-key-card_w_"]:focus-within .bc-poster { border-color: #14b8a6;
+    box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+}
+.bc-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-bottom: 2px; }
+.bc-title { font-family: "Jua", sans-serif; font-size: 17px; line-height: 1.25; color: #0f6b5c; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2; overflow: hidden; word-break: break-all; }
+.bc-sub { display: flex; min-width: 0; font-size: 13px; line-height: 1.5; color: #5f6b68; }
+.bc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-date { flex: none; white-space: pre; }
+html body [class*="st-key-card_w_"] [data-testid="stMarkdownContainer"]:has(.bc) { margin-bottom: 0 !important; }
+/* 북마크 버튼: 포스터 오른쪽 아래 34px (포스터 높이 = 카드 폭 × 4/3 이라 카드 폭으로 자리를 잰다) */
+html body [class*="st-key-card_w_"] [class*="st-key-fav_"] { position: absolute !important; top: calc(100cqw * 4 / 3 - 44px) !important;
+  bottom: auto !important; right: 10px !important; left: auto !important; width: 34px !important; height: 34px; z-index: 7; }
+html body [class*="st-key-card_w_"] [class*="st-key-fav_"] button { width: 34px !important; min-width: 34px !important; height: 34px !important;
+  min-height: 34px !important; padding: 0 !important; border: 0 !important; border-radius: 8px !important; box-shadow: none !important; }
+html body [class*="st-key-card_w_"] [class*="st-key-fav_off_"] button { background: rgba(255,255,255,.75) !important; }
+html body [class*="st-key-card_w_"] [class*="st-key-fav_off_"] button:hover { background: #fff !important; box-shadow: 0 0 0 2px #14b8a6 !important; }
+html body [class*="st-key-card_w_"] [class*="st-key-fav_"] button span[data-testid="stIconMaterial"] { font-size: 20px !important; }
+/* 'N건 더보기': 46px 알약 */
+html body .st-key-list_more { margin-top: 14px !important; }
+html body .st-key-list_more button { height: 46px !important; min-height: 46px !important; padding: 0 28px !important; border: 0 !important;
+  border-radius: 999px !important; background: #e6fbf7 !important; box-shadow: none !important; }
+html body .st-key-list_more button p { font-size: 14px !important; font-weight: 800 !important; color: #0b5e57 !important; }
+html body .st-key-list_more button:hover { background: #d3f5ee !important; }
+/* 빈 결과 */
+html body .empty-box { padding: 40px 16px 24px; border-radius: 18px; background: #f6f8f7; }
+html body .empty-ic .mi { color: #9eddcc; }
+html body .empty-t { font-size: 21px; color: #26302d; }
+html body .empty-s { color: #5f6b68; font-size: 14px; }
+html body .st-key-empty_relax { margin-top: 4px; }
+html body .st-key-empty_relax button:not([data-testid="stBaseButton-primary"]) { height: 40px !important; min-height: 40px !important; padding: 0 14px !important;
+  border: 1.5px solid #e3e9e7 !important; border-radius: 999px !important; background: #fff !important; box-shadow: none !important; }
+html body .st-key-empty_relax button:not([data-testid="stBaseButton-primary"]) p { font-size: 13.5px !important; font-weight: 700 !important; color: #26302d !important; }
+html body .st-key-empty_relax button:not([data-testid="stBaseButton-primary"]):hover { border-color: #14b8a6 !important; }
+html body .st-key-empty_relax button:not([data-testid="stBaseButton-primary"]):hover p { color: #0b5e57 !important; }
+
+/* ---------- 4. 물어보기 (겉모양만): PC 오른쪽 칸 · 모바일 버튼 / 팝업 ---------- */
+html body .st-key-ask_panel { border: 1.5px solid #9eddcc !important; border-radius: 18px !important; box-shadow: none !important; }
+html body .st-key-ask_panel > [data-testid="stElementContainer"]:has(.apn-head) { padding: 0 !important; width: 100% !important; background: #e9f7f2 !important; }
+html body .st-key-ask_panel > [data-testid="stElementContainer"]:has(.apn-head) [data-testid="stMarkdown"] { width: 100% !important; }
+html body .apn-head { flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; padding: 14px 16px; background: #e9f7f2; }
+html body .apn-head::before { content: ""; flex: none; width: 36px; height: 36px; background: url("app/static/mascot.png") center / contain no-repeat; }
+html body .apn-title { font-family: "Jua", sans-serif; font-weight: 400; font-size: 19px; line-height: 1.3; color: #0f6b5c; }
+html body .st-key-apn_log, html body .st-key-apd_log { padding-top: 12px; }
+html body .apn-row { margin: 0 0 2px; }
+html body .apn-ava, html body .apn-name { display: none; }
+html body .apn-col { max-width: 92%; }
+html body .apn-bot { background: #f6f8f7; border-radius: 18px 18px 18px 4px; padding: 12px 14px; font-size: 14px; line-height: 1.6; color: #26302d; }
+html body .apn-bot b, html body .apn-bot strong, html body .apn-num { color: #0f6b5c; }
+html body .apn-me { margin: 0 0 2px; }
+html body .apn-me span { max-width: 82%; background: #14b8a6; border-radius: 18px 18px 4px 18px; padding: 10px 14px; font-size: 14px;
+  font-weight: 600; line-height: 1.5; }
+html body .apn-exbox { border: 1px solid #9eddcc; background: #fff; }
+html body .apn-exbox b { color: #0f6b5c; font-size: 12px; }
+html body .apn-ex { font-size: 12.5px; padding: 4px 10px; border-color: #9eddcc; color: #0f6b5c; }
+html body [class*="st-key-apn_card_"], html body [class*="st-key-apd_card_"] { margin: 0 !important; width: 100% !important; max-width: 100% !important; }
+html body .apc { gap: 10px; padding: 8px; border: 1px solid #e3e9e7; border-radius: 12px; background: #fff; transition: border-color .12s; }
+html body [class*="st-key-apn_card_"]:hover .apc, html body [class*="st-key-apd_card_"]:hover .apc { background: #fff; border-color: #14b8a6; }
+html body .apc img { width: 40px; height: 54px; flex: 0 0 40px; border-radius: 7px; background: #f4f6f5; }
+html body .apc-txt { gap: 1px; }
+html body .apc-work { font-family: inherit; font-size: 13.5px; font-weight: 800; line-height: 1.4; color: #26302d; }
+html body .apc-cafe { font-size: 12px; font-weight: 600; line-height: 1.4; }
+html body .apc-addr { font-size: 12px; line-height: 1.5; color: #5f6b68; }
+html body .apc-date { font-size: 12px; font-weight: 700; color: #0f6b5c; }
+html body [class*="st-key-apn_more_"] button, html body [class*="st-key-apd_more_"] button { min-height: 0 !important; padding: 7px 12px !important;
+  border: 1px solid #9eddcc !important; border-radius: 999px !important; background: #fff !important; box-shadow: none !important; }
+html body [class*="st-key-apn_more_"] button p, html body [class*="st-key-apd_more_"] button p,
+html body [class*="st-key-apn_more_"] button span, html body [class*="st-key-apd_more_"] button span { font-size: 12.5px !important; font-weight: 700 !important; color: #0f6b5c !important; }
+html body .st-key-apn_chips, html body .st-key-apd_chips { gap: 6px !important; padding-top: 8px; border-top: 0 !important; }
+html body .st-key-apn_chips button, html body .st-key-apd_chips button { padding: 6px 12px !important; border: 1px solid #9eddcc !important;
+  background: #fff !important; box-shadow: none !important; }
+html body .st-key-apn_chips button p, html body .st-key-apd_chips button p { font-size: 12.5px !important; line-height: 1.4 !important; color: #0f6b5c !important; }
+html body .st-key-apn_chips button:hover, html body .st-key-apd_chips button:hover { border-color: #14b8a6 !important; background: #e6fbf7 !important; }
+html body .st-key-apn_chips button:hover p, html body .st-key-apd_chips button:hover p { color: #0b5e57 !important; }
+/* 입력칸: 44px 알약 + 44px 동그라미 보내기(종이비행기. 글자 '보내기' 는 읽기 프로그램용으로 남는다) */
+html body .st-key-apn_form, html body .st-key-apd_form { margin-top: 10px !important; border-top: 1px solid #eef2f1; }
+html body .st-key-apn_form [data-testid="stForm"], html body .st-key-apd_form [data-testid="stForm"] { padding: 12px 0 !important; }
+html body .st-key-apn_form [data-testid="stHorizontalBlock"], html body .st-key-apd_form [data-testid="stHorizontalBlock"] {
+  flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; gap: 8px !important; }
+html body .st-key-apn_form [data-testid="stColumn"]:first-child, html body .st-key-apd_form [data-testid="stColumn"]:first-child {
+  flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }
+html body .st-key-apn_form [data-testid="stColumn"]:last-child, html body .st-key-apd_form [data-testid="stColumn"]:last-child {
+  flex: 0 0 44px !important; width: 44px !important; min-width: 44px !important; }
+html body .st-key-apn_form [data-testid="stTextInputRootElement"], html body .st-key-apd_form [data-testid="stTextInputRootElement"] {
+  height: 44px !important; border: 1px solid #e3e9e7 !important; border-radius: 999px !important; background: #f6f8f7 !important; }
+html body .st-key-apn_form [data-testid="stTextInputRootElement"]:focus-within,
+html body .st-key-apd_form [data-testid="stTextInputRootElement"]:focus-within { border-color: #14b8a6 !important; }
+html body .st-key-apn_form input, html body .st-key-apd_form input { font-size: 14px !important; background: transparent !important; padding: 0 14px !important; }
+html body .st-key-apn_form [data-testid="stFormSubmitButton"] button, html body .st-key-apd_form [data-testid="stFormSubmitButton"] button {
+  width: 44px !important; min-width: 44px !important; height: 44px !important; min-height: 44px !important; padding: 0 !important;
+  border: 0 !important; border-radius: 50% !important; box-shadow: none !important; overflow: hidden;
+  background: #14b8a6 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12l16-8-6 16-2.5-6.5z'/%3E%3C/svg%3E") center / 20px 20px no-repeat !important; }
+html body .st-key-apn_form [data-testid="stFormSubmitButton"] button:hover,
+html body .st-key-apd_form [data-testid="stFormSubmitButton"] button:hover { background-color: #0d9488 !important; }
+html body .st-key-apn_form [data-testid="stFormSubmitButton"] button p,
+html body .st-key-apd_form [data-testid="stFormSubmitButton"] button p { font-size: 0 !important; color: transparent !important; }
+@media (min-width: 641px) {
+  /* 리스트: 목록 | 물어보기 320px (간격 20px) · 지도: (노트 300 | 지도) | 물어보기 340px (간격 16px) */
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel) { flex-wrap: nowrap !important; gap: 20px !important; }
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel) > [data-testid="stColumn"]:first-child {
+    flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel) > [data-testid="stColumn"]:has(.st-key-ask_panel) {
+    flex: 0 0 320px !important; width: 320px !important; min-width: 320px !important; }
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel):has(.st-key-map_row) { gap: 16px !important; }
+  html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel):has(.st-key-map_row) > [data-testid="stColumn"]:has(.st-key-ask_panel) {
+    flex: 0 0 340px !important; width: 340px !important; min-width: 340px !important; }
+}
+@media (max-width: 640px) {
+  /* 모바일 물어보기 버튼: 흰 동그라미 + 민트 테두리 + 마스코트 (등록 + 버튼과 같은 56px, 그 바로 위) */
+  html body .st-key-add_btn button { width: 56px !important; height: 56px !important; }
+  html body .st-key-ask_fab { width: 56px !important; height: 56px; bottom: calc(76px + 56px + 12px); }
+  html body .st-key-ask_fab button { width: 56px !important; height: 56px !important; border: 2px solid #14b8a6 !important;
+    background: #fff url("app/static/mascot.png") center / 36px auto no-repeat !important; box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }
+  html body .st-key-ask_fab button span { display: none !important; }
+}
+
+/* ---------- 5. 지도로 보기: PC 3단 (노트 300 | 지도 | 물어보기 340), 모바일은 지도(400px) → 노트 ---------- */
+html body .st-key-map_frame { position: relative; gap: 0 !important; }
+html body .st-key-map_frame iframe { border-radius: 18px; }
+/* '지도에 N곳': PC 는 지도 위 가운데 알약 (왼쪽 위는 확대 · 축소 버튼 자리), 모바일은 지도 위 제목 줄 */
+html body .st-key-map_frame > [data-testid="stElementContainer"]:has(.map-count) { position: absolute !important; left: 50%; top: 14px;
+  transform: translateX(-50%); z-index: 3; width: auto !important; pointer-events: none; }
+html body .st-key-map_frame [data-testid="stMarkdownContainer"]:has(.map-count) { margin: 0 !important; }
+.map-count { padding: 6px 14px; border-radius: 999px; background: #fff; font-size: 13px; font-weight: 700; line-height: 1.5; color: #26302d;
+  white-space: nowrap; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+.map-count b { color: #0f6b5c; font-weight: 800; }
+@media (min-width: 641px) {
+  html body .st-key-map_row > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: 16px !important;
+    align-items: flex-start !important; }
+  html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {
+    flex: 0 0 300px !important; width: 300px !important; min-width: 300px !important; }
+  html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_frame) {
+    flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }
+  /* 노트 칸: 회색 바탕 상자, 지도 · 물어보기와 같은 높이. 목록만 그 안에서 스크롤 */
+  html body .st-key-map_daily { height: calc(100vh - 115px) !important; min-height: 520px; padding: 16px !important; border-radius: 18px;
+    background: #f6f8f7; overflow: hidden; gap: 12px !important; flex-wrap: nowrap !important; flex: 0 0 auto !important; }
+  html body .st-key-map_daily > [data-testid="stElementContainer"]:has(.dn-list) { flex: 1 1 0 !important; min-height: 0 !important;
+    overflow-y: auto; margin-right: -6px; padding-right: 6px; width: auto !important; }
+  html body .st-key-map_daily > [data-testid="stElementContainer"]:has(style), html body .st-key-map_daily > [data-testid="stElementContainer"]:has(iframe) {
+    position: absolute !important; width: 0 !important; height: 0 !important; overflow: hidden; }
+}
+@media (max-width: 640px) {
+  html body .st-key-map_row [data-testid="stHorizontalBlock"]:has(.st-key-map_daily) { flex-direction: column !important; flex-wrap: nowrap !important;
+    gap: 18px !important; }
+  html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_frame) { order: -1 !important;
+    flex: 0 0 auto !important; width: 100% !important; min-width: 100% !important; }
+  html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {
+    flex: 0 0 auto !important; width: 100% !important; min-width: 100% !important; }
+  html body .st-key-map_frame iframe { height: 400px !important; min-height: 0 !important; }
+  html body .st-key-map_frame > [data-testid="stElementContainer"]:has(.map-count) { position: static !important; transform: none; margin: 4px 0 12px; }
+  .map-count { padding: 0; border-radius: 0; background: none; box-shadow: none; font-size: 17px; font-weight: 800; }
+}
+
+/* ---------- 6. 모바일 (폭 640px 이하): A-MList ---------- */
+@media (max-width: 640px) {
+  /* 목록 위 줄: 제목 + 필터 버튼(44px), 그 아래 칩 줄(북마크 · 지역 고르기 · 정렬, 36px) */
+  html body .st-key-listtools:has(.st-key-listbar h4) { position: relative; margin-bottom: 12px !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { display: flex !important;
+    flex-direction: row !important; flex-wrap: wrap !important; align-items: center !important; gap: 12px 6px !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stColumn"]:has(.st-key-listbar) { flex: 1 1 100% !important; width: 100% !important;
+    min-width: 0 !important; min-height: 44px; padding-right: 52px; display: flex !important; align-items: center; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stColumn"]:has([class*="st-key-folsw_"]) { display: block !important;
+    flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stColumn"]:has(.st-key-regions) { display: block !important;
+    flex: 1 1 120px !important; width: auto !important; min-width: 0 !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stColumn"]:has(.st-key-sort) { flex: 0 0 112px !important; width: 112px !important;
+    min-width: 0 !important; }
+  html body .st-key-listtools:has(.st-key-listbar h4) [class*="st-key-folsw_"],
+  html body .st-key-listtools:has(.st-key-listbar h4) .st-key-regions { display: block !important; }
+  html body .st-key-listtools .st-key-listbar h4 { font-size: 17px !important; }
+  html body .st-key-listtools [class*="st-key-folsw"] button { height: 36px !important; min-height: 36px !important; padding: 0 12px !important; gap: 4px; }
+  html body .st-key-listtools [class*="st-key-folsw"] button p { font-size: 13px !important; }
+  html body .st-key-listtools [class*="st-key-folsw"] button span[data-testid="stIconMaterial"] { font-size: 16px !important; }
+  html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]),
+  html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]),
+  html body .st-key-listtools .st-key-regions [data-testid="stMultiSelect"] > div:not([data-testid]) > div,
+  html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div { min-height: 36px !important; }
+  html body .st-key-listtools .st-key-sort [data-testid="stSelectbox"] > div:not([data-testid]) > div { height: 36px !important; }
+  html body .st-key-listtools .st-key-sort input, html body .st-key-listtools .st-key-regions input { font-size: 13px !important; }
+  html body .st-key-listtools .st-key-regions [data-tag] { height: 26px !important; }
+  /* 필터 버튼: '팝업 카페 N곳' 줄 오른쪽 끝 44px 네모 + 걸린 조건 수 */
+  html body .st-key-listtools:has(.st-key-listbar h4) [data-testid="stLayoutWrapper"]:has(> .st-key-view_tools) { position: absolute !important; top: 0; right: 0;
+    width: 44px !important; height: 44px !important; min-height: 44px !important; margin: 0 !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn, html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn .stButton {
+    width: 44px !important; min-width: 44px !important; flex: 0 0 44px !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn button { position: relative; overflow: visible !important; width: 44px !important;
+    min-width: 44px !important; height: 44px !important; padding: 0 !important; border: 1.5px solid #e3e9e7 !important; border-radius: 12px !important;
+    background: #fff !important; box-shadow: none !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn button span[data-testid="stIconMaterial"] { font-size: 22px !important; color: #26302d !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn button [data-testid="stMarkdownContainer"] { position: absolute; top: -6px; right: -6px;
+    width: auto !important; }
+  html body .st-key-listtools .st-key-view_tools .st-key-m_filter_btn button p { min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px;
+    background: #0b7a70; color: #fff !important; font-size: 11px !important; font-weight: 800 !important; line-height: 18px !important; text-align: center; }
+  html body .st-key-abrowse_chips { gap: 6px !important; margin-bottom: 12px; }
+  html body .st-key-abrowse_chips button { height: 36px !important; min-height: 36px !important; padding: 0 10px 0 12px !important; }
+  html body .st-key-abrowse_chips button p { font-size: 13px !important; max-width: 200px; }
+  /* 카드 격자: 2열 */
+  html body .st-key-wide_grid > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px !important; }
+  .bc { gap: 6px; }
+  .bc-state, .bc-area, .bc-chip { font-size: 11.5px; }
+  .bc-state { left: 8px; top: 8px; padding: 2px 8px; }
+  .bc-area { right: 8px; top: 8px; padding: 1px 8px; }
+  .bc-chip { left: 8px; bottom: 8px; max-width: calc(100% - 58px); padding: 2px 8px; background: rgba(255,255,255,.9); }
+  .bc-title { font-size: 16px; }
+  .bc-sub { font-size: 12.5px; }
+  html body [class*="st-key-card_w_"] [class*="st-key-fav_"] { top: calc(100cqw * 4 / 3 - 42px) !important; right: 8px !important; bottom: auto !important; }
+  html body .st-key-list_more, html body .st-key-list_more > div, html body .st-key-list_more .stButton, html body .st-key-list_more button { width: 100% !important; }
+}
+</style>
+"""
+
+
 def _scroll_top() -> None:
     """페이지를 맨 위로 올린다. Streamlit 은 다시 그려도 스크롤 위치를 그대로 두어서,
     상세를 닫고 돌아오면 짧아진 페이지의 맨 아래에 머문다.
@@ -4101,6 +5746,40 @@ def _follow_switch(key: str) -> None:
               on_click=lambda: st.session_state.update(fav_only=not on))
 
 
+def _abrowse_cond_chips(f: dict) -> None:
+    """걸린 필터 칩 (A안 · 웹 CondChips 와 같게): 목록 · 지도 위에 지금 걸린 조건을 알약으로, 누르면 그 조건만 풀린다.
+    지역은 '지역 고르기' 칸이 고른 지역을 칩으로 보여 주고, 북마크는 '북마크' 버튼이 따로 있어 여기엔 넣지 않는다."""
+    chips: list[tuple[str, str]] = []
+    query = str(f.get("query") or "").strip()
+    if query:
+        chips.append(("query", f"검색: {query}"))
+    if f.get("span", "진행중 + 예정") != "진행중 + 예정":
+        chips.append(("span", str(f["span"])))
+    day = f.get("day")
+    if day:
+        chips.append(("day", f"{day.month}.{day.day} ({_WEEKDAYS[day.weekday()]})"))
+    if f.get("work", "전체") != "전체":
+        chips.append(("work", f"작품: {f['work']}"))
+    if f.get("chars"):
+        chips.append(("chars", "캐릭터: " + " · ".join(map(str, f["chars"]))))
+    if chips:      # 기본값이 아닌 필터 칸은 민트로 (A-List '진행 중' 칸)
+        box = {"query": ".st-key-f_query", "span": ".st-key-f_span", "day": '[class*="st-key-f_date_"]',
+               "work": ".st-key-f_work", "chars": '[class*="st-key-filter_chars_"]'}
+        on = ", ".join(f"html body .st-key-filters {box[w]} {inner}" for w, _ in chips for inner in (
+            '[data-testid="stTextInputRootElement"]', '[data-testid="stDateInputField"]',
+            '[data-testid="stSelectbox"] > div:not([data-testid]) > div', '[data-testid="stMultiSelect"] > div:not([data-testid]) > div'))
+        st.markdown(f"<style>{on} {{ border-color: #14b8a6 !important; background: #e6fbf7 !important; }}</style>",
+                    unsafe_allow_html=True)
+    if not chips and not f.get("reserve"):
+        return
+    with st.container(horizontal=True, key="abrowse_chips"):
+        for what, label in chips:
+            st.button(label, icon=":material/close:", key=f"abchip_{what}", on_click=_relax, args=(what,))
+        if f.get("reserve"):          # 홈 '사전예약 팝업' 더보기로 건 조건 (보라)
+            st.button("사전예약 팝업만", icon=":material/close:", key="res_only_chip",
+                      on_click=lambda: st.session_state.update(res_only=False))
+
+
 # 모바일 필터 시트 (필터 아이콘을 눌렀을 때만 page_map 이 붙인다). PC 에는 머리·아래 줄을 늘 숨긴다
 MOBILE_SHEET_CSS = """
 .st-key-filters { position: fixed !important; left: 0; right: 0; top: 44px; bottom: 0; z-index: 1005;
@@ -4138,6 +5817,22 @@ MOBILE_SHEET_CSS = """
 .st-key-m_sheet_done button { width: 100% !important; min-height: 0 !important; height: 50px; border-radius: 12px !important;
   background: #26302D !important; border: 0 !important; }
 .st-key-m_sheet_done button p { font-size: 1.02rem !important; font-weight: 700 !important; color: #fff !important; }
+/* A안 (11/25, A-MList 필터 시트 · 웹 a-browse.css): 아래에서 올라오는 시트 — 위 모서리 22px, 높이는 내용만큼(최대 86%),
+   제목 Jua 21px, 칸 사이 14px(구분선 없음), 아래 줄은 '전체 삭제' 글자 버튼 + 민트 알약 'N곳 표시' */
+html body .st-key-filters { top: auto !important; max-height: 86vh; max-height: 86dvh; border: 0 !important; border-radius: 22px 22px 0 0 !important;
+  padding: 16px 16px 0 !important; box-shadow: 0 0 0 100vmax rgba(20,24,23,.45) !important; }
+html body .sheet-title { font-family: "Jua", sans-serif; font-size: 21px; font-weight: 400; color: #26302d; }
+html body .st-key-filters [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+html body .st-key-filters .st-key-m_only > div { padding: 7px 0 !important; border-bottom: 0 !important; }
+html body .st-key-m_sheet_foot { flex-direction: row !important; align-items: center !important; justify-content: space-between !important;
+  gap: 8px !important; border-top: 0 !important; padding: 12px 0 calc(16px + env(safe-area-inset-bottom)) !important; }
+html body .st-key-m_sheet_foot > div, html body .st-key-m_sheet_foot .stButton,
+html body .st-key-m_sheet_foot [class*="st-key-m_sheet_"] { width: auto !important; flex: 0 0 auto !important; }
+html body .st-key-m_sheet_reset button { width: auto !important; height: 46px !important; padding: 0 4px !important; }
+html body .st-key-m_sheet_reset button p { font-size: 14px !important; font-weight: 700 !important; color: #5f6b68 !important; }
+html body .st-key-m_sheet_done button { width: auto !important; height: 46px !important; padding: 0 24px !important; border-radius: 999px !important;
+  background: #14b8a6 !important; box-shadow: none !important; }
+html body .st-key-m_sheet_done button p { font-size: 14px !important; font-weight: 800 !important; }
 """
 
 
@@ -4490,6 +6185,56 @@ html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-k
 }</style>
 """
 
+# A안 메뉴바 (11/25, docs/design/handoff A-Home · A-Mobile header): GNB_CSS 뒤에 불러서 덮는다 (웹 web/app/a-shell.css 와 같은 값)
+#   연민트 바탕 · 로고 52px · 알약 탭(고른 탭 = 흰 알약 + 굵게) · 오른쪽 44px 흰 동그라미 버튼. 모바일: 로고 44px, 탭 네 칸
+A_GNB_CSS = """
+<style>
+html body .st-key-gnb { padding: 12px 24px !important; gap: 12px !important; min-height: 52px; }
+html body .st-key-gnb .st-key-home_brand button { width: 186px !important; height: 52px !important; }
+html body .st-key-gnb .st-key-gnb_tabs { gap: 4px !important; }
+html body .st-key-gnb .st-key-gnb_tabs button { padding: 9px 18px !important; border: 0 !important; border-radius: 999px !important; }
+html body .st-key-gnb .st-key-gnb_tabs button p { font-family: inherit !important; font-size: 15px !important; font-weight: 600 !important;
+  color: #26302D !important; letter-spacing: 0 !important; line-height: 1.3 !important; }
+html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button { background: #fff !important; }
+html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button p { font-size: 15px !important;
+  font-weight: 800 !important; color: #1F2A27 !important; }
+html body .st-key-gnb .st-key-gnb_right { gap: 6px !important; }
+/* 검색 · 알림: 44px 흰 동그라미, 아이콘 22px */
+html body .st-key-gnb .st-key-gnb_right [class*="st-key-gnb_search_"] button,
+html body .st-key-gnb .st-key-gnb_right [data-testid="stPopover"] button { width: 44px !important; min-width: 44px !important;
+  height: 44px !important; min-height: 44px !important; border-radius: 50% !important; background-color: #fff !important;
+  background-size: 22px 22px !important; padding: 0 !important; }
+/* 프로필 사진 동그라미 44px, 손님 '로그인' 은 흰 알약 */
+html body .st-key-gnb .st-key-gnb_right .st-key-login_btn button { min-height: 44px !important; }
+html body .st-key-gnb .st-key-gnb_right .st-key-login_btn.aw-member button,
+html body.aw-member .st-key-gnb .st-key-gnb_right .st-key-login_btn button { width: 44px !important; height: 44px !important;
+  border: 2px solid #fff !important; }
+html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button { background: #fff !important; border-radius: 999px !important;
+  padding: 0 18px !important; height: 44px !important; }
+html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button p { font-family: inherit !important; font-size: 14px !important;
+  font-weight: 800 !important; color: #1F2A27 !important; }
+@media (max-width: 640px) {
+  html body .st-key-gnb { padding: 14px 16px 10px !important; border-radius: 0 0 24px 24px !important; row-gap: 10px !important; }
+  html body .st-key-gnb .st-key-home_brand button { width: 157px !important; height: 44px !important; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs { gap: 4px !important; margin-top: 0 !important; justify-content: stretch !important; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs > div { flex: 1 1 0 !important; width: auto !important; min-width: 0; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button { width: 100% !important; padding: 10px 0 !important; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button p,
+  html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button p { font-size: 13.5px !important;
+    letter-spacing: -.02em !important; white-space: nowrap; }
+  html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button { height: 40px !important; min-height: 40px !important;
+    padding: 0 14px !important; }
+  html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button p { font-size: 13px !important; }
+  /* 모바일 물어보기 버튼: 흰 동그라미 + 민트 테두리 + 마스코트, 등록(+)과 같은 56px (홈을 포함한 모든 화면 — A_BROWSE_CSS 와 같은 값) */
+  html body .st-key-add_btn button { width: 56px !important; height: 56px !important; }
+  html body .st-key-ask_fab { width: 56px !important; height: 56px; bottom: calc(76px + 56px + 12px); }
+  html body .st-key-ask_fab button { width: 56px !important; height: 56px !important; border: 2px solid #14b8a6 !important;
+    background: #fff url("app/static/mascot.png") center / 36px auto no-repeat !important; box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }
+  html body .st-key-ask_fab button span { display: none !important; }
+}
+</style>
+"""
+
 
 ASK_FAB_CSS = """
 <style>
@@ -4715,6 +6460,9 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
     if st.session_state.pop("_gnb_to_map", False) and not on_map:
         go("map")                            # 다른 화면에서 지도·리스트·내 캘린더 탭을 누름 (메인이면 표시만 지운다)
     st.markdown(GNB_CSS, unsafe_allow_html=True)
+    # A안 메뉴바 (11/25). 회원이면 body 에 aw-member 를 달아 프로필 동그라미 / 손님 '로그인' 알약을 가른다
+    st.markdown(A_GNB_CSS, unsafe_allow_html=True)
+    components.html("<script>window.parent.document.body.classList.toggle('aw-member', %s);</script>" % ('true' if _member() else 'false'), height=0)
     components.html(f"<script>window.parent.eval({json.dumps(_TOP_BTN_JS)});</script>", height=0)   # 모바일 '맨 위로'
     components.html(f"<script>window.parent.eval({json.dumps(_GNB_MOTION_JS)});</script>", height=0)   # 메뉴바 모션 (11/19)
     wide = bool(st.session_state.get("list_only"))
@@ -4806,9 +6554,9 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
             if who:
                 # 회원: 닉네임 글자 대신 프로필 사진 동그라미 (11/18 요청). 글자는 화면에서만 숨겨 읽기 프로그램 · 테스트는 그대로 읽는다
                 av = _avatar_url(who.get("avatar")).replace('"', "%22")
-                st.markdown(f'<style>.st-key-gnb_right .st-key-login_btn button {{ width: 36px !important; height: 36px !important;'
+                st.markdown(f'<style>html body .st-key-gnb .st-key-gnb_right .st-key-login_btn button {{ width: 44px !important; height: 44px !important;'
                             f' min-height: 0 !important; padding: 0 !important; border-radius: 50% !important;'
-                            f' border: 2px solid #9EDDCC !important; background: #DDF3EC url("{av}") center / cover no-repeat !important; }}'
+                            f' border: 2px solid #fff !important; background: #DDF3EC url("{av}") center / cover no-repeat !important; }}'
                             f' .st-key-gnb_right .st-key-login_btn button p {{ font-size: 0 !important; line-height: 0 !important; }}'
                             f' .st-key-gnb_right .st-key-login_btn button:hover {{ border-color: var(--accent) !important; }}</style>',
                             unsafe_allow_html=True)
@@ -4938,83 +6686,87 @@ def _notice_history(days_back: int = 2) -> list[tuple[date, str, str, dict]]:
 
 
 def render_my_calendar_view() -> None:
-    st.markdown(CAL_CSS + MYCAL_CSS + BOX_CSS, unsafe_allow_html=True)
-    # (모바일 리스트·지도 아이콘 줄은 11/18 요청으로 뺐다 — 메뉴바 탭으로 옮긴다)
-    # 순서 (11/18 요청): 왼쪽 = 내 캘린더(가장 넓게) · 가운데 = 찜·다녀온·최근 본(조금 작게) · 오른쪽 = 알림 받은 내역
-    # 캘린더는 지도 보기 오른쪽 캘린더와 같은 크기, 알림은 데일리 팝업 노트와 같은 폭·모양
-    left, mid, right = st.columns([1.55, 2.3, 1.5], gap="medium")      # 찜 줄이고 알림 내역 키움 (11/18)
+    # A안 (11/25, 웹 app/calendar/page.tsx 와 같게): 왼쪽 400px = 달력 + 곧 있는 팝업 · 가운데(넓게) = 북마크 · 다녀온 팝업 · 최근 본
+    # · 오른쪽 = 알림 받은 내역 + 내 주변 추천. 모바일은 달력 → 곧 있는 팝업 → 탭 · 목록 → 알림 순서 (칸 순서 그대로 쌓인다)
+    st.markdown(CAL_CSS + MYCAL_CSS + BOX_CSS + A_MEMBER_CSS, unsafe_allow_html=True)
+    keep = _amem_keep()
+    with st.container(key="amc_wrap"):
+        left, mid, right = st.columns([1.55, 2.3, 1.5], gap="medium")
     with right, st.container(key="ntf_box"):
-        # 긴 설명은 제목 옆 ? 에 (11/18 요청: 문구가 길어 줄이 어색했음)
-        r_ = _rules()
-        st.markdown('<div class="mc-title">알림 받은 내역 <span class="nh-help" tabindex="0">?<span class="nh-tip">'
-                    f'북마크한 팝업의 <b>오픈 {r_["open"]["days"]}일 전</b>, <b>종료 {r_["end"]["days"]}일 전</b>부터 당일까지 '
-                    '알려 드려요. 최근 3일 알림만 보여요.<br>관리자 공지와 삭제 요청 결과도 여기에 와요.</span></span></div>',
-                    unsafe_allow_html=True)
         _render_notice_history()
     with left, st.container(key="mycal_box"):
-        render_calendar()
+        render_calendar(css=False)
     with mid, st.container(key="keep_box"):
         tab = st.session_state.get("box_tab", "fav")
         if tab not in ("fav", "visited", "recent"):
             tab = "fav"
         with st.container(horizontal=True, key="box_tabs"):
-            for t, label in (("fav", "북마크"), ("visited", "다녀온 팝업"), ("recent", "최근 본 팝업")):
+            for t, label in (("fav", f"북마크 {len(keep['fav'])}"), ("visited", f"다녀온 팝업 {len(keep['visited'])}"),
+                             ("recent", "최근 본")):
                 st.button(label, key=f"boxtab_{'on_' if tab == t else ''}{t}", on_click=_box_tab, args=(t,))
         render_box_view(tab)
 
 
 def _render_notice_history() -> None:
-    """종 알림과 같은 모양(새 알림/읽음 · 굵은 종류 · 왜 왔는지 한 줄 · 칸 전체가 버튼) + 왼쪽 포스터 (11/18 요청).
+    """알림 받은 내역 (A안, 웹 NtfHistory 와 같게): 새 알림/읽음/지난 알림 · 날 · 지역 칩 · 굵은 종류 · 왜 왔는지 한 줄, 칸 전체가 버튼.
     오늘 알림은 종과 같은 번호를 써서 한쪽에서 읽으면 다른 쪽도 '읽음'."""
     me = _member()
-    rules = _rules()
+    r_ = _rules()
     inbox = _inbox(str(me["entry_id"])) if me else []
     # 최근 3일 알림만 (그 전 내역은 보이지 않음, 11/18 요청)
-    inbox = [r for r in inbox if (admin._day(r.get("updated_at")) or TODAY) >= TODAY - timedelta(days=2)]
-    if inbox:
-        st.markdown('<div class="nh-day">받은 알림</div>', unsafe_allow_html=True)
-    for r in inbox[:20]:                    # 공지 · 삭제 요청 처리 결과 (관리자가 보냄)
-        _ntf_cell(_ntf_id("i" + str(r.get("row_id"))),
-                  f'<b>{escape(str(r.get("title") or ""))}</b><br>{escape(str(r.get("body") or ""))}'
-                  + _why_html(admin.KIND_RULE.get(str(r.get("kind")), "notice")), None, kp="h")
-    hist = _notice_history()
-    if not hist:
-        st.markdown('<div class="ntf-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
-                    '여기에 쌓여요.</div>', unsafe_allow_html=True)
-    last_day = None
-    for day, kind, label, r in hist[:40]:
-        if day != last_day:
-            st.markdown(f'<div class="nh-day">{"오늘" if day == TODAY else f"{day.month}월 {day.day}일"}</div>',
-                        unsafe_allow_html=True)
-            last_day = day
+    inbox = [r for r in inbox if (admin._day(r.get("updated_at")) or TODAY) >= TODAY - timedelta(days=2)][:20]
+    hist = _notice_history()[:40]
+    has_loc, near = _amem_near()
+    day_text = lambda d: "오늘" if d == TODAY else f"{d.month}.{d.day}"      # noqa: E731
+    cells = []                               # (알림 번호, 글, 팝업 번호, 포스터, 지난 알림?)
+    for r in inbox:                          # 공지 · 삭제 요청 처리 결과 (관리자가 보냄)
+        cells.append((_ntf_id("i" + str(r.get("row_id"))),
+                      f'<span class="nh-time">{day_text(admin._day(r.get("updated_at")) or TODAY)}</span>'
+                      f'<strong>{escape(str(r.get("title") or ""))}</strong>'
+                      f'<span class="nh-txt">{escape(str(r.get("body") or ""))}</span>'
+                      + _why_html(admin.KIND_RULE.get(str(r.get("kind")), "notice")), None, None, False))
+    for day, kind, label, r in hist:
         eid = str(r.get("entry_id"))
-        name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
+        work, cafe_name = str(r.get("work") or ""), str(r.get("cafe_name") or "")
+        name = escape(f"{work} · {cafe_name}".strip(" ·"))
         bell = f"<b>{label}</b> · {name}" + _why_html(kind)      # 종 알림(_notices)과 같은 글 → 같은 번호(읽음 공유)
         nid = _ntf_id(f"m{TODAY}{eid}{bell}") if day == TODAY else _ntf_id(f"h{day}{eid}{label}")
-        # 화면에는 종류 / 작품 / 매장을 줄바꿈으로 (11/18 요청)
-        text = (_area_chip(r.get("address"), "ntf-area") + f"<b>{label}</b><br>{escape(str(r.get('work') or ''))}<br>"
-                f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>" + _why_html(kind))
-        _ntf_cell(nid, text, eid, poster=_poster_url(r.get("images")), kp="h", past=day != TODAY)
-    _render_near_picks()
+        text = (f'<span class="nh-time">{day_text(day)}</span>' + _area_chip(r.get("address"), "nh-area")
+                + f"<strong>{label} · {escape(work or cafe_name)}</strong>"
+                + (f'<span class="nh-txt">{escape(cafe_name)}</span>' if work else "") + _why_html(kind))
+        cells.append((nid, text, eid, _poster_url(r.get("images")), day != TODAY))
+    # '모두 읽음': 받은 알림 + 오늘 알림 + 내 주변 추천 (지난 알림은 원래 읽음으로 보인다)
+    fresh = [c[0] for c in cells if not c[4] and c[0] not in _ntf_read()] + [n for n, _, _ in near if n not in _ntf_read()]
+    with st.container(horizontal=True, vertical_alignment="center", key="amem_nh_head"):
+        st.markdown('<div class="am-h2">알림 받은 내역<span class="nh-help" tabindex="0">?<span class="nh-tip">'
+                    f'북마크한 팝업의 <b>오픈 {r_["open"]["days"]}일 전</b>, <b>종료 {r_["end"]["days"]}일 전</b>부터 당일까지 '
+                    '알려 드려요. 최근 3일 알림만 보여요.<br>관리자 공지와 삭제 요청 결과도 여기에 와요.</span></span></div>',
+                    unsafe_allow_html=True)
+        if fresh:
+            st.button("모두 읽음", key="amem_nh_all", type="tertiary", on_click=_ntf_mark, args=(fresh,))
+    st.markdown('<div class="nh-sub">최근 3일</div>', unsafe_allow_html=True)
+    if not cells:
+        st.markdown('<div class="nh-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
+                    '여기에 쌓여요.</div>', unsafe_allow_html=True)
+    for nid, text, eid, poster, past in cells:
+        _ntf_cell(nid, text, eid, poster=poster, kp="h", past=past)
+    _render_near_picks(has_loc, near)
+    tip = _amem_ntf_tip(r_)
+    if tip:
+        st.markdown(f'<div class="nh-mtip"><img src="{_AMEM_MASCOT}" alt=""><span>{escape(tip)}</span></div>',
+                    unsafe_allow_html=True)
 
 
 NEAR_KM = 20          # '내 주변' 으로 볼 거리
 
 
-def _render_near_picks() -> None:
-    """알림 받은 내역 아래 '내 주변 추천' 최대 3곳 (11/18 요청).
+def _amem_near() -> tuple[bool, list[tuple[str, float, dict]]]:
+    """'내 주변 추천' 최대 3곳 (11/18 요청) → (위치를 아는지, [(알림 번호, km, 행)]).
     대상: 지금 진행 중이거나 3일 안에 여는 팝업 중 내 위치에서 NEAR_KM 안 (북마크한 곳은 위 알림에 있으니 뺌).
     순서: 별점 높은 순 → 다녀온 후기 많은 순 → 가까운 순."""
-    st.markdown('<div class="nh-day">내 주변 추천 <span class="nh-help" tabindex="0">?<span class="nh-tip">'
-                f'내 위치에서 {NEAR_KM}km 안에 있는 팝업 중 <b>지금 진행 중</b>이거나 <b>3일 안에 여는</b> 곳을 골라요.<br>'
-                '순서: 별점 높은 순 → 다녀온 후기 많은 순 → 가까운 순, 최대 3곳.<br>'
-                '이미 북마크한 팝업은 위 알림에 있어서 빼요. 위치를 허용해야 보여요.</span></span></div>',
-                unsafe_allow_html=True)
     loc = _my_loc()
     if not loc:
-        st.markdown('<div class="ntf-empty">위치를 허용하면 내 주변에서 별점 좋은 팝업을 추천해 드려요. '
-                    '브라우저 주소창의 위치 권한을 허용해 주세요.</div>', unsafe_allow_html=True)
-        return
+        return False, []
     me = (float(loc["lat"]), float(loc["lng"]))
     _, mine, _ = _fav_state()
     ratings = _ask_ctx().get("ratings") or {}
@@ -5032,19 +6784,40 @@ def _render_near_picks() -> None:
         if km > NEAR_KM:
             continue
         avg, n = ratings.get(str(r.get("entry_id")), (0.0, 0))
-        cand.append((-avg, -n, km, r, avg, n))
+        cand.append((-avg, -n, km, r))
     cand.sort(key=lambda t: t[:3])
-    if not cand:
-        st.markdown(f'<div class="ntf-empty">내 위치에서 {NEAR_KM}km 안에 지금 열려 있거나 곧 여는 팝업이 없어요.</div>',
+    return True, [(_ntf_id(f"r{TODAY}{r.get('entry_id')}"), km, r) for _, _, km, r in cand[:3]]
+
+
+def _render_near_picks(has_loc: bool | None = None, near: list | None = None) -> None:
+    """알림 받은 내역 아래 '내 주변 추천' (A안: 44px 포스터 · 작품 · 지역 · 매장 · 거리, 칸 전체가 버튼)."""
+    if has_loc is None or near is None:
+        has_loc, near = _amem_near()
+    st.markdown('<div class="nh-near"><div class="am-h2">내 주변 추천<span class="nh-help" tabindex="0">?<span class="nh-tip">'
+                f'내 위치에서 {NEAR_KM}km 안에 있는 팝업 중 <b>지금 진행 중</b>이거나 <b>3일 안에 여는</b> 곳을 골라요.<br>'
+                '순서: 별점 높은 순 → 다녀온 후기 많은 순 → 가까운 순, 최대 3곳.<br>'
+                '이미 북마크한 팝업은 위 알림에 있어서 빼요. 위치를 허용해야 보여요.</span></span></div>'
+                f'<div class="nh-sub">{NEAR_KM}km 안 · 진행 중이거나 3일 안에 열림 · 별점 높은 순</div></div>',
+                unsafe_allow_html=True)
+    if not has_loc:
+        st.markdown('<div class="nh-empty">위치를 허용하면 내 주변에서 별점 좋은 팝업을 추천해 드려요. '
+                    '브라우저 주소창의 위치 권한을 허용해 주세요.</div>', unsafe_allow_html=True)
+        return
+    if not near:
+        st.markdown(f'<div class="nh-empty">내 위치에서 {NEAR_KM}km 안에 지금 열려 있거나 곧 여는 팝업이 없어요.</div>',
                     unsafe_allow_html=True)
         return
-    for _, _, km, r, avg, n in cand[:3]:
+    for nid, km, r in near:
         eid = str(r.get("entry_id"))
+        work, cafe_name = str(r.get("work") or ""), str(r.get("cafe_name") or "")
         dist = f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km"
-        # 거리 / 작품 / 매장 줄바꿈 (별점·상태 줄은 뺐다, 기준은 제목 옆 ? 에) — 11/18 요청
-        text = (_area_chip(r.get("address"), "ntf-area") + f"<b>내 주변 {dist}</b><br>{escape(str(r.get('work') or ''))}<br>"
-                f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>")
-        _ntf_cell(_ntf_id(f"r{TODAY}{eid}"), text, eid, poster=_poster_url(r.get("images")), kp="h")
+        sub = " · ".join(x for x in (geo.area_name(str(r.get("address") or "")), cafe_name if work else "") if x)
+        with st.container(key=f"nh_{nid}"):
+            st.markdown(f'<div class="nr-item{" read" if nid in _ntf_read() else ""}">'
+                        f'<span class="nr-pst" style="{_amem_bg(r.get("images"))}"></span>'
+                        f'<span class="nr-body"><strong>{escape(work or cafe_name)}</strong><span>{escape(sub)}</span></span>'
+                        f'<span class="nr-km">{dist}</span></div>', unsafe_allow_html=True)
+            st.button(f"{work or cafe_name} 상세", key=f"nh_btn_{nid}", on_click=_ntf_click, args=(nid, eid))
 
 
 # ------------------------------------------------------------ '보관함' 탭: 찜 · 다녀온(내가 쓴 다녀온 후기) · 최근 본
@@ -5121,94 +6894,767 @@ def _box_tab(t: str) -> None:
     st.session_state["box_tab"] = t
 
 
-def _box_card(r: dict, key: str, review_html: str = "") -> None:
+def _box_card(r: dict, key: str, review_html: str = "", stamp_lv: int = 0) -> None:
+    """내 캘린더 가운데 칸 카드 (A안, 웹 KeepBox 의 Card): 96px 포스터 · 상태 칩 + 지역 칩 · 작품 · '카페 · 기간' · 특전 첫 항목.
+    다녀온 팝업(stamp_lv)은 포스터 귀퉁이에 40px 도장, 상태 칩 대신 아래에 내 후기. 칸 전체가 상세로 가는 버튼."""
     eid = str(r.get("entry_id"))
     s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
-    md = lambda d: f"{d.month}.{d.day}" if d else ""          # noqa: E731
-    state = ("종료" if e_ and e_ < TODAY else "예정" if s_ and s_ > TODAY else "진행 중") if s_ else ""
+    if not (s_ and e_):
+        state, color = "기간 미정", "gray"
+    elif e_ < TODAY:
+        state, color = "종료", "gray"
+    elif s_ > TODAY:
+        state, color = f"D-{(s_ - TODAY).days}", "blue"
+    elif (e_ - TODAY).days <= 3:
+        state, color = "마감임박", "red"
+    else:
+        state, color = "진행 중", "green"
+    work, cafe_name = str(r.get("work") or ""), str(r.get("cafe_name") or "")
+    period = "오늘 종료" if e_ == TODAY else _period(r, show_raw=False)
+    perk = (_split(r.get("perks") or "") or [""])[0]
+    dot = ""
+    if stamp_lv:
+        from common import stamp
+        dot = f'<span class="am-stamp">{_amem_dot(stamp.TIERS[stamp_lv - 1], 40, bw=3)}</span>'
+    chips = ("" if review_html else f'<span class="am-st {color}">{state}</span>') + _area_chip(r.get("address"), "am-area")
+    heart = not review_html                 # 북마크 단추는 북마크 · 최근 본 카드에만 (모바일에서는 숨김 — 상세 · 리스트에서 바꾼다)
     with st.container(key=f"bx_{key}_{eid}"):
         st.markdown(
-            f'<div class="bxc{" soon" if state == "예정" else ""}"><img class="pst" src="{escape(_poster_url(r.get("images")))}" alt="">'
-            f'<div class="t"><span class="bx-chips">{_area_chip(r.get("address"), "bx-area")}'
-            f'<span class="st{" end" if state == "종료" else ""}">{state}</span></span>'
-            f'<div class="w">{escape(str(r.get("work") or ""))}</div><div class="c">{escape(str(r.get("cafe_name") or ""))}</div>'
-            f'<div class="d">{escape(_period(r))}</div></div></div>{review_html}', unsafe_allow_html=True)
-        st.button(f"{r.get('work')} 상세", key=f"bxbtn_{key}_{eid}", on_click=_gnb_open, args=(eid,))
+            f'<div class="am-card{" has-bm" if heart else ""}"><span class="am-pst" style="{_amem_bg(r.get("images"))}">{dot}</span>'
+            f'<span class="am-body"><span class="am-chips">{chips}</span>'
+            f'<span class="am-t">{escape(work or cafe_name)}</span>'
+            f'<span class="am-sub">{escape(cafe_name + " · " if work else "")}{escape(period)}</span>'
+            + (review_html or (f'<span class="am-perk">특전 · {escape(perk)}</span>' if perk else ""))
+            + '</span></div>', unsafe_allow_html=True)
+        st.button(f"{work or cafe_name} 상세", key=f"bxbtn_{key}_{eid}", on_click=_gnb_open, args=(eid,))
+        if heart:
+            _heart(eid, f"k{key}")
 
 
-def _box_empty(title: str, hint: str, icon: str) -> None:
-    st.markdown(f'<div class="bx-empty"><div class="ic">{icon}</div><h4>{title}</h4><p>{hint}</p></div>',
+def _box_empty(title: str, hint: str, icon: str = "") -> None:
+    st.markdown('<div class="am-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">'
+                f'<path d="M6 4h12v16l-6-4-6 4V4z"/></svg><div class="am-empty-t">{title}</div><p>{hint}</p></div>',
                 unsafe_allow_html=True)
 
 
 BOX_PAGE = 10          # 내 캘린더 북마크 · 다녀온 팝업: 처음 10건, 더 있으면 '+N건 더보기' 로 10건씩 (11/19 요청)
 
 
-def _box_grid(items: list[tuple[dict, str]], key: str) -> None:
-    """카드 목록 (캘린더 옆 칸이라 한 줄에 한 장). 최근 본 팝업은 원래 10개까지라 더보기가 없다."""
+def _box_grid(items: list[tuple], key: str, stamp_lv: int = 0) -> None:
+    """카드 목록 (한 줄에 한 장). 최근 본 팝업은 원래 10개까지라 더보기가 없다."""
     n = st.session_state.get(f"bx_n_{key}", BOX_PAGE)
     for r, review_html in items[:n]:
-        _box_card(r, key, review_html)
+        _box_card(r, key, review_html, stamp_lv)
     if len(items) > n:
-        with st.container(horizontal=True, horizontal_alignment="center", key=f"bx_morewrap_{key}"):
-            st.button(f"+{len(items) - n}건 더보기", icon=":material/expand_more:", key=f"bx_more_{key}",
+        with st.container(key=f"bx_morewrap_{key}"):
+            st.button(f"+{len(items) - n}건 더보기", key=f"bx_more_{key}", width="stretch",
                       on_click=lambda: st.session_state.update({f"bx_n_{key}": n + BOX_PAGE}))
 
 
-def render_box_view(tab: str) -> None:
-    """내 캘린더 오른쪽 칸의 찜 · 다녀온 · 최근 본."""
+def _amem_keep() -> dict:
+    """내 캘린더 가운데 칸 · 마이페이지 숫자에 쓰는 내 목록 (한 번 실행에 한 번만 읽음).
+    latest = 지금 보이는 팝업(끝난 것 제외), fav = 북마크한 팝업, visited = [(팝업, 내 다녀온 후기들)], stamps = 내 후기 도장 수."""
+    from common import stamp
+    run = st.session_state.get("_run", 0)
+    cached = st.session_state.get("_amem_keep_cache")
+    if cached and cached[0] == run:
+        return cached[1]
     # 끝난 팝업은 어디에도 보이지 않게 (11/18 요청): 북마크·다녀온·최근 본 모두 종료일이 오늘 이후인 것만
     latest = {str(r.get("entry_id")): r for r in mycal.latest_rows(store.all_rows())
               if r.get("status") != "deleted" or r.get("source") == "기간 종료"}
     latest = {k: r for k, r in latest.items() if (mycal._day(r.get("end_date")) or TODAY) >= TODAY}
+    _, mine, _ = _fav_state()
+    fav = sorted((latest[i] for i in mine if i in latest),
+                 key=lambda r: (str(r.get("end_date") or "") < TODAY.isoformat(), str(r.get("start_date") or "")))
+    me = _me()
+    rows = reviews.current_rows()
+    by_cafe: dict[str, list[dict]] = {}
+    for rv in sorted((r for r in rows if r.get("kind") == review.RATED_KIND and not r.get("parent_id")
+                      and review.can_delete(r, me)), key=lambda x: str(x.get("updated_at", "")), reverse=True):
+        by_cafe.setdefault(str(rv.get("cafe_id")), []).append(rv)
+    visited = [(latest[cid], rvs) for cid, rvs in by_cafe.items() if cid in latest]
+    stamps = stamp.stamps_of(me, stamp.counts(rows)) if _member() else 0      # 도장은 끝난 팝업의 후기도 센다
+    val = {"latest": latest, "fav": fav, "visited": visited, "stamps": stamps}
+    st.session_state["_amem_keep_cache"] = (run, val)
+    return val
+
+
+def render_box_view(tab: str) -> None:
+    """내 캘린더 가운데 칸의 북마크 · 다녀온 팝업(후기 도장) · 최근 본."""
+    from common import stamp
+    keep = _amem_keep()
+    latest = keep["latest"]
 
     if tab == "fav":
-        st.markdown(f'<div class="bx-tip">{_mi("notifications")} 북마크한 팝업은 오픈·종료 3일 전부터 알림으로 알려 드려요.</div>',
-                    unsafe_allow_html=True)
-        _, mine, _ = _fav_state()
-        rows = sorted((latest[i] for i in mine if i in latest),
-                      key=lambda r: (str(r.get("end_date") or "") < TODAY.isoformat(), str(r.get("start_date") or "")))
-        if not rows:
-            _box_empty("아직 북마크한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.", "bookmark_add")
+        if not keep["fav"]:
+            _box_empty("아직 북마크한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.")
+            with st.container(horizontal=True, horizontal_alignment="center", key="amem_cta_fav"):
+                st.button("리스트에서 찾아보기", key="amem_cta_list", type="primary", on_click=_gnb_go, args=("list",))
             return
-        _box_grid([(r, "") for r in rows], "fav")
+        _box_grid([(r, "") for r in keep["fav"]], "fav")
 
     elif tab == "visited":
-        st.markdown(f'<div class="bx-tip">{_mi("rate_review")} \'다녀온 후기\'를 쓴 팝업이 여기에 모여요. 쓴 후기도 함께 보여요.</div>',
-                    unsafe_allow_html=True)
-        me = _me()
-        mine_reviews = [r for r in reviews.current_rows()
-                        if r.get("kind") == review.RATED_KIND and not r.get("parent_id") and review.can_delete(r, me)]
-        by_cafe: dict[str, list[dict]] = {}
-        for rv in sorted(mine_reviews, key=lambda x: str(x.get("updated_at", "")), reverse=True):
-            by_cafe.setdefault(str(rv.get("cafe_id")), []).append(rv)
+        stamps = keep["stamps"]
+        cur = stamp.tier_of(stamps)
+        hidden = stamps - len(keep["visited"])          # 도장은 끝난 팝업의 후기도 세지만, 이 목록은 지금 있는 팝업만 보여 준다
+        with st.container(key="amem_rkb"):
+            st.markdown(_amem_rank_card(stamps, f"도장 {stamps}개 중 {hidden}개는 이미 끝난 팝업의 후기라 아래 목록에는 없어요."
+                                        if hidden > 0 else ""), unsafe_allow_html=True)
+            if st.button("랭크 안내", key="amem_rank_open_v", type="tertiary"):
+                _amem_rank_dialog()
         items = []
-        for cid, rvs in by_cafe.items():
-            if cid not in latest:
-                continue
-            html_parts = []
+        for r, rvs in keep["visited"]:
+            top = rvs[0]
+            stars_ = review.stars(top.get("rating"))
+            when = _amem_md(top.get("updated_at"))
+            got = ('<span class="am-got">' + (f'<span class="am-stars">{stars_}</span> · ' if stars_ else "") + "도장 받았어요"
+                   + (f'<span class="am-when"> · {when} 후기</span>' if when else "") + "</span>")
+            parts = [got]
             for rv in rvs:
                 pics = images.paths(rv.get("images"))        # 리뷰 화면과 같은 방법으로 사진 경로를 고른다
                 imgs = "".join(f'<img src="{escape(images.url(x))}" alt="">' for x in pics[:4])
-                html_parts.append(
-                    f'<div class="bxr"><span class="stars">{review.stars(rv.get("rating"))}</span>'
-                    f'<span class="when">{escape(_when(str(rv.get("updated_at", ""))))}</span>'
-                    f'<div>{escape(str(rv.get("body") or ""))}</div>'
-                    f'{f"<div class=imgs>{imgs}</div>" if imgs else ""}</div>')
-            items.append((latest[cid], "".join(html_parts)))
+                if str(rv.get("body") or "").strip():
+                    parts.append(f'<span class="am-rv">{escape(str(rv.get("body")))}</span>')
+                if imgs:
+                    parts.append(f'<span class="am-imgs">{imgs}</span>')
+            items.append((r, "".join(parts)))
         if not items:
-            _box_empty("다녀온 팝업이 없어요", "팝업 상세의 리뷰 탭에서 '다녀온 후기'를 쓰면 여기에 기록돼요.", "where_to_vote")
+            _box_empty("다녀온 팝업이 없어요", "팝업 상세의 리뷰에서 '다녀온 후기'를 쓰면 도장을 받고 여기에 기록돼요.")
             return
-        _box_grid(items, "visited")
+        _box_grid(items, "visited", stamp_lv=cur.lv if cur else 1)
 
     else:
         ids = [i for i in st.session_state.get("recent_seen", []) if i in latest][:RECENT_MAX]
-        st.markdown(f'<div class="bx-tip">{_mi("history")} 이 브라우저에서 최근에 연 팝업 상세예요 (최대 {RECENT_MAX}개).</div>',
+        st.markdown(f'<div class="am-tip">이 브라우저에서 최근에 연 팝업 상세예요 (최대 {RECENT_MAX}개).</div>',
                     unsafe_allow_html=True)
         if not ids:
-            _box_empty("최근 본 팝업이 없어요", "리스트나 지도에서 팝업을 눌러 상세를 열면 여기에 남아요.", "history")
+            _box_empty("최근 본 팝업이 없어요", "리스트나 지도에서 팝업을 눌러 상세를 열면 여기에 남아요.")
             return
         _box_grid([(latest[i], "") for i in ids], "recent")
+
+
+# ------------------------------------------------------------ A안 (11/25): 내 캘린더 · 마이페이지 · 후기 도장 랭크 안내
+# 웹 web/app/a-member.css 의 값을 그대로 옮겼다 (.amc-* 달력 · .am-* 카드/탭 · .nh-*/.nr-* 알림 · .rkb-* 도장 요약 · .mp-* 마이페이지
+# · .rkp-* 랭크 안내). 예전 MYCAL_CSS · BOX_CSS · CAL_CSS · AUTH_CSS · GNB_CSS(.ntf-*) 규칙은 그대로 두고 여기서 덮는다.
+A_MEMBER_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Titan+One&display=swap');
+html body { --am-line:#e3e9e7; --am-line-soft:#eef2f1; --am-soft:#f6f8f7; --am-gray:#f4f6f5; --am-ink:#26302d; --am-ink-soft:#5f6b68;
+  --am-mint-line:#9eddcc; --am-gnb:#e9f7f2; }
+.am-m { display:none !important; }
+/* ---- 틀: 왼쪽 400px · 가운데 넓게 · 오른쪽 300px ---- */
+html body .st-key-amc_wrap { max-width:1232px; width:100%; margin:0 auto; }
+html body .st-key-amc_wrap [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-mycal_box) { gap:20px !important;
+  flex-wrap:wrap !important; align-items:flex-start !important; }
+html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-mycal_box) { flex:0 1 400px !important; max-width:400px; min-width:0 !important; width:auto !important; }
+html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-keep_box) { flex:999 1 420px !important; min-width:0 !important; width:auto !important; }
+html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-ntf_box) { flex:1 1 260px !important; max-width:300px; min-width:0 !important; width:auto !important; }
+@media (max-width:1167px) { html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-ntf_box) { flex-basis:100% !important; max-width:none; } }
+@media (max-width:887px) { html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-mycal_box) { flex-basis:100% !important; max-width:none; } }
+html body .st-key-mycal_box, html body .st-key-keep_box, html body .st-key-ntf_box { border:0 !important; border-radius:0 !important;
+  padding:0 !important; background:transparent !important; }
+html body .st-key-mycal_box { gap:16px !important; }
+html body .st-key-keep_box, html body .st-key-ntf_box { gap:12px !important; }
+html body .st-key-amc_wrap [data-testid="stMarkdownContainer"], html body .st-key-amem_mp [data-testid="stMarkdownContainer"],
+html body .st-key-amc_box [data-testid="stMarkdownContainer"] { margin-bottom:0 !important; }
+.am-h2 { font-size:17px; font-weight:800; color:var(--am-ink); display:flex; align-items:center; line-height:1.4; margin:0; }
+/* ? 도움말: 22px 동그라미 */
+html body .amc-h1 .cal-help, html body .am-h2 .nh-help { position:relative; display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; margin-left:6px; border-radius:50%; border:1px solid #c6d0cd; background:#fff; color:var(--am-ink-soft);
+  font-family:"Pretendard", sans-serif; font-size:12px; font-weight:800; line-height:1; flex:none; cursor:help; vertical-align:middle; }
+/* ---- 달력 ---- */
+html body .st-key-amc_box { border:1.5px solid var(--am-line); border-radius:18px; padding:16px !important; background:#fff;
+  gap:12px !important; min-width:0; position:relative; }
+.amc-title { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.amc-h1 { font-family:"Jua", sans-serif; font-size:26px; line-height:1.15; color:var(--am-ink); display:flex; align-items:center; }
+.amc-nick { font-size:13px; color:var(--am-ink-soft); overflow-wrap:anywhere; }
+html body .st-key-amc_box .st-key-cal_nav { justify-content:flex-end !important; align-items:center !important; gap:6px !important;
+  margin:0 !important; flex-wrap:nowrap !important; }
+html body .st-key-amc_box .st-key-cal_nav > div, html body .st-key-amc_box .st-key-cal_nav > div:first-child { flex:0 0 auto !important;
+  width:auto !important; min-width:0 !important; }
+.amc-month { display:inline-block; font-family:"Jua", sans-serif; font-size:18px; min-width:96px; text-align:center; white-space:nowrap;
+  color:var(--am-ink); }
+html body .st-key-amc_box .st-key-cal_prev button, html body .st-key-amc_box .st-key-cal_next button { width:40px !important;
+  height:40px !important; min-height:0 !important; padding:0 !important; border-radius:50% !important;
+  border:1px solid var(--am-line) !important; background:#fff !important; }
+html body .st-key-amc_box .st-key-cal_prev button p, html body .st-key-amc_box .st-key-cal_next button p { font-size:22px !important;
+  line-height:1 !important; color:var(--am-ink) !important; margin:-3px 0 0 !important; font-weight:500; }
+html body .st-key-amc_box .st-key-cal_prev button:hover, html body .st-key-amc_box .st-key-cal_next button:hover { border-color:var(--accent) !important; }
+html body .st-key-amc_box .st-key-cal_now button { height:40px !important; min-height:0 !important; padding:0 14px !important;
+  border-radius:999px !important; border:1px solid var(--accent) !important; background:var(--accent-soft) !important; margin-left:0 !important; }
+html body .st-key-amc_box .st-key-cal_now button p { font-size:13px !important; font-weight:800 !important; color:#0b5e57 !important; white-space:nowrap; }
+.amc-empty { font-size:12.5px; color:var(--am-ink-soft); background:var(--am-soft); border-radius:12px; padding:8px 12px; line-height:1.5; }
+.amc-cal { display:flex; flex-direction:column; gap:12px; }
+.amc-dow { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); font-size:12.5px; font-weight:800; color:var(--am-ink-soft);
+  text-align:center; border-bottom:1px solid var(--am-line-soft); padding-bottom:8px; }
+.amc-dow span:first-child { color:#c0313f; }
+.amc-weeks { display:flex; flex-direction:column; margin-top:-12px; }
+.amc-week { --lane-h:16px; position:relative; min-height:92px; border-bottom:1px solid var(--am-line-soft); box-sizing:border-box; }
+.amc-days { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); height:100%; position:absolute; inset:0; }
+.amc-day { padding:4px; border-left:1px solid var(--am-line-soft); }
+.amc-day:first-child { border-left:0; }
+.amc-day span { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; border-radius:999px;
+  font-size:11.5px; font-weight:800; color:var(--am-ink); }
+.amc-day.sun span { color:#c0313f; }
+.amc-day.out span { color:#9aa5a1; }
+.amc-day.today { background:var(--accent-soft); }
+.amc-day.today span { background:#0b7a70; color:#fff; }
+html body a.amc-bar.cal-bar { position:absolute; height:15px; line-height:15px; padding:0 2px; box-sizing:border-box;
+  background:none !important; border-radius:0; font-size:0; overflow:visible; text-decoration:none !important; }
+html body a.amc-bar.cal-bar > span { display:block; height:100%; border-radius:8px; color:var(--am-ink) !important; font-size:10.5px;
+  font-weight:800; line-height:15px; padding:0 5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+html body a.amc-bar.cl > span { border-top-left-radius:0; border-bottom-left-radius:0; }
+html body a.amc-bar.cr > span { border-top-right-radius:0; border-bottom-right-radius:0; }
+@media (min-width:641px) { html body a.amc-bar.cal-bar > span { box-shadow:none !important; } }
+.amc-foot { margin:0 !important; font-size:12.5px !important; color:var(--am-ink-soft); }
+.amc-legend { list-style:none; margin:0 !important; padding:0 !important; display:none; flex-wrap:wrap; gap:6px 12px; font-size:12px; color:var(--am-ink); }
+.amc-legend li { display:inline-flex; align-items:center; gap:5px; min-width:0; margin:0 !important; padding:0 !important; font-size:12px; }
+.amc-legend i { width:14px; height:6px; border-radius:3px; flex:none; }
+/* ---- 곧 있는 팝업 ---- */
+.amc-up { background:var(--am-soft); border-radius:18px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; }
+html body a.am-up { display:flex; align-items:center; gap:12px; padding:10px 12px; background:#fff; border-radius:12px;
+  color:var(--am-ink) !important; text-decoration:none !important; min-width:0; }
+html body a.am-up:hover { outline:1.5px solid var(--accent); }
+html body .am-up .am-up-t { flex:1; min-width:0; font-size:14px; font-weight:800; color:var(--am-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.am-up-when { margin-left:auto; font-size:13px; color:var(--am-ink-soft); white-space:nowrap; }
+.am-up-empty { font-size:13px; color:var(--am-ink-soft); line-height:1.5; }
+.am-st { font-size:12px; font-weight:800; padding:3px 10px; border-radius:999px; white-space:nowrap; line-height:1.5; }
+.am-st.green { color:#0b5e57; background:#e6fbf7; }
+.am-st.blue { color:#2c5bc5; background:#eaf0fc; }
+.am-st.red { color:#c0313f; background:#fdecee; }
+.am-st.gray { color:var(--am-ink-soft); background:var(--am-gray); }
+/* ---- 가운데: 알약 탭 + 카드 ---- */
+html body .st-key-keep_box .st-key-box_tabs { gap:4px !important; background:var(--am-gray); border-radius:999px; padding:4px !important;
+  border-bottom:0 !important; margin:0 !important; flex-wrap:nowrap !important; }
+html body .st-key-keep_box .st-key-box_tabs > div { flex:1 1 0 !important; min-width:0 !important; width:auto !important; }
+html body .st-key-keep_box .st-key-box_tabs .stButton, html body .st-key-keep_box .st-key-box_tabs button { width:100% !important; }
+html body .st-key-keep_box .st-key-box_tabs button { border:0 !important; border-radius:999px !important; padding:12px 8px !important;
+  background:none !important; margin:0 !important; min-height:0 !important; box-shadow:none !important; }
+html body .st-key-keep_box .st-key-box_tabs button p { font-size:15px !important; font-weight:500 !important; color:var(--am-ink-soft) !important;
+  white-space:nowrap; }
+html body .st-key-keep_box .st-key-box_tabs [class*="st-key-boxtab_on_"] button { background:#fff !important; }
+html body .st-key-keep_box .st-key-box_tabs [class*="st-key-boxtab_on_"] button p { color:var(--am-ink) !important; font-weight:800 !important; }
+html body .st-key-keep_box [class*="st-key-bx_"] { margin-bottom:0; }
+.am-card { display:flex; gap:18px; align-items:center; padding:14px 16px; border:1.5px solid var(--am-line); border-radius:16px;
+  background:#fff; color:var(--am-ink); min-width:0; transition:border-color .15s; }
+[class*="st-key-bx_"]:hover .am-card { border-color:var(--accent); }
+.am-pst { position:relative; width:96px; aspect-ratio:3 / 4; border-radius:12px; border:2.5px solid var(--am-mint-line);
+  background-color:var(--am-gray); background-size:cover; background-position:center; flex:none; box-sizing:border-box; }
+.am-stamp { position:absolute; right:-10px; bottom:-10px; display:flex; border-radius:50%; transform:rotate(-10deg);
+  box-shadow:0 2px 6px rgba(0,0,0,.12); }
+.am-body { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.am-chips { display:flex; gap:6px; flex-wrap:wrap; }
+.am-chips:empty { display:none; }
+.am-chips .am-st { padding:2px 10px; }
+.am-area { font-size:12px; padding:2px 10px; border-radius:999px; line-height:1.5; white-space:nowrap; }
+.am-t { font-family:"Jua", sans-serif; font-size:21px; line-height:1.25; color:#0f6b5c; overflow-wrap:anywhere; }
+.am-sub { font-size:14px; color:var(--am-ink-soft); overflow-wrap:anywhere; }
+.am-perk { align-self:flex-start; max-width:100%; font-size:13px; font-weight:700; padding:4px 12px; border-radius:999px;
+  background:var(--am-gray); color:var(--am-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.am-got { font-size:12.5px; font-weight:800; color:#0f6b5c; }
+.am-stars { color:#9a6a00; letter-spacing:1px; }
+.am-when { font-weight:500; color:var(--am-ink-soft); }
+.am-rv { font-size:13px; line-height:1.55; background:var(--am-soft); border-radius:10px; padding:8px 10px; display:-webkit-box;
+  -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.am-imgs { display:flex; gap:6px; flex-wrap:wrap; }
+.am-imgs img { width:48px; height:48px; object-fit:cover; border-radius:8px; }
+.am-tip { font-size:12.5px; color:var(--am-ink-soft); }
+.am-empty { text-align:center; padding:36px 16px; border:1.5px dashed var(--am-line); border-radius:16px; }
+.am-empty svg { width:52px; height:52px; color:#c6d0cd; }
+.am-empty-t { margin:12px 0 4px; font-size:16px; font-weight:800; color:var(--am-ink); }
+.am-empty p { margin:0 !important; font-size:13.5px !important; color:var(--am-ink-soft); line-height:1.55; }
+/* 북마크 단추 (카드 오른쪽, PC 만) */
+@media (min-width:641px) { .am-card.has-bm { padding-right:74px; } }
+html body .st-key-keep_box [class*="st-key-fav_"] { position:absolute !important; right:16px; top:50%; transform:translateY(-50%);
+  z-index:3; width:40px !important; }
+html body .st-key-keep_box [class*="st-key-fav_"] button { width:40px !important; height:40px !important; min-width:0 !important;
+  min-height:0 !important; padding:0 !important; border-radius:10px !important; background:#fff !important;
+  border:1.5px solid var(--am-line) !important; box-shadow:none !important; }
+html body .st-key-keep_box [class*="st-key-fav_"] button::before { display:none !important; }
+html body .st-key-keep_box [class*="st-key-fav_"] button span { font-size:22px !important; color:var(--am-ink-soft) !important; margin:0 !important; }
+html body .st-key-keep_box [class*="st-key-fav_on_"] button { border-color:var(--accent) !important; }
+html body .st-key-keep_box [class*="st-key-fav_on_"] button span { color:var(--accent-deep) !important; }
+/* 더보기 · 빈 목록 단추 */
+html body [class*="st-key-bx_more_"] button, html body .st-key-amrv_more button { width:100% !important; height:44px !important;
+  min-height:0 !important; border-radius:999px !important; border:0 !important; background:var(--accent-soft) !important; }
+html body [class*="st-key-bx_more_"] button p, html body .st-key-amrv_more button p { font-size:14px !important; font-weight:800 !important;
+  color:#0b5e57 !important; }
+html body [class*="st-key-amem_cta_"] button { border:0 !important; border-radius:999px !important; background:var(--accent-deep) !important;
+  padding:9px 14px !important; min-height:0 !important; }
+html body [class*="st-key-amem_cta_"] button p { font-size:13px !important; font-weight:800 !important; color:#fff !important; }
+/* ---- 후기 도장 ---- */
+.amk { display:inline-flex; align-items:center; justify-content:center; flex:none; border-radius:50%; box-sizing:border-box; vertical-align:middle; }
+.amk img { width:62% !important; height:auto !important; display:block; max-width:none; }
+.amk.locked { opacity:.45; filter:grayscale(1); }
+.amk-big { position:relative; display:inline-block; flex:none; }
+.amk-big svg { position:absolute; inset:0; }
+.amk-big > img { position:absolute; left:50%; top:50%; width:41% !important; height:auto !important; transform:translate(-50%, -50%); }
+.amk-ring-t { font-family:"Titan One", "Jua", sans-serif; }
+.amk-lv { position:absolute; right:-2px; bottom:2px; min-width:30px; height:26px; padding:0 6px; border-radius:999px; border:3px solid #fff;
+  color:#fff; font-family:"Titan One", "Jua", sans-serif; font-size:13px; line-height:20px; text-align:center; box-sizing:border-box; }
+.amk-big.dim { filter:grayscale(1); opacity:.45; }
+html body .st-key-amem_rkb, html body .st-key-amem_rank { position:relative; }
+.rkb-card { border:1.5px solid var(--am-mint-line); border-radius:20px; padding:16px; background:#fff; display:flex; flex-direction:column; gap:14px; }
+.rkb-top { display:flex; align-items:center; gap:14px; padding-right:64px; }
+.rkb-s60 { position:relative; width:60px; height:60px; flex:none; }
+.rkb-lv { position:absolute; right:-6px; bottom:-4px; min-width:22px; height:20px; padding:0 4px; border-radius:999px; border:2px solid #fff;
+  color:#fff; font-family:"Titan One", "Jua", sans-serif; font-size:11px; line-height:16px; text-align:center; box-sizing:border-box; }
+.rkb-txt { flex:1; display:flex; flex-direction:column; gap:4px; min-width:0; }
+.rkb-cap { font-size:13px; font-weight:700; color:var(--am-ink-soft); }
+.rkb-name { font-family:"Jua", sans-serif; font-size:21px; color:#0f6b5c; line-height:1.25; }
+.rkb-line { font-size:12.5px; color:var(--am-ink); line-height:1.5; }
+.rkb-bar { height:10px; border-radius:999px; background:var(--am-line-soft); overflow:hidden; }
+.rkb-bar span { display:block; height:100%; border-radius:999px; }
+.rkb-row { list-style:none; margin:0 !important; padding:0 !important; display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:4px; }
+.rkb-row li { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; margin:0 !important; padding:0; }
+.rkb-row li.lock { opacity:.45; filter:grayscale(1); }
+.rkb-row li.lock .amk.locked { opacity:1; filter:none; }
+.rkb-nm { font-size:11px; font-weight:800; color:var(--am-ink); text-align:center; line-height:1.25; word-break:keep-all; }
+.rkb-row.cells { gap:10px; }
+.rkb-row.cells li { gap:6px; padding:12px 6px; border-radius:16px; }
+.rkb-row.cells .rkb-nm { font-size:13px; }
+.rkb-need { font-size:12px; color:var(--am-ink-soft); }
+.rkb-note { margin:0 !important; font-size:12px !important; color:var(--am-ink-soft); line-height:1.5; }
+html body [class*="st-key-amem_rank_open_"] { position:absolute !important; top:26px; right:16px; width:auto !important; z-index:2; }
+html body .st-key-amem_rank_open_mp { top:24px; right:28px; }
+html body [class*="st-key-amem_rank_open_"] button { border:0 !important; background:none !important; padding:8px 0 !important;
+  min-height:0 !important; box-shadow:none !important; width:auto !important; }
+html body [class*="st-key-amem_rank_open_"] button p { font-size:12.5px !important; font-weight:700 !important; color:var(--accent-deep) !important;
+  text-decoration:underline; text-underline-offset:2px; white-space:nowrap; }
+/* ---- 오른쪽: 알림 받은 내역 + 내 주변 추천 ---- */
+html body .st-key-amem_nh_head { justify-content:space-between !important; align-items:center !important; min-height:34px; gap:8px !important;
+  flex-wrap:nowrap !important; }
+html body .st-key-amem_nh_head > div { width:auto !important; flex:0 1 auto !important; }
+html body .st-key-amem_nh_all button { border:0 !important; background:none !important; padding:8px 4px !important; min-height:0 !important; }
+html body .st-key-amem_nh_all button p { font-size:13px !important; font-weight:700 !important; color:#0f6b5c !important; white-space:nowrap; }
+.nh-sub { font-size:12.5px; color:var(--am-ink-soft); margin-top:-6px; }
+html body .st-key-ntf_box [class*="ntfc_"], html body .st-key-ntf_box .ntf-item.plain { margin-bottom:0 !important; }
+html body .st-key-ntf_box .ntf-item { display:flex; gap:10px; align-items:flex-start; padding:12px !important; border-radius:14px;
+  background:#fff6f6; border:0 !important; color:var(--am-ink); min-width:0; font-size:12.5px; line-height:1.45; box-shadow:none !important; }
+html body .st-key-ntf_box .ntf-item.read { background:var(--am-soft); color:var(--am-ink); }
+html body .st-key-ntf_box .ntf-item::before { display:none !important; }
+html body .st-key-ntf_box [class*="ntfc_"]:hover .ntf-item { outline:1.5px solid var(--accent); }
+html body .st-key-ntf_box .ntf-item .ntf-pst { width:40px; height:52px; flex:0 0 40px; border-radius:8px; object-fit:cover; background:var(--am-gray); }
+html body .st-key-ntf_box .ntf-item .ntf-body { padding-right:0 !important; min-width:0; flex:1 1 auto; }
+html body .st-key-ntf_box .ntf-item .ntf-st { position:static !important; float:none !important; font-size:11.5px; font-weight:800; color:#d63a3a; margin-right:6px; }
+html body .st-key-ntf_box .ntf-item.read .ntf-st { color:var(--am-ink-soft); }
+.nh-time { font-size:11.5px; color:var(--am-ink-soft); margin-right:6px; }
+.nh-area { display:inline-block; font-size:11px; padding:0 7px; border-radius:999px; line-height:1.6; }
+html body .st-key-ntf_box .ntf-body strong { display:block; font-size:14px; line-height:1.35; margin-top:3px; color:var(--am-ink); overflow-wrap:anywhere; }
+.nh-txt { display:block; font-size:12.5px; line-height:1.45; margin-top:3px; overflow-wrap:anywhere; }
+html body .st-key-ntf_box .ntf-why { display:block; font-size:12.5px; color:var(--am-ink-soft); line-height:1.45; margin-top:3px; }
+html body .st-key-ntf_box .ntf-why .mi { display:none; }
+.nh-empty { font-size:13px; color:var(--am-ink-soft); line-height:1.55; padding:12px; border-radius:14px; background:var(--am-soft); }
+.nh-near { margin-top:8px; border-top:1px solid var(--am-line-soft); padding-top:16px; display:flex; flex-direction:column; gap:10px; }
+.nh-near .nh-sub { margin-top:-4px; }
+html body .st-key-ntf_box [class*="st-key-nh_"] { margin-bottom:0; }
+.nr-item { display:flex; align-items:center; gap:10px; color:var(--am-ink); min-width:0; border-radius:12px; }
+[class*="st-key-nh_"]:hover .nr-item strong { color:var(--accent-deep); }
+.nr-pst { width:44px; height:44px; border-radius:12px; background-color:var(--am-gray); background-size:cover; background-position:center; flex:none; }
+.nr-body { display:flex; flex-direction:column; min-width:0; }
+.nr-body strong { font-size:14px; }
+.nr-body strong, .nr-body span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.nr-body span { font-size:12.5px; color:var(--am-ink-soft); }
+.nr-km { margin-left:auto; font-size:12.5px; font-weight:800; color:#0f6b5c; white-space:nowrap; }
+.nh-mtip { display:flex; align-items:center; gap:12px; padding:14px; border-radius:16px; background:var(--am-gnb); margin-top:4px; }
+.nh-mtip img { width:44px !important; height:auto !important; display:block; flex:none; }
+.nh-mtip span { font-size:13px; line-height:1.55; color:var(--am-ink); }
+/* ================= 마이페이지 ================= */
+html body .st-key-amem_mp { gap:20px !important; }
+.mp-h { margin:4px 0 0; font-family:"Jua", sans-serif; font-size:30px; color:var(--am-ink); line-height:1.3; }
+html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_prof),
+html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_set) { gap:20px !important;
+  flex-wrap:wrap !important; }
+html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_set) { align-items:flex-start !important; }
+html body .st-key-amem_mp [data-testid="stColumn"]:has(.st-key-amem_prof), html body .st-key-amem_mp [data-testid="stColumn"]:has(.st-key-amem_set) {
+  flex:1 1 300px !important; max-width:360px; min-width:0 !important; width:auto !important; }
+html body .st-key-amem_mp [data-testid="stColumn"]:has(.st-key-amem_rank), html body .st-key-amem_mp [data-testid="stColumn"]:has(.st-key-amem_rvs) {
+  flex:999 1 520px !important; min-width:0 !important; width:auto !important; }
+html body .st-key-amem_prof { border:1.5px solid var(--am-line); border-radius:22px; padding:24px !important; background:#fff;
+  align-items:center; gap:12px !important; box-sizing:border-box; height:100%; }
+.mp-prof-in { display:flex; flex-direction:column; align-items:center; gap:12px; }
+.mp-av { position:relative; width:104px; height:104px; flex:none; display:block; }
+.mp-av-img { display:block; width:100%; height:100%; border-radius:50%; border:4px solid #fff; box-shadow:0 0 0 2px var(--am-line);
+  overflow:hidden; box-sizing:border-box; background:#DDF3EC; }
+html body .mp-av .me-avimg { width:100% !important; height:100% !important; border:0; border-radius:0; object-fit:cover; display:block; }
+.mp-av-stamp { position:absolute; right:-8px; bottom:-6px; display:flex; }
+.mp-who { display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; max-width:100%; text-align:center; }
+.mp-nickname { font-family:"Jua", sans-serif; font-size:26px; line-height:1.2; color:var(--am-ink); overflow-wrap:anywhere; }
+.mp-lv { font-size:13px; font-weight:800; color:var(--am-ink-soft); background:var(--am-gray); padding:4px 12px; border-radius:999px; }
+.mp-meta { font-size:13px; color:var(--am-ink-soft); }
+.mp-meta.small { font-size:12px; }
+.mp-meta code { font-size:11.5px; background:var(--am-gray); border-radius:4px; padding:0 4px; color:var(--am-ink-soft); }
+html body .st-key-amem_nums { position:relative; width:100%; margin-top:6px; border-top:1px solid var(--am-line-soft); padding-top:14px; }
+.mp-nums { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); width:100%; text-align:center; }
+html body .mp-nums > * { display:flex; flex-direction:column; gap:2px; color:var(--am-ink) !important; text-decoration:none !important; }
+.mp-nums strong { font-family:"Titan One", "Jua", sans-serif; font-size:22px; font-weight:400; color:#0f6b5c; line-height:1.2; }
+html body .mp-nums > * > span { font-size:12.5px; color:var(--am-ink-soft); }
+html body .st-key-amem_nums_btn { position:absolute !important; left:0; top:0; bottom:0; width:66.667% !important; gap:0 !important;
+  flex-wrap:nowrap !important; z-index:2; }
+html body .st-key-amem_nums_btn > div { flex:1 1 0 !important; width:auto !important; height:100%; min-width:0 !important; }
+html body .st-key-amem_nums_btn .stButton, html body .st-key-amem_nums_btn button { width:100% !important; height:100% !important;
+  min-height:0 !important; opacity:0 !important; cursor:pointer; }
+html body a.mp-edit { width:100%; height:44px; margin-top:4px; border-radius:999px; border:1px solid var(--am-line); background:#fff;
+  color:var(--am-ink) !important; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center;
+  text-decoration:none !important; box-sizing:border-box; }
+html body a.mp-edit:hover { border-color:var(--accent); color:var(--accent-deep) !important; }
+html body .st-key-amem_prof > div { width:100%; }
+html body .st-key-amem_rank { border:1.5px solid var(--am-mint-line); border-radius:22px; padding:24px 28px !important; background:#fff;
+  gap:18px !important; box-sizing:border-box; height:100%; justify-content:space-evenly; }
+.mp-rank-top { display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+.mp-rank-txt { flex:1; display:flex; flex-direction:column; gap:6px; min-width:220px; padding-right:90px; }
+.mp-rank-cap { font-size:14px; font-weight:700; color:var(--am-ink-soft); }
+.mp-rank-name { font-family:"Jua", sans-serif; font-size:28px; line-height:1.2; color:#0f6b5c; }
+.mp-rank-txt .rkb-line { font-size:14px; }
+.mp-rank-txt .rkb-bar { height:12px; margin-top:4px; }
+html body .st-key-amem_rank_open_mp button p { font-size:13px !important; }
+html body .st-key-amem_rvs { gap:12px !important; }
+.mp-rv-h { font-size:19px; font-weight:800; color:var(--am-ink); }
+.mp-rv-h em { font-style:normal; color:#0f6b5c; }
+html body [class*="st-key-amrv_"] { position:relative; }
+html body [class*="st-key-amrvb_"] { position:absolute !important; inset:0; z-index:2; width:100% !important; height:100% !important; }
+html body [class*="st-key-amrvb_"] > div, html body [class*="st-key-amrvb_"] .stButton, html body [class*="st-key-amrvb_"] button {
+  width:100% !important; height:100% !important; }
+html body [class*="st-key-amrvb_"] button { opacity:0 !important; cursor:pointer; }
+.mp-rv { display:flex; gap:14px; padding:14px; border:1.5px solid var(--am-line); border-radius:16px; background:#fff; color:var(--am-ink); min-width:0; }
+[class*="st-key-amrv_"]:hover .mp-rv { border-color:var(--accent); }
+.mp-rv-pst { width:56px; height:74px; border-radius:10px; background-color:var(--am-gray); background-size:cover; background-position:center; flex:none; }
+.mp-rv-body { flex:1; display:flex; flex-direction:column; gap:4px; min-width:0; }
+.mp-rv-t { font-family:"Jua", sans-serif; font-size:17px; line-height:1.3; color:#0f6b5c; overflow-wrap:anywhere; }
+.mp-rv-meta { font-size:12.5px; font-weight:800; color:#9a6a00; }
+.mp-rv-meta .kind { color:#2c5bc5; }
+.mp-rv-meta .when { font-weight:500; color:var(--am-ink-soft); }
+.mp-rv-txt { font-size:14px; line-height:1.6; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.mp-rv-txt.none { color:var(--am-ink-soft); }
+.mp-rv-stamp { align-self:center; display:flex; flex:none; transform:rotate(-10deg); }
+.mp-rv-empty { text-align:center; padding:36px 16px; border:1.5px dashed var(--am-line); border-radius:16px; }
+.mp-rv-empty img { width:56px !important; height:auto !important; margin:0 auto 10px; display:block; }
+.mp-rv-empty p { margin:0 !important; font-size:13.5px !important; color:var(--am-ink-soft); line-height:1.55; }
+/* 설정 */
+html body .st-key-amem_set { border:1.5px solid var(--am-line); border-radius:22px; padding:22px !important; background:#fff;
+  gap:14px !important; box-sizing:border-box; }
+html body .st-key-amem_set [data-testid="stForm"] { padding:0 !important; border:0 !important; }
+html body .st-key-amem_set [data-testid="stForm"] [data-testid="stHorizontalBlock"] { gap:8px !important; flex-wrap:nowrap !important; align-items:flex-end !important; }
+html body .st-key-amem_set [data-testid="stForm"] [data-testid="stColumn"]:first-child { flex:1 1 auto !important; min-width:0 !important; width:auto !important; }
+html body .st-key-amem_set [data-testid="stForm"] [data-testid="stColumn"]:last-child { flex:0 0 auto !important; min-width:0 !important; width:auto !important; }
+html body .st-key-amem_set [data-testid="stFormSubmitButton"] button { height:42px !important; min-height:0 !important; padding:0 16px !important;
+  border-radius:999px !important; border:0 !important; background:var(--accent-deep) !important; }
+html body .st-key-amem_set [data-testid="stFormSubmitButton"] button p { font-size:13px !important; font-weight:800 !important; color:#fff !important; white-space:nowrap; }
+html body .st-key-amem_row_ntf { justify-content:space-between !important; align-items:center !important; gap:12px !important; flex-wrap:nowrap !important; }
+html body .st-key-amem_row_ntf > div { width:auto !important; flex:0 1 auto !important; min-width:0 !important; }
+html body .st-key-amem_row_ntf > div:last-child { flex:0 0 auto !important; }
+.mp-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:4px 0; }
+.mp-row-t { display:flex; flex-direction:column; min-width:0; }
+.mp-row-t b { font-size:14px; font-weight:700; color:var(--am-ink); }
+.mp-row-t small { font-size:12px; color:var(--am-ink-soft); line-height:1.45; }
+html body .st-key-amem_to_ntf button { height:42px !important; min-height:0 !important; padding:0 16px !important; border-radius:999px !important;
+  border:1px solid var(--am-line) !important; background:#fff !important; }
+html body .st-key-amem_to_ntf button p { font-size:13px !important; font-weight:700 !important; color:var(--am-ink) !important; white-space:nowrap; }
+html body .st-key-amem_to_ntf button:hover { border-color:var(--accent) !important; }
+.mp-flag { font-size:12px; font-weight:800; padding:4px 10px; border-radius:999px; background:var(--am-gray); color:var(--am-ink-soft); white-space:nowrap; }
+.mp-flag.on { background:var(--accent-soft); color:#0b5e57; }
+.mp-links { border-top:1px solid var(--am-line-soft); padding-top:10px; display:flex; flex-direction:column; }
+html body .mp-links > a { text-align:left; padding:10px 0; font-size:14px; color:var(--am-ink) !important; text-decoration:none !important; }
+html body .mp-links > a:hover { color:var(--accent-deep) !important; }
+html body .st-key-amem_logout, html body .st-key-amem_set .st-key-withdraw_box { margin-top:-10px !important; }
+html body .st-key-amem_logout button { border:0 !important; background:none !important; padding:6px 0 !important; min-height:0 !important;
+  width:auto !important; box-shadow:none !important; }
+html body .st-key-amem_logout button p { font-size:14px !important; color:var(--am-ink) !important; font-weight:400 !important; }
+html body .st-key-amem_logout button:hover p { color:var(--accent-deep) !important; }
+html body .st-key-amem_set .st-key-withdraw_box button { padding:6px 0 !important; }
+html body .st-key-amem_set .st-key-withdraw_box button p { font-size:14px !important; color:#c0313f !important; font-weight:700 !important; text-decoration:none !important; }
+.mp-out-note { font-size:12px; color:var(--am-ink-soft); line-height:1.5; margin-top:-8px; }
+/* ================= 후기 도장 랭크 안내 (창) ================= */
+html body div[data-testid="stDialog"] div[role="dialog"]:has(.rkp) { width:min(1100px, 94vw) !important; max-width:none !important; }
+.rkp { background:var(--am-soft); border-radius:24px; padding:32px 28px; display:flex; flex-direction:column; gap:22px; }
+.rkp-head { display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:12px 24px; }
+.rkp-h { font-family:"Jua", sans-serif; font-size:32px; line-height:1.2; color:var(--am-ink); }
+.rkp-p { margin-top:6px; font-size:15px; color:var(--am-ink-soft); line-height:1.5; }
+.rkp-chip { font-size:13px; font-weight:800; color:#0b5e57; background:var(--accent-soft); padding:6px 14px; border-radius:999px; white-space:nowrap; }
+.rkp-me { font-size:14px; line-height:1.6; background:#fff; border-radius:16px; padding:12px 16px; color:var(--am-ink); }
+.rkp-grid { list-style:none; margin:0 !important; padding:0 !important; display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:14px; }
+.rkp-grid li { position:relative; background:#fff; border-radius:22px; padding:22px 12px; border:2px solid #fff; display:flex;
+  flex-direction:column; align-items:center; gap:10px; min-width:0; margin:0 !important; }
+.rkp-now { position:absolute; top:-12px; left:50%; transform:translateX(-50%); font-size:11.5px; font-weight:800; color:#fff;
+  padding:2px 10px; border-radius:999px; white-space:nowrap; }
+.rkp-txt { display:flex; flex-direction:column; align-items:center; gap:10px; min-width:0; }
+.rkp-name { font-family:"Jua", sans-serif; font-size:22px; line-height:1.2; }
+.rkp-need { font-size:13px; font-weight:800; padding:3px 12px; border-radius:999px; white-space:nowrap; }
+.rkp-perk { font-size:12.5px; color:var(--am-ink-soft); text-align:center; line-height:1.5; word-break:keep-all; }
+.rkp-rules { background:#fff; border-radius:22px; padding:20px 24px; }
+.rkp-rules-h { margin:0 0 8px; font-size:15px; font-weight:800; color:var(--am-ink); }
+.rkp-rules ul { margin:0 !important; padding-left:18px !important; }
+.rkp-rules li { font-size:14px !important; line-height:1.7; margin:0 !important; color:var(--am-ink); }
+@media (max-width:1100px) and (min-width:641px) { .rkp-grid { grid-template-columns:repeat(3, minmax(0, 1fr)); row-gap:22px; } }
+/* ================= 모바일 (640px 이하) ================= */
+@media (max-width:640px) {
+  .am-m { display:flex !important; }
+  .am-pc { display:none !important; }
+  html body .st-key-amc_wrap [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-mycal_box) { gap:22px !important; }
+  html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-mycal_box), html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-keep_box),
+  html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-ntf_box) { flex:1 1 100% !important; max-width:none !important; }
+  html body .st-key-amc_box { padding:14px !important; gap:10px !important; }
+  .amc-h1 { font-size:22px; }
+  html body .st-key-amc_box .st-key-cal_nav { gap:2px !important; }
+  html body .st-key-amc_box .st-key-cal_prev button, html body .st-key-amc_box .st-key-cal_next button { border:0 !important; background:none !important; }
+  .amc-month { font-size:17px; min-width:0; }
+  html body .st-key-amc_box .st-key-cal_now button { height:36px !important; padding:0 12px !important; margin-left:4px !important; }
+  .amc-dow { font-size:12px; border-bottom:0; padding-bottom:0; }
+  .amc-weeks { margin-top:-4px; }
+  .amc-week { --lane-h:8px; min-height:60px; border-bottom:0; border-top:1px solid var(--am-line-soft); }
+  .amc-day { padding:4px 0 0; border-left:0; text-align:center; }
+  .amc-day span { font-size:12px; }
+  html body a.amc-bar.cal-bar { height:6px; }
+  html body a.amc-bar.cal-bar > span { border-radius:3px; padding:0; font-size:0; line-height:0; }
+  .amc-foot { display:none; }
+  .amc-cal .cal-pop { display:none !important; }   /* 손가락으로 누르면 바로 상세로 가므로 미리보기 카드는 PC 에서만 */
+  .amc-legend { display:flex; }
+  .amc-up { padding:14px; }
+  html body .st-key-keep_box .st-key-box_tabs button { padding:12px 4px !important; }
+  html body .st-key-keep_box .st-key-box_tabs button p { font-size:14px !important; }
+  .am-card { gap:14px; padding:12px; }
+  .am-pst { width:84px; }
+  .am-body { gap:5px; }
+  .am-chips .am-st, .am-area { font-size:11.5px; padding:2px 9px; }
+  .am-t { font-size:18px; }
+  .am-sub { font-size:13px; }
+  .am-perk { font-size:12px; padding:3px 10px; }
+  html body .st-key-keep_box [class*="st-key-fav_"] { display:none !important; }
+  html body [class*="st-key-bx_more_"] button, html body .st-key-amrv_more button { height:46px !important; }
+  /* 마이페이지 */
+  html body .st-key-amem_mp { gap:18px !important; }
+  .mp-h { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0, 0, 0, 0); white-space:nowrap; }
+  html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_prof),
+  html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_set) { gap:18px !important; }
+  html body .st-key-amem_mp [data-testid="stColumn"] { flex:1 1 100% !important; max-width:none !important; }
+  html body .st-key-amem_prof { border:0; border-radius:0; padding:0 !important; gap:16px !important; height:auto; }
+  .mp-prof-in { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:14px; }
+  .mp-av { width:76px; height:76px; }
+  .mp-av-img { border-width:3px; }
+  .mp-av-stamp { right:-8px; bottom:-8px; transform:scale(.8); transform-origin:100% 100%; }
+  .mp-who { align-items:flex-start; text-align:left; gap:4px; }
+  .mp-nickname { font-size:23px; }
+  .mp-lv { font-size:12.5px; padding:3px 10px; }
+  .mp-meta { font-size:12px; }
+  .mp-meta.small { font-size:11.5px; }
+  html body a.mp-edit { width:auto; height:40px; margin:0; padding:0 12px; font-size:13px; }
+  html body .st-key-amem_nums { margin:0; border-top:0; background:var(--am-soft); border-radius:16px; padding:12px 0; }
+  .mp-nums > *:nth-child(2) { border-left:1px solid var(--am-line); border-right:1px solid var(--am-line); }
+  .mp-nums strong { font-size:20px; }
+  html body .mp-nums > * > span { font-size:12px; }
+  html body .st-key-amem_rank { border-radius:20px; padding:16px !important; gap:14px !important; height:auto; }
+  .mp-rank-top { gap:6px 14px; }
+  .mp-rank-txt { min-width:0; padding-right:0; }
+  .mp-rank-cap { font-size:13px; }
+  .mp-rank-name { font-size:21px; }
+  .mp-rank-txt .rkb-line { font-size:12.5px; }
+  .mp-rank-txt .rkb-bar { height:10px; }
+  html body .st-key-amem_rank_open_mp { position:static !important; align-self:flex-end; margin-top:-8px; margin-bottom:-8px; }
+  html body .st-key-amem_rank_open_mp button p { font-size:12.5px !important; }
+  .mp-rank-top .amk-big { zoom:.75; }
+  .rkb-row.cells { gap:4px; }
+  .rkb-row.cells li { padding:8px 2px; border-radius:12px; }
+  .rkb-row.cells .rkb-nm { font-size:11px; }
+  .rkb-row.cells .amk { zoom:.8; }
+  .rkb-need { font-size:11px; }
+  html body .st-key-amem_rvs { gap:10px !important; }
+  .mp-rv-h, html body .st-key-amem_set .am-h2 { font-size:16px; }
+  .mp-rv { gap:12px; padding:12px; border-radius:14px; }
+  .mp-rv-pst { width:46px; height:60px; border-radius:8px; }
+  .mp-rv-t { font-size:16px; }
+  .mp-rv-txt { font-size:13.5px; line-height:1.55; }
+  .mp-rv-stamp { transform:rotate(-10deg) scale(.8); }
+  html body .st-key-amem_set { border:0; border-radius:0; padding:0 !important; gap:12px !important; }
+  .mp-row { padding:10px 0; border-bottom:1px solid var(--am-line-soft); }
+  .mp-links { border-top:0; padding-top:0; }
+  html body .mp-links > a { padding:13px 0; border-bottom:1px solid var(--am-line-soft); }
+  /* 랭크 안내: 카드를 한 줄씩 (도장 왼쪽 · 글 오른쪽) */
+  .rkp { padding:22px 16px; border-radius:20px; gap:16px; }
+  .rkp-h { font-size:26px; }
+  .rkp-p { font-size:13.5px; }
+  .rkp-grid { grid-template-columns:minmax(0, 1fr); gap:12px; }
+  .rkp-grid li { flex-direction:row; gap:16px; padding:14px 16px; border-radius:18px; }
+  .rkp-grid .amk-big { zoom:.76; }
+  .rkp-txt { align-items:flex-start; gap:6px; }
+  .rkp-name { font-size:20px; }
+  .rkp-perk { text-align:left; }
+  .rkp-now { left:auto; right:14px; transform:none; }
+  .rkp-rules { padding:16px 18px; border-radius:18px; }
+  .rkp-rules li { font-size:13.5px !important; }
+}
+</style>
+"""
+
+_AMEM_MASCOT = "app/static/mascot.png"
+# 달력 막대 색 (웹 lib/server/a-member.ts 의 calTone): CAL_COLORS 의 색마다 [옅은 색 (PC 막대 바탕), 진한 색 (모바일 줄 · 범례)]
+_AMEM_TONE = {
+    "#14b8a6": ("#c8eedd", "#6fd0aa"), "#F59E0B": ("#ffdcae", "#ffb866"), "#8B5CF6": ("#e4d6ff", "#b99cf5"),
+    "#EC4899": ("#ffc9d2", "#ff9fb0"), "#3B82F6": ("#cddcff", "#8fb0ff"), "#22A06B": ("#d3efc9", "#8fd27c"),
+    "#EF6C4D": ("#ffd3c4", "#ff9d82"), "#64748B": ("#dde3ea", "#a3b0c0"),
+}
+
+
+def _amem_tone(work: str) -> tuple[str, str]:
+    return _AMEM_TONE.get(_cal_color(work), ("#c8eedd", "#6fd0aa"))
+
+
+def _amem_bg(value) -> str:
+    """포스터를 바탕 그림으로 (못 받으면 기본 그림이 보이게 두 겹)."""
+    return f"background-image:url('{escape(_poster_url(value))}'), url('{images.DEFAULT_POSTER_URL}')"
+
+
+def _amem_md(stamp_text) -> str:
+    """저장 시각 → '11.25'."""
+    try:
+        d = datetime.fromisoformat(str(stamp_text)).astimezone()
+    except ValueError:
+        d = mycal._day(stamp_text)
+    return f"{d.month}.{d.day}" if d else ""
+
+
+def _amem_dot(t, size: int, bw: float | None = None, locked: bool = False, glow: bool = False) -> str:
+    """작은 후기 도장: 색 테두리 동그라미 + 마스코트 (웹 RankStamp · TierDot). 아직 못 받은 단계는 점선 + 흐리게."""
+    bw = bw if bw is not None else (3 if size >= 44 else 2.5)
+    style = (f"width:{size}px;height:{size}px;border:{bw}px {'dashed' if locked else 'solid'} {t.ring};background:{t.fill};"
+             + (f"box-shadow:0 0 0 4px {t.fill};" if glow else ""))
+    return f'<span class="amk{" locked" if locked else ""}" style="{style}"><img src="{_AMEM_MASCOT}" alt=""></span>'
+
+
+def _amem_big(t, size: int = 96, dim: bool = False) -> str:
+    """큰 후기 도장 (마이페이지 96px · 랭크 안내 116px): 둘레 글자 'ANI:WHERE ✦ LV.n 영문이름 ✦' + 단계 숫자 (웹 RankStampBig)."""
+    rid = f"amk-ring-{t.lv}-{size}"
+    return (f'<span class="amk-big{" dim" if dim else ""}" style="width:{size}px;height:{size}px" role="img" aria-label="Lv.{t.lv} {t.name} 도장">'
+            f'<svg width="{size}" height="{size}" viewBox="0 0 80 80" aria-hidden="true"><defs>'
+            f'<path id="{rid}" d="M40 40 m-29.5 0 a29.5 29.5 0 1 1 59 0 a29.5 29.5 0 1 1 -59 0"></path></defs>'
+            f'<circle cx="40" cy="40" r="38" fill="{t.fill}"></circle>'
+            f'<circle cx="40" cy="40" r="38" fill="none" stroke="{t.ring}" stroke-width="3.5"></circle>'
+            f'<circle cx="40" cy="40" r="22.5" fill="#ffffff" stroke="{t.ring}" stroke-width="1.2"></circle>'
+            f'<text class="amk-ring-t" font-size="7.2" fill="{t.fg}"><textPath href="#{rid}" textLength="172" lengthAdjust="spacingAndGlyphs">'
+            f'ANI:WHERE ✦ LV.{t.lv} {t.en} ✦</textPath></text></svg>'
+            f'<img src="{_AMEM_MASCOT}" alt=""><span class="amk-lv" style="background:{t.ring}">{t.lv}</span></span>')
+
+
+def _amem_rank_line(stamps: int, short: bool = False) -> str:
+    """'다녀온 후기 4개 · Lv.3 성지순례러까지 6개 남았어요'."""
+    from common import stamp
+    nxt = stamp.next_tier(stamps)
+    tail = (f' · <strong style="color:{nxt[0].fg}">Lv.{nxt[0].lv}{"" if short else " " + nxt[0].name}</strong>까지 '
+            f'<strong>{nxt[1]}개</strong> 남았어요' if nxt else " · 가장 높은 랭크예요")
+    return f'<span class="rkb-line">다녀온 후기 <strong>{stamps}개</strong>{tail}</span>'
+
+
+def _amem_rank_bar(stamps: int) -> str:
+    """다음 랭크까지 진행 막대 (가장 높은 랭크면 가득)."""
+    from common import stamp
+    cur, nxt = stamp.tier_of(stamps), stamp.next_tier(stamps)
+    pct = min(100, round(stamps / nxt[0].need * 100)) if nxt else 100
+    return f'<div class="rkb-bar"><span style="width:{pct}%;background:{(cur or stamp.TIERS[0]).ring}"></span></div>'
+
+
+def _amem_tier_row(stamps: int, cells: bool = False) -> str:
+    """5단계 한 줄: 받은 단계는 색, 지금 단계는 강조, 나머지는 흐리게. cells = 마이페이지의 칸 모양."""
+    from common import stamp
+    cur = stamp.tier_of(stamps)
+    out = []
+    for t in stamp.TIERS:
+        got, now = stamps >= t.need, bool(cur and cur.lv == t.lv)
+        out.append(f'<li class="{"got" if got else "lock"}"{f" style=background:{t.fill}" if now and cells else ""}>'
+                   + _amem_dot(t, 48 if cells else 36, locked=not got, glow=now and not cells)
+                   + f'<span class="rkb-nm"{f" style=color:{t.fg}" if got else ""}>{"" if cells else f"Lv.{t.lv}<br>"}{t.name}</span>'
+                   + (f'<span class="rkb-need">후기 {t.need}개</span>' if cells else "") + "</li>")
+    return f'<ul class="rkb-row{" cells" if cells else ""}" aria-label="후기 도장 5단계">{"".join(out)}</ul>'
+
+
+def _amem_rank_card(stamps: int, note: str = "") -> str:
+    """다녀온 팝업 탭 위 요약 (A-MVisited): 60px 도장 · 지금 랭크 · 도장 수 · 다음 랭크까지 진행 막대 · 5단계.
+    도장이 없으면 Lv.1 을 점선 + 회색으로."""
+    from common import stamp
+    cur = stamp.tier_of(stamps)
+    t = cur or stamp.TIERS[0]
+    s60 = (f'<span class="rkb-s60">{_amem_dot(t, 60, bw=3, locked=not cur)}'
+           + (f'<span class="rkb-lv" style="background:{cur.ring}">{cur.lv}</span>' if cur else "") + "</span>")
+    name = (f'<span class="rkb-name" style="color:{cur.fg}">Lv.{cur.lv} {cur.name}</span>' if cur
+            else '<span class="rkb-name">아직 도장이 없어요</span>')
+    return (f'<div class="rkb-card"><div class="rkb-top">{s60}<div class="rkb-txt"><span class="rkb-cap">내 후기 도장</span>{name}'
+            f'{_amem_rank_line(stamps, short=True)}</div></div>{_amem_rank_bar(stamps)}{_amem_tier_row(stamps)}'
+            + (f'<p class="rkb-note">{escape(note)}</p>' if note else "") + "</div>")
+
+
+def _amem_rank_html(stamps: int) -> str:
+    """후기 도장 랭크 안내 (A-Rank, 웹 app/mypage/rank/page.tsx): 5단계 카드 · 내 랭크 강조 · 세는 규칙.
+    시안 카드의 '혜택' 글은 아직 없는 기능이라 쓰지 않고 stamp.TIERS 의 perk 만 보여 준다."""
+    from common import stamp
+    cur, nxt = stamp.tier_of(stamps), stamp.next_tier(stamps)
+    me = (f'지금 내 도장 <strong>{stamps}개</strong>'
+          + (f' · <strong style="color:{cur.fg}">Lv.{cur.lv} {cur.name}</strong>' if cur else " · 아직 랭크가 없어요")
+          + (f" · Lv.{nxt[0].lv} {nxt[0].name}까지 {nxt[1]}개 남았어요" if nxt else " · 가장 높은 랭크예요"))
+    cards = []
+    for t in stamp.TIERS:
+        now = bool(cur and cur.lv == t.lv)
+        cards.append(f'<li{f" style=border-color:{t.ring}" if now else ""}>'
+                     + (f'<span class="rkp-now" style="background:{t.ring}">지금 내 랭크</span>' if now else "")
+                     + _amem_big(t, 116)
+                     + f'<div class="rkp-txt"><span class="rkp-name" style="color:{t.fg}">{t.name}</span>'
+                       f'<span class="rkp-need" style="background:{t.fill};color:{t.fg}">다녀온 후기 {t.need}개</span>'
+                       f'<span class="rkp-perk">{escape(t.perk)}</span></div></li>')
+    rules = "".join(f"<li>{escape(x)}</li>" for x in stamp.RULES)
+    return ('<div class="rkp"><div class="rkp-head"><div><div class="rkp-h">후기 도장 랭크</div>'
+            '<div class="rkp-p">다녀온 후기를 남기면 도장이 하나씩 쌓이고, 쌓인 도장 수만큼 랭크가 올라가요.</div></div>'
+            '<span class="rkp-chip">다녀온 후기 1개 = 도장 1개</span></div>'
+            f'<div class="rkp-me">{me}</div><ol class="rkp-grid">{"".join(cards)}</ol>'
+            f'<div class="rkp-rules"><div class="rkp-rules-h">세는 규칙</div><ul>{rules}</ul></div></div>')
+
+
+@st.dialog("후기 도장 랭크 안내", width="large")
+def _amem_rank_dialog() -> None:
+    """랭크 안내 창 — 내 캘린더 '다녀온 팝업' 탭과 마이페이지에서 연다 (화면 분기를 늘리지 않으려고 창으로)."""
+    st.markdown(_amem_rank_html(_amem_keep()["stamps"]), unsafe_allow_html=True)
+
+
+def _amem_ntf_tip(rules: dict) -> str:
+    """알림 내역 맨 아래 마스코트 안내 한 줄 (웹 calendar/page.tsx 의 tip). 규칙이 모두 꺼져 있으면 ''."""
+    od = rules["open"]["days"] if rules["open"]["enabled"] else None
+    ed = rules["end"]["days"] if rules["end"]["enabled"] else None
+    if od is not None and ed is not None:
+        return (f"북마크한 팝업은 오픈·종료 {od}일 전부터 알려 드려요." if od == ed
+                else f"북마크한 팝업은 오픈 {od}일 전 · 종료 {ed}일 전부터 알려 드려요.")
+    if od is not None:
+        return f"북마크한 팝업은 오픈 {od}일 전부터 알려 드려요."
+    return f"북마크한 팝업은 종료 {ed}일 전부터 알려 드려요." if ed is not None else ""
+
+
+def _amem_open(cafe_id: str) -> None:
+    """마이페이지에서 팝업 상세로 (메뉴바가 다음 실행에서 메인으로 옮긴다)."""
+    st.session_state.update(cal_view=False, box_view=False, home_view=False, _gnb_to_map=True)
+    _gnb_open(cafe_id)
+
+
+def _amem_to_keep(tab: str) -> None:
+    """마이페이지 → 내 캘린더의 그 탭 (북마크 · 다녀온 팝업)."""
+    _gnb_go("cal")
+    st.session_state["box_tab"] = tab
+
+
+def _amem_my_reviews() -> list[dict]:
+    """내가 쓴 원글 리뷰 전부 (답글 · 지운 글 제외, 내린 팝업의 후기는 갈 곳이 없어 뺌), 최신 순.
+    팝업마다 가장 최근 다녀온 후기 하나에만 도장 표시 (웹 mypage/page.tsx)."""
+    me = _me()
+    by_id = {str(r.get("entry_id")): r for r in store.current_rows()}
+    rows = sorted((r for r in reviews.current_rows() if not str(r.get("parent_id") or "") and review.can_delete(r, me)
+                   and str(r.get("cafe_id")) in by_id), key=lambda x: str(x.get("updated_at", "")), reverse=True)
+    out, stamped = [], set()
+    for r in rows:
+        cid = str(r.get("cafe_id"))
+        p = by_id[cid]
+        got = r.get("kind") == review.RATED_KIND and cid not in stamped
+        if got:
+            stamped.add(cid)
+        work, name = str(p.get("work") or ""), str(p.get("cafe_name") or "")
+        out.append({"id": str(r.get("entry_id")), "cafe_id": cid, "title": f"{work} · {name}" if work else name,
+                    "images": p.get("images"), "kind": str(r.get("kind") or "리뷰"), "stars": review.stars(r.get("rating")),
+                    "body": str(r.get("body") or "").strip(), "date": _amem_md(r.get("updated_at")),
+                    "photos": len(images.paths(r.get("images"))), "stamp": got})
+    return out
 
 
 def page_map() -> None:
@@ -5294,6 +7740,7 @@ def page_map() -> None:
     # '스파이패밀리' 와 '스파이 패밀리' 가 따로 걸리지 않게 목록의 작품명으로 맞춘다
     df["work"] = df["work"].fillna("").astype(str).map(catalog.canonical_work)
 
+    st.markdown(A_BROWSE_CSS, unsafe_allow_html=True)     # A안: 리스트로 보기 · 지도로 보기 (LIST_CSS · GNB_CSS · ASK_PANEL_CSS 를 덮는다)
     # 모바일(폭 640px 이하)에서는 검색 필터를 접어 두고 '검색 필터' 버튼으로 연다. PC 에서는 버튼을 숨기고 늘 보인다.
     # 화면 폭은 서버가 모르니, 열림 상태는 서버가 기억하고 '좁은 화면일 때만 숨기기' 는 CSS 가 맡는다
     ss = st.session_state
@@ -5435,16 +7882,15 @@ def page_map() -> None:
         with region:
             # 지금 등록된 카페가 있는 지역만, 카드 배지와 같은 이름으로. 여러 곳을 함께 고를 수 있다
             st.multiselect("지역", areas, key="regions", label_visibility="collapsed",
-                           placeholder="지역 고르기 (여러 곳 가능)", select_all=False)   # 기본이 전체라 '전체 선택' 은 뺌 (11/18)
+                           placeholder="+ 지역 고르기", select_all=False)   # 기본이 전체라 '전체 선택' 은 뺌 (11/18)
         with sort:
             _view_icon_button(wide, active, m_open)
             st.selectbox("정렬", SORTS, key="sort", label_visibility="collapsed")
 
         # ('마지막 업데이트' 줄은 11/18 요청으로 모든 화면에서 뺐다 — _update_note 는 남겨 둠)
+        if not current:
+            _abrowse_cond_chips(fcond)        # 걸린 필터 칩 (리스트 · 지도 모두)
         if wide:
-            if st.session_state.get("res_only"):
-                st.button("사전예약 팝업만 보는 중", icon=":material/close:", key="res_only_chip",
-                          on_click=lambda: st.session_state.update(res_only=False))
             render_list(view, wide=True, df_all=df, fcond=fcond)
     if wide:
         with chat, st.container(key="ask_panel"):
@@ -5461,6 +7907,7 @@ def page_map() -> None:
                      "work": str(r["work"]), "cafe": str(r["cafe_name"]),
                      "address": str(r["address"] or "-"),
                      "dates": _period(r, lambda d: f"{d:%m.%d}"),
+                     "state": _status(r)[0], "state_color": _status(r)[1],      # 미리보기 카드의 상태 배지 (A안)
                      "poster": _poster_url(r.get("images"))}
                     for _, r in mapped.iterrows()],
             selected=selected, height=MAP_HEIGHT,
@@ -5488,6 +7935,8 @@ def page_map() -> None:
         with col_day, st.container(key="map_daily"):
             render_daily(df)
         with col_map, st.container(key="map_frame"):
+            if not mapped.empty:          # A안: 지도 위 '지도에 N곳' 알약
+                st.markdown(f'<div class="map-count">지도에 <b>{len(mapped)}곳</b></div>', unsafe_allow_html=True)
             draw_map()
         # PC 지도: 화면 높이에 맞춰 늘린다 (메뉴바·여백만 빼고, 페이지 스크롤이 생기지 않을 만큼, 11/18 요청)
         st.markdown("<style>@media (min-width: 641px) { .st-key-map_frame iframe { height: calc(100vh - 140px) !important;"
@@ -5509,83 +7958,93 @@ def page_map() -> None:
 
 # ================================================================ 데일리 팝업 노트
 # 지도보기 왼쪽: 고른 날(처음엔 오늘)에 열려 있는 팝업을 지역별로. 날짜는 ‹ › 로 하루씩 옮긴다
-DAILY_CSS = f"""
+DAILY_CSS = """
 <style>
-/* 머리 상자: 제목 / ‹ 날짜 › / ‹ 지역 › 세 줄을 촘촘하게 */
-.st-key-daily_head {{ border:1px solid #DDE2E0; border-radius:12px; padding:8px 6px; background:#fff;
-                     gap:4px !important; }}
-.st-key-daily_head [data-testid="stMarkdownContainer"] {{ margin:0 !important; }}
-.dn-title {{ text-align:center; color:#6B7672; font-size:.75rem; font-weight:600; line-height:1.2; }}
-.st-key-daily_nav, .st-key-daily_areas {{ align-items:center !important; justify-content:center !important;
-  gap:4px !important; flex-wrap:nowrap !important; }}
-.st-key-daily_nav > div, .st-key-daily_areas > div {{ width:auto !important; flex:0 0 auto !important; }}
-.st-key-daily_nav button, .st-key-daily_areas button {{ min-height:0 !important; height:22px; width:22px;
-  padding:0 !important; line-height:1; }}
-.st-key-daily_nav button p, .st-key-daily_areas button p {{ font-size:1rem !important; line-height:1 !important;
-  color:var(--accent-deep) !important; font-weight:700; margin:0 !important; }}
-.st-key-daily_nav [data-testid="stMarkdownContainer"], .st-key-daily_areas [data-testid="stMarkdownContainer"] {{
-  display:flex; align-items:center; height:22px; margin:0 !important; }}
-.st-key-daily_nav [data-testid="stMarkdownContainer"] p, .st-key-daily_areas [data-testid="stMarkdownContainer"] p {{
-  margin:0; line-height:1; }}
-.dn-date {{ font-weight:800; font-size:.88rem; color:#1F2A27; white-space:nowrap; }}
-.dn-today {{ background:var(--accent-soft); color:var(--accent-deep); font-size:.66rem; font-weight:700;
-            padding:.1rem .35rem; border-radius:5px; margin-right:4px; }}
-.dn-area {{ display:inline-block; min-width:70px; text-align:center; font-size:.76rem; font-weight:700; color:#26302D;
-           background:#F4F6F5; border-radius:999px; padding:.2rem .6rem; white-space:nowrap; }}
-.dn-area span {{ color:#8A9490; font-weight:500; margin-left:3px; }}
-/* 목록: 포스터 · 위치 · 작품명만. 포스터를 점선으로 잇는다 */
-.dn-list {{ margin-top:12px; padding:0 2px; }}   /* 스크롤 없이 아래로 모두 보인다 */
-.dn-item {{ display:flex; align-items:center; gap:10px; position:relative; padding:0 0 12px;
-           text-decoration:none !important; color:inherit !important; }}
-.dn-item:not(:last-child)::before {{ content:""; position:absolute; left:17px; top:38px; bottom:2px;
-                                    border-left:1.5px dashed #C9D1CE; }}
-.dn-thumb {{ flex:0 0 36px; height:36px; border-radius:50%; background:#F4F6F5 center/cover no-repeat;
-            border:1px solid #E4E8E6; }}
-.dn-body {{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:3px; }}
-.dn-body .abadge {{ font-size:.62rem; line-height:1.4; padding:0 .35rem; border-radius:5px; font-weight:700; }}
-.dn-name {{ max-width:100%; font-weight:800; font-size:.8rem; line-height:1.25; color:#1F2A27;
-           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
-.dn-item:hover .dn-name {{ color:var(--accent-deep); }}
-.dn-empty {{ color:#6B7672; text-align:center; padding:16px 4px; font-size:.76rem; margin-top:8px; }}
-/* 위의 보이지 않는 칸들(스타일·내 위치 칸) 사이 기본 간격 때문에 머리 상자가 16px 내려가 있었다.
-   칸 사이 간격을 없애서 지도·캘린더와 위쪽 선을 맞춘다 (목록과의 사이는 .dn-list 의 margin-top) */
-.st-key-map_daily {{ gap: 0 !important; }}
-.st-key-map_daily .dn-list {{ margin-top: 14px; }}
+/* A안 (11/25, A-Map · A-MMap · 웹 a-browse.css 의 데일리 팝업 노트): 회색 상자 안에 제목(Jua) · ‹ 날짜 › · ‹ 지역 › 흰 알약 · 안내 한 줄 · 카드 목록.
+   상자 · 3단 폭은 A_BROWSE_CSS 가 잡는다 */
+.st-key-daily_head { border: 0; border-radius: 0; padding: 0; background: none; gap: 10px !important; overflow: visible !important; }
+.st-key-daily_head [data-testid="stMarkdownContainer"] { margin: 0 !important; }
+.dn-title { display: flex; align-items: center; font-family: "Jua", sans-serif; font-weight: 400; font-size: 22px; line-height: 1.3; color: #26302d; }
+.st-key-daily_nav, .st-key-daily_areas { align-items: center !important; justify-content: space-between !important; gap: 2px !important;
+  flex-wrap: nowrap !important; padding: 4px; border-radius: 999px; background: #fff; }
+/* 지역 줄은 알약 테두리(바탕) 없이 ‹ 지역 › 만 (11/25 요청). 날짜 줄만 알약 */
+html body .st-key-daily_areas { background: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 4px !important; }
+.st-key-daily_nav > div, .st-key-daily_areas > div { width: auto !important; flex: 0 0 auto !important; min-width: 0; }
+.st-key-daily_nav > div:has(.dn-date), .st-key-daily_areas > div:has(.dn-area) { flex: 0 1 auto !important; overflow: hidden; }
+.st-key-daily_nav button, .st-key-daily_areas button { min-height: 0 !important; width: 36px !important; height: 36px !important; padding: 0 !important;
+  border: 0 !important; border-radius: 50% !important; background: none !important; display: flex !important; align-items: center !important;
+  justify-content: center !important; }
+.st-key-daily_nav button:hover:not(:disabled), .st-key-daily_areas button:hover:not(:disabled) { background: #e6fbf7 !important; }
+.st-key-daily_nav button span[data-testid="stIconMaterial"], .st-key-daily_areas button span[data-testid="stIconMaterial"] {
+  font-size: 22px !important; color: #26302d !important; margin: 0 !important; }
+.st-key-daily_nav button:disabled span[data-testid="stIconMaterial"], .st-key-daily_areas button:disabled span[data-testid="stIconMaterial"] { color: #c5cdca !important; }
+.st-key-daily_nav button [data-testid="stMarkdownContainer"], .st-key-daily_areas button [data-testid="stMarkdownContainer"] { display: none !important; }
+.st-key-daily_nav [data-testid="stMarkdownContainer"], .st-key-daily_areas [data-testid="stMarkdownContainer"] {
+  display: flex; align-items: center; margin: 0 !important; }
+.st-key-daily_nav [data-testid="stMarkdownContainer"] p, .st-key-daily_areas [data-testid="stMarkdownContainer"] p { margin: 0; line-height: 1.4; }
+.dn-date { display: inline-flex; align-items: center; font-size: 14px; font-weight: 800; color: #26302d; white-space: nowrap; }
+.dn-today { margin-right: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 800; line-height: 1.5; color: #0b5e57;
+  background: #e6fbf7; }
+.dn-area { display: inline-block; max-width: 100%; font-size: 14px; font-weight: 800; color: #26302d; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.dn-area span { margin-left: 5px; color: #0f6b5c; font-weight: 800; }
+.dn-hint { font-size: 13px; line-height: 1.5; color: #5f6b68; }
+.dn-hint b { color: #0f6b5c; }
+/* 목록: 줄마다 썸네일 40×52 · 작품 · '지역 · ~ 12.15' · 상태 배지 */
+.dn-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0 0 2px; }
+.dn-item { display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 10px; row-gap: 3px; align-items: center; padding: 8px;
+  border: 1px solid #e3e9e7; border-radius: 12px; background: #fff; color: #26302d !important; text-decoration: none !important; }
+.dn-item:hover { border-color: #14b8a6; }
+.dn-item.on { padding: 7px; border: 2px solid #14b8a6; }
+.dn-thumb { grid-row: 1 / span 2; width: 40px; height: 52px; border-radius: 8px; background: #f4f6f5 center / cover no-repeat; }
+.dn-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; align-self: end; }
+.dn-name { max-width: 100%; font-size: 14px; font-weight: 800; line-height: 1.35; color: #26302d; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.dn-place { max-width: 100%; font-size: 12.5px; line-height: 1.4; color: #5f6b68; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dn-place b { font-weight: 700; }
+.dn-state { grid-column: 2; justify-self: start; align-self: start; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 800;
+  line-height: 1.5; white-space: nowrap; color: #0b5e57; background: #e6fbf7; }
+.dn-empty { margin: 0; padding: 24px 8px; border-radius: 12px; background: #fff; font-size: 13px; color: #5f6b68; text-align: center; }
 /* 내 위치를 묻는 칸은 보이지 않게 흐름에서 뺀다 (스크립트만 돈다) */
-.st-key-daily_loc {{ position:absolute !important; width:0 !important; height:0 !important; overflow:hidden; }}
+.st-key-daily_loc { position:absolute !important; width:0 !important; height:0 !important; overflow:hidden; }
 /* 제목 옆 ? : 커서를 올리거나(모바일은 누르면) 안내 말풍선 */
-.dn-help {{ position:relative; display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px;
-           margin-left:4px; border:1px solid #B5BDBA; border-radius:50%; color:#8A9490; font-size:.6rem; font-weight:700;
-           line-height:1; cursor:help; vertical-align:1px; }}
-.dn-tip {{ display:none; position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%); z-index:50;
-          width:170px; padding:7px 9px; border-radius:8px; background:#26302D; color:#fff; font-size:.7rem;
-          font-weight:500; line-height:1.4; text-align:left; word-break:keep-all; box-shadow:0 4px 12px rgba(0,0,0,.18); }}
-.dn-tip b {{ color:#7FE3D3; }}
-.dn-help:hover .dn-tip, .dn-help:focus .dn-tip {{ display:block; }}
-.st-key-daily_head {{ overflow:visible !important; }}
+.dn-help { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:none; width:17px; height:17px;
+           margin-left:6px; border:1.5px solid #9aa5a1; border-radius:50%; color:#7b8784; font-family:"NanumSquareRound", "Pretendard", sans-serif;
+           font-size:11px; font-weight:800; line-height:1; cursor:help; }
+.dn-tip { display:none; position:absolute; top:calc(100% + 6px); left:0; transform:translateX(-40%); z-index:50;
+          width:190px; padding:7px 9px; border-radius:8px; background:#26302D; color:#fff; font-size:12px;
+          font-weight:500; line-height:1.4; text-align:left; word-break:keep-all; box-shadow:0 4px 12px rgba(0,0,0,.18); }
+.dn-tip b { color:#7FE3D3; }
+.dn-help:hover .dn-tip, .dn-help:focus .dn-tip { display:block; }
 /* 지도보기: 지도는 화면에 붙어 따라 내려오지 않고 페이지와 함께 스크롤된다 */
-.st-key-map_row [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{ position: static !important; top: auto !important; }}
-/* 모바일: 데일리 팝업 노트(왼쪽 좁게)와 지도를 한 줄에, 내 캘린더는 그 아래 전체 폭 */
-@media (max-width: 640px) {{
-  /* 예전 모바일 규칙(지도를 맨 위로 세로 쌓기: flex-direction column + order -1)을 이 줄에서는 덮어쓴다 */
-  .st-key-map_row [data-testid="stHorizontalBlock"]:has(.st-key-map_daily) {{ flex-direction: row !important;
-    flex-wrap: wrap !important; gap: 8px !important; }}
-  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{ order: 0 !important; }}
-  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {{
-    flex: 0 0 38% !important; width: 38% !important; min-width: 38% !important; }}
-  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) {{
-    flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }}
-  .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_cal) {{
-    flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important; }}
-  .st-key-daily_head {{ padding: 6px 2px; }}
-  .dn-today {{ display: none; }}
-  .dn-date {{ font-size: .76rem; }}
-  .dn-area {{ min-width: 0; font-size: .7rem; padding: .15rem .45rem; }}
-  .dn-name {{ font-size: .74rem; }}
-  .dn-thumb {{ flex-basis: 30px; height: 30px; }}
-  .dn-item {{ gap: 6px; }}
-  .dn-item:not(:last-child)::before {{ left: 14px; top: 32px; }}
-}}
+.st-key-map_row [data-testid="stColumn"]:has(iframe[src*="kakao_map"]) { position: static !important; top: auto !important; }
+/* 모바일 (A-MMap): 지도 아래 전체 폭. 머리는 '제목 | ‹ 날짜 ›' · '안내 | ‹ 지역 ›' 두 줄 */
+@media (max-width: 640px) {
+  .st-key-map_daily { gap: 10px !important; }
+  .st-key-daily_head { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title day" "hint area";
+    align-items: center; gap: 6px 8px !important; }
+  .st-key-daily_head > * { width: auto !important; min-width: 0; }
+  .st-key-daily_head > :has(.dn-title) { grid-area: title; }
+  .st-key-daily_head > :has(.st-key-daily_nav) { grid-area: day; }
+  .st-key-daily_head > :has(.st-key-daily_areas) { grid-area: area; justify-self: end; }
+  .st-key-daily_head > :has(.dn-hint) { grid-area: hint; }
+  .dn-title { font-size: 21px; }
+  .dn-hint { font-size: 12.5px; }
+  .st-key-daily_nav, .st-key-daily_areas { padding: 2px; background: #f6f8f7; }
+  html body .st-key-daily_areas { padding: 0 !important; background: none !important; }
+  .st-key-daily_nav button, .st-key-daily_areas button { width: 40px !important; height: 40px !important; }
+  .st-key-daily_nav button span[data-testid="stIconMaterial"], .st-key-daily_areas button span[data-testid="stIconMaterial"] { font-size: 20px !important; }
+  .dn-date, .dn-area { font-size: 13.5px; }
+  .dn-area { max-width: 110px; }
+  .dn-list { gap: 10px; }
+  .dn-item { display: flex; gap: 12px; padding: 10px; border-width: 1.5px; border-radius: 14px; }
+  .dn-item.on { padding: 9.5px; }
+  .dn-thumb { width: 44px; height: 58px; flex: 0 0 44px; }
+  .dn-body { gap: 2px; align-self: center; flex: 1 1 auto; }
+  .dn-name { font-size: 14.5px; }
+  .dn-state { margin-left: auto; align-self: center; flex: none; padding: 2px 9px; }
+  .dn-empty { background: #f6f8f7; }
+}
 </style>
 """
 
@@ -5643,21 +8102,27 @@ def render_daily(df: pd.DataFrame) -> None:
         guide = "위치 권한을 허용하면 내 주변 지역 팝업부터 보여 줘요"
     else:
         guide = "내 위치를 확인하고 있어요"
+    wd = _WEEKDAYS[day.weekday()]
+    year = "" if day.year == TODAY.year else f"{day.year}년 "
     with st.container(key="daily_head"):
         st.markdown(f'<div class="dn-title">데일리 팝업 노트<span class="dn-help" tabindex="0">?'
                     f'<span class="dn-tip">{guide}</span></span></div>', unsafe_allow_html=True)
+        # ‹ 날짜 › · ‹ 지역 › 는 흰 알약 (A안 · 웹 DailyNote 와 같게). PC 는 '11월 25일 (수)', 모바일은 '11.25 (수)'
         with st.container(horizontal=True, key="daily_nav"):
-            st.button("‹", key="daily_prev", type="tertiary", on_click=_daily_shift, args=(-1,))
-            st.markdown(('<span class="dn-today">오늘</span>' if off == 0 else "")
-                        + f'<span class="dn-date">{day:%y. %m. %d.} {_WEEKDAYS[day.weekday()]}</span>',
-                        unsafe_allow_html=True)
-            st.button("›", key="daily_next", type="tertiary", on_click=_daily_shift, args=(1,))
+            st.button("", icon=":material/chevron_left:", key="daily_prev", type="tertiary", on_click=_daily_shift, args=(-1,))
+            st.markdown('<span class="dn-date">' + ('<span class="dn-today">오늘</span>' if off == 0 else "")
+                        + f'<span class="ab-pc">{year}{day.month}월 {day.day}일 ({wd})</span>'
+                        f'<span class="ab-m">{day.month}.{day.day} ({wd})</span></span>', unsafe_allow_html=True)
+            st.button("", icon=":material/chevron_right:", key="daily_next", type="tertiary", on_click=_daily_shift, args=(1,))
         with st.container(horizontal=True, key="daily_areas"):
-            st.button("‹", key="daily_area_prev", type="tertiary", on_click=_daily_area_shift,
+            st.button("", icon=":material/chevron_left:", key="daily_area_prev", type="tertiary", on_click=_daily_area_shift,
                       args=(-1, len(choices)), disabled=len(choices) < 2)
             st.markdown(f'<span class="dn-area">{escape(area)}<span>{count}</span></span>', unsafe_allow_html=True)
-            st.button("›", key="daily_area_next", type="tertiary", on_click=_daily_area_shift,
+            st.button("", icon=":material/chevron_right:", key="daily_area_next", type="tertiary", on_click=_daily_area_shift,
                       args=(1, len(choices)), disabled=len(choices) < 2)
+        if order:      # 어느 지역부터 보여 주는지 한 줄 (내 위치를 알면 가까운 곳부터, 모르면 그날 팝업이 많은 곳부터)
+            st.markdown(f'<div class="dn-hint">{"내 위치에서 가까운 " if near else "팝업이 많은 "}<b>{escape(str(order[0]))}</b>부터</div>',
+                        unsafe_allow_html=True)
 
     if area != "전체":
         open_ = open_[open_["area"].replace("", "기타") == area]
@@ -5666,14 +8131,19 @@ def render_daily(df: pd.DataFrame) -> None:
         return
     _, _, fcounts = _fav_state()
     rows = sorted(open_.to_dict("records"), key=lambda r: (-fcounts.get(str(r["entry_id"]), 0), r["start_date"]))
-    items = "".join(
-        f'<a class="dn-item" data-id="{escape(str(r["entry_id"]))}" href="./?cafe={quote(str(r["entry_id"]))}" target="_self"'
-        f'>'
-        f'<span class="dn-thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')"></span>'
-        f'<div class="dn-body">{_area_badge(r.get("address"))}'
-        f'<div class="dn-name">{escape(str(r["work"]))}</div></div></a>'
-        for r in rows)
-    st.markdown(f'<div class="dn-list">{items}</div>', unsafe_allow_html=True)
+
+    def item(r: dict) -> str:
+        """한 줄: 썸네일(40×52) · 작품 · '지역 · ~ 12.15' · 상태 배지."""
+        label, color, _ = _status(r)
+        place = geo.area_name(str(r.get("address") or ""))
+        where = (f'<b style="color:{_darken(_area_colors(r.get("address"))[0], 0.62)}">{escape(place)}</b> · ' if place else "")
+        return (f'<a class="dn-item" data-id="{escape(str(r["entry_id"]))}" href="./?cafe={quote(str(r["entry_id"]))}" target="_self">'
+                f'<span class="dn-thumb" style="background-image:url(\'{_poster_url(r.get("images"))}\'), url(\'{images.DEFAULT_POSTER_URL}\')"></span>'
+                f'<span class="dn-body"><span class="dn-name">{escape(str(r["work"]))}</span>'
+                f'<span class="dn-place">{where}{escape(_abrowse_period_short(r))}</span></span>'
+                f'<span class="dn-state {color}">{escape(label)}</span></a>')
+
+    st.markdown(f'<div class="dn-list">{"".join(item(r) for r in rows)}</div>', unsafe_allow_html=True)
     # 목록을 누르면 상세로 가지 않고, 지도에서 그 팝업 자리를 보여 주며 지도 안 목록 창에 띄운다
     components.html(f"<script>window.parent.eval({json.dumps(_DAILY_PEEK_JS)});</script>", height=0)
 
@@ -5690,6 +8160,9 @@ _DAILY_PEEK_JS = """
     try { ok = !!(f && f.contentWindow.peek && f.contentWindow.peek(a.dataset.id)); } catch (err) {}
     if (!ok) return;            // 지도에 없는 팝업이면 원래대로 상세로 간다
     e.preventDefault();
+    // 고른 줄은 민트 테두리로 (A안)
+    document.querySelectorAll('a.dn-item.on').forEach(function (x) { x.classList.remove('on'); });
+    a.classList.add('on');
     // 모바일처럼 지도가 화면 밖에 있으면 지도가 보이게
     const r = f.getBoundingClientRect();
     if (r.top < 0 || r.bottom > window.innerHeight) f.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -6400,54 +8873,75 @@ def _cal_color(work: str) -> str:
 
 
 def _cal_html(year: int, month: int, events: list, compact: bool = False) -> str:
-    # 막대 한 줄 높이, 날짜 숫자 아래 막대가 시작하는 높이, 날짜 칸 최소 높이 (px). 지도 옆(compact)은 작게
-    lane_h, top, min_h = (18, 22, 44) if compact else (23, 32, 86)
-    dow = "".join(f"<div>{d}</div>" for d in "일월화수목금토")
-    weeks = []
+    """달력 (A안, 웹 app/calendar/page.tsx 와 같게): PC 는 15px 옅은 막대 + 진한 글자, 모바일은 6px 진한 줄 + 아래 범례.
+    막대 줄 높이는 CSS 변수 --lane-h (PC 16px · 모바일 8px), 겹치는 팝업이 많은 주는 줄 수만큼 늘어난다."""
+    dow = "".join(f"<span>{d}</span>" for d in "일월화수목금토")
+    weeks, legend = [], {}
     for w in mycal.month_weeks(year, month, events):
-        height = max(min_h, top + w.lanes * lane_h + 8)
         cells = "".join(
-            f'<div class="cal-day{" out" if d.month != month else ""}{" sun" if i == 0 else " sat" if i == 6 else ""}'
-            f'{" today" if d == TODAY else ""}" style="min-height:{height}px"><span>{d.day}</span></div>'
+            f'<div class="amc-day{" out" if d.month != month else ""}{" sun" if i == 0 else ""}'
+            f'{" today" if d == TODAY else ""}"><span>{d.day}</span></div>'
             for i, d in enumerate(w.days))
-        # 연속된 날은 한 막대. 주를 넘어가면 끊긴 쪽 모서리를 각지게 둔다 (.cl / .cr)
-        bars = "".join(
-            f'<a class="cal-bar{" cl" if b.cont_left else ""}{" cr" if b.cont_right else ""}" href="./?cafe={quote(b.event.cafe_id)}"'
-            f' target="_self"'
-            f' style="left:calc({b.col} * 100% / 7 + 3px); width:calc({b.span} * 100% / 7 - 6px);'
-            f' top:{top + b.lane * lane_h}px; background:{_cal_color(b.event.work)}">'
-            f'{escape(b.event.work)}</a>' + _cal_pop(b, top + (b.lane + 1) * lane_h)
-            for b in w.bars)
-        weeks.append(f'<div class="cal-week">{cells}{bars}</div>')
-    return f'<div class="cal"><div class="cal-dow">{dow}</div>{"".join(weeks)}</div>'
+        bars = []
+        for b in w.bars:
+            name = b.event.work or b.event.cafe_name
+            soft, strong = _amem_tone(b.event.work)
+            legend.setdefault(name, strong)
+            # 연속된 날은 한 막대. 주를 넘어가면 끊긴 쪽 모서리를 각지게 둔다 (.cl / .cr).
+            # 색 두 가지를 한 칸에 담는다: 바탕 = 옅은 색(PC), 안쪽 그림자 = 진한 색(모바일 줄 — PC 에서는 CSS 가 끈다)
+            bars.append(
+                f'<a class="amc-bar cal-bar{" cl" if b.cont_left else ""}{" cr" if b.cont_right else ""}"'
+                f' href="./?cafe={quote(b.event.cafe_id)}" target="_self"'
+                f' style="left:{b.col * 100 / 7:.4f}%; width:{b.span * 100 / 7:.4f}%; top:calc(28px + {b.lane} * var(--lane-h))">'
+                f'<span style="background:{soft}; box-shadow:inset 0 0 0 20px {strong}">{escape(name)}</span></a>'
+                + _cal_pop(b, f"calc(28px + {b.lane + 1} * var(--lane-h) + 2px)"))
+        weeks.append(f'<div class="amc-week" style="height:calc(36px + {w.lanes} * var(--lane-h))">'
+                     f'<div class="amc-days">{cells}</div>{"".join(bars)}</div>')
+    leg = "".join(f'<li><i style="background:{c}"></i>{escape(n)}</li>' for n, c in legend.items())
+    return (f'<div class="amc-cal"><div class="amc-dow" aria-hidden="true">{dow}</div><div class="amc-weeks">{"".join(weeks)}</div>'
+            '<p class="amc-foot">막대 = 북마크한 팝업 기간 · 둥근 끝 = 시작·종료일</p>'
+            + (f'<ul class="amc-legend" aria-label="달력 색">{leg}</ul>' if leg else "") + '</div>')
 
 
-def _cal_pop(b, top: int) -> str:
-    """막대 바로 아래에 뜨는 미리보기 카드. 오른쪽 칸(목~토)에서 시작하는 막대는 오른쪽 끝에 맞춰 화면 밖으로 안 나가게."""
+def _cal_pop(b, top) -> str:
+    """막대 바로 아래에 뜨는 미리보기 카드. 오른쪽 칸(목~토)에서 시작하는 막대는 오른쪽 끝에 맞춰 화면 밖으로 안 나가게.
+    top 은 숫자(px)나 CSS 값('calc(...)')."""
     e = b.event
     side = (f"right:calc({7 - b.col - b.span} * 100% / 7 + 3px)" if b.col >= 4
             else f"left:calc({b.col} * 100% / 7 + 3px)")
-    return (f'<div class="cal-pop" style="{side}; top:{top}px">'
+    return (f'<div class="cal-pop" style="{side}; top:{f"{top}px" if isinstance(top, (int, float)) else top}">'
             f'<img src="{_poster_url(e.images)}" alt=""/>'
             f'<div><div class="w">{escape(e.work)}</div><div class="c">{escape(e.cafe_name)}</div>'
             f'<div class="a">{escape(e.address or "-")}</div>'
             f'<div class="d">{e.start:%m.%d} ~ {"상시" if pdates.is_always(e.end) else f"{e.end:%m.%d}"}</div></div></div>')
 
 
+def _amem_up_badge(e) -> tuple[str, str, date | None]:
+    """곧 있는 팝업 배지 (A-Cal, 웹 upBadge): 열리기 전 'D-3 오픈'(파랑) · 진행 중 '종료 D-5'(7일 안이면 빨강, 그 밖 회색)
+    · '오늘 오픈' · '오늘 종료'. 끝이 없는(상시) 팝업은 '진행 중'. → (글자, 색, 옆에 보일 날)"""
+    if e.start > TODAY:
+        return f"D-{(e.start - TODAY).days} 오픈", "blue", e.start
+    if e.start == TODAY and e.end != TODAY:
+        return "오늘 오픈", "green", e.start
+    if pdates.is_always(e.end):
+        return "진행 중", "green", None
+    left = (e.end - TODAY).days
+    if left == 0:
+        return "오늘 종료", "red", e.end
+    return f"종료 D-{left}", "red" if left <= 7 else "gray", e.end
+
+
 def _upcoming_html(events: list) -> str:
     items = []
     for e in mycal.upcoming(events, TODAY):
-        label, color = mycal.status(e, TODAY)
-        when = _day(e.start, False) + ("" if e.start == e.end else " - 상시" if pdates.is_always(e.end) else f" - {_day(e.end, False)}")
+        label, color, when = _amem_up_badge(e)
+        day = f"{when.month}.{when.day} ({_WEEKDAYS[when.weekday()]})" if when else "상시"
         items.append(
-            f'<a class="up-item" href="./?cafe={quote(e.cafe_id)}" target="_self">'
-            f'<span class="up-bar" style="background:{_cal_color(e.work)}"></span>'
-            f'<span class="up-thumb" style="background-image:url(\'{_poster_url(e.images)}\'), url(\'{images.DEFAULT_POSTER_URL}\')"></span>'
-            f'<span class="up-text"><div class="up-name">{escape(e.work)} · {escape(e.cafe_name)}</div>'
-            f'<div class="up-when">{when}</div></span>'
-            f'<span class="up-state {color}">{escape(label)}</span></a>')
-    body = "".join(items) or '<div class="up-empty">곧 있는 북마크한 팝업이 없어요. 리스트에서 북마크해 보세요.</div>'
-    return f'<div class="up-head"><b>곧 있는 팝업</b><i></i></div>{body}'
+            f'<a class="am-up" href="./?cafe={quote(e.cafe_id)}" target="_self"><span class="am-st {color}">{escape(label)}</span>'
+            f'<span class="am-up-t up-name">{escape(f"{e.work} · {e.cafe_name}" if e.work else e.cafe_name)}</span>'
+            f'<span class="am-up-when">{day}</span></a>')
+    body = "".join(items) or '<div class="am-up-empty">곧 있는 북마크한 팝업이 없어요. 리스트에서 북마크해 보세요.</div>'
+    return f'<div class="amc-up"><div class="am-h2">곧 있는 팝업</div>{body}</div>'
 
 
 def _cal_shift(delta: int) -> None:
@@ -6465,28 +8959,33 @@ def page_calendar() -> None:
     render_calendar()
 
 
-def render_calendar(compact: bool = False) -> None:
-    """내 캘린더 묶음 (월 머리글·이전/다음 달·달력·곧 있는 팝업). compact 면 지도 옆 좁은 칸용으로 칸 높이를 줄인다."""
+def render_calendar(compact: bool = False, css: bool = True) -> None:
+    """내 캘린더 묶음 (제목 · 이전/다음 달 · 달력 · 곧 있는 팝업). A안: 흰 달력 상자 + 아래 회색 '곧 있는 팝업' 상자.
+    css=False 는 내 캘린더 탭처럼 이미 A_MEMBER_CSS 를 내보낸 화면에서."""
+    if css:
+        st.markdown(A_MEMBER_CSS, unsafe_allow_html=True)
     _, mine, _ = _fav_state()
     # 기간이 끝나 지도에서 내려간 팔로우도 지난 달력에 남도록, 내린 기록까지 포함한 최신 행에서 고른다
     events = mycal.fav_events(mycal.latest_rows(store.all_rows()), mine, TODAY)
     events = [e for e in events if e.end >= TODAY]          # 끝난 팝업은 달력에서도 뺀다 (11/18 요청)
 
     year, month = st.session_state.get("cal_month") or (TODAY.year, TODAY.month)
-    # 머리글 한 줄: '2026년 10월'  ‹  ›  [오늘]
-    with st.container(horizontal=True, vertical_alignment="center", key="cal_nav"):
-        st.markdown(f'<span class="cal-label">내 캘린더</span><span class="cal-month">{year}년 {month}월</span>'
-                    '<span class="cal-help" tabindex="0">?<span class="cal-tip">내가 북마크한 팝업만 달력에 보여요. '
-                    '리스트나 상세의 북마크 아이콘을 누르면 여기에 추가돼요.</span></span>', unsafe_allow_html=True)
-        st.button("‹", key="cal_prev", type="tertiary", on_click=_cal_shift, args=(-1,))
-        st.button("›", key="cal_next", type="tertiary", on_click=_cal_shift, args=(1,))
-        st.button("이번달", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None))
-    # '내 캘린더' 줄 바로 아래: 내 닉네임(리뷰와 같은 IP 기반). 북마크도 이 사람 것만 보인다
-    st.markdown(f'<div class="cal-nick">{escape(_nick_only(_me()))}</div>', unsafe_allow_html=True)
-    if not events:
-        st.markdown('<div class="cal-empty">아직 북마크한 팝업이 없어요. 리스트에서 북마크하면 달력에 일정이 채워져요.</div>',
-                    unsafe_allow_html=True)
-    st.markdown(_cal_html(year, month, events, compact), unsafe_allow_html=True)
+    with st.container(key="amc_box"):
+        # 제목 줄 바로 아래: 내 닉네임 · 북마크한 팝업 수 (북마크는 이 사람 것만 보인다)
+        st.markdown('<div class="amc-title"><div class="amc-h1"><span>내 캘린더</span><span class="cal-help" tabindex="0">?'
+                    '<span class="cal-tip">내가 북마크한 팝업만 달력에 보여요. 리스트나 상세의 북마크 아이콘을 누르면 여기에 추가돼요.'
+                    f'</span></span></div><span class="amc-nick">{escape(_nick_only(_me()))} · 북마크한 팝업 {len(_amem_keep()["fav"])}곳'
+                    '</span></div>', unsafe_allow_html=True)
+        # ‹  2026년 10월  ›  [이번달]
+        with st.container(horizontal=True, vertical_alignment="center", key="cal_nav"):
+            st.button("‹", key="cal_prev", type="tertiary", on_click=_cal_shift, args=(-1,))
+            st.markdown(f'<span class="amc-month">{year}년 {month}월</span>', unsafe_allow_html=True)
+            st.button("›", key="cal_next", type="tertiary", on_click=_cal_shift, args=(1,))
+            st.button("이번달", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None))
+        if not events:
+            st.markdown('<div class="amc-empty">아직 북마크한 팝업이 없어요. 리스트에서 북마크하면 달력에 일정이 채워져요.</div>',
+                        unsafe_allow_html=True)
+        st.markdown(_cal_html(year, month, events, compact), unsafe_allow_html=True)
     st.markdown(_upcoming_html(events), unsafe_allow_html=True)
 
 
@@ -7078,102 +9577,190 @@ def _avatar_saved(msg: str) -> None:
 
 
 def _my_account(row: dict) -> None:
+    """마이페이지 (A안 11/25, 웹 app/mypage/page.tsx 와 같게): 프로필 + 랭크 도장 · 숫자 3개 · 내 후기 도장 · 내가 쓴 후기 · 설정.
+    예전 '내 계정'의 기능(닉네임 · 프로필 사진(선택 동의) · 비밀번호 · 로그아웃 · 탈퇴)은 모두 '설정' 칸에 그대로 있다."""
+    from common import stamp
+    # 로그인 · 가입은 가운데 좁은 칸(420px)이지만 마이페이지는 넓게 쓴다 (이 규칙은 회원에게만 나간다)
+    st.markdown(A_MEMBER_CSS + "<style>html body .st-key-auth_wrap { max-width: 1232px !important; }</style>",
+                unsafe_allow_html=True)
+    keep = _amem_keep()
+    stamps = keep["stamps"]
+    cur = stamp.tier_of(stamps)
+    try:
+        my_reviews = _amem_my_reviews()
+    except Exception:                     # 리뷰를 못 읽어도 프로필 · 설정은 보여 준다
+        my_reviews = []
     prov = auth.PROVIDER_LABEL.get(str(row.get("provider")), "")
-    # 프로필 사진 옆에 닉네임 · 로그인 수단 · 가입일 · 회원 번호 (11/18 요청)
-    st.markdown(f'<div class="auth-title">내 계정</div><div class="auth-card me-card">'
-                f'<div class="me-av">{_avatar_img(row.get("avatar"), 72, "me-avimg")}</div><div class="me-info">'
-                f'<b>{escape(_nick_only(auth.display_name(row)))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
-                f'가입 {escape(str(row.get("agreed_at", ""))[:10])}<br>회원 번호 <code>{escape(str(row["entry_id"]))}</code>'
-                f'{" · 관리자" if _is_admin() else ""}</span></div></div>', unsafe_allow_html=True)
-    n = st.session_state.get("_av_n", 0)
-    # 사진을 바꾸면(_av_n 이 늘면) 새 칸으로 그려 접힌 채로 보인다 (11/19 요청: 바꾼 뒤 '프로필 사진 바꾸기' 닫기)
-    with st.expander("프로필 사진 바꾸기", key=f"av_exp_{n}"):
-        st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
-        up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n}")
-        if up is not None:     # 고른 사진을 바로 보여 준다 (저장 전 미리보기, 11/18 요청: 기다리는 게 보이게)
-            st.markdown(f'<div class="av-preview"><img src="data:{up.type or "image/png"};base64,'
-                        f'{base64.b64encode(up.getvalue()).decode()}" alt=""><span>이 사진으로 바뀌어요 — 가운데를 동그랗게 잘라요</span></div>',
+    agreed = str(row.get("agreed_at", "") or "")[:10].replace("-", ".")
+    local = row.get("provider") == "local"
+    has_photo = auth.clean_avatar(row.get("avatar")) not in ("", "none", None)
+    r_ = _rules()
+    od = r_["open"]["days"] if r_["open"]["enabled"] else None
+    ed = r_["end"]["days"] if r_["end"]["enabled"] else None
+    notice = ("지금은 운영자가 오픈 · 종료 알림을 꺼 두었어요" if od is None and ed is None else
+              "북마크한 팝업, " + " · ".join(x for x in (f"오픈 {od}일 전" if od is not None else "",
+                                                    f"종료 {ed}일 전" if ed is not None else "") if x) + "부터 종과 내 캘린더로")
+    with st.container(key="amem_mp"):
+        st.markdown('<div class="mp-h">마이페이지</div>', unsafe_allow_html=True)
+        c_prof, c_rank = st.columns([1, 2.4], gap="medium")
+        c_rvs, c_set = st.columns([2.4, 1], gap="medium")
+
+    # ---- 프로필: 사진 + 도장 배지 · 닉네임 · 랭크 칩 · 로그인 수단 · 가입일 · 회원 번호, 숫자 3개
+    with c_prof, st.container(key="amem_prof"):
+        lv_chip = (f'<span class="mp-lv" style="color:{cur.fg};background:{cur.fill}">Lv.{cur.lv} {cur.name}</span>' if cur
+                   else '<span class="mp-lv">아직 도장이 없어요</span>')
+        st.markdown(
+            f'<div class="mp-prof-in"><span class="mp-av"><span class="mp-av-img">{_avatar_img(row.get("avatar"), 104, "me-avimg")}</span>'
+            + (f'<span class="mp-av-stamp">{_amem_dot(cur, 40, bw=3)}</span>' if cur else "")
+            + f'</span><div class="mp-who"><span class="mp-nickname">{escape(_nick_only(auth.display_name(row)))}</span>{lv_chip}'
+            f'<span class="mp-meta">{escape(prov + "로 로그인" if prov else "로그인 중")}{f" · {agreed} 가입" if agreed else ""}</span>'
+            f'<span class="mp-meta small">회원 번호 <code>{escape(str(row["entry_id"]))}</code>{" · 관리자" if _is_admin() else ""}</span>'
+            '</div><a class="mp-edit am-m" href="#mp-set" target="_self">수정</a></div>', unsafe_allow_html=True)
+        with st.container(key="amem_nums"):
+            # 북마크 수는 내 캘린더와 같게 (아직 끝나지 않은 팝업만). 앞 두 칸은 내 캘린더의 그 탭으로, 셋째 칸은 아래 '내가 쓴 후기'로
+            st.markdown(f'<div class="mp-nums"><span><strong>{len(keep["fav"])}</strong><span>북마크</span></span>'
+                        f'<span><strong>{stamps}</strong><span>후기 도장</span></span>'
+                        f'<a href="#my-reviews" target="_self"><strong>{len(my_reviews)}</strong><span>쓴 후기</span></a></div>',
                         unsafe_allow_html=True)
-        ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 사진 설정'을 누르면 바로 지워요",
-                               key=f"av_agree_{n}")
-        c1, c2 = st.columns(2)
-        if c1.button("이 사진으로 저장", type="primary", width="stretch", disabled=up is None or not ok_photo, key="av_save"):
-            data = up.getvalue()
-            if images.too_big(data, 5):
-                st.warning("5MB 이하 사진만 올릴 수 있어요.", icon=":material/error:")
-            else:
+            with st.container(horizontal=True, key="amem_nums_btn"):
+                st.button("북마크 보기", key="amem_num_fav", on_click=_amem_to_keep, args=("fav",))
+                st.button("후기 도장 보기", key="amem_num_visited", on_click=_amem_to_keep, args=("visited",))
+        st.markdown('<a class="mp-edit am-pc" href="#mp-set" target="_self">프로필 수정</a>', unsafe_allow_html=True)
+
+    # ---- 내 후기 도장: 96px 도장(둘레 글자) · 지금 랭크 · 진행 막대 · 5단계
+    with c_rank, st.container(key="amem_rank"):
+        name = (f'<span class="mp-rank-name" style="color:{cur.fg}">Lv.{cur.lv} {cur.name}</span>' if cur
+                else '<span class="mp-rank-name">첫 도장을 받아 보세요</span>')
+        st.markdown(f'<div class="mp-rank-top">{_amem_big(cur or stamp.TIERS[0], 96, dim=not cur)}<div class="mp-rank-txt">'
+                    f'<span class="mp-rank-cap">내 후기 도장</span>{name}{_amem_rank_line(stamps)}{_amem_rank_bar(stamps)}</div></div>',
+                    unsafe_allow_html=True)
+        if st.button("랭크 안내 보기", key="amem_rank_open_mp", type="tertiary"):
+            _amem_rank_dialog()
+        st.markdown(_amem_tier_row(stamps, cells=True), unsafe_allow_html=True)
+
+    # ---- 내가 쓴 후기: 누르면 그 팝업 상세, 5건씩 더보기
+    with c_rvs, st.container(key="amem_rvs"):
+        st.markdown(f'<div class="mp-rv-h" id="my-reviews">내가 쓴 후기 <em>{len(my_reviews)}</em></div>', unsafe_allow_html=True)
+        if not my_reviews:
+            st.markdown(f'<div class="mp-rv-empty"><img src="{_AMEM_MASCOT}" alt=""><p>아직 쓴 후기가 없어요. 팝업 상세의 리뷰에서 '
+                        '<b>다녀온 후기</b>를 쓰면 도장을 하나 받아요.</p></div>', unsafe_allow_html=True)
+            with st.container(horizontal=True, horizontal_alignment="center", key="amem_cta_rv"):
+                st.button("팝업 찾아보기", key="amem_cta_find", type="primary", on_click=_gnb_go, args=("list",))
+        n = st.session_state.get("amrv_n", 5)
+        for rv in my_reviews[:n]:
+            meta = (f'<span class="stars">{rv["stars"]}</span>' if rv["stars"] else f'<span class="kind">{escape(rv["kind"])}</span>')
+            body = (f'<span class="mp-rv-txt">{escape(rv["body"])}</span>' if rv["body"]
+                    else '<span class="mp-rv-txt none">별점만 남긴 후기예요</span>')
+            photos = f" · 사진 {rv['photos']}장" if rv["photos"] else ""
+            with st.container(key=f"amrv_{rv['id']}"):
+                st.markdown(
+                    f'<div class="mp-rv"><span class="mp-rv-pst" style="{_amem_bg(rv["images"])}"></span><span class="mp-rv-body">'
+                    f'<span class="mp-rv-t">{escape(rv["title"])}</span><span class="mp-rv-meta">{meta}<span class="when"> · {rv["date"]}'
+                    f'{photos}</span></span>{body}</span>'
+                    + (f'<span class="mp-rv-stamp">{_amem_dot(cur or stamp.TIERS[0], 40, bw=3)}</span>' if rv["stamp"] else "")
+                    + '</div>', unsafe_allow_html=True)
+                st.button(f"{rv['title']} 상세", key=f"amrvb_{rv['id']}", on_click=_amem_open, args=(rv["cafe_id"],))
+        if len(my_reviews) > n:
+            st.button(f"+{len(my_reviews) - n}건 더보기", key="amrv_more", width="stretch",
+                      on_click=lambda: st.session_state.update(amrv_n=n + 5))
+
+    # ---- 설정: 닉네임 · 알림 안내 · 프로필 사진(선택 동의) · 비밀번호 · 처리방침 · 튜토리얼 · 로그아웃 · 탈퇴
+    with c_set, st.container(key="amem_set"):
+        st.markdown('<div class="am-h2" id="mp-set">설정</div>', unsafe_allow_html=True)
+        with st.form("rename", border=False):
+            cur_nick = str(row.get("nickname", "") or "")
+            if len(cur_nick) > auth.MAX_NICK:      # 예전(16자까지) 닉네임: 칸에는 10자까지만 들어간다 (11/18 10자 제한)
+                st.caption(f"지금 닉네임이 {auth.MAX_NICK}자를 넘어요. 저장하면 {auth.MAX_NICK}자 안으로 바뀌어요.")
+            f1, f2 = st.columns([3, 1], vertical_alignment="bottom")
+            nick = f1.text_input("닉네임 바꾸기", value=cur_nick[:auth.MAX_NICK], max_chars=auth.MAX_NICK,
+                                 placeholder=_suggest_nick(),
+                                 help="칸을 비워 두고 저장하면 흐리게 보이는 랜덤 닉네임으로 바꿔요 (가입할 때와 같게)")
+            if f2.form_submit_button("저장", type="primary"):
+                # 비워 두고 저장 → 랜덤 닉네임 (11/18 요청). 그사이 누가 먼저 썼으면 _suggest_nick 이 새로 짓는다
+                nick = (nick or "").strip() or _suggest_nick(final=True)
                 try:
-                    with st.spinner("사진을 줄여서 저장하는 중…"):
-                        auth.set_avatar(members, row, images.save_avatar(up.name, data))
-                    _avatar_saved("프로필 사진을 바꿨어요.")
-                except ValueError as err:
-                    st.warning(str(err), icon=":material/error:")
-        if c2.button("기본 사진 설정", width="stretch", key="av_default"):
-            auth.set_avatar(members, row, "none")
-            _avatar_saved("기본 사진으로 바꿨어요.")
-        if row.get("provider") in ("kakao", "naver"):
-            st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.')
-    with st.form("rename", border=False):
-        cur_nick = str(row.get("nickname", "") or "")
-        if len(cur_nick) > auth.MAX_NICK:      # 예전(16자까지) 닉네임: 칸에는 10자까지만 들어간다 (11/18 10자 제한)
-            st.caption(f"지금 닉네임이 {auth.MAX_NICK}자를 넘어요. 저장하면 {auth.MAX_NICK}자 안으로 바뀌어요.")
-        nick = st.text_input("닉네임 바꾸기", value=cur_nick[:auth.MAX_NICK], max_chars=auth.MAX_NICK,
-                             placeholder=_suggest_nick(),
-                             help="칸을 비워 두고 저장하면 흐리게 보이는 랜덤 닉네임으로 바꿔요 (가입할 때와 같게)")
-        # 저장 · 로그아웃을 한 줄에 반반 (11/18 요청). 폼 안에는 제출 버튼만 둘 수 있어서 로그아웃도 제출 버튼으로
-        b1, b2 = st.columns(2)
-        saved = b1.form_submit_button("저장", icon=":material/check:", type="primary", width="stretch")
-        if b2.form_submit_button("로그아웃", icon=":material/logout:", width="stretch"):
+                    auth.rename(members, row, nick)
+                    st.session_state.pop("_member_cache", None)
+                    st.session_state["flash"] = (f"닉네임을 '{nick}'(으)로 바꿨어요.", ":material/check_circle:")
+                    st.rerun()
+                except auth.AuthError as e:
+                    st.warning(str(e), icon=":material/error:")
+        with st.container(horizontal=True, vertical_alignment="center", key="amem_row_ntf"):
+            st.markdown(f'<div class="mp-row-t"><b>오픈 · 종료 알림</b><small>{escape(notice)}</small></div>', unsafe_allow_html=True)
+            st.button("알림 내역", key="amem_to_ntf", on_click=_amem_to_keep, args=("fav",))
+        st.markdown('<div class="mp-row"><span class="mp-row-t"><b>프로필 사진 사용 [선택]</b>'
+                    f'<small>{"지금 내 사진을 쓰고 있어요" if has_photo else "지금은 기본 그림이에요"}</small></span>'
+                    f'<span class="mp-flag{" on" if has_photo else ""}">{"사용 중" if has_photo else "기본 그림"}</span></div>',
+                    unsafe_allow_html=True)
+        n_av = st.session_state.get("_av_n", 0)
+        # 사진을 바꾸면(_av_n 이 늘면) 새 칸으로 그려 접힌 채로 보인다 (11/19 요청: 바꾼 뒤 '프로필 사진 바꾸기' 닫기)
+        with st.expander("프로필 사진 바꾸기", key=f"av_exp_{n_av}"):
+            st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
+            up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n_av}")
+            if up is not None:     # 고른 사진을 바로 보여 준다 (저장 전 미리보기, 11/18 요청: 기다리는 게 보이게)
+                st.markdown(f'<div class="av-preview"><img src="data:{up.type or "image/png"};base64,'
+                            f'{base64.b64encode(up.getvalue()).decode()}" alt=""><span>이 사진으로 바뀌어요 — 가운데를 동그랗게 잘라요</span></div>',
+                            unsafe_allow_html=True)
+            # 선택 동의 없이는 사진을 저장하지 않는다 (동의해야 저장 단추가 켜진다)
+            ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 사진 설정'을 누르면 바로 지워요",
+                                   key=f"av_agree_{n_av}")
+            if st.button("이 사진으로 저장", type="primary", width="stretch", disabled=up is None or not ok_photo, key="av_save"):
+                data = up.getvalue()
+                if images.too_big(data, 5):
+                    st.warning("5MB 이하 사진만 올릴 수 있어요.", icon=":material/error:")
+                else:
+                    try:
+                        with st.spinner("사진을 줄여서 저장하는 중…"):
+                            auth.set_avatar(members, row, images.save_avatar(up.name, data))
+                        _avatar_saved("프로필 사진을 바꿨어요.")
+                    except ValueError as err:
+                        st.warning(str(err), icon=":material/error:")
+            if st.button("기본 사진 설정", width="stretch", key="av_default"):
+                auth.set_avatar(members, row, "none")
+                _avatar_saved("기본 사진으로 바꿨어요.")
+            if row.get("provider") in ("kakao", "naver"):
+                st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.')
+        if local:
+            with st.expander("비밀번호 바꾸기"):
+                with st.form("pw_change", border=False):
+                    lid = st.text_input("아이디", max_chars=20)
+                    old = st.text_input("지금 비밀번호", type="password")
+                    new = st.text_input("새 비밀번호", type="password", placeholder="영문+숫자 8자 이상")
+                    new2 = st.text_input("새 비밀번호 확인", type="password")
+                    if st.form_submit_button("바꾸기", icon=":material/check:"):
+                        try:
+                            auth.change_password(lid, old, new, new2)
+                            st.session_state["flash"] = ("비밀번호를 바꿨어요.", ":material/check_circle:")
+                            st.rerun()
+                        except auth.AuthError as e:
+                            st.warning(str(e), icon=":material/error:")
+        st.markdown(f'<div class="mp-links"><a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
+                    '<a href="./guide" target="_self">사용자 튜토리얼</a></div>', unsafe_allow_html=True)
+        if st.button("로그아웃", key="amem_logout", type="tertiary"):
             _logout()
             st.session_state["flash"] = ("로그아웃했어요.", ":material/logout:")
             st.rerun()
-        if saved:
-            # 비워 두고 저장 → 랜덤 닉네임 (11/18 요청). 그사이 누가 먼저 썼으면 _suggest_nick 이 새로 짓는다
-            nick = (nick or "").strip() or _suggest_nick(final=True)
-            try:
-                auth.rename(members, row, nick)
-                st.session_state.pop("_member_cache", None)
-                st.session_state["flash"] = (f"닉네임을 '{nick}'(으)로 바꿨어요.", ":material/check_circle:")
-                st.rerun()
-            except auth.AuthError as e:
-                st.warning(str(e), icon=":material/error:")
-    local = row.get("provider") == "local"
-    if local:
-        with st.expander("비밀번호 바꾸기"):
-            with st.form("pw_change", border=False):
-                lid = st.text_input("아이디", max_chars=20)
-                old = st.text_input("지금 비밀번호", type="password")
-                new = st.text_input("새 비밀번호", type="password", placeholder="영문+숫자 8자 이상")
-                new2 = st.text_input("새 비밀번호 확인", type="password")
-                if st.form_submit_button("바꾸기", icon=":material/check:"):
+        with st.container(key="withdraw_box"), st.popover("탈퇴하기"):
+            st.write("닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 **지난 기록까지 바로 지워요**. 후기 도장도 함께 없어져요. "
+                     "쓴 리뷰는 다른 이용자를 위해 '탈퇴한 회원'으로 남아요 (지우고 싶은 글은 먼저 삭제 요청해 주세요).")
+            if local:
+                st.caption("아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.")
+                w_id = st.text_input("아이디", key="w_id")
+                w_pw = st.text_input("비밀번호", type="password", key="w_pw")
+            if st.button("탈퇴할게요", type="primary"):
+                if local:
                     try:
-                        auth.change_password(lid, old, new, new2)
-                        st.session_state["flash"] = ("비밀번호를 바꿨어요.", ":material/check_circle:")
-                        st.rerun()
+                        auth.drop_password(w_id, w_pw)
                     except auth.AuthError as e:
                         st.warning(str(e), icon=":material/error:")
-    st.markdown(f'<div class="consent-link"><a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a></div>',
-                unsafe_allow_html=True)
-    # 탈퇴하기: 맨 아래 작은 회색 글씨(버튼이지만 글자처럼) — 11/18 요청
-    with st.container(key="withdraw_box"), st.popover("탈퇴하기"):
-        st.write("닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 **지난 기록까지 바로 지워요**. "
-                 "쓴 리뷰는 다른 이용자를 위해 '탈퇴한 회원'으로 남아요 (지우고 싶은 글은 먼저 삭제 요청해 주세요).")
-        if local:
-            st.caption("아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.")
-            w_id = st.text_input("아이디", key="w_id")
-            w_pw = st.text_input("비밀번호", type="password", key="w_pw")
-        if st.button("탈퇴할게요", type="primary"):
-            if local:
-                try:
-                    auth.drop_password(w_id, w_pw)
-                except auth.AuthError as e:
-                    st.warning(str(e), icon=":material/error:")
-                    st.stop()
-            auth.withdraw(members, row)
-            auth.purge_withdrawn(str(row["entry_id"]))     # 개인정보 파기 (지난 기록까지)
-            _logout()
-            st.session_state["flash"] = ("탈퇴했어요. 그동안 고마웠어요.", ":material/check_circle:")
-            st.rerun()
+                        st.stop()
+                auth.withdraw(members, row)
+                auth.purge_withdrawn(str(row["entry_id"]))     # 개인정보 파기 (지난 기록까지)
+                _logout()
+                st.session_state["flash"] = ("탈퇴했어요. 그동안 고마웠어요.", ":material/check_circle:")
+                st.rerun()
+        st.markdown('<div class="mp-out-note">탈퇴하면 닉네임 · 사진 · 접속 기록 · 도장이 바로 지워지고, 쓴 후기는 \'탈퇴한 회원\'으로 남아요.</div>',
+                    unsafe_allow_html=True)
 
 
 def page_auth() -> None:

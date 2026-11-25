@@ -3,7 +3,6 @@ import { getPopupData } from "@/lib/data";
 import {
   addDays,
   byCode,
-  daysBetween,
   periodDot,
   stateOf,
   todayKST,
@@ -11,22 +10,26 @@ import {
   type Item,
 } from "@/lib/popup";
 import BookmarkPicker from "@/components/member/BookmarkPicker";
-import { areaFill, HomeCard, posterBg } from "@/components/cards";
+import { areaFill, posterBg } from "@/components/cards";
 import HScroll from "@/components/HScroll";
 import RankBanner from "@/components/home/RankBanner";
 import NewSection from "@/components/home/NewSection";
 import WeekCalendar from "@/components/home/WeekCalendar";
 import ReviewSection from "@/components/home/ReviewSection";
+import ReserveSection from "@/components/home/ReserveSection";
+import SecHead from "@/components/home/SecHead";
+import { ClockLine } from "@/components/home/Icons2";
 import EmptyState from "@/components/EmptyState";
 import { getMe, getMyFavs } from "@/lib/server/session";
 import { rankScores } from "@/lib/server/rank";
-import { homeReviews } from "@/lib/server/member";
+import { homeReviews, KINDS } from "@/lib/server/member";
 import { rankOrder, TOP_N } from "@/lib/rank";
-import { EventIcon, HelpIcon, HourglassIcon, NewIcon, RateReviewIcon } from "@/components/Icons";
+import { GiftIcon, HelpIcon } from "@/components/Icons";
 
 export const revalidate = 600;
 
 const STORY_MAX = 12;
+const REVIEW_MAX = 30; // 후기 모음: 처음 6개, '후기 더보기'로 6개씩 여기까지
 
 /** 팝업이 많은 지역 n 곳 (앱 _home_areas) */
 function topAreas(rows: Item[], n = 3): string[] {
@@ -36,22 +39,6 @@ function topAreas(rows: Item[], n = 3): string[] {
     .sort((a, b) => b[1] - a[1])
     .slice(0, n)
     .map(([a]) => a);
-}
-
-function HomeHead({ title, icon, more }: { title: string; icon: React.ReactNode; more?: string }) {
-  return (
-    <div className="home-hh">
-      <h2 className="home-h">
-        {icon}
-        {title}
-      </h2>
-      {more && (
-        <Link href={more} className="home-more">
-          더보기
-        </Link>
-      )}
-    </div>
-  );
 }
 
 export default async function Home() {
@@ -84,7 +71,7 @@ export default async function Home() {
     .filter((p) => favs.has(p.id))
     .sort((a, b) => stateOf(a, today).rank - stateOf(b, today).rank || a.end.localeCompare(b.end));
   // 실시간 인기 급상승 랭킹 (5위까지): 규칙은 lib/rank.ts — 앱 common/rank.py 와 같은 시험(samples/rank_cases.json)을 통과 (11/20)
-  const [scores, reviews] = await Promise.all([rankScores(), homeReviews(new Set(popups.map((p) => p.id)))]);
+  const [scores, reviews] = await Promise.all([rankScores(), homeReviews(new Set(popups.map((p) => p.id)), REVIEW_MAX)]);
   const top = rankOrder(live, scores).slice(0, TOP_N).map(toItem);
   const fresh = [...liveItems].sort((a, b) => b.created.localeCompare(a.created));
   // 곧 끝나는 팝업: 어제부터 7일 (11/20 요청 — 금요일이면 목 ~ 다음 주 수, 앱 _home_week)
@@ -96,12 +83,13 @@ export default async function Home() {
     .sort((a, b) => a.start.localeCompare(b.start));
 
   return (
-    <div className="home">
+    <div className="home ah">
       <h1 className="sr-only">ANI:WHERE 홈 — 애니 팝업·콜라보 카페</h1>
 
       {me ? (
+        // 회원: '북마크 팝업' — 사용자 요청(11/25)으로 A안 이전 모양 그대로 (a-home.css 의 동그라미 규칙은 손님 줄에만).
         // 회원: '북마크 팝업' — 내가 북마크한 (진행 중 · 예정) 팝업 하나에 동그라미 하나, 위에 지역, 아래 작품 (앱 render_stories)
-        <section className="stories" aria-labelledby="story-h">
+        <section className="stories stories-old" aria-labelledby="story-h">
           <div className="story-head" id="story-h">
             북마크 팝업
             <span className="help" tabIndex={0}>
@@ -142,26 +130,31 @@ export default async function Home() {
           </HScroll>
         </section>
       ) : (
-        <section className="stories" aria-labelledby="story-h">
-          <div className="story-head" id="story-h">
-            특전 있는 작품들
-            <span
-              className="help"
-              tabIndex={0}
-              aria-label="지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요."
-            >
-              <HelpIcon />
-              <span className="tip">
-                지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요.
+        // 손님: '특전 있는 작품들' — 같은 동그라미 모양, 위 배지는 그 작품의 특전 있는 팝업 수
+        <section className="stories ah-sec" aria-labelledby="story-h">
+          <SecHead
+            id="story-h"
+            title="특전 있는 작품들"
+            icon={<GiftIcon />}
+            help={
+              <span
+                className="help"
+                tabIndex={0}
+                aria-label="지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요."
+              >
+                <HelpIcon />
+                <span className="tip">
+                  지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요.
+                </span>
               </span>
-            </span>
-          </div>
+            }
+          />
           <HScroll className="story-row" label="특전 있는 작품들">
             {works.map((w) => (
               <Link key={w} href={`/list?work=${encodeURIComponent(w)}`} className="story hot" prefetch={false}>
                 <span className="ring">
+                  <span className="rg" aria-label={`특전 있는 팝업 ${count.get(w)}곳`}>{count.get(w)}</span>
                   <span className="pic" style={posterBg(posterOf.get(w) ?? "")} />
-                  <span className="cnt">{count.get(w)}</span>
                 </span>
                 <span className="nm">{w}</span>
               </Link>
@@ -170,28 +163,24 @@ export default async function Home() {
         </section>
       )}
 
+      {/* 실시간 인기 급상승 랭킹: 사용자 요청으로 예전 모양 · 동작 그대로 (RankBanner 와 그 CSS 는 고치지 않는다) */}
       {top.length > 0 && <RankBanner items={top} today={today} />}
 
-      <HomeHead title="따끈따끈 신규 등록 팝업" icon={<NewIcon />} more="/list?sort=new" />
       <NewSection items={fresh} areas={topAreas(liveItems)} today={today} />
 
-      <HomeHead title="곧 끝나는 팝업" icon={<HourglassIcon />} more="/list?sort=end" />
-      <WeekCalendar items={weekItems} first={first} today={today} />
+      <section className="ah-sec ah-end" aria-labelledby="ah-end-h">
+        <SecHead id="ah-end-h" title="곧 끝나는 팝업" icon={<ClockLine />}>
+          <Link href="/list?sort=end" className="ah-more" prefetch={false}>
+            더보기
+          </Link>
+        </SecHead>
+        <WeekCalendar items={weekItems} first={first} today={today} />
+      </section>
 
-      <HomeHead title="사전예약 팝업" icon={<EventIcon />} more="/list?reserve=1&sort=open" />
-      {reserve.length ? (
-        <HScroll className="home-row" label="사전예약 팝업">
-          {reserve.map((p) => (
-            <HomeCard key={p.id} p={p} today={today} badge={`사전예약 D-${daysBetween(today, p.start)}`} />
-          ))}
-        </HScroll>
-      ) : (
-        <div className="home-empty">곧 열리는 팝업 중 사전예약을 받는 곳이 없어요.</div>
-      )}
+      <ReserveSection items={reserve} today={today} />
 
       {/* 꿀팁 가득! 실시간 후기 모음 (앱 _home_reviews, 11/20 웹에 추가) */}
-      <HomeHead title="꿀팁 가득! 실시간 후기 모음" icon={<RateReviewIcon />} />
-      <ReviewSection reviews={reviews} popups={new Map(popups.map((p) => [p.id, toItem(p)]))} today={today} />
+      <ReviewSection reviews={reviews} popups={new Map(popups.map((p) => [p.id, toItem(p)]))} kinds={KINDS} today={today} />
     </div>
   );
 }
