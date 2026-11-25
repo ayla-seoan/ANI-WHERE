@@ -5517,83 +5517,87 @@ def _notice_history(days_back: int = 2) -> list[tuple[date, str, str, dict]]:
 
 
 def render_my_calendar_view() -> None:
-    st.markdown(CAL_CSS + MYCAL_CSS + BOX_CSS, unsafe_allow_html=True)
-    # (모바일 리스트·지도 아이콘 줄은 11/18 요청으로 뺐다 — 메뉴바 탭으로 옮긴다)
-    # 순서 (11/18 요청): 왼쪽 = 내 캘린더(가장 넓게) · 가운데 = 찜·다녀온·최근 본(조금 작게) · 오른쪽 = 알림 받은 내역
-    # 캘린더는 지도 보기 오른쪽 캘린더와 같은 크기, 알림은 데일리 팝업 노트와 같은 폭·모양
-    left, mid, right = st.columns([1.55, 2.3, 1.5], gap="medium")      # 찜 줄이고 알림 내역 키움 (11/18)
+    # A안 (11/25, 웹 app/calendar/page.tsx 와 같게): 왼쪽 400px = 달력 + 곧 있는 팝업 · 가운데(넓게) = 북마크 · 다녀온 팝업 · 최근 본
+    # · 오른쪽 = 알림 받은 내역 + 내 주변 추천. 모바일은 달력 → 곧 있는 팝업 → 탭 · 목록 → 알림 순서 (칸 순서 그대로 쌓인다)
+    st.markdown(CAL_CSS + MYCAL_CSS + BOX_CSS + A_MEMBER_CSS, unsafe_allow_html=True)
+    keep = _amem_keep()
+    with st.container(key="amc_wrap"):
+        left, mid, right = st.columns([1.55, 2.3, 1.5], gap="medium")
     with right, st.container(key="ntf_box"):
-        # 긴 설명은 제목 옆 ? 에 (11/18 요청: 문구가 길어 줄이 어색했음)
-        r_ = _rules()
-        st.markdown('<div class="mc-title">알림 받은 내역 <span class="nh-help" tabindex="0">?<span class="nh-tip">'
-                    f'북마크한 팝업의 <b>오픈 {r_["open"]["days"]}일 전</b>, <b>종료 {r_["end"]["days"]}일 전</b>부터 당일까지 '
-                    '알려 드려요. 최근 3일 알림만 보여요.<br>관리자 공지와 삭제 요청 결과도 여기에 와요.</span></span></div>',
-                    unsafe_allow_html=True)
         _render_notice_history()
     with left, st.container(key="mycal_box"):
-        render_calendar()
+        render_calendar(css=False)
     with mid, st.container(key="keep_box"):
         tab = st.session_state.get("box_tab", "fav")
         if tab not in ("fav", "visited", "recent"):
             tab = "fav"
         with st.container(horizontal=True, key="box_tabs"):
-            for t, label in (("fav", "북마크"), ("visited", "다녀온 팝업"), ("recent", "최근 본 팝업")):
+            for t, label in (("fav", f"북마크 {len(keep['fav'])}"), ("visited", f"다녀온 팝업 {len(keep['visited'])}"),
+                             ("recent", "최근 본")):
                 st.button(label, key=f"boxtab_{'on_' if tab == t else ''}{t}", on_click=_box_tab, args=(t,))
         render_box_view(tab)
 
 
 def _render_notice_history() -> None:
-    """종 알림과 같은 모양(새 알림/읽음 · 굵은 종류 · 왜 왔는지 한 줄 · 칸 전체가 버튼) + 왼쪽 포스터 (11/18 요청).
+    """알림 받은 내역 (A안, 웹 NtfHistory 와 같게): 새 알림/읽음/지난 알림 · 날 · 지역 칩 · 굵은 종류 · 왜 왔는지 한 줄, 칸 전체가 버튼.
     오늘 알림은 종과 같은 번호를 써서 한쪽에서 읽으면 다른 쪽도 '읽음'."""
     me = _member()
-    rules = _rules()
+    r_ = _rules()
     inbox = _inbox(str(me["entry_id"])) if me else []
     # 최근 3일 알림만 (그 전 내역은 보이지 않음, 11/18 요청)
-    inbox = [r for r in inbox if (admin._day(r.get("updated_at")) or TODAY) >= TODAY - timedelta(days=2)]
-    if inbox:
-        st.markdown('<div class="nh-day">받은 알림</div>', unsafe_allow_html=True)
-    for r in inbox[:20]:                    # 공지 · 삭제 요청 처리 결과 (관리자가 보냄)
-        _ntf_cell(_ntf_id("i" + str(r.get("row_id"))),
-                  f'<b>{escape(str(r.get("title") or ""))}</b><br>{escape(str(r.get("body") or ""))}'
-                  + _why_html(admin.KIND_RULE.get(str(r.get("kind")), "notice")), None, kp="h")
-    hist = _notice_history()
-    if not hist:
-        st.markdown('<div class="ntf-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
-                    '여기에 쌓여요.</div>', unsafe_allow_html=True)
-    last_day = None
-    for day, kind, label, r in hist[:40]:
-        if day != last_day:
-            st.markdown(f'<div class="nh-day">{"오늘" if day == TODAY else f"{day.month}월 {day.day}일"}</div>',
-                        unsafe_allow_html=True)
-            last_day = day
+    inbox = [r for r in inbox if (admin._day(r.get("updated_at")) or TODAY) >= TODAY - timedelta(days=2)][:20]
+    hist = _notice_history()[:40]
+    has_loc, near = _amem_near()
+    day_text = lambda d: "오늘" if d == TODAY else f"{d.month}.{d.day}"      # noqa: E731
+    cells = []                               # (알림 번호, 글, 팝업 번호, 포스터, 지난 알림?)
+    for r in inbox:                          # 공지 · 삭제 요청 처리 결과 (관리자가 보냄)
+        cells.append((_ntf_id("i" + str(r.get("row_id"))),
+                      f'<span class="nh-time">{day_text(admin._day(r.get("updated_at")) or TODAY)}</span>'
+                      f'<strong>{escape(str(r.get("title") or ""))}</strong>'
+                      f'<span class="nh-txt">{escape(str(r.get("body") or ""))}</span>'
+                      + _why_html(admin.KIND_RULE.get(str(r.get("kind")), "notice")), None, None, False))
+    for day, kind, label, r in hist:
         eid = str(r.get("entry_id"))
-        name = escape(f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·"))
+        work, cafe_name = str(r.get("work") or ""), str(r.get("cafe_name") or "")
+        name = escape(f"{work} · {cafe_name}".strip(" ·"))
         bell = f"<b>{label}</b> · {name}" + _why_html(kind)      # 종 알림(_notices)과 같은 글 → 같은 번호(읽음 공유)
         nid = _ntf_id(f"m{TODAY}{eid}{bell}") if day == TODAY else _ntf_id(f"h{day}{eid}{label}")
-        # 화면에는 종류 / 작품 / 매장을 줄바꿈으로 (11/18 요청)
-        text = (_area_chip(r.get("address"), "ntf-area") + f"<b>{label}</b><br>{escape(str(r.get('work') or ''))}<br>"
-                f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>" + _why_html(kind))
-        _ntf_cell(nid, text, eid, poster=_poster_url(r.get("images")), kp="h", past=day != TODAY)
-    _render_near_picks()
+        text = (f'<span class="nh-time">{day_text(day)}</span>' + _area_chip(r.get("address"), "nh-area")
+                + f"<strong>{label} · {escape(work or cafe_name)}</strong>"
+                + (f'<span class="nh-txt">{escape(cafe_name)}</span>' if work else "") + _why_html(kind))
+        cells.append((nid, text, eid, _poster_url(r.get("images")), day != TODAY))
+    # '모두 읽음': 받은 알림 + 오늘 알림 + 내 주변 추천 (지난 알림은 원래 읽음으로 보인다)
+    fresh = [c[0] for c in cells if not c[4] and c[0] not in _ntf_read()] + [n for n, _, _ in near if n not in _ntf_read()]
+    with st.container(horizontal=True, vertical_alignment="center", key="amem_nh_head"):
+        st.markdown('<div class="am-h2">알림 받은 내역<span class="nh-help" tabindex="0">?<span class="nh-tip">'
+                    f'북마크한 팝업의 <b>오픈 {r_["open"]["days"]}일 전</b>, <b>종료 {r_["end"]["days"]}일 전</b>부터 당일까지 '
+                    '알려 드려요. 최근 3일 알림만 보여요.<br>관리자 공지와 삭제 요청 결과도 여기에 와요.</span></span></div>',
+                    unsafe_allow_html=True)
+        if fresh:
+            st.button("모두 읽음", key="amem_nh_all", type="tertiary", on_click=_ntf_mark, args=(fresh,))
+    st.markdown('<div class="nh-sub">최근 3일</div>', unsafe_allow_html=True)
+    if not cells:
+        st.markdown('<div class="nh-empty">아직 받은 알림이 없어요. 리스트에서 팝업을 북마크하면 오픈·종료가 가까울 때 '
+                    '여기에 쌓여요.</div>', unsafe_allow_html=True)
+    for nid, text, eid, poster, past in cells:
+        _ntf_cell(nid, text, eid, poster=poster, kp="h", past=past)
+    _render_near_picks(has_loc, near)
+    tip = _amem_ntf_tip(r_)
+    if tip:
+        st.markdown(f'<div class="nh-mtip"><img src="{_AMEM_MASCOT}" alt=""><span>{escape(tip)}</span></div>',
+                    unsafe_allow_html=True)
 
 
 NEAR_KM = 20          # '내 주변' 으로 볼 거리
 
 
-def _render_near_picks() -> None:
-    """알림 받은 내역 아래 '내 주변 추천' 최대 3곳 (11/18 요청).
+def _amem_near() -> tuple[bool, list[tuple[str, float, dict]]]:
+    """'내 주변 추천' 최대 3곳 (11/18 요청) → (위치를 아는지, [(알림 번호, km, 행)]).
     대상: 지금 진행 중이거나 3일 안에 여는 팝업 중 내 위치에서 NEAR_KM 안 (북마크한 곳은 위 알림에 있으니 뺌).
     순서: 별점 높은 순 → 다녀온 후기 많은 순 → 가까운 순."""
-    st.markdown('<div class="nh-day">내 주변 추천 <span class="nh-help" tabindex="0">?<span class="nh-tip">'
-                f'내 위치에서 {NEAR_KM}km 안에 있는 팝업 중 <b>지금 진행 중</b>이거나 <b>3일 안에 여는</b> 곳을 골라요.<br>'
-                '순서: 별점 높은 순 → 다녀온 후기 많은 순 → 가까운 순, 최대 3곳.<br>'
-                '이미 북마크한 팝업은 위 알림에 있어서 빼요. 위치를 허용해야 보여요.</span></span></div>',
-                unsafe_allow_html=True)
     loc = _my_loc()
     if not loc:
-        st.markdown('<div class="ntf-empty">위치를 허용하면 내 주변에서 별점 좋은 팝업을 추천해 드려요. '
-                    '브라우저 주소창의 위치 권한을 허용해 주세요.</div>', unsafe_allow_html=True)
-        return
+        return False, []
     me = (float(loc["lat"]), float(loc["lng"]))
     _, mine, _ = _fav_state()
     ratings = _ask_ctx().get("ratings") or {}
@@ -5611,19 +5615,40 @@ def _render_near_picks() -> None:
         if km > NEAR_KM:
             continue
         avg, n = ratings.get(str(r.get("entry_id")), (0.0, 0))
-        cand.append((-avg, -n, km, r, avg, n))
+        cand.append((-avg, -n, km, r))
     cand.sort(key=lambda t: t[:3])
-    if not cand:
-        st.markdown(f'<div class="ntf-empty">내 위치에서 {NEAR_KM}km 안에 지금 열려 있거나 곧 여는 팝업이 없어요.</div>',
+    return True, [(_ntf_id(f"r{TODAY}{r.get('entry_id')}"), km, r) for _, _, km, r in cand[:3]]
+
+
+def _render_near_picks(has_loc: bool | None = None, near: list | None = None) -> None:
+    """알림 받은 내역 아래 '내 주변 추천' (A안: 44px 포스터 · 작품 · 지역 · 매장 · 거리, 칸 전체가 버튼)."""
+    if has_loc is None or near is None:
+        has_loc, near = _amem_near()
+    st.markdown('<div class="nh-near"><div class="am-h2">내 주변 추천<span class="nh-help" tabindex="0">?<span class="nh-tip">'
+                f'내 위치에서 {NEAR_KM}km 안에 있는 팝업 중 <b>지금 진행 중</b>이거나 <b>3일 안에 여는</b> 곳을 골라요.<br>'
+                '순서: 별점 높은 순 → 다녀온 후기 많은 순 → 가까운 순, 최대 3곳.<br>'
+                '이미 북마크한 팝업은 위 알림에 있어서 빼요. 위치를 허용해야 보여요.</span></span></div>'
+                f'<div class="nh-sub">{NEAR_KM}km 안 · 진행 중이거나 3일 안에 열림 · 별점 높은 순</div></div>',
+                unsafe_allow_html=True)
+    if not has_loc:
+        st.markdown('<div class="nh-empty">위치를 허용하면 내 주변에서 별점 좋은 팝업을 추천해 드려요. '
+                    '브라우저 주소창의 위치 권한을 허용해 주세요.</div>', unsafe_allow_html=True)
+        return
+    if not near:
+        st.markdown(f'<div class="nh-empty">내 위치에서 {NEAR_KM}km 안에 지금 열려 있거나 곧 여는 팝업이 없어요.</div>',
                     unsafe_allow_html=True)
         return
-    for _, _, km, r, avg, n in cand[:3]:
+    for nid, km, r in near:
         eid = str(r.get("entry_id"))
+        work, cafe_name = str(r.get("work") or ""), str(r.get("cafe_name") or "")
         dist = f"{km * 1000:.0f}m" if km < 1 else f"{km:.1f}km"
-        # 거리 / 작품 / 매장 줄바꿈 (별점·상태 줄은 뺐다, 기준은 제목 옆 ? 에) — 11/18 요청
-        text = (_area_chip(r.get("address"), "ntf-area") + f"<b>내 주변 {dist}</b><br>{escape(str(r.get('work') or ''))}<br>"
-                f"<span class='ntf-cafe'>{escape(str(r.get('cafe_name') or ''))}</span>")
-        _ntf_cell(_ntf_id(f"r{TODAY}{eid}"), text, eid, poster=_poster_url(r.get("images")), kp="h")
+        sub = " · ".join(x for x in (geo.area_name(str(r.get("address") or "")), cafe_name if work else "") if x)
+        with st.container(key=f"nh_{nid}"):
+            st.markdown(f'<div class="nr-item{" read" if nid in _ntf_read() else ""}">'
+                        f'<span class="nr-pst" style="{_amem_bg(r.get("images"))}"></span>'
+                        f'<span class="nr-body"><strong>{escape(work or cafe_name)}</strong><span>{escape(sub)}</span></span>'
+                        f'<span class="nr-km">{dist}</span></div>', unsafe_allow_html=True)
+            st.button(f"{work or cafe_name} 상세", key=f"nh_btn_{nid}", on_click=_ntf_click, args=(nid, eid))
 
 
 # ------------------------------------------------------------ '보관함' 탭: 찜 · 다녀온(내가 쓴 다녀온 후기) · 최근 본
@@ -5700,94 +5725,767 @@ def _box_tab(t: str) -> None:
     st.session_state["box_tab"] = t
 
 
-def _box_card(r: dict, key: str, review_html: str = "") -> None:
+def _box_card(r: dict, key: str, review_html: str = "", stamp_lv: int = 0) -> None:
+    """내 캘린더 가운데 칸 카드 (A안, 웹 KeepBox 의 Card): 96px 포스터 · 상태 칩 + 지역 칩 · 작품 · '카페 · 기간' · 특전 첫 항목.
+    다녀온 팝업(stamp_lv)은 포스터 귀퉁이에 40px 도장, 상태 칩 대신 아래에 내 후기. 칸 전체가 상세로 가는 버튼."""
     eid = str(r.get("entry_id"))
     s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
-    md = lambda d: f"{d.month}.{d.day}" if d else ""          # noqa: E731
-    state = ("종료" if e_ and e_ < TODAY else "예정" if s_ and s_ > TODAY else "진행 중") if s_ else ""
+    if not (s_ and e_):
+        state, color = "기간 미정", "gray"
+    elif e_ < TODAY:
+        state, color = "종료", "gray"
+    elif s_ > TODAY:
+        state, color = f"D-{(s_ - TODAY).days}", "blue"
+    elif (e_ - TODAY).days <= 3:
+        state, color = "마감임박", "red"
+    else:
+        state, color = "진행 중", "green"
+    work, cafe_name = str(r.get("work") or ""), str(r.get("cafe_name") or "")
+    period = "오늘 종료" if e_ == TODAY else _period(r, show_raw=False)
+    perk = (_split(r.get("perks") or "") or [""])[0]
+    dot = ""
+    if stamp_lv:
+        from common import stamp
+        dot = f'<span class="am-stamp">{_amem_dot(stamp.TIERS[stamp_lv - 1], 40, bw=3)}</span>'
+    chips = ("" if review_html else f'<span class="am-st {color}">{state}</span>') + _area_chip(r.get("address"), "am-area")
+    heart = not review_html                 # 북마크 단추는 북마크 · 최근 본 카드에만 (모바일에서는 숨김 — 상세 · 리스트에서 바꾼다)
     with st.container(key=f"bx_{key}_{eid}"):
         st.markdown(
-            f'<div class="bxc{" soon" if state == "예정" else ""}"><img class="pst" src="{escape(_poster_url(r.get("images")))}" alt="">'
-            f'<div class="t"><span class="bx-chips">{_area_chip(r.get("address"), "bx-area")}'
-            f'<span class="st{" end" if state == "종료" else ""}">{state}</span></span>'
-            f'<div class="w">{escape(str(r.get("work") or ""))}</div><div class="c">{escape(str(r.get("cafe_name") or ""))}</div>'
-            f'<div class="d">{escape(_period(r))}</div></div></div>{review_html}', unsafe_allow_html=True)
-        st.button(f"{r.get('work')} 상세", key=f"bxbtn_{key}_{eid}", on_click=_gnb_open, args=(eid,))
+            f'<div class="am-card{" has-bm" if heart else ""}"><span class="am-pst" style="{_amem_bg(r.get("images"))}">{dot}</span>'
+            f'<span class="am-body"><span class="am-chips">{chips}</span>'
+            f'<span class="am-t">{escape(work or cafe_name)}</span>'
+            f'<span class="am-sub">{escape(cafe_name + " · " if work else "")}{escape(period)}</span>'
+            + (review_html or (f'<span class="am-perk">특전 · {escape(perk)}</span>' if perk else ""))
+            + '</span></div>', unsafe_allow_html=True)
+        st.button(f"{work or cafe_name} 상세", key=f"bxbtn_{key}_{eid}", on_click=_gnb_open, args=(eid,))
+        if heart:
+            _heart(eid, f"k{key}")
 
 
-def _box_empty(title: str, hint: str, icon: str) -> None:
-    st.markdown(f'<div class="bx-empty"><div class="ic">{icon}</div><h4>{title}</h4><p>{hint}</p></div>',
+def _box_empty(title: str, hint: str, icon: str = "") -> None:
+    st.markdown('<div class="am-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">'
+                f'<path d="M6 4h12v16l-6-4-6 4V4z"/></svg><div class="am-empty-t">{title}</div><p>{hint}</p></div>',
                 unsafe_allow_html=True)
 
 
 BOX_PAGE = 10          # 내 캘린더 북마크 · 다녀온 팝업: 처음 10건, 더 있으면 '+N건 더보기' 로 10건씩 (11/19 요청)
 
 
-def _box_grid(items: list[tuple[dict, str]], key: str) -> None:
-    """카드 목록 (캘린더 옆 칸이라 한 줄에 한 장). 최근 본 팝업은 원래 10개까지라 더보기가 없다."""
+def _box_grid(items: list[tuple], key: str, stamp_lv: int = 0) -> None:
+    """카드 목록 (한 줄에 한 장). 최근 본 팝업은 원래 10개까지라 더보기가 없다."""
     n = st.session_state.get(f"bx_n_{key}", BOX_PAGE)
     for r, review_html in items[:n]:
-        _box_card(r, key, review_html)
+        _box_card(r, key, review_html, stamp_lv)
     if len(items) > n:
-        with st.container(horizontal=True, horizontal_alignment="center", key=f"bx_morewrap_{key}"):
-            st.button(f"+{len(items) - n}건 더보기", icon=":material/expand_more:", key=f"bx_more_{key}",
+        with st.container(key=f"bx_morewrap_{key}"):
+            st.button(f"+{len(items) - n}건 더보기", key=f"bx_more_{key}", width="stretch",
                       on_click=lambda: st.session_state.update({f"bx_n_{key}": n + BOX_PAGE}))
 
 
-def render_box_view(tab: str) -> None:
-    """내 캘린더 오른쪽 칸의 찜 · 다녀온 · 최근 본."""
+def _amem_keep() -> dict:
+    """내 캘린더 가운데 칸 · 마이페이지 숫자에 쓰는 내 목록 (한 번 실행에 한 번만 읽음).
+    latest = 지금 보이는 팝업(끝난 것 제외), fav = 북마크한 팝업, visited = [(팝업, 내 다녀온 후기들)], stamps = 내 후기 도장 수."""
+    from common import stamp
+    run = st.session_state.get("_run", 0)
+    cached = st.session_state.get("_amem_keep_cache")
+    if cached and cached[0] == run:
+        return cached[1]
     # 끝난 팝업은 어디에도 보이지 않게 (11/18 요청): 북마크·다녀온·최근 본 모두 종료일이 오늘 이후인 것만
     latest = {str(r.get("entry_id")): r for r in mycal.latest_rows(store.all_rows())
               if r.get("status") != "deleted" or r.get("source") == "기간 종료"}
     latest = {k: r for k, r in latest.items() if (mycal._day(r.get("end_date")) or TODAY) >= TODAY}
+    _, mine, _ = _fav_state()
+    fav = sorted((latest[i] for i in mine if i in latest),
+                 key=lambda r: (str(r.get("end_date") or "") < TODAY.isoformat(), str(r.get("start_date") or "")))
+    me = _me()
+    rows = reviews.current_rows()
+    by_cafe: dict[str, list[dict]] = {}
+    for rv in sorted((r for r in rows if r.get("kind") == review.RATED_KIND and not r.get("parent_id")
+                      and review.can_delete(r, me)), key=lambda x: str(x.get("updated_at", "")), reverse=True):
+        by_cafe.setdefault(str(rv.get("cafe_id")), []).append(rv)
+    visited = [(latest[cid], rvs) for cid, rvs in by_cafe.items() if cid in latest]
+    stamps = stamp.stamps_of(me, stamp.counts(rows)) if _member() else 0      # 도장은 끝난 팝업의 후기도 센다
+    val = {"latest": latest, "fav": fav, "visited": visited, "stamps": stamps}
+    st.session_state["_amem_keep_cache"] = (run, val)
+    return val
+
+
+def render_box_view(tab: str) -> None:
+    """내 캘린더 가운데 칸의 북마크 · 다녀온 팝업(후기 도장) · 최근 본."""
+    from common import stamp
+    keep = _amem_keep()
+    latest = keep["latest"]
 
     if tab == "fav":
-        st.markdown(f'<div class="bx-tip">{_mi("notifications")} 북마크한 팝업은 오픈·종료 3일 전부터 알림으로 알려 드려요.</div>',
-                    unsafe_allow_html=True)
-        _, mine, _ = _fav_state()
-        rows = sorted((latest[i] for i in mine if i in latest),
-                      key=lambda r: (str(r.get("end_date") or "") < TODAY.isoformat(), str(r.get("start_date") or "")))
-        if not rows:
-            _box_empty("아직 북마크한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.", "bookmark_add")
+        if not keep["fav"]:
+            _box_empty("아직 북마크한 팝업이 없어요", "리스트나 상세에서 북마크 아이콘을 누르면 여기에 모여요.")
+            with st.container(horizontal=True, horizontal_alignment="center", key="amem_cta_fav"):
+                st.button("리스트에서 찾아보기", key="amem_cta_list", type="primary", on_click=_gnb_go, args=("list",))
             return
-        _box_grid([(r, "") for r in rows], "fav")
+        _box_grid([(r, "") for r in keep["fav"]], "fav")
 
     elif tab == "visited":
-        st.markdown(f'<div class="bx-tip">{_mi("rate_review")} \'다녀온 후기\'를 쓴 팝업이 여기에 모여요. 쓴 후기도 함께 보여요.</div>',
-                    unsafe_allow_html=True)
-        me = _me()
-        mine_reviews = [r for r in reviews.current_rows()
-                        if r.get("kind") == review.RATED_KIND and not r.get("parent_id") and review.can_delete(r, me)]
-        by_cafe: dict[str, list[dict]] = {}
-        for rv in sorted(mine_reviews, key=lambda x: str(x.get("updated_at", "")), reverse=True):
-            by_cafe.setdefault(str(rv.get("cafe_id")), []).append(rv)
+        stamps = keep["stamps"]
+        cur = stamp.tier_of(stamps)
+        hidden = stamps - len(keep["visited"])          # 도장은 끝난 팝업의 후기도 세지만, 이 목록은 지금 있는 팝업만 보여 준다
+        with st.container(key="amem_rkb"):
+            st.markdown(_amem_rank_card(stamps, f"도장 {stamps}개 중 {hidden}개는 이미 끝난 팝업의 후기라 아래 목록에는 없어요."
+                                        if hidden > 0 else ""), unsafe_allow_html=True)
+            if st.button("랭크 안내", key="amem_rank_open_v", type="tertiary"):
+                _amem_rank_dialog()
         items = []
-        for cid, rvs in by_cafe.items():
-            if cid not in latest:
-                continue
-            html_parts = []
+        for r, rvs in keep["visited"]:
+            top = rvs[0]
+            stars_ = review.stars(top.get("rating"))
+            when = _amem_md(top.get("updated_at"))
+            got = ('<span class="am-got">' + (f'<span class="am-stars">{stars_}</span> · ' if stars_ else "") + "도장 받았어요"
+                   + (f'<span class="am-when"> · {when} 후기</span>' if when else "") + "</span>")
+            parts = [got]
             for rv in rvs:
                 pics = images.paths(rv.get("images"))        # 리뷰 화면과 같은 방법으로 사진 경로를 고른다
                 imgs = "".join(f'<img src="{escape(images.url(x))}" alt="">' for x in pics[:4])
-                html_parts.append(
-                    f'<div class="bxr"><span class="stars">{review.stars(rv.get("rating"))}</span>'
-                    f'<span class="when">{escape(_when(str(rv.get("updated_at", ""))))}</span>'
-                    f'<div>{escape(str(rv.get("body") or ""))}</div>'
-                    f'{f"<div class=imgs>{imgs}</div>" if imgs else ""}</div>')
-            items.append((latest[cid], "".join(html_parts)))
+                if str(rv.get("body") or "").strip():
+                    parts.append(f'<span class="am-rv">{escape(str(rv.get("body")))}</span>')
+                if imgs:
+                    parts.append(f'<span class="am-imgs">{imgs}</span>')
+            items.append((r, "".join(parts)))
         if not items:
-            _box_empty("다녀온 팝업이 없어요", "팝업 상세의 리뷰 탭에서 '다녀온 후기'를 쓰면 여기에 기록돼요.", "where_to_vote")
+            _box_empty("다녀온 팝업이 없어요", "팝업 상세의 리뷰에서 '다녀온 후기'를 쓰면 도장을 받고 여기에 기록돼요.")
             return
-        _box_grid(items, "visited")
+        _box_grid(items, "visited", stamp_lv=cur.lv if cur else 1)
 
     else:
         ids = [i for i in st.session_state.get("recent_seen", []) if i in latest][:RECENT_MAX]
-        st.markdown(f'<div class="bx-tip">{_mi("history")} 이 브라우저에서 최근에 연 팝업 상세예요 (최대 {RECENT_MAX}개).</div>',
+        st.markdown(f'<div class="am-tip">이 브라우저에서 최근에 연 팝업 상세예요 (최대 {RECENT_MAX}개).</div>',
                     unsafe_allow_html=True)
         if not ids:
-            _box_empty("최근 본 팝업이 없어요", "리스트나 지도에서 팝업을 눌러 상세를 열면 여기에 남아요.", "history")
+            _box_empty("최근 본 팝업이 없어요", "리스트나 지도에서 팝업을 눌러 상세를 열면 여기에 남아요.")
             return
         _box_grid([(latest[i], "") for i in ids], "recent")
+
+
+# ------------------------------------------------------------ A안 (11/25): 내 캘린더 · 마이페이지 · 후기 도장 랭크 안내
+# 웹 web/app/a-member.css 의 값을 그대로 옮겼다 (.amc-* 달력 · .am-* 카드/탭 · .nh-*/.nr-* 알림 · .rkb-* 도장 요약 · .mp-* 마이페이지
+# · .rkp-* 랭크 안내). 예전 MYCAL_CSS · BOX_CSS · CAL_CSS · AUTH_CSS · GNB_CSS(.ntf-*) 규칙은 그대로 두고 여기서 덮는다.
+A_MEMBER_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Titan+One&display=swap');
+html body { --am-line:#e3e9e7; --am-line-soft:#eef2f1; --am-soft:#f6f8f7; --am-gray:#f4f6f5; --am-ink:#26302d; --am-ink-soft:#5f6b68;
+  --am-mint-line:#9eddcc; --am-gnb:#e9f7f2; }
+.am-m { display:none !important; }
+/* ---- 틀: 왼쪽 400px · 가운데 넓게 · 오른쪽 300px ---- */
+html body .st-key-amc_wrap { max-width:1232px; width:100%; margin:0 auto; }
+html body .st-key-amc_wrap [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-mycal_box) { gap:20px !important;
+  flex-wrap:wrap !important; align-items:flex-start !important; }
+html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-mycal_box) { flex:0 1 400px !important; max-width:400px; min-width:0 !important; width:auto !important; }
+html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-keep_box) { flex:999 1 420px !important; min-width:0 !important; width:auto !important; }
+html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-ntf_box) { flex:1 1 260px !important; max-width:300px; min-width:0 !important; width:auto !important; }
+@media (max-width:1167px) { html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-ntf_box) { flex-basis:100% !important; max-width:none; } }
+@media (max-width:887px) { html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-mycal_box) { flex-basis:100% !important; max-width:none; } }
+html body .st-key-mycal_box, html body .st-key-keep_box, html body .st-key-ntf_box { border:0 !important; border-radius:0 !important;
+  padding:0 !important; background:transparent !important; }
+html body .st-key-mycal_box { gap:16px !important; }
+html body .st-key-keep_box, html body .st-key-ntf_box { gap:12px !important; }
+html body .st-key-amc_wrap [data-testid="stMarkdownContainer"], html body .st-key-amem_mp [data-testid="stMarkdownContainer"],
+html body .st-key-amc_box [data-testid="stMarkdownContainer"] { margin-bottom:0 !important; }
+.am-h2 { font-size:17px; font-weight:800; color:var(--am-ink); display:flex; align-items:center; line-height:1.4; margin:0; }
+/* ? 도움말: 22px 동그라미 */
+html body .amc-h1 .cal-help, html body .am-h2 .nh-help { position:relative; display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; margin-left:6px; border-radius:50%; border:1px solid #c6d0cd; background:#fff; color:var(--am-ink-soft);
+  font-family:"Pretendard", sans-serif; font-size:12px; font-weight:800; line-height:1; flex:none; cursor:help; vertical-align:middle; }
+/* ---- 달력 ---- */
+html body .st-key-amc_box { border:1.5px solid var(--am-line); border-radius:18px; padding:16px !important; background:#fff;
+  gap:12px !important; min-width:0; position:relative; }
+.amc-title { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.amc-h1 { font-family:"Jua", sans-serif; font-size:26px; line-height:1.15; color:var(--am-ink); display:flex; align-items:center; }
+.amc-nick { font-size:13px; color:var(--am-ink-soft); overflow-wrap:anywhere; }
+html body .st-key-amc_box .st-key-cal_nav { justify-content:flex-end !important; align-items:center !important; gap:6px !important;
+  margin:0 !important; flex-wrap:nowrap !important; }
+html body .st-key-amc_box .st-key-cal_nav > div, html body .st-key-amc_box .st-key-cal_nav > div:first-child { flex:0 0 auto !important;
+  width:auto !important; min-width:0 !important; }
+.amc-month { display:inline-block; font-family:"Jua", sans-serif; font-size:18px; min-width:96px; text-align:center; white-space:nowrap;
+  color:var(--am-ink); }
+html body .st-key-amc_box .st-key-cal_prev button, html body .st-key-amc_box .st-key-cal_next button { width:40px !important;
+  height:40px !important; min-height:0 !important; padding:0 !important; border-radius:50% !important;
+  border:1px solid var(--am-line) !important; background:#fff !important; }
+html body .st-key-amc_box .st-key-cal_prev button p, html body .st-key-amc_box .st-key-cal_next button p { font-size:22px !important;
+  line-height:1 !important; color:var(--am-ink) !important; margin:-3px 0 0 !important; font-weight:500; }
+html body .st-key-amc_box .st-key-cal_prev button:hover, html body .st-key-amc_box .st-key-cal_next button:hover { border-color:var(--accent) !important; }
+html body .st-key-amc_box .st-key-cal_now button { height:40px !important; min-height:0 !important; padding:0 14px !important;
+  border-radius:999px !important; border:1px solid var(--accent) !important; background:var(--accent-soft) !important; margin-left:0 !important; }
+html body .st-key-amc_box .st-key-cal_now button p { font-size:13px !important; font-weight:800 !important; color:#0b5e57 !important; white-space:nowrap; }
+.amc-empty { font-size:12.5px; color:var(--am-ink-soft); background:var(--am-soft); border-radius:12px; padding:8px 12px; line-height:1.5; }
+.amc-cal { display:flex; flex-direction:column; gap:12px; }
+.amc-dow { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); font-size:12.5px; font-weight:800; color:var(--am-ink-soft);
+  text-align:center; border-bottom:1px solid var(--am-line-soft); padding-bottom:8px; }
+.amc-dow span:first-child { color:#c0313f; }
+.amc-weeks { display:flex; flex-direction:column; margin-top:-12px; }
+.amc-week { --lane-h:16px; position:relative; min-height:92px; border-bottom:1px solid var(--am-line-soft); box-sizing:border-box; }
+.amc-days { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); height:100%; position:absolute; inset:0; }
+.amc-day { padding:4px; border-left:1px solid var(--am-line-soft); }
+.amc-day:first-child { border-left:0; }
+.amc-day span { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; border-radius:999px;
+  font-size:11.5px; font-weight:800; color:var(--am-ink); }
+.amc-day.sun span { color:#c0313f; }
+.amc-day.out span { color:#9aa5a1; }
+.amc-day.today { background:var(--accent-soft); }
+.amc-day.today span { background:#0b7a70; color:#fff; }
+html body a.amc-bar.cal-bar { position:absolute; height:15px; line-height:15px; padding:0 2px; box-sizing:border-box;
+  background:none !important; border-radius:0; font-size:0; overflow:visible; text-decoration:none !important; }
+html body a.amc-bar.cal-bar > span { display:block; height:100%; border-radius:8px; color:var(--am-ink) !important; font-size:10.5px;
+  font-weight:800; line-height:15px; padding:0 5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+html body a.amc-bar.cl > span { border-top-left-radius:0; border-bottom-left-radius:0; }
+html body a.amc-bar.cr > span { border-top-right-radius:0; border-bottom-right-radius:0; }
+@media (min-width:641px) { html body a.amc-bar.cal-bar > span { box-shadow:none !important; } }
+.amc-foot { margin:0 !important; font-size:12.5px !important; color:var(--am-ink-soft); }
+.amc-legend { list-style:none; margin:0 !important; padding:0 !important; display:none; flex-wrap:wrap; gap:6px 12px; font-size:12px; color:var(--am-ink); }
+.amc-legend li { display:inline-flex; align-items:center; gap:5px; min-width:0; margin:0 !important; padding:0 !important; font-size:12px; }
+.amc-legend i { width:14px; height:6px; border-radius:3px; flex:none; }
+/* ---- 곧 있는 팝업 ---- */
+.amc-up { background:var(--am-soft); border-radius:18px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; }
+html body a.am-up { display:flex; align-items:center; gap:12px; padding:10px 12px; background:#fff; border-radius:12px;
+  color:var(--am-ink) !important; text-decoration:none !important; min-width:0; }
+html body a.am-up:hover { outline:1.5px solid var(--accent); }
+html body .am-up .am-up-t { flex:1; min-width:0; font-size:14px; font-weight:800; color:var(--am-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.am-up-when { margin-left:auto; font-size:13px; color:var(--am-ink-soft); white-space:nowrap; }
+.am-up-empty { font-size:13px; color:var(--am-ink-soft); line-height:1.5; }
+.am-st { font-size:12px; font-weight:800; padding:3px 10px; border-radius:999px; white-space:nowrap; line-height:1.5; }
+.am-st.green { color:#0b5e57; background:#e6fbf7; }
+.am-st.blue { color:#2c5bc5; background:#eaf0fc; }
+.am-st.red { color:#c0313f; background:#fdecee; }
+.am-st.gray { color:var(--am-ink-soft); background:var(--am-gray); }
+/* ---- 가운데: 알약 탭 + 카드 ---- */
+html body .st-key-keep_box .st-key-box_tabs { gap:4px !important; background:var(--am-gray); border-radius:999px; padding:4px !important;
+  border-bottom:0 !important; margin:0 !important; flex-wrap:nowrap !important; }
+html body .st-key-keep_box .st-key-box_tabs > div { flex:1 1 0 !important; min-width:0 !important; width:auto !important; }
+html body .st-key-keep_box .st-key-box_tabs .stButton, html body .st-key-keep_box .st-key-box_tabs button { width:100% !important; }
+html body .st-key-keep_box .st-key-box_tabs button { border:0 !important; border-radius:999px !important; padding:12px 8px !important;
+  background:none !important; margin:0 !important; min-height:0 !important; box-shadow:none !important; }
+html body .st-key-keep_box .st-key-box_tabs button p { font-size:15px !important; font-weight:500 !important; color:var(--am-ink-soft) !important;
+  white-space:nowrap; }
+html body .st-key-keep_box .st-key-box_tabs [class*="st-key-boxtab_on_"] button { background:#fff !important; }
+html body .st-key-keep_box .st-key-box_tabs [class*="st-key-boxtab_on_"] button p { color:var(--am-ink) !important; font-weight:800 !important; }
+html body .st-key-keep_box [class*="st-key-bx_"] { margin-bottom:0; }
+.am-card { display:flex; gap:18px; align-items:center; padding:14px 16px; border:1.5px solid var(--am-line); border-radius:16px;
+  background:#fff; color:var(--am-ink); min-width:0; transition:border-color .15s; }
+[class*="st-key-bx_"]:hover .am-card { border-color:var(--accent); }
+.am-pst { position:relative; width:96px; aspect-ratio:3 / 4; border-radius:12px; border:2.5px solid var(--am-mint-line);
+  background-color:var(--am-gray); background-size:cover; background-position:center; flex:none; box-sizing:border-box; }
+.am-stamp { position:absolute; right:-10px; bottom:-10px; display:flex; border-radius:50%; transform:rotate(-10deg);
+  box-shadow:0 2px 6px rgba(0,0,0,.12); }
+.am-body { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.am-chips { display:flex; gap:6px; flex-wrap:wrap; }
+.am-chips:empty { display:none; }
+.am-chips .am-st { padding:2px 10px; }
+.am-area { font-size:12px; padding:2px 10px; border-radius:999px; line-height:1.5; white-space:nowrap; }
+.am-t { font-family:"Jua", sans-serif; font-size:21px; line-height:1.25; color:#0f6b5c; overflow-wrap:anywhere; }
+.am-sub { font-size:14px; color:var(--am-ink-soft); overflow-wrap:anywhere; }
+.am-perk { align-self:flex-start; max-width:100%; font-size:13px; font-weight:700; padding:4px 12px; border-radius:999px;
+  background:var(--am-gray); color:var(--am-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.am-got { font-size:12.5px; font-weight:800; color:#0f6b5c; }
+.am-stars { color:#9a6a00; letter-spacing:1px; }
+.am-when { font-weight:500; color:var(--am-ink-soft); }
+.am-rv { font-size:13px; line-height:1.55; background:var(--am-soft); border-radius:10px; padding:8px 10px; display:-webkit-box;
+  -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.am-imgs { display:flex; gap:6px; flex-wrap:wrap; }
+.am-imgs img { width:48px; height:48px; object-fit:cover; border-radius:8px; }
+.am-tip { font-size:12.5px; color:var(--am-ink-soft); }
+.am-empty { text-align:center; padding:36px 16px; border:1.5px dashed var(--am-line); border-radius:16px; }
+.am-empty svg { width:52px; height:52px; color:#c6d0cd; }
+.am-empty-t { margin:12px 0 4px; font-size:16px; font-weight:800; color:var(--am-ink); }
+.am-empty p { margin:0 !important; font-size:13.5px !important; color:var(--am-ink-soft); line-height:1.55; }
+/* 북마크 단추 (카드 오른쪽, PC 만) */
+@media (min-width:641px) { .am-card.has-bm { padding-right:74px; } }
+html body .st-key-keep_box [class*="st-key-fav_"] { position:absolute !important; right:16px; top:50%; transform:translateY(-50%);
+  z-index:3; width:40px !important; }
+html body .st-key-keep_box [class*="st-key-fav_"] button { width:40px !important; height:40px !important; min-width:0 !important;
+  min-height:0 !important; padding:0 !important; border-radius:10px !important; background:#fff !important;
+  border:1.5px solid var(--am-line) !important; box-shadow:none !important; }
+html body .st-key-keep_box [class*="st-key-fav_"] button::before { display:none !important; }
+html body .st-key-keep_box [class*="st-key-fav_"] button span { font-size:22px !important; color:var(--am-ink-soft) !important; margin:0 !important; }
+html body .st-key-keep_box [class*="st-key-fav_on_"] button { border-color:var(--accent) !important; }
+html body .st-key-keep_box [class*="st-key-fav_on_"] button span { color:var(--accent-deep) !important; }
+/* 더보기 · 빈 목록 단추 */
+html body [class*="st-key-bx_more_"] button, html body .st-key-amrv_more button { width:100% !important; height:44px !important;
+  min-height:0 !important; border-radius:999px !important; border:0 !important; background:var(--accent-soft) !important; }
+html body [class*="st-key-bx_more_"] button p, html body .st-key-amrv_more button p { font-size:14px !important; font-weight:800 !important;
+  color:#0b5e57 !important; }
+html body [class*="st-key-amem_cta_"] button { border:0 !important; border-radius:999px !important; background:var(--accent-deep) !important;
+  padding:9px 14px !important; min-height:0 !important; }
+html body [class*="st-key-amem_cta_"] button p { font-size:13px !important; font-weight:800 !important; color:#fff !important; }
+/* ---- 후기 도장 ---- */
+.amk { display:inline-flex; align-items:center; justify-content:center; flex:none; border-radius:50%; box-sizing:border-box; vertical-align:middle; }
+.amk img { width:62% !important; height:auto !important; display:block; max-width:none; }
+.amk.locked { opacity:.45; filter:grayscale(1); }
+.amk-big { position:relative; display:inline-block; flex:none; }
+.amk-big svg { position:absolute; inset:0; }
+.amk-big > img { position:absolute; left:50%; top:50%; width:41% !important; height:auto !important; transform:translate(-50%, -50%); }
+.amk-ring-t { font-family:"Titan One", "Jua", sans-serif; }
+.amk-lv { position:absolute; right:-2px; bottom:2px; min-width:30px; height:26px; padding:0 6px; border-radius:999px; border:3px solid #fff;
+  color:#fff; font-family:"Titan One", "Jua", sans-serif; font-size:13px; line-height:20px; text-align:center; box-sizing:border-box; }
+.amk-big.dim { filter:grayscale(1); opacity:.45; }
+html body .st-key-amem_rkb, html body .st-key-amem_rank { position:relative; }
+.rkb-card { border:1.5px solid var(--am-mint-line); border-radius:20px; padding:16px; background:#fff; display:flex; flex-direction:column; gap:14px; }
+.rkb-top { display:flex; align-items:center; gap:14px; padding-right:64px; }
+.rkb-s60 { position:relative; width:60px; height:60px; flex:none; }
+.rkb-lv { position:absolute; right:-6px; bottom:-4px; min-width:22px; height:20px; padding:0 4px; border-radius:999px; border:2px solid #fff;
+  color:#fff; font-family:"Titan One", "Jua", sans-serif; font-size:11px; line-height:16px; text-align:center; box-sizing:border-box; }
+.rkb-txt { flex:1; display:flex; flex-direction:column; gap:4px; min-width:0; }
+.rkb-cap { font-size:13px; font-weight:700; color:var(--am-ink-soft); }
+.rkb-name { font-family:"Jua", sans-serif; font-size:21px; color:#0f6b5c; line-height:1.25; }
+.rkb-line { font-size:12.5px; color:var(--am-ink); line-height:1.5; }
+.rkb-bar { height:10px; border-radius:999px; background:var(--am-line-soft); overflow:hidden; }
+.rkb-bar span { display:block; height:100%; border-radius:999px; }
+.rkb-row { list-style:none; margin:0 !important; padding:0 !important; display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:4px; }
+.rkb-row li { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; margin:0 !important; padding:0; }
+.rkb-row li.lock { opacity:.45; filter:grayscale(1); }
+.rkb-row li.lock .amk.locked { opacity:1; filter:none; }
+.rkb-nm { font-size:11px; font-weight:800; color:var(--am-ink); text-align:center; line-height:1.25; word-break:keep-all; }
+.rkb-row.cells { gap:10px; }
+.rkb-row.cells li { gap:6px; padding:12px 6px; border-radius:16px; }
+.rkb-row.cells .rkb-nm { font-size:13px; }
+.rkb-need { font-size:12px; color:var(--am-ink-soft); }
+.rkb-note { margin:0 !important; font-size:12px !important; color:var(--am-ink-soft); line-height:1.5; }
+html body [class*="st-key-amem_rank_open_"] { position:absolute !important; top:26px; right:16px; width:auto !important; z-index:2; }
+html body .st-key-amem_rank_open_mp { top:24px; right:28px; }
+html body [class*="st-key-amem_rank_open_"] button { border:0 !important; background:none !important; padding:8px 0 !important;
+  min-height:0 !important; box-shadow:none !important; width:auto !important; }
+html body [class*="st-key-amem_rank_open_"] button p { font-size:12.5px !important; font-weight:700 !important; color:var(--accent-deep) !important;
+  text-decoration:underline; text-underline-offset:2px; white-space:nowrap; }
+/* ---- 오른쪽: 알림 받은 내역 + 내 주변 추천 ---- */
+html body .st-key-amem_nh_head { justify-content:space-between !important; align-items:center !important; min-height:34px; gap:8px !important;
+  flex-wrap:nowrap !important; }
+html body .st-key-amem_nh_head > div { width:auto !important; flex:0 1 auto !important; }
+html body .st-key-amem_nh_all button { border:0 !important; background:none !important; padding:8px 4px !important; min-height:0 !important; }
+html body .st-key-amem_nh_all button p { font-size:13px !important; font-weight:700 !important; color:#0f6b5c !important; white-space:nowrap; }
+.nh-sub { font-size:12.5px; color:var(--am-ink-soft); margin-top:-6px; }
+html body .st-key-ntf_box [class*="ntfc_"], html body .st-key-ntf_box .ntf-item.plain { margin-bottom:0 !important; }
+html body .st-key-ntf_box .ntf-item { display:flex; gap:10px; align-items:flex-start; padding:12px !important; border-radius:14px;
+  background:#fff6f6; border:0 !important; color:var(--am-ink); min-width:0; font-size:12.5px; line-height:1.45; box-shadow:none !important; }
+html body .st-key-ntf_box .ntf-item.read { background:var(--am-soft); color:var(--am-ink); }
+html body .st-key-ntf_box .ntf-item::before { display:none !important; }
+html body .st-key-ntf_box [class*="ntfc_"]:hover .ntf-item { outline:1.5px solid var(--accent); }
+html body .st-key-ntf_box .ntf-item .ntf-pst { width:40px; height:52px; flex:0 0 40px; border-radius:8px; object-fit:cover; background:var(--am-gray); }
+html body .st-key-ntf_box .ntf-item .ntf-body { padding-right:0 !important; min-width:0; flex:1 1 auto; }
+html body .st-key-ntf_box .ntf-item .ntf-st { position:static !important; float:none !important; font-size:11.5px; font-weight:800; color:#d63a3a; margin-right:6px; }
+html body .st-key-ntf_box .ntf-item.read .ntf-st { color:var(--am-ink-soft); }
+.nh-time { font-size:11.5px; color:var(--am-ink-soft); margin-right:6px; }
+.nh-area { display:inline-block; font-size:11px; padding:0 7px; border-radius:999px; line-height:1.6; }
+html body .st-key-ntf_box .ntf-body strong { display:block; font-size:14px; line-height:1.35; margin-top:3px; color:var(--am-ink); overflow-wrap:anywhere; }
+.nh-txt { display:block; font-size:12.5px; line-height:1.45; margin-top:3px; overflow-wrap:anywhere; }
+html body .st-key-ntf_box .ntf-why { display:block; font-size:12.5px; color:var(--am-ink-soft); line-height:1.45; margin-top:3px; }
+html body .st-key-ntf_box .ntf-why .mi { display:none; }
+.nh-empty { font-size:13px; color:var(--am-ink-soft); line-height:1.55; padding:12px; border-radius:14px; background:var(--am-soft); }
+.nh-near { margin-top:8px; border-top:1px solid var(--am-line-soft); padding-top:16px; display:flex; flex-direction:column; gap:10px; }
+.nh-near .nh-sub { margin-top:-4px; }
+html body .st-key-ntf_box [class*="st-key-nh_"] { margin-bottom:0; }
+.nr-item { display:flex; align-items:center; gap:10px; color:var(--am-ink); min-width:0; border-radius:12px; }
+[class*="st-key-nh_"]:hover .nr-item strong { color:var(--accent-deep); }
+.nr-pst { width:44px; height:44px; border-radius:12px; background-color:var(--am-gray); background-size:cover; background-position:center; flex:none; }
+.nr-body { display:flex; flex-direction:column; min-width:0; }
+.nr-body strong { font-size:14px; }
+.nr-body strong, .nr-body span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.nr-body span { font-size:12.5px; color:var(--am-ink-soft); }
+.nr-km { margin-left:auto; font-size:12.5px; font-weight:800; color:#0f6b5c; white-space:nowrap; }
+.nh-mtip { display:flex; align-items:center; gap:12px; padding:14px; border-radius:16px; background:var(--am-gnb); margin-top:4px; }
+.nh-mtip img { width:44px !important; height:auto !important; display:block; flex:none; }
+.nh-mtip span { font-size:13px; line-height:1.55; color:var(--am-ink); }
+/* ================= 마이페이지 ================= */
+html body .st-key-amem_mp { gap:20px !important; }
+.mp-h { margin:4px 0 0; font-family:"Jua", sans-serif; font-size:30px; color:var(--am-ink); line-height:1.3; }
+html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_prof),
+html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_set) { gap:20px !important;
+  flex-wrap:wrap !important; }
+html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_set) { align-items:flex-start !important; }
+html body .st-key-amem_mp [data-testid="stColumn"]:has(.st-key-amem_prof), html body .st-key-amem_mp [data-testid="stColumn"]:has(.st-key-amem_set) {
+  flex:1 1 300px !important; max-width:360px; min-width:0 !important; width:auto !important; }
+html body .st-key-amem_mp [data-testid="stColumn"]:has(.st-key-amem_rank), html body .st-key-amem_mp [data-testid="stColumn"]:has(.st-key-amem_rvs) {
+  flex:999 1 520px !important; min-width:0 !important; width:auto !important; }
+html body .st-key-amem_prof { border:1.5px solid var(--am-line); border-radius:22px; padding:24px !important; background:#fff;
+  align-items:center; gap:12px !important; box-sizing:border-box; height:100%; }
+.mp-prof-in { display:flex; flex-direction:column; align-items:center; gap:12px; }
+.mp-av { position:relative; width:104px; height:104px; flex:none; display:block; }
+.mp-av-img { display:block; width:100%; height:100%; border-radius:50%; border:4px solid #fff; box-shadow:0 0 0 2px var(--am-line);
+  overflow:hidden; box-sizing:border-box; background:#DDF3EC; }
+html body .mp-av .me-avimg { width:100% !important; height:100% !important; border:0; border-radius:0; object-fit:cover; display:block; }
+.mp-av-stamp { position:absolute; right:-8px; bottom:-6px; display:flex; }
+.mp-who { display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; max-width:100%; text-align:center; }
+.mp-nickname { font-family:"Jua", sans-serif; font-size:26px; line-height:1.2; color:var(--am-ink); overflow-wrap:anywhere; }
+.mp-lv { font-size:13px; font-weight:800; color:var(--am-ink-soft); background:var(--am-gray); padding:4px 12px; border-radius:999px; }
+.mp-meta { font-size:13px; color:var(--am-ink-soft); }
+.mp-meta.small { font-size:12px; }
+.mp-meta code { font-size:11.5px; background:var(--am-gray); border-radius:4px; padding:0 4px; color:var(--am-ink-soft); }
+html body .st-key-amem_nums { position:relative; width:100%; margin-top:6px; border-top:1px solid var(--am-line-soft); padding-top:14px; }
+.mp-nums { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); width:100%; text-align:center; }
+html body .mp-nums > * { display:flex; flex-direction:column; gap:2px; color:var(--am-ink) !important; text-decoration:none !important; }
+.mp-nums strong { font-family:"Titan One", "Jua", sans-serif; font-size:22px; font-weight:400; color:#0f6b5c; line-height:1.2; }
+html body .mp-nums > * > span { font-size:12.5px; color:var(--am-ink-soft); }
+html body .st-key-amem_nums_btn { position:absolute !important; left:0; top:0; bottom:0; width:66.667% !important; gap:0 !important;
+  flex-wrap:nowrap !important; z-index:2; }
+html body .st-key-amem_nums_btn > div { flex:1 1 0 !important; width:auto !important; height:100%; min-width:0 !important; }
+html body .st-key-amem_nums_btn .stButton, html body .st-key-amem_nums_btn button { width:100% !important; height:100% !important;
+  min-height:0 !important; opacity:0 !important; cursor:pointer; }
+html body a.mp-edit { width:100%; height:44px; margin-top:4px; border-radius:999px; border:1px solid var(--am-line); background:#fff;
+  color:var(--am-ink) !important; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center;
+  text-decoration:none !important; box-sizing:border-box; }
+html body a.mp-edit:hover { border-color:var(--accent); color:var(--accent-deep) !important; }
+html body .st-key-amem_prof > div { width:100%; }
+html body .st-key-amem_rank { border:1.5px solid var(--am-mint-line); border-radius:22px; padding:24px 28px !important; background:#fff;
+  gap:18px !important; box-sizing:border-box; height:100%; justify-content:space-evenly; }
+.mp-rank-top { display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+.mp-rank-txt { flex:1; display:flex; flex-direction:column; gap:6px; min-width:220px; padding-right:90px; }
+.mp-rank-cap { font-size:14px; font-weight:700; color:var(--am-ink-soft); }
+.mp-rank-name { font-family:"Jua", sans-serif; font-size:28px; line-height:1.2; color:#0f6b5c; }
+.mp-rank-txt .rkb-line { font-size:14px; }
+.mp-rank-txt .rkb-bar { height:12px; margin-top:4px; }
+html body .st-key-amem_rank_open_mp button p { font-size:13px !important; }
+html body .st-key-amem_rvs { gap:12px !important; }
+.mp-rv-h { font-size:19px; font-weight:800; color:var(--am-ink); }
+.mp-rv-h em { font-style:normal; color:#0f6b5c; }
+html body [class*="st-key-amrv_"] { position:relative; }
+html body [class*="st-key-amrvb_"] { position:absolute !important; inset:0; z-index:2; width:100% !important; height:100% !important; }
+html body [class*="st-key-amrvb_"] > div, html body [class*="st-key-amrvb_"] .stButton, html body [class*="st-key-amrvb_"] button {
+  width:100% !important; height:100% !important; }
+html body [class*="st-key-amrvb_"] button { opacity:0 !important; cursor:pointer; }
+.mp-rv { display:flex; gap:14px; padding:14px; border:1.5px solid var(--am-line); border-radius:16px; background:#fff; color:var(--am-ink); min-width:0; }
+[class*="st-key-amrv_"]:hover .mp-rv { border-color:var(--accent); }
+.mp-rv-pst { width:56px; height:74px; border-radius:10px; background-color:var(--am-gray); background-size:cover; background-position:center; flex:none; }
+.mp-rv-body { flex:1; display:flex; flex-direction:column; gap:4px; min-width:0; }
+.mp-rv-t { font-family:"Jua", sans-serif; font-size:17px; line-height:1.3; color:#0f6b5c; overflow-wrap:anywhere; }
+.mp-rv-meta { font-size:12.5px; font-weight:800; color:#9a6a00; }
+.mp-rv-meta .kind { color:#2c5bc5; }
+.mp-rv-meta .when { font-weight:500; color:var(--am-ink-soft); }
+.mp-rv-txt { font-size:14px; line-height:1.6; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.mp-rv-txt.none { color:var(--am-ink-soft); }
+.mp-rv-stamp { align-self:center; display:flex; flex:none; transform:rotate(-10deg); }
+.mp-rv-empty { text-align:center; padding:36px 16px; border:1.5px dashed var(--am-line); border-radius:16px; }
+.mp-rv-empty img { width:56px !important; height:auto !important; margin:0 auto 10px; display:block; }
+.mp-rv-empty p { margin:0 !important; font-size:13.5px !important; color:var(--am-ink-soft); line-height:1.55; }
+/* 설정 */
+html body .st-key-amem_set { border:1.5px solid var(--am-line); border-radius:22px; padding:22px !important; background:#fff;
+  gap:14px !important; box-sizing:border-box; }
+html body .st-key-amem_set [data-testid="stForm"] { padding:0 !important; border:0 !important; }
+html body .st-key-amem_set [data-testid="stForm"] [data-testid="stHorizontalBlock"] { gap:8px !important; flex-wrap:nowrap !important; align-items:flex-end !important; }
+html body .st-key-amem_set [data-testid="stForm"] [data-testid="stColumn"]:first-child { flex:1 1 auto !important; min-width:0 !important; width:auto !important; }
+html body .st-key-amem_set [data-testid="stForm"] [data-testid="stColumn"]:last-child { flex:0 0 auto !important; min-width:0 !important; width:auto !important; }
+html body .st-key-amem_set [data-testid="stFormSubmitButton"] button { height:42px !important; min-height:0 !important; padding:0 16px !important;
+  border-radius:999px !important; border:0 !important; background:var(--accent-deep) !important; }
+html body .st-key-amem_set [data-testid="stFormSubmitButton"] button p { font-size:13px !important; font-weight:800 !important; color:#fff !important; white-space:nowrap; }
+html body .st-key-amem_row_ntf { justify-content:space-between !important; align-items:center !important; gap:12px !important; flex-wrap:nowrap !important; }
+html body .st-key-amem_row_ntf > div { width:auto !important; flex:0 1 auto !important; min-width:0 !important; }
+html body .st-key-amem_row_ntf > div:last-child { flex:0 0 auto !important; }
+.mp-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:4px 0; }
+.mp-row-t { display:flex; flex-direction:column; min-width:0; }
+.mp-row-t b { font-size:14px; font-weight:700; color:var(--am-ink); }
+.mp-row-t small { font-size:12px; color:var(--am-ink-soft); line-height:1.45; }
+html body .st-key-amem_to_ntf button { height:42px !important; min-height:0 !important; padding:0 16px !important; border-radius:999px !important;
+  border:1px solid var(--am-line) !important; background:#fff !important; }
+html body .st-key-amem_to_ntf button p { font-size:13px !important; font-weight:700 !important; color:var(--am-ink) !important; white-space:nowrap; }
+html body .st-key-amem_to_ntf button:hover { border-color:var(--accent) !important; }
+.mp-flag { font-size:12px; font-weight:800; padding:4px 10px; border-radius:999px; background:var(--am-gray); color:var(--am-ink-soft); white-space:nowrap; }
+.mp-flag.on { background:var(--accent-soft); color:#0b5e57; }
+.mp-links { border-top:1px solid var(--am-line-soft); padding-top:10px; display:flex; flex-direction:column; }
+html body .mp-links > a { text-align:left; padding:10px 0; font-size:14px; color:var(--am-ink) !important; text-decoration:none !important; }
+html body .mp-links > a:hover { color:var(--accent-deep) !important; }
+html body .st-key-amem_logout, html body .st-key-amem_set .st-key-withdraw_box { margin-top:-10px !important; }
+html body .st-key-amem_logout button { border:0 !important; background:none !important; padding:6px 0 !important; min-height:0 !important;
+  width:auto !important; box-shadow:none !important; }
+html body .st-key-amem_logout button p { font-size:14px !important; color:var(--am-ink) !important; font-weight:400 !important; }
+html body .st-key-amem_logout button:hover p { color:var(--accent-deep) !important; }
+html body .st-key-amem_set .st-key-withdraw_box button { padding:6px 0 !important; }
+html body .st-key-amem_set .st-key-withdraw_box button p { font-size:14px !important; color:#c0313f !important; font-weight:700 !important; text-decoration:none !important; }
+.mp-out-note { font-size:12px; color:var(--am-ink-soft); line-height:1.5; margin-top:-8px; }
+/* ================= 후기 도장 랭크 안내 (창) ================= */
+html body div[data-testid="stDialog"] div[role="dialog"]:has(.rkp) { width:min(1100px, 94vw) !important; max-width:none !important; }
+.rkp { background:var(--am-soft); border-radius:24px; padding:32px 28px; display:flex; flex-direction:column; gap:22px; }
+.rkp-head { display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:12px 24px; }
+.rkp-h { font-family:"Jua", sans-serif; font-size:32px; line-height:1.2; color:var(--am-ink); }
+.rkp-p { margin-top:6px; font-size:15px; color:var(--am-ink-soft); line-height:1.5; }
+.rkp-chip { font-size:13px; font-weight:800; color:#0b5e57; background:var(--accent-soft); padding:6px 14px; border-radius:999px; white-space:nowrap; }
+.rkp-me { font-size:14px; line-height:1.6; background:#fff; border-radius:16px; padding:12px 16px; color:var(--am-ink); }
+.rkp-grid { list-style:none; margin:0 !important; padding:0 !important; display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:14px; }
+.rkp-grid li { position:relative; background:#fff; border-radius:22px; padding:22px 12px; border:2px solid #fff; display:flex;
+  flex-direction:column; align-items:center; gap:10px; min-width:0; margin:0 !important; }
+.rkp-now { position:absolute; top:-12px; left:50%; transform:translateX(-50%); font-size:11.5px; font-weight:800; color:#fff;
+  padding:2px 10px; border-radius:999px; white-space:nowrap; }
+.rkp-txt { display:flex; flex-direction:column; align-items:center; gap:10px; min-width:0; }
+.rkp-name { font-family:"Jua", sans-serif; font-size:22px; line-height:1.2; }
+.rkp-need { font-size:13px; font-weight:800; padding:3px 12px; border-radius:999px; white-space:nowrap; }
+.rkp-perk { font-size:12.5px; color:var(--am-ink-soft); text-align:center; line-height:1.5; word-break:keep-all; }
+.rkp-rules { background:#fff; border-radius:22px; padding:20px 24px; }
+.rkp-rules-h { margin:0 0 8px; font-size:15px; font-weight:800; color:var(--am-ink); }
+.rkp-rules ul { margin:0 !important; padding-left:18px !important; }
+.rkp-rules li { font-size:14px !important; line-height:1.7; margin:0 !important; color:var(--am-ink); }
+@media (max-width:1100px) and (min-width:641px) { .rkp-grid { grid-template-columns:repeat(3, minmax(0, 1fr)); row-gap:22px; } }
+/* ================= 모바일 (640px 이하) ================= */
+@media (max-width:640px) {
+  .am-m { display:flex !important; }
+  .am-pc { display:none !important; }
+  html body .st-key-amc_wrap [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-mycal_box) { gap:22px !important; }
+  html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-mycal_box), html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-keep_box),
+  html body .st-key-amc_wrap [data-testid="stColumn"]:has(.st-key-ntf_box) { flex:1 1 100% !important; max-width:none !important; }
+  html body .st-key-amc_box { padding:14px !important; gap:10px !important; }
+  .amc-h1 { font-size:22px; }
+  html body .st-key-amc_box .st-key-cal_nav { gap:2px !important; }
+  html body .st-key-amc_box .st-key-cal_prev button, html body .st-key-amc_box .st-key-cal_next button { border:0 !important; background:none !important; }
+  .amc-month { font-size:17px; min-width:0; }
+  html body .st-key-amc_box .st-key-cal_now button { height:36px !important; padding:0 12px !important; margin-left:4px !important; }
+  .amc-dow { font-size:12px; border-bottom:0; padding-bottom:0; }
+  .amc-weeks { margin-top:-4px; }
+  .amc-week { --lane-h:8px; min-height:60px; border-bottom:0; border-top:1px solid var(--am-line-soft); }
+  .amc-day { padding:4px 0 0; border-left:0; text-align:center; }
+  .amc-day span { font-size:12px; }
+  html body a.amc-bar.cal-bar { height:6px; }
+  html body a.amc-bar.cal-bar > span { border-radius:3px; padding:0; font-size:0; line-height:0; }
+  .amc-foot { display:none; }
+  .amc-cal .cal-pop { display:none !important; }   /* 손가락으로 누르면 바로 상세로 가므로 미리보기 카드는 PC 에서만 */
+  .amc-legend { display:flex; }
+  .amc-up { padding:14px; }
+  html body .st-key-keep_box .st-key-box_tabs button { padding:12px 4px !important; }
+  html body .st-key-keep_box .st-key-box_tabs button p { font-size:14px !important; }
+  .am-card { gap:14px; padding:12px; }
+  .am-pst { width:84px; }
+  .am-body { gap:5px; }
+  .am-chips .am-st, .am-area { font-size:11.5px; padding:2px 9px; }
+  .am-t { font-size:18px; }
+  .am-sub { font-size:13px; }
+  .am-perk { font-size:12px; padding:3px 10px; }
+  html body .st-key-keep_box [class*="st-key-fav_"] { display:none !important; }
+  html body [class*="st-key-bx_more_"] button, html body .st-key-amrv_more button { height:46px !important; }
+  /* 마이페이지 */
+  html body .st-key-amem_mp { gap:18px !important; }
+  .mp-h { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0, 0, 0, 0); white-space:nowrap; }
+  html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_prof),
+  html body .st-key-amem_mp [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-amem_set) { gap:18px !important; }
+  html body .st-key-amem_mp [data-testid="stColumn"] { flex:1 1 100% !important; max-width:none !important; }
+  html body .st-key-amem_prof { border:0; border-radius:0; padding:0 !important; gap:16px !important; height:auto; }
+  .mp-prof-in { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:14px; }
+  .mp-av { width:76px; height:76px; }
+  .mp-av-img { border-width:3px; }
+  .mp-av-stamp { right:-8px; bottom:-8px; transform:scale(.8); transform-origin:100% 100%; }
+  .mp-who { align-items:flex-start; text-align:left; gap:4px; }
+  .mp-nickname { font-size:23px; }
+  .mp-lv { font-size:12.5px; padding:3px 10px; }
+  .mp-meta { font-size:12px; }
+  .mp-meta.small { font-size:11.5px; }
+  html body a.mp-edit { width:auto; height:40px; margin:0; padding:0 12px; font-size:13px; }
+  html body .st-key-amem_nums { margin:0; border-top:0; background:var(--am-soft); border-radius:16px; padding:12px 0; }
+  .mp-nums > *:nth-child(2) { border-left:1px solid var(--am-line); border-right:1px solid var(--am-line); }
+  .mp-nums strong { font-size:20px; }
+  html body .mp-nums > * > span { font-size:12px; }
+  html body .st-key-amem_rank { border-radius:20px; padding:16px !important; gap:14px !important; height:auto; }
+  .mp-rank-top { gap:6px 14px; }
+  .mp-rank-txt { min-width:0; padding-right:0; }
+  .mp-rank-cap { font-size:13px; }
+  .mp-rank-name { font-size:21px; }
+  .mp-rank-txt .rkb-line { font-size:12.5px; }
+  .mp-rank-txt .rkb-bar { height:10px; }
+  html body .st-key-amem_rank_open_mp { position:static !important; align-self:flex-end; margin-top:-8px; margin-bottom:-8px; }
+  html body .st-key-amem_rank_open_mp button p { font-size:12.5px !important; }
+  .mp-rank-top .amk-big { zoom:.75; }
+  .rkb-row.cells { gap:4px; }
+  .rkb-row.cells li { padding:8px 2px; border-radius:12px; }
+  .rkb-row.cells .rkb-nm { font-size:11px; }
+  .rkb-row.cells .amk { zoom:.8; }
+  .rkb-need { font-size:11px; }
+  html body .st-key-amem_rvs { gap:10px !important; }
+  .mp-rv-h, html body .st-key-amem_set .am-h2 { font-size:16px; }
+  .mp-rv { gap:12px; padding:12px; border-radius:14px; }
+  .mp-rv-pst { width:46px; height:60px; border-radius:8px; }
+  .mp-rv-t { font-size:16px; }
+  .mp-rv-txt { font-size:13.5px; line-height:1.55; }
+  .mp-rv-stamp { transform:rotate(-10deg) scale(.8); }
+  html body .st-key-amem_set { border:0; border-radius:0; padding:0 !important; gap:12px !important; }
+  .mp-row { padding:10px 0; border-bottom:1px solid var(--am-line-soft); }
+  .mp-links { border-top:0; padding-top:0; }
+  html body .mp-links > a { padding:13px 0; border-bottom:1px solid var(--am-line-soft); }
+  /* 랭크 안내: 카드를 한 줄씩 (도장 왼쪽 · 글 오른쪽) */
+  .rkp { padding:22px 16px; border-radius:20px; gap:16px; }
+  .rkp-h { font-size:26px; }
+  .rkp-p { font-size:13.5px; }
+  .rkp-grid { grid-template-columns:minmax(0, 1fr); gap:12px; }
+  .rkp-grid li { flex-direction:row; gap:16px; padding:14px 16px; border-radius:18px; }
+  .rkp-grid .amk-big { zoom:.76; }
+  .rkp-txt { align-items:flex-start; gap:6px; }
+  .rkp-name { font-size:20px; }
+  .rkp-perk { text-align:left; }
+  .rkp-now { left:auto; right:14px; transform:none; }
+  .rkp-rules { padding:16px 18px; border-radius:18px; }
+  .rkp-rules li { font-size:13.5px !important; }
+}
+</style>
+"""
+
+_AMEM_MASCOT = "app/static/mascot.png"
+# 달력 막대 색 (웹 lib/server/a-member.ts 의 calTone): CAL_COLORS 의 색마다 [옅은 색 (PC 막대 바탕), 진한 색 (모바일 줄 · 범례)]
+_AMEM_TONE = {
+    "#14b8a6": ("#c8eedd", "#6fd0aa"), "#F59E0B": ("#ffdcae", "#ffb866"), "#8B5CF6": ("#e4d6ff", "#b99cf5"),
+    "#EC4899": ("#ffc9d2", "#ff9fb0"), "#3B82F6": ("#cddcff", "#8fb0ff"), "#22A06B": ("#d3efc9", "#8fd27c"),
+    "#EF6C4D": ("#ffd3c4", "#ff9d82"), "#64748B": ("#dde3ea", "#a3b0c0"),
+}
+
+
+def _amem_tone(work: str) -> tuple[str, str]:
+    return _AMEM_TONE.get(_cal_color(work), ("#c8eedd", "#6fd0aa"))
+
+
+def _amem_bg(value) -> str:
+    """포스터를 바탕 그림으로 (못 받으면 기본 그림이 보이게 두 겹)."""
+    return f"background-image:url('{escape(_poster_url(value))}'), url('{images.DEFAULT_POSTER_URL}')"
+
+
+def _amem_md(stamp_text) -> str:
+    """저장 시각 → '11.25'."""
+    try:
+        d = datetime.fromisoformat(str(stamp_text)).astimezone()
+    except ValueError:
+        d = mycal._day(stamp_text)
+    return f"{d.month}.{d.day}" if d else ""
+
+
+def _amem_dot(t, size: int, bw: float | None = None, locked: bool = False, glow: bool = False) -> str:
+    """작은 후기 도장: 색 테두리 동그라미 + 마스코트 (웹 RankStamp · TierDot). 아직 못 받은 단계는 점선 + 흐리게."""
+    bw = bw if bw is not None else (3 if size >= 44 else 2.5)
+    style = (f"width:{size}px;height:{size}px;border:{bw}px {'dashed' if locked else 'solid'} {t.ring};background:{t.fill};"
+             + (f"box-shadow:0 0 0 4px {t.fill};" if glow else ""))
+    return f'<span class="amk{" locked" if locked else ""}" style="{style}"><img src="{_AMEM_MASCOT}" alt=""></span>'
+
+
+def _amem_big(t, size: int = 96, dim: bool = False) -> str:
+    """큰 후기 도장 (마이페이지 96px · 랭크 안내 116px): 둘레 글자 'ANI:WHERE ✦ LV.n 영문이름 ✦' + 단계 숫자 (웹 RankStampBig)."""
+    rid = f"amk-ring-{t.lv}-{size}"
+    return (f'<span class="amk-big{" dim" if dim else ""}" style="width:{size}px;height:{size}px" role="img" aria-label="Lv.{t.lv} {t.name} 도장">'
+            f'<svg width="{size}" height="{size}" viewBox="0 0 80 80" aria-hidden="true"><defs>'
+            f'<path id="{rid}" d="M40 40 m-29.5 0 a29.5 29.5 0 1 1 59 0 a29.5 29.5 0 1 1 -59 0"></path></defs>'
+            f'<circle cx="40" cy="40" r="38" fill="{t.fill}"></circle>'
+            f'<circle cx="40" cy="40" r="38" fill="none" stroke="{t.ring}" stroke-width="3.5"></circle>'
+            f'<circle cx="40" cy="40" r="22.5" fill="#ffffff" stroke="{t.ring}" stroke-width="1.2"></circle>'
+            f'<text class="amk-ring-t" font-size="7.2" fill="{t.fg}"><textPath href="#{rid}" textLength="172" lengthAdjust="spacingAndGlyphs">'
+            f'ANI:WHERE ✦ LV.{t.lv} {t.en} ✦</textPath></text></svg>'
+            f'<img src="{_AMEM_MASCOT}" alt=""><span class="amk-lv" style="background:{t.ring}">{t.lv}</span></span>')
+
+
+def _amem_rank_line(stamps: int, short: bool = False) -> str:
+    """'다녀온 후기 4개 · Lv.3 성지순례러까지 6개 남았어요'."""
+    from common import stamp
+    nxt = stamp.next_tier(stamps)
+    tail = (f' · <strong style="color:{nxt[0].fg}">Lv.{nxt[0].lv}{"" if short else " " + nxt[0].name}</strong>까지 '
+            f'<strong>{nxt[1]}개</strong> 남았어요' if nxt else " · 가장 높은 랭크예요")
+    return f'<span class="rkb-line">다녀온 후기 <strong>{stamps}개</strong>{tail}</span>'
+
+
+def _amem_rank_bar(stamps: int) -> str:
+    """다음 랭크까지 진행 막대 (가장 높은 랭크면 가득)."""
+    from common import stamp
+    cur, nxt = stamp.tier_of(stamps), stamp.next_tier(stamps)
+    pct = min(100, round(stamps / nxt[0].need * 100)) if nxt else 100
+    return f'<div class="rkb-bar"><span style="width:{pct}%;background:{(cur or stamp.TIERS[0]).ring}"></span></div>'
+
+
+def _amem_tier_row(stamps: int, cells: bool = False) -> str:
+    """5단계 한 줄: 받은 단계는 색, 지금 단계는 강조, 나머지는 흐리게. cells = 마이페이지의 칸 모양."""
+    from common import stamp
+    cur = stamp.tier_of(stamps)
+    out = []
+    for t in stamp.TIERS:
+        got, now = stamps >= t.need, bool(cur and cur.lv == t.lv)
+        out.append(f'<li class="{"got" if got else "lock"}"{f" style=background:{t.fill}" if now and cells else ""}>'
+                   + _amem_dot(t, 48 if cells else 36, locked=not got, glow=now and not cells)
+                   + f'<span class="rkb-nm"{f" style=color:{t.fg}" if got else ""}>{"" if cells else f"Lv.{t.lv}<br>"}{t.name}</span>'
+                   + (f'<span class="rkb-need">후기 {t.need}개</span>' if cells else "") + "</li>")
+    return f'<ul class="rkb-row{" cells" if cells else ""}" aria-label="후기 도장 5단계">{"".join(out)}</ul>'
+
+
+def _amem_rank_card(stamps: int, note: str = "") -> str:
+    """다녀온 팝업 탭 위 요약 (A-MVisited): 60px 도장 · 지금 랭크 · 도장 수 · 다음 랭크까지 진행 막대 · 5단계.
+    도장이 없으면 Lv.1 을 점선 + 회색으로."""
+    from common import stamp
+    cur = stamp.tier_of(stamps)
+    t = cur or stamp.TIERS[0]
+    s60 = (f'<span class="rkb-s60">{_amem_dot(t, 60, bw=3, locked=not cur)}'
+           + (f'<span class="rkb-lv" style="background:{cur.ring}">{cur.lv}</span>' if cur else "") + "</span>")
+    name = (f'<span class="rkb-name" style="color:{cur.fg}">Lv.{cur.lv} {cur.name}</span>' if cur
+            else '<span class="rkb-name">아직 도장이 없어요</span>')
+    return (f'<div class="rkb-card"><div class="rkb-top">{s60}<div class="rkb-txt"><span class="rkb-cap">내 후기 도장</span>{name}'
+            f'{_amem_rank_line(stamps, short=True)}</div></div>{_amem_rank_bar(stamps)}{_amem_tier_row(stamps)}'
+            + (f'<p class="rkb-note">{escape(note)}</p>' if note else "") + "</div>")
+
+
+def _amem_rank_html(stamps: int) -> str:
+    """후기 도장 랭크 안내 (A-Rank, 웹 app/mypage/rank/page.tsx): 5단계 카드 · 내 랭크 강조 · 세는 규칙.
+    시안 카드의 '혜택' 글은 아직 없는 기능이라 쓰지 않고 stamp.TIERS 의 perk 만 보여 준다."""
+    from common import stamp
+    cur, nxt = stamp.tier_of(stamps), stamp.next_tier(stamps)
+    me = (f'지금 내 도장 <strong>{stamps}개</strong>'
+          + (f' · <strong style="color:{cur.fg}">Lv.{cur.lv} {cur.name}</strong>' if cur else " · 아직 랭크가 없어요")
+          + (f" · Lv.{nxt[0].lv} {nxt[0].name}까지 {nxt[1]}개 남았어요" if nxt else " · 가장 높은 랭크예요"))
+    cards = []
+    for t in stamp.TIERS:
+        now = bool(cur and cur.lv == t.lv)
+        cards.append(f'<li{f" style=border-color:{t.ring}" if now else ""}>'
+                     + (f'<span class="rkp-now" style="background:{t.ring}">지금 내 랭크</span>' if now else "")
+                     + _amem_big(t, 116)
+                     + f'<div class="rkp-txt"><span class="rkp-name" style="color:{t.fg}">{t.name}</span>'
+                       f'<span class="rkp-need" style="background:{t.fill};color:{t.fg}">다녀온 후기 {t.need}개</span>'
+                       f'<span class="rkp-perk">{escape(t.perk)}</span></div></li>')
+    rules = "".join(f"<li>{escape(x)}</li>" for x in stamp.RULES)
+    return ('<div class="rkp"><div class="rkp-head"><div><div class="rkp-h">후기 도장 랭크</div>'
+            '<div class="rkp-p">다녀온 후기를 남기면 도장이 하나씩 쌓이고, 쌓인 도장 수만큼 랭크가 올라가요.</div></div>'
+            '<span class="rkp-chip">다녀온 후기 1개 = 도장 1개</span></div>'
+            f'<div class="rkp-me">{me}</div><ol class="rkp-grid">{"".join(cards)}</ol>'
+            f'<div class="rkp-rules"><div class="rkp-rules-h">세는 규칙</div><ul>{rules}</ul></div></div>')
+
+
+@st.dialog("후기 도장 랭크 안내", width="large")
+def _amem_rank_dialog() -> None:
+    """랭크 안내 창 — 내 캘린더 '다녀온 팝업' 탭과 마이페이지에서 연다 (화면 분기를 늘리지 않으려고 창으로)."""
+    st.markdown(_amem_rank_html(_amem_keep()["stamps"]), unsafe_allow_html=True)
+
+
+def _amem_ntf_tip(rules: dict) -> str:
+    """알림 내역 맨 아래 마스코트 안내 한 줄 (웹 calendar/page.tsx 의 tip). 규칙이 모두 꺼져 있으면 ''."""
+    od = rules["open"]["days"] if rules["open"]["enabled"] else None
+    ed = rules["end"]["days"] if rules["end"]["enabled"] else None
+    if od is not None and ed is not None:
+        return (f"북마크한 팝업은 오픈·종료 {od}일 전부터 알려 드려요." if od == ed
+                else f"북마크한 팝업은 오픈 {od}일 전 · 종료 {ed}일 전부터 알려 드려요.")
+    if od is not None:
+        return f"북마크한 팝업은 오픈 {od}일 전부터 알려 드려요."
+    return f"북마크한 팝업은 종료 {ed}일 전부터 알려 드려요." if ed is not None else ""
+
+
+def _amem_open(cafe_id: str) -> None:
+    """마이페이지에서 팝업 상세로 (메뉴바가 다음 실행에서 메인으로 옮긴다)."""
+    st.session_state.update(cal_view=False, box_view=False, home_view=False, _gnb_to_map=True)
+    _gnb_open(cafe_id)
+
+
+def _amem_to_keep(tab: str) -> None:
+    """마이페이지 → 내 캘린더의 그 탭 (북마크 · 다녀온 팝업)."""
+    _gnb_go("cal")
+    st.session_state["box_tab"] = tab
+
+
+def _amem_my_reviews() -> list[dict]:
+    """내가 쓴 원글 리뷰 전부 (답글 · 지운 글 제외, 내린 팝업의 후기는 갈 곳이 없어 뺌), 최신 순.
+    팝업마다 가장 최근 다녀온 후기 하나에만 도장 표시 (웹 mypage/page.tsx)."""
+    me = _me()
+    by_id = {str(r.get("entry_id")): r for r in store.current_rows()}
+    rows = sorted((r for r in reviews.current_rows() if not str(r.get("parent_id") or "") and review.can_delete(r, me)
+                   and str(r.get("cafe_id")) in by_id), key=lambda x: str(x.get("updated_at", "")), reverse=True)
+    out, stamped = [], set()
+    for r in rows:
+        cid = str(r.get("cafe_id"))
+        p = by_id[cid]
+        got = r.get("kind") == review.RATED_KIND and cid not in stamped
+        if got:
+            stamped.add(cid)
+        work, name = str(p.get("work") or ""), str(p.get("cafe_name") or "")
+        out.append({"id": str(r.get("entry_id")), "cafe_id": cid, "title": f"{work} · {name}" if work else name,
+                    "images": p.get("images"), "kind": str(r.get("kind") or "리뷰"), "stars": review.stars(r.get("rating")),
+                    "body": str(r.get("body") or "").strip(), "date": _amem_md(r.get("updated_at")),
+                    "photos": len(images.paths(r.get("images"))), "stamp": got})
+    return out
 
 
 def page_map() -> None:
@@ -6979,54 +7677,75 @@ def _cal_color(work: str) -> str:
 
 
 def _cal_html(year: int, month: int, events: list, compact: bool = False) -> str:
-    # 막대 한 줄 높이, 날짜 숫자 아래 막대가 시작하는 높이, 날짜 칸 최소 높이 (px). 지도 옆(compact)은 작게
-    lane_h, top, min_h = (18, 22, 44) if compact else (23, 32, 86)
-    dow = "".join(f"<div>{d}</div>" for d in "일월화수목금토")
-    weeks = []
+    """달력 (A안, 웹 app/calendar/page.tsx 와 같게): PC 는 15px 옅은 막대 + 진한 글자, 모바일은 6px 진한 줄 + 아래 범례.
+    막대 줄 높이는 CSS 변수 --lane-h (PC 16px · 모바일 8px), 겹치는 팝업이 많은 주는 줄 수만큼 늘어난다."""
+    dow = "".join(f"<span>{d}</span>" for d in "일월화수목금토")
+    weeks, legend = [], {}
     for w in mycal.month_weeks(year, month, events):
-        height = max(min_h, top + w.lanes * lane_h + 8)
         cells = "".join(
-            f'<div class="cal-day{" out" if d.month != month else ""}{" sun" if i == 0 else " sat" if i == 6 else ""}'
-            f'{" today" if d == TODAY else ""}" style="min-height:{height}px"><span>{d.day}</span></div>'
+            f'<div class="amc-day{" out" if d.month != month else ""}{" sun" if i == 0 else ""}'
+            f'{" today" if d == TODAY else ""}"><span>{d.day}</span></div>'
             for i, d in enumerate(w.days))
-        # 연속된 날은 한 막대. 주를 넘어가면 끊긴 쪽 모서리를 각지게 둔다 (.cl / .cr)
-        bars = "".join(
-            f'<a class="cal-bar{" cl" if b.cont_left else ""}{" cr" if b.cont_right else ""}" href="./?cafe={quote(b.event.cafe_id)}"'
-            f' target="_self"'
-            f' style="left:calc({b.col} * 100% / 7 + 3px); width:calc({b.span} * 100% / 7 - 6px);'
-            f' top:{top + b.lane * lane_h}px; background:{_cal_color(b.event.work)}">'
-            f'{escape(b.event.work)}</a>' + _cal_pop(b, top + (b.lane + 1) * lane_h)
-            for b in w.bars)
-        weeks.append(f'<div class="cal-week">{cells}{bars}</div>')
-    return f'<div class="cal"><div class="cal-dow">{dow}</div>{"".join(weeks)}</div>'
+        bars = []
+        for b in w.bars:
+            name = b.event.work or b.event.cafe_name
+            soft, strong = _amem_tone(b.event.work)
+            legend.setdefault(name, strong)
+            # 연속된 날은 한 막대. 주를 넘어가면 끊긴 쪽 모서리를 각지게 둔다 (.cl / .cr).
+            # 색 두 가지를 한 칸에 담는다: 바탕 = 옅은 색(PC), 안쪽 그림자 = 진한 색(모바일 줄 — PC 에서는 CSS 가 끈다)
+            bars.append(
+                f'<a class="amc-bar cal-bar{" cl" if b.cont_left else ""}{" cr" if b.cont_right else ""}"'
+                f' href="./?cafe={quote(b.event.cafe_id)}" target="_self"'
+                f' style="left:{b.col * 100 / 7:.4f}%; width:{b.span * 100 / 7:.4f}%; top:calc(28px + {b.lane} * var(--lane-h))">'
+                f'<span style="background:{soft}; box-shadow:inset 0 0 0 20px {strong}">{escape(name)}</span></a>'
+                + _cal_pop(b, f"calc(28px + {b.lane + 1} * var(--lane-h) + 2px)"))
+        weeks.append(f'<div class="amc-week" style="height:calc(36px + {w.lanes} * var(--lane-h))">'
+                     f'<div class="amc-days">{cells}</div>{"".join(bars)}</div>')
+    leg = "".join(f'<li><i style="background:{c}"></i>{escape(n)}</li>' for n, c in legend.items())
+    return (f'<div class="amc-cal"><div class="amc-dow" aria-hidden="true">{dow}</div><div class="amc-weeks">{"".join(weeks)}</div>'
+            '<p class="amc-foot">막대 = 북마크한 팝업 기간 · 둥근 끝 = 시작·종료일</p>'
+            + (f'<ul class="amc-legend" aria-label="달력 색">{leg}</ul>' if leg else "") + '</div>')
 
 
-def _cal_pop(b, top: int) -> str:
-    """막대 바로 아래에 뜨는 미리보기 카드. 오른쪽 칸(목~토)에서 시작하는 막대는 오른쪽 끝에 맞춰 화면 밖으로 안 나가게."""
+def _cal_pop(b, top) -> str:
+    """막대 바로 아래에 뜨는 미리보기 카드. 오른쪽 칸(목~토)에서 시작하는 막대는 오른쪽 끝에 맞춰 화면 밖으로 안 나가게.
+    top 은 숫자(px)나 CSS 값('calc(...)')."""
     e = b.event
     side = (f"right:calc({7 - b.col - b.span} * 100% / 7 + 3px)" if b.col >= 4
             else f"left:calc({b.col} * 100% / 7 + 3px)")
-    return (f'<div class="cal-pop" style="{side}; top:{top}px">'
+    return (f'<div class="cal-pop" style="{side}; top:{f"{top}px" if isinstance(top, (int, float)) else top}">'
             f'<img src="{_poster_url(e.images)}" alt=""/>'
             f'<div><div class="w">{escape(e.work)}</div><div class="c">{escape(e.cafe_name)}</div>'
             f'<div class="a">{escape(e.address or "-")}</div>'
             f'<div class="d">{e.start:%m.%d} ~ {"상시" if pdates.is_always(e.end) else f"{e.end:%m.%d}"}</div></div></div>')
 
 
+def _amem_up_badge(e) -> tuple[str, str, date | None]:
+    """곧 있는 팝업 배지 (A-Cal, 웹 upBadge): 열리기 전 'D-3 오픈'(파랑) · 진행 중 '종료 D-5'(7일 안이면 빨강, 그 밖 회색)
+    · '오늘 오픈' · '오늘 종료'. 끝이 없는(상시) 팝업은 '진행 중'. → (글자, 색, 옆에 보일 날)"""
+    if e.start > TODAY:
+        return f"D-{(e.start - TODAY).days} 오픈", "blue", e.start
+    if e.start == TODAY and e.end != TODAY:
+        return "오늘 오픈", "green", e.start
+    if pdates.is_always(e.end):
+        return "진행 중", "green", None
+    left = (e.end - TODAY).days
+    if left == 0:
+        return "오늘 종료", "red", e.end
+    return f"종료 D-{left}", "red" if left <= 7 else "gray", e.end
+
+
 def _upcoming_html(events: list) -> str:
     items = []
     for e in mycal.upcoming(events, TODAY):
-        label, color = mycal.status(e, TODAY)
-        when = _day(e.start, False) + ("" if e.start == e.end else " - 상시" if pdates.is_always(e.end) else f" - {_day(e.end, False)}")
+        label, color, when = _amem_up_badge(e)
+        day = f"{when.month}.{when.day} ({_WEEKDAYS[when.weekday()]})" if when else "상시"
         items.append(
-            f'<a class="up-item" href="./?cafe={quote(e.cafe_id)}" target="_self">'
-            f'<span class="up-bar" style="background:{_cal_color(e.work)}"></span>'
-            f'<span class="up-thumb" style="background-image:url(\'{_poster_url(e.images)}\'), url(\'{images.DEFAULT_POSTER_URL}\')"></span>'
-            f'<span class="up-text"><div class="up-name">{escape(e.work)} · {escape(e.cafe_name)}</div>'
-            f'<div class="up-when">{when}</div></span>'
-            f'<span class="up-state {color}">{escape(label)}</span></a>')
-    body = "".join(items) or '<div class="up-empty">곧 있는 북마크한 팝업이 없어요. 리스트에서 북마크해 보세요.</div>'
-    return f'<div class="up-head"><b>곧 있는 팝업</b><i></i></div>{body}'
+            f'<a class="am-up" href="./?cafe={quote(e.cafe_id)}" target="_self"><span class="am-st {color}">{escape(label)}</span>'
+            f'<span class="am-up-t up-name">{escape(f"{e.work} · {e.cafe_name}" if e.work else e.cafe_name)}</span>'
+            f'<span class="am-up-when">{day}</span></a>')
+    body = "".join(items) or '<div class="am-up-empty">곧 있는 북마크한 팝업이 없어요. 리스트에서 북마크해 보세요.</div>'
+    return f'<div class="amc-up"><div class="am-h2">곧 있는 팝업</div>{body}</div>'
 
 
 def _cal_shift(delta: int) -> None:
@@ -7044,28 +7763,33 @@ def page_calendar() -> None:
     render_calendar()
 
 
-def render_calendar(compact: bool = False) -> None:
-    """내 캘린더 묶음 (월 머리글·이전/다음 달·달력·곧 있는 팝업). compact 면 지도 옆 좁은 칸용으로 칸 높이를 줄인다."""
+def render_calendar(compact: bool = False, css: bool = True) -> None:
+    """내 캘린더 묶음 (제목 · 이전/다음 달 · 달력 · 곧 있는 팝업). A안: 흰 달력 상자 + 아래 회색 '곧 있는 팝업' 상자.
+    css=False 는 내 캘린더 탭처럼 이미 A_MEMBER_CSS 를 내보낸 화면에서."""
+    if css:
+        st.markdown(A_MEMBER_CSS, unsafe_allow_html=True)
     _, mine, _ = _fav_state()
     # 기간이 끝나 지도에서 내려간 팔로우도 지난 달력에 남도록, 내린 기록까지 포함한 최신 행에서 고른다
     events = mycal.fav_events(mycal.latest_rows(store.all_rows()), mine, TODAY)
     events = [e for e in events if e.end >= TODAY]          # 끝난 팝업은 달력에서도 뺀다 (11/18 요청)
 
     year, month = st.session_state.get("cal_month") or (TODAY.year, TODAY.month)
-    # 머리글 한 줄: '2026년 10월'  ‹  ›  [오늘]
-    with st.container(horizontal=True, vertical_alignment="center", key="cal_nav"):
-        st.markdown(f'<span class="cal-label">내 캘린더</span><span class="cal-month">{year}년 {month}월</span>'
-                    '<span class="cal-help" tabindex="0">?<span class="cal-tip">내가 북마크한 팝업만 달력에 보여요. '
-                    '리스트나 상세의 북마크 아이콘을 누르면 여기에 추가돼요.</span></span>', unsafe_allow_html=True)
-        st.button("‹", key="cal_prev", type="tertiary", on_click=_cal_shift, args=(-1,))
-        st.button("›", key="cal_next", type="tertiary", on_click=_cal_shift, args=(1,))
-        st.button("이번달", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None))
-    # '내 캘린더' 줄 바로 아래: 내 닉네임(리뷰와 같은 IP 기반). 북마크도 이 사람 것만 보인다
-    st.markdown(f'<div class="cal-nick">{escape(_nick_only(_me()))}</div>', unsafe_allow_html=True)
-    if not events:
-        st.markdown('<div class="cal-empty">아직 북마크한 팝업이 없어요. 리스트에서 북마크하면 달력에 일정이 채워져요.</div>',
-                    unsafe_allow_html=True)
-    st.markdown(_cal_html(year, month, events, compact), unsafe_allow_html=True)
+    with st.container(key="amc_box"):
+        # 제목 줄 바로 아래: 내 닉네임 · 북마크한 팝업 수 (북마크는 이 사람 것만 보인다)
+        st.markdown('<div class="amc-title"><div class="amc-h1"><span>내 캘린더</span><span class="cal-help" tabindex="0">?'
+                    '<span class="cal-tip">내가 북마크한 팝업만 달력에 보여요. 리스트나 상세의 북마크 아이콘을 누르면 여기에 추가돼요.'
+                    f'</span></span></div><span class="amc-nick">{escape(_nick_only(_me()))} · 북마크한 팝업 {len(_amem_keep()["fav"])}곳'
+                    '</span></div>', unsafe_allow_html=True)
+        # ‹  2026년 10월  ›  [이번달]
+        with st.container(horizontal=True, vertical_alignment="center", key="cal_nav"):
+            st.button("‹", key="cal_prev", type="tertiary", on_click=_cal_shift, args=(-1,))
+            st.markdown(f'<span class="amc-month">{year}년 {month}월</span>', unsafe_allow_html=True)
+            st.button("›", key="cal_next", type="tertiary", on_click=_cal_shift, args=(1,))
+            st.button("이번달", key="cal_now", on_click=lambda: st.session_state.pop("cal_month", None))
+        if not events:
+            st.markdown('<div class="amc-empty">아직 북마크한 팝업이 없어요. 리스트에서 북마크하면 달력에 일정이 채워져요.</div>',
+                        unsafe_allow_html=True)
+        st.markdown(_cal_html(year, month, events, compact), unsafe_allow_html=True)
     st.markdown(_upcoming_html(events), unsafe_allow_html=True)
 
 
@@ -7657,102 +8381,190 @@ def _avatar_saved(msg: str) -> None:
 
 
 def _my_account(row: dict) -> None:
+    """마이페이지 (A안 11/25, 웹 app/mypage/page.tsx 와 같게): 프로필 + 랭크 도장 · 숫자 3개 · 내 후기 도장 · 내가 쓴 후기 · 설정.
+    예전 '내 계정'의 기능(닉네임 · 프로필 사진(선택 동의) · 비밀번호 · 로그아웃 · 탈퇴)은 모두 '설정' 칸에 그대로 있다."""
+    from common import stamp
+    # 로그인 · 가입은 가운데 좁은 칸(420px)이지만 마이페이지는 넓게 쓴다 (이 규칙은 회원에게만 나간다)
+    st.markdown(A_MEMBER_CSS + "<style>html body .st-key-auth_wrap { max-width: 1232px !important; }</style>",
+                unsafe_allow_html=True)
+    keep = _amem_keep()
+    stamps = keep["stamps"]
+    cur = stamp.tier_of(stamps)
+    try:
+        my_reviews = _amem_my_reviews()
+    except Exception:                     # 리뷰를 못 읽어도 프로필 · 설정은 보여 준다
+        my_reviews = []
     prov = auth.PROVIDER_LABEL.get(str(row.get("provider")), "")
-    # 프로필 사진 옆에 닉네임 · 로그인 수단 · 가입일 · 회원 번호 (11/18 요청)
-    st.markdown(f'<div class="auth-title">내 계정</div><div class="auth-card me-card">'
-                f'<div class="me-av">{_avatar_img(row.get("avatar"), 72, "me-avimg")}</div><div class="me-info">'
-                f'<b>{escape(_nick_only(auth.display_name(row)))}</b><br><span class="auth-note">{escape(prov)} 계정으로 로그인 중 · '
-                f'가입 {escape(str(row.get("agreed_at", ""))[:10])}<br>회원 번호 <code>{escape(str(row["entry_id"]))}</code>'
-                f'{" · 관리자" if _is_admin() else ""}</span></div></div>', unsafe_allow_html=True)
-    n = st.session_state.get("_av_n", 0)
-    # 사진을 바꾸면(_av_n 이 늘면) 새 칸으로 그려 접힌 채로 보인다 (11/19 요청: 바꾼 뒤 '프로필 사진 바꾸기' 닫기)
-    with st.expander("프로필 사진 바꾸기", key=f"av_exp_{n}"):
-        st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
-        up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n}")
-        if up is not None:     # 고른 사진을 바로 보여 준다 (저장 전 미리보기, 11/18 요청: 기다리는 게 보이게)
-            st.markdown(f'<div class="av-preview"><img src="data:{up.type or "image/png"};base64,'
-                        f'{base64.b64encode(up.getvalue()).decode()}" alt=""><span>이 사진으로 바뀌어요 — 가운데를 동그랗게 잘라요</span></div>',
+    agreed = str(row.get("agreed_at", "") or "")[:10].replace("-", ".")
+    local = row.get("provider") == "local"
+    has_photo = auth.clean_avatar(row.get("avatar")) not in ("", "none", None)
+    r_ = _rules()
+    od = r_["open"]["days"] if r_["open"]["enabled"] else None
+    ed = r_["end"]["days"] if r_["end"]["enabled"] else None
+    notice = ("지금은 운영자가 오픈 · 종료 알림을 꺼 두었어요" if od is None and ed is None else
+              "북마크한 팝업, " + " · ".join(x for x in (f"오픈 {od}일 전" if od is not None else "",
+                                                    f"종료 {ed}일 전" if ed is not None else "") if x) + "부터 종과 내 캘린더로")
+    with st.container(key="amem_mp"):
+        st.markdown('<div class="mp-h">마이페이지</div>', unsafe_allow_html=True)
+        c_prof, c_rank = st.columns([1, 2.4], gap="medium")
+        c_rvs, c_set = st.columns([2.4, 1], gap="medium")
+
+    # ---- 프로필: 사진 + 도장 배지 · 닉네임 · 랭크 칩 · 로그인 수단 · 가입일 · 회원 번호, 숫자 3개
+    with c_prof, st.container(key="amem_prof"):
+        lv_chip = (f'<span class="mp-lv" style="color:{cur.fg};background:{cur.fill}">Lv.{cur.lv} {cur.name}</span>' if cur
+                   else '<span class="mp-lv">아직 도장이 없어요</span>')
+        st.markdown(
+            f'<div class="mp-prof-in"><span class="mp-av"><span class="mp-av-img">{_avatar_img(row.get("avatar"), 104, "me-avimg")}</span>'
+            + (f'<span class="mp-av-stamp">{_amem_dot(cur, 40, bw=3)}</span>' if cur else "")
+            + f'</span><div class="mp-who"><span class="mp-nickname">{escape(_nick_only(auth.display_name(row)))}</span>{lv_chip}'
+            f'<span class="mp-meta">{escape(prov + "로 로그인" if prov else "로그인 중")}{f" · {agreed} 가입" if agreed else ""}</span>'
+            f'<span class="mp-meta small">회원 번호 <code>{escape(str(row["entry_id"]))}</code>{" · 관리자" if _is_admin() else ""}</span>'
+            '</div><a class="mp-edit am-m" href="#mp-set" target="_self">수정</a></div>', unsafe_allow_html=True)
+        with st.container(key="amem_nums"):
+            # 북마크 수는 내 캘린더와 같게 (아직 끝나지 않은 팝업만). 앞 두 칸은 내 캘린더의 그 탭으로, 셋째 칸은 아래 '내가 쓴 후기'로
+            st.markdown(f'<div class="mp-nums"><span><strong>{len(keep["fav"])}</strong><span>북마크</span></span>'
+                        f'<span><strong>{stamps}</strong><span>후기 도장</span></span>'
+                        f'<a href="#my-reviews" target="_self"><strong>{len(my_reviews)}</strong><span>쓴 후기</span></a></div>',
                         unsafe_allow_html=True)
-        ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 사진 설정'을 누르면 바로 지워요",
-                               key=f"av_agree_{n}")
-        c1, c2 = st.columns(2)
-        if c1.button("이 사진으로 저장", type="primary", width="stretch", disabled=up is None or not ok_photo, key="av_save"):
-            data = up.getvalue()
-            if images.too_big(data, 5):
-                st.warning("5MB 이하 사진만 올릴 수 있어요.", icon=":material/error:")
-            else:
+            with st.container(horizontal=True, key="amem_nums_btn"):
+                st.button("북마크 보기", key="amem_num_fav", on_click=_amem_to_keep, args=("fav",))
+                st.button("후기 도장 보기", key="amem_num_visited", on_click=_amem_to_keep, args=("visited",))
+        st.markdown('<a class="mp-edit am-pc" href="#mp-set" target="_self">프로필 수정</a>', unsafe_allow_html=True)
+
+    # ---- 내 후기 도장: 96px 도장(둘레 글자) · 지금 랭크 · 진행 막대 · 5단계
+    with c_rank, st.container(key="amem_rank"):
+        name = (f'<span class="mp-rank-name" style="color:{cur.fg}">Lv.{cur.lv} {cur.name}</span>' if cur
+                else '<span class="mp-rank-name">첫 도장을 받아 보세요</span>')
+        st.markdown(f'<div class="mp-rank-top">{_amem_big(cur or stamp.TIERS[0], 96, dim=not cur)}<div class="mp-rank-txt">'
+                    f'<span class="mp-rank-cap">내 후기 도장</span>{name}{_amem_rank_line(stamps)}{_amem_rank_bar(stamps)}</div></div>',
+                    unsafe_allow_html=True)
+        if st.button("랭크 안내 보기", key="amem_rank_open_mp", type="tertiary"):
+            _amem_rank_dialog()
+        st.markdown(_amem_tier_row(stamps, cells=True), unsafe_allow_html=True)
+
+    # ---- 내가 쓴 후기: 누르면 그 팝업 상세, 5건씩 더보기
+    with c_rvs, st.container(key="amem_rvs"):
+        st.markdown(f'<div class="mp-rv-h" id="my-reviews">내가 쓴 후기 <em>{len(my_reviews)}</em></div>', unsafe_allow_html=True)
+        if not my_reviews:
+            st.markdown(f'<div class="mp-rv-empty"><img src="{_AMEM_MASCOT}" alt=""><p>아직 쓴 후기가 없어요. 팝업 상세의 리뷰에서 '
+                        '<b>다녀온 후기</b>를 쓰면 도장을 하나 받아요.</p></div>', unsafe_allow_html=True)
+            with st.container(horizontal=True, horizontal_alignment="center", key="amem_cta_rv"):
+                st.button("팝업 찾아보기", key="amem_cta_find", type="primary", on_click=_gnb_go, args=("list",))
+        n = st.session_state.get("amrv_n", 5)
+        for rv in my_reviews[:n]:
+            meta = (f'<span class="stars">{rv["stars"]}</span>' if rv["stars"] else f'<span class="kind">{escape(rv["kind"])}</span>')
+            body = (f'<span class="mp-rv-txt">{escape(rv["body"])}</span>' if rv["body"]
+                    else '<span class="mp-rv-txt none">별점만 남긴 후기예요</span>')
+            photos = f" · 사진 {rv['photos']}장" if rv["photos"] else ""
+            with st.container(key=f"amrv_{rv['id']}"):
+                st.markdown(
+                    f'<div class="mp-rv"><span class="mp-rv-pst" style="{_amem_bg(rv["images"])}"></span><span class="mp-rv-body">'
+                    f'<span class="mp-rv-t">{escape(rv["title"])}</span><span class="mp-rv-meta">{meta}<span class="when"> · {rv["date"]}'
+                    f'{photos}</span></span>{body}</span>'
+                    + (f'<span class="mp-rv-stamp">{_amem_dot(cur or stamp.TIERS[0], 40, bw=3)}</span>' if rv["stamp"] else "")
+                    + '</div>', unsafe_allow_html=True)
+                st.button(f"{rv['title']} 상세", key=f"amrvb_{rv['id']}", on_click=_amem_open, args=(rv["cafe_id"],))
+        if len(my_reviews) > n:
+            st.button(f"+{len(my_reviews) - n}건 더보기", key="amrv_more", width="stretch",
+                      on_click=lambda: st.session_state.update(amrv_n=n + 5))
+
+    # ---- 설정: 닉네임 · 알림 안내 · 프로필 사진(선택 동의) · 비밀번호 · 처리방침 · 튜토리얼 · 로그아웃 · 탈퇴
+    with c_set, st.container(key="amem_set"):
+        st.markdown('<div class="am-h2" id="mp-set">설정</div>', unsafe_allow_html=True)
+        with st.form("rename", border=False):
+            cur_nick = str(row.get("nickname", "") or "")
+            if len(cur_nick) > auth.MAX_NICK:      # 예전(16자까지) 닉네임: 칸에는 10자까지만 들어간다 (11/18 10자 제한)
+                st.caption(f"지금 닉네임이 {auth.MAX_NICK}자를 넘어요. 저장하면 {auth.MAX_NICK}자 안으로 바뀌어요.")
+            f1, f2 = st.columns([3, 1], vertical_alignment="bottom")
+            nick = f1.text_input("닉네임 바꾸기", value=cur_nick[:auth.MAX_NICK], max_chars=auth.MAX_NICK,
+                                 placeholder=_suggest_nick(),
+                                 help="칸을 비워 두고 저장하면 흐리게 보이는 랜덤 닉네임으로 바꿔요 (가입할 때와 같게)")
+            if f2.form_submit_button("저장", type="primary"):
+                # 비워 두고 저장 → 랜덤 닉네임 (11/18 요청). 그사이 누가 먼저 썼으면 _suggest_nick 이 새로 짓는다
+                nick = (nick or "").strip() or _suggest_nick(final=True)
                 try:
-                    with st.spinner("사진을 줄여서 저장하는 중…"):
-                        auth.set_avatar(members, row, images.save_avatar(up.name, data))
-                    _avatar_saved("프로필 사진을 바꿨어요.")
-                except ValueError as err:
-                    st.warning(str(err), icon=":material/error:")
-        if c2.button("기본 사진 설정", width="stretch", key="av_default"):
-            auth.set_avatar(members, row, "none")
-            _avatar_saved("기본 사진으로 바꿨어요.")
-        if row.get("provider") in ("kakao", "naver"):
-            st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.')
-    with st.form("rename", border=False):
-        cur_nick = str(row.get("nickname", "") or "")
-        if len(cur_nick) > auth.MAX_NICK:      # 예전(16자까지) 닉네임: 칸에는 10자까지만 들어간다 (11/18 10자 제한)
-            st.caption(f"지금 닉네임이 {auth.MAX_NICK}자를 넘어요. 저장하면 {auth.MAX_NICK}자 안으로 바뀌어요.")
-        nick = st.text_input("닉네임 바꾸기", value=cur_nick[:auth.MAX_NICK], max_chars=auth.MAX_NICK,
-                             placeholder=_suggest_nick(),
-                             help="칸을 비워 두고 저장하면 흐리게 보이는 랜덤 닉네임으로 바꿔요 (가입할 때와 같게)")
-        # 저장 · 로그아웃을 한 줄에 반반 (11/18 요청). 폼 안에는 제출 버튼만 둘 수 있어서 로그아웃도 제출 버튼으로
-        b1, b2 = st.columns(2)
-        saved = b1.form_submit_button("저장", icon=":material/check:", type="primary", width="stretch")
-        if b2.form_submit_button("로그아웃", icon=":material/logout:", width="stretch"):
+                    auth.rename(members, row, nick)
+                    st.session_state.pop("_member_cache", None)
+                    st.session_state["flash"] = (f"닉네임을 '{nick}'(으)로 바꿨어요.", ":material/check_circle:")
+                    st.rerun()
+                except auth.AuthError as e:
+                    st.warning(str(e), icon=":material/error:")
+        with st.container(horizontal=True, vertical_alignment="center", key="amem_row_ntf"):
+            st.markdown(f'<div class="mp-row-t"><b>오픈 · 종료 알림</b><small>{escape(notice)}</small></div>', unsafe_allow_html=True)
+            st.button("알림 내역", key="amem_to_ntf", on_click=_amem_to_keep, args=("fav",))
+        st.markdown('<div class="mp-row"><span class="mp-row-t"><b>프로필 사진 사용 [선택]</b>'
+                    f'<small>{"지금 내 사진을 쓰고 있어요" if has_photo else "지금은 기본 그림이에요"}</small></span>'
+                    f'<span class="mp-flag{" on" if has_photo else ""}">{"사용 중" if has_photo else "기본 그림"}</span></div>',
+                    unsafe_allow_html=True)
+        n_av = st.session_state.get("_av_n", 0)
+        # 사진을 바꾸면(_av_n 이 늘면) 새 칸으로 그려 접힌 채로 보인다 (11/19 요청: 바꾼 뒤 '프로필 사진 바꾸기' 닫기)
+        with st.expander("프로필 사진 바꾸기", key=f"av_exp_{n_av}"):
+            st.caption("리뷰 옆에 동그랗게 보여요. 선택이에요 — 없으면 기본 그림이 보여요. 사람 얼굴·개인정보가 든 사진은 피해 주세요.")
+            up = st.file_uploader("사진 올리기 (png·jpg·webp, 5MB까지)", type=["png", "jpg", "jpeg", "webp"], key=f"av_up_{n_av}")
+            if up is not None:     # 고른 사진을 바로 보여 준다 (저장 전 미리보기, 11/18 요청: 기다리는 게 보이게)
+                st.markdown(f'<div class="av-preview"><img src="data:{up.type or "image/png"};base64,'
+                            f'{base64.b64encode(up.getvalue()).decode()}" alt=""><span>이 사진으로 바뀌어요 — 가운데를 동그랗게 잘라요</span></div>',
+                            unsafe_allow_html=True)
+            # 선택 동의 없이는 사진을 저장하지 않는다 (동의해야 저장 단추가 켜진다)
+            ok_photo = st.checkbox("[선택] 프로필 사진 수집·이용에 동의해요 — 리뷰 옆 표시용, '기본 사진 설정'을 누르면 바로 지워요",
+                                   key=f"av_agree_{n_av}")
+            if st.button("이 사진으로 저장", type="primary", width="stretch", disabled=up is None or not ok_photo, key="av_save"):
+                data = up.getvalue()
+                if images.too_big(data, 5):
+                    st.warning("5MB 이하 사진만 올릴 수 있어요.", icon=":material/error:")
+                else:
+                    try:
+                        with st.spinner("사진을 줄여서 저장하는 중…"):
+                            auth.set_avatar(members, row, images.save_avatar(up.name, data))
+                        _avatar_saved("프로필 사진을 바꿨어요.")
+                    except ValueError as err:
+                        st.warning(str(err), icon=":material/error:")
+            if st.button("기본 사진 설정", width="stretch", key="av_default"):
+                auth.set_avatar(members, row, "none")
+                _avatar_saved("기본 사진으로 바꿨어요.")
+            if row.get("provider") in ("kakao", "naver"):
+                st.caption(f'{auth.PROVIDER_LABEL[row["provider"]]} 프로필 사진은 가입할 때 [선택] 항목에 동의하면 불러와요.')
+        if local:
+            with st.expander("비밀번호 바꾸기"):
+                with st.form("pw_change", border=False):
+                    lid = st.text_input("아이디", max_chars=20)
+                    old = st.text_input("지금 비밀번호", type="password")
+                    new = st.text_input("새 비밀번호", type="password", placeholder="영문+숫자 8자 이상")
+                    new2 = st.text_input("새 비밀번호 확인", type="password")
+                    if st.form_submit_button("바꾸기", icon=":material/check:"):
+                        try:
+                            auth.change_password(lid, old, new, new2)
+                            st.session_state["flash"] = ("비밀번호를 바꿨어요.", ":material/check_circle:")
+                            st.rerun()
+                        except auth.AuthError as e:
+                            st.warning(str(e), icon=":material/error:")
+        st.markdown(f'<div class="mp-links"><a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
+                    '<a href="./guide" target="_self">사용자 튜토리얼</a></div>', unsafe_allow_html=True)
+        if st.button("로그아웃", key="amem_logout", type="tertiary"):
             _logout()
             st.session_state["flash"] = ("로그아웃했어요.", ":material/logout:")
             st.rerun()
-        if saved:
-            # 비워 두고 저장 → 랜덤 닉네임 (11/18 요청). 그사이 누가 먼저 썼으면 _suggest_nick 이 새로 짓는다
-            nick = (nick or "").strip() or _suggest_nick(final=True)
-            try:
-                auth.rename(members, row, nick)
-                st.session_state.pop("_member_cache", None)
-                st.session_state["flash"] = (f"닉네임을 '{nick}'(으)로 바꿨어요.", ":material/check_circle:")
-                st.rerun()
-            except auth.AuthError as e:
-                st.warning(str(e), icon=":material/error:")
-    local = row.get("provider") == "local"
-    if local:
-        with st.expander("비밀번호 바꾸기"):
-            with st.form("pw_change", border=False):
-                lid = st.text_input("아이디", max_chars=20)
-                old = st.text_input("지금 비밀번호", type="password")
-                new = st.text_input("새 비밀번호", type="password", placeholder="영문+숫자 8자 이상")
-                new2 = st.text_input("새 비밀번호 확인", type="password")
-                if st.form_submit_button("바꾸기", icon=":material/check:"):
+        with st.container(key="withdraw_box"), st.popover("탈퇴하기"):
+            st.write("닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 **지난 기록까지 바로 지워요**. 후기 도장도 함께 없어져요. "
+                     "쓴 리뷰는 다른 이용자를 위해 '탈퇴한 회원'으로 남아요 (지우고 싶은 글은 먼저 삭제 요청해 주세요).")
+            if local:
+                st.caption("아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.")
+                w_id = st.text_input("아이디", key="w_id")
+                w_pw = st.text_input("비밀번호", type="password", key="w_pw")
+            if st.button("탈퇴할게요", type="primary"):
+                if local:
                     try:
-                        auth.change_password(lid, old, new, new2)
-                        st.session_state["flash"] = ("비밀번호를 바꿨어요.", ":material/check_circle:")
-                        st.rerun()
+                        auth.drop_password(w_id, w_pw)
                     except auth.AuthError as e:
                         st.warning(str(e), icon=":material/error:")
-    st.markdown(f'<div class="consent-link"><a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a></div>',
-                unsafe_allow_html=True)
-    # 탈퇴하기: 맨 아래 작은 회색 글씨(버튼이지만 글자처럼) — 11/18 요청
-    with st.container(key="withdraw_box"), st.popover("탈퇴하기"):
-        st.write("닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 **지난 기록까지 바로 지워요**. "
-                 "쓴 리뷰는 다른 이용자를 위해 '탈퇴한 회원'으로 남아요 (지우고 싶은 글은 먼저 삭제 요청해 주세요).")
-        if local:
-            st.caption("아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.")
-            w_id = st.text_input("아이디", key="w_id")
-            w_pw = st.text_input("비밀번호", type="password", key="w_pw")
-        if st.button("탈퇴할게요", type="primary"):
-            if local:
-                try:
-                    auth.drop_password(w_id, w_pw)
-                except auth.AuthError as e:
-                    st.warning(str(e), icon=":material/error:")
-                    st.stop()
-            auth.withdraw(members, row)
-            auth.purge_withdrawn(str(row["entry_id"]))     # 개인정보 파기 (지난 기록까지)
-            _logout()
-            st.session_state["flash"] = ("탈퇴했어요. 그동안 고마웠어요.", ":material/check_circle:")
-            st.rerun()
+                        st.stop()
+                auth.withdraw(members, row)
+                auth.purge_withdrawn(str(row["entry_id"]))     # 개인정보 파기 (지난 기록까지)
+                _logout()
+                st.session_state["flash"] = ("탈퇴했어요. 그동안 고마웠어요.", ":material/check_circle:")
+                st.rerun()
+        st.markdown('<div class="mp-out-note">탈퇴하면 닉네임 · 사진 · 접속 기록 · 도장이 바로 지워지고, 쓴 후기는 \'탈퇴한 회원\'으로 남아요.</div>',
+                    unsafe_allow_html=True)
 
 
 def page_auth() -> None:
