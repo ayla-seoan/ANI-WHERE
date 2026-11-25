@@ -6225,6 +6225,12 @@ html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button
   html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button { height: 40px !important; min-height: 40px !important;
     padding: 0 14px !important; }
   html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button p { font-size: 13px !important; }
+  /* 모바일 물어보기 버튼: 흰 동그라미 + 민트 테두리 + 마스코트, 등록(+)과 같은 56px (홈을 포함한 모든 화면 — A_BROWSE_CSS 와 같은 값) */
+  html body .st-key-add_btn button { width: 56px !important; height: 56px !important; }
+  html body .st-key-ask_fab { width: 56px !important; height: 56px; bottom: calc(76px + 56px + 12px); }
+  html body .st-key-ask_fab button { width: 56px !important; height: 56px !important; border: 2px solid #14b8a6 !important;
+    background: #fff url("app/static/mascot.png") center / 36px auto no-repeat !important; box-shadow: 0 4px 14px rgba(0,0,0,.14) !important; }
+  html body .st-key-ask_fab button span { display: none !important; }
 }
 </style>
 """
