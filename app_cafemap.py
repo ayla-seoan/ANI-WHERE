@@ -838,59 +838,72 @@ def _link_status(urls: tuple[str, ...]) -> dict:
         return {}
 
 
+def _ad_left_text(current: dict) -> str:
+    """일정 칸 둘째 줄: 남은 날 (웹 popup/[id]/page.tsx 의 left 와 같은 규칙). 운영 시간은 데이터에 없어서 넣지 않는다."""
+    tags = _split(current.get("tags") or "")
+    s_, e_ = mycal._day(current.get("start_date")), mycal._day(current.get("end_date"))
+    if pdates.TAG_CHECK in tags or not s_ or not e_:
+        text = "공식 공지에서 기간을 확인해 주세요"
+    elif e_ < TODAY:
+        text = "끝난 팝업이에요"
+    elif s_ > TODAY:
+        text = f"시작까지 {(s_ - TODAY).days}일"
+    elif pdates.TAG_ALWAYS in tags or pdates.is_always(e_):
+        text = "상시 운영"
+    elif e_ == TODAY:
+        text = "오늘까지예요"
+    else:
+        text = f"끝나는 날까지 {(e_ - TODAY).days}일"
+    return text + (" · 사전 예약" if _is_reserve(current) else "")
+
+
 def _detail_info_html(current: dict) -> str:
-    """상세 정보 블록: 위치(주소 + 지도에서 확인하기) · 일정 → 혜택(특전·굿즈·이벤트) → 참고 웹사이트 카드 → 팝업 소개."""
-    # 위치 · 일정: 왼쪽에 항목 이름, 오른쪽에 내용 (오른쪽 정렬)
+    """상세 정보 블록 (A안, 웹 .ad-check / .ad-sec 과 같게): 위치 칸 · 일정 칸 → 혜택 칩 → 참고 웹사이트 → 팝업 소개."""
     addr = str(current.get("address") or "-")
     start, end = pd.to_datetime(current.get("start_date")), pd.to_datetime(current.get("end_date"))
     span = f"{_day(start, True)} - {_day(end, end.year != start.year)}"
     if pdates.is_always(end) or pdates.TAG_CHECK in _split(current.get("tags") or ""):
-        span = _period(current, lambda d: _day(d, True))
-    # 위치: 카페 이름을 크고 굵게 맨 위에, 그 아래 주소, 그 아래 '지도에서 확인하기'
-    # '방문 전 확인' 회색 상자: 왼쪽 항목 이름(고정 폭), 오른쪽 내용(왼쪽 정렬)
-    rows = (
-        '<div class="dinfo-title">방문 전 확인</div>'
-        # 위치 줄: 항목 이름 | 카페 이름·주소 | (같은 줄 오른쪽 끝) 지도에서 확인하기
-        '<div class="drow"><div class="dlabel">위치</div><div class="dval">'
-        f'<div class="dcafe">{escape(str(current.get("cafe_name") or "-"))}</div>'
-        f'<div class="daddr">{escape(addr)}</div></div>'
-        f'<a class="dbtn" href="{escape(_map_link(current))}" target="_blank" rel="noopener">{_mi("location_on")}지도에서 확인하기</a>'
-        '</div>'
-        f'<div class="drow"><div class="dlabel">일정</div><div class="dval">{escape(span)}</div></div>'
+        span = _period(current, lambda d: _day(d, True))      # 상시 팝업은 '26.11.20(금) ~ 상시'
+    # 방문 전 확인: 위치 칸(카페 이름 · 주소 · 지도에서 확인하기) + 일정 칸(기간 · 남은 날)
+    check = (
+        '<div class="ad-check" aria-label="방문 전 확인">'
+        f'<div class="ad-box">{_mi("location_on")}<div>'
+        f'<strong class="dcafe">{escape(str(current.get("cafe_name") or "-"))}</strong>'
+        f'<span class="daddr">{escape(addr)}</span>'
+        f'<a href="{escape(_map_link(current))}" target="_blank" rel="noopener">지도에서 확인하기</a></div></div>'
+        f'<div class="ad-box">{_mi("calendar_month")}<div><strong>{escape(span)}</strong>'
+        f'<span>{escape(_ad_left_text(current))}</span></div></div></div>'
     )
-    # 혜택: 특전 · 굿즈 · 이벤트마다 검은 알약 라벨, 그 옆에 회색 상자 안 목록 (라벨 | 내용 한 줄)
-    groups = [("특전", _mi("redeem"), _split(current.get("perks") or "")),
-              ("굿즈", _mi("shopping_bag"), _split(current.get("goods") or "")),
-              ("이벤트", _mi("celebration"), _split(current.get("tags") or ""))]
-    perks = "".join(
-        f'<div class="dgroup"><span class="dpill">{name}</span><ul class="dbox">'
-        + "".join(f"<li>{icon} {escape(x)}</li>" for x in items) + "</ul></div>"
-        for name, icon, items in groups if items)
-    perks_html = (f'<div class="dsec"><div class="dsec-title">혜택</div>{perks}</div>' if perks else
-                  '<div class="dsec"><div class="dsec-title">혜택</div><div class="dnone">등록된 특전·굿즈가 없어요</div></div>')
-    # 참고 웹사이트: 연회색 카드 (사이트 이름 + 주소 + ↗), 카드 전체를 누르면 새 탭
-    # recal.kr 은 맨 뒤로 (다른 사이트가 없으면 그대로 첫 번째) — 예전에 가져온 행사에도 같은 순서로 보인다
+    # 혜택: 특전 · 굿즈 · 이벤트를 칩으로 ('특전 · 랜덤 코스터'). 상시 · 기간 확인 필요 표시는 혜택이 아니라서 뺀다
+    groups = [("특전", _split(current.get("perks") or "")),
+              ("굿즈", _split(current.get("goods") or "")),
+              ("이벤트", [t for t in _split(current.get("tags") or "") if t not in cafe.PERIOD_TAGS])]
+    chips = "".join(f'<span class="{"perk" if name == "특전" else "etc"}"><b>{name}</b>{escape(x)}</span>'
+                    for name, items in groups for x in items)
+    perks_html = ('<div class="ad-sec"><div class="ad-h2">혜택</div>'
+                  + (f'<div class="ad-chips">{chips}</div>' if chips else '<div class="ad-none">등록된 특전·굿즈가 없어요</div>')
+                  + '</div>')
+    # 참고 웹사이트: 사이트 이름 + ↗. recal.kr 은 맨 뒤로 (다른 사이트가 없으면 그대로 첫 번째)
     links = cafe.order_links(cafe.parse_links(current.get("links") or "")[0])
     link_html = ""
     if links:
         status = _link_status(tuple(links))      # 깨진 공식 링크는 '링크 확인 필요' (하루 동안 기억)
         cards = "".join(
             f'<a class="dlink{" broken" if status.get(u) is False else ""}" href="{escape(u)}" target="_blank" rel="noopener">'
-            f'<div class="dlink-text"><div class="dlink-title">{escape(_site_name(u))}'
-            + (f' <span class="dlink-warn">{_mi("link_off")} 링크 확인 필요</span>' if status.get(u) is False else "")
-            + f'</div><div class="dlink-url">{escape(u)}</div></div><span class="dlink-go">↗</span></a>'
+            f'<span>{escape(_site_name(u))}</span>'
+            + (f'<span class="dlink-warn">{_mi("link_off")} 링크 확인 필요</span>' if status.get(u) is False else "")
+            + f'{_mi("open_in_new")}</a>'
             for u in links)
-        link_html = f'<div class="dsec"><div class="dsec-title">참고 웹사이트</div>{cards}</div>'
+        link_html = f'<div class="ad-sec"><div class="ad-h2">참고 웹사이트</div><div class="ad-links">{cards}</div></div>'
     # 팝업 소개: 쓴 글(간편등록은 공지)을 줄바꿈 그대로. 없으면 칸을 만들지 않는다
     intro = str(current.get("intro") or "").strip()
     src = str(current.get("intro_src") or "").strip()
     src_btn = (f'<a class="dsrc" href="{escape(src)}" target="_blank" rel="noopener">'
                f'{_mi("open_in_new")}출처 보기</a>' if src.startswith(("http://", "https://")) else "")
-    # 출처 보기는 소개 상자 안 오른쪽 맨 아래
     src_foot = f'<div class="dintro-foot">{src_btn}</div>' if src_btn else ""
-    intro_html = (f'<div class="dsec"><div class="dsec-title">팝업 소개</div>'
-                  f'<div class="dintro">{_intro_body(intro)}{src_foot}</div></div>' if intro else "")
-    return f'<div class="dinfo">{rows}</div><div class="dband"></div>{perks_html}{link_html}{intro_html}'
+    intro_html = (f'<div class="ad-sec"><div class="ad-h2">팝업 소개</div>'
+                  f'<div class="ad-intro">{_intro_body(intro)}{src_foot}</div></div>' if intro else "")
+    return f'<div class="ad-info">{check}{perks_html}{link_html}{intro_html}</div>'
 
 
 def _blog_row(current: dict) -> dict:
@@ -990,45 +1003,52 @@ def _render_blog_tab(current: dict, posts: list[dict]) -> None:
 
 
 def render_detail(current: dict) -> None:
-    """상세 화면 왼쪽: 이미지 슬라이드 · 작품(+캐릭터) · 위치(카페명·주소)·일정 · 혜택 · 참고 웹사이트 · 공유.
+    """상세 화면 위쪽 2단 (A안, 웹 .ad-hero): 왼쪽 3:4 사진(넘기기 · 작은 사진 줄 · 눌러서 크게 보기),
+    오른쪽 상태 · 지역 배지 → 제목 + 공유 · 북마크 → 평균 별점 → 위치 · 일정 칸 → 혜택 → 참고 웹사이트 → 팝업 소개.
+    수정하기 탭에서는 이 2단을 숨기고 작은 머리(포스터 60×80 + 제목)만 보인다 (A_DETAIL_CSS 가 탭 상태를 보고 바꾼다).
     지도는 상세에 따로 그리지 않고, 위치의 '지도에서 확인하기' 로 카카오맵을 연다."""
     entry_id = str(current["entry_id"])
-    # 포스터와 추가 이미지를 한 슬라이드로: 몇 초마다 넘어가고, 버튼으로 넘기고, 누르면 크게 본다.
-    # 포스터가 없으면 기본 그림을 보여 준다 (저장소에는 넣지 않는다)
     pics = images.paths(current.get("images"))
-    gallery.gallery([images.url(p) for p in pics] or [images.DEFAULT_POSTER_URL],
-                    key=f"gallery_{entry_id}")
-    # 머리글 (LIST_CSS 의 .dhead):
-    #   1줄 📍 지역 ······························· 진행 상태 배지(작게)
-    #   2줄 작품 이름(크게) ························ [공유][♡]
-    #   3줄 캐릭터(포인트 색)
-    top, title_html, chars_html = _detail_head_html(current)
-    st.markdown(top, unsafe_allow_html=True)
-    # 2줄: 작품 이름 칸이 남는 폭을 쓰고, 오른쪽에 공유·찜 버튼 칸 (공유를 누르면 공유 칸이 넓어지며 왼쪽으로 펼쳐진다)
-    with st.container(key="detail_actions"):
-        title_col, share_col, fav_col = st.columns([6, 1, 1], vertical_alignment="center")
-    with title_col:
-        st.markdown(title_html, unsafe_allow_html=True)
-    with fav_col:
-        _heart(entry_id, "d")      # 하트만 (글자·찜 수 없이)
-    with share_col:
-        # 받은 사람이 누르면 이 카페 상세가 바로 열린다 (?cafe=...)
-        share.share_buttons(
-            entry_id,
-            title=f"{current.get('work', '')} · {current.get('cafe_name', '')}",
-            text=f"{current.get('start_date')} ~ {current.get('end_date')} · {current.get('address') or ''}",
-            image=images.url(pics[0]) if pics else images.DEFAULT_POSTER_URL,
-            key=f"share_{entry_id}",
-        )
-    if chars_html:
-        st.markdown(chars_html, unsafe_allow_html=True)
-    # 위치(카페명·주소) · 일정 · 혜택 · 참고 웹사이트 (LIST_CSS 의 .dinfo / .dsec / .dlink)
-    st.markdown(_detail_info_html(current), unsafe_allow_html=True)
+    poster = images.url(pics[0]) if pics else images.DEFAULT_POSTER_URL
+    badges_html, title_html, sub_html = _detail_head_html(current)
+    # 수정하기 탭의 작은 머리 (평소엔 숨김). A_DETAIL_CSS 도 여기서 한 번 내보낸다 (LIST_CSS 뒤라서 같은 규칙을 덮는다)
+    with st.container(key="ad_mini"):
+        st.markdown(A_DETAIL_CSS, unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="ad-mini"><img src="{poster}" alt="" onerror="this.onerror=null;this.src=\'{images.DEFAULT_POSTER_URL}\'">'
+              f'<div><span>팝업 상세 · {escape(str(current.get("cafe_name") or ""))}</span>'
+              f'<div class="ad-title">{escape(str(current.get("work") or ""))}</div></div></div>',
+            unsafe_allow_html=True)
+    with st.container(key="ad_hero"):
+        col_pic, col_info = st.columns([42, 92], gap="large")
+    with col_pic:
+        # 포스터와 추가 이미지를 한 슬라이드로. 포스터가 없으면 기본 그림을 보여 준다 (저장소에는 넣지 않는다)
+        gallery.gallery([images.url(p) for p in pics] or [images.DEFAULT_POSTER_URL], key=f"gallery_{entry_id}")
+    with col_info:
+        st.markdown(badges_html, unsafe_allow_html=True)
+        # 제목 칸이 남는 폭을 쓰고, 오른쪽에 공유 · 북마크 (44px). 공유를 누르면 공유 칸이 넓어지며 왼쪽으로 펼쳐진다
+        with st.container(key="detail_actions"):
+            title_col, share_col, fav_col = st.columns([6, 1, 1], vertical_alignment="top")
+        with title_col:
+            st.markdown(title_html, unsafe_allow_html=True)
+        with fav_col:
+            _heart(entry_id, "d")      # 북마크 아이콘만 (글자·수 없이)
+        with share_col:
+            # 받은 사람이 누르면 이 카페 상세가 바로 열린다 (?cafe=...)
+            share.share_buttons(
+                entry_id,
+                title=f"{current.get('work', '')} · {current.get('cafe_name', '')}",
+                text=f"{current.get('start_date')} ~ {current.get('end_date')} · {current.get('address') or ''}",
+                image=poster,
+                key=f"share_{entry_id}",
+            )
+        # 캐릭터 · 평균 별점 · 위치 · 일정 · 혜택 · 참고 웹사이트 · 팝업 소개
+        st.markdown(sub_html + _detail_info_html(current), unsafe_allow_html=True)
 
 
 def _detail_head_html(current: dict) -> tuple[str, str, str]:
-    """상세 머리글 세 조각: (📍 지역 + 진행 상태 배지 줄, 작품 이름, 캐릭터 줄).
-    일정 날짜는 아래 '일정' 줄에만 둔다. 캐릭터가 없으면 셋째는 빈 문자열."""
+    """상세 머리글 세 조각: (상태 · 지역 배지 줄, 작품 이름, 캐릭터 + 평균 별점 줄).
+    일정 날짜는 아래 '일정' 칸에만 둔다. 캐릭터도 별점도 없으면 셋째는 빈 문자열."""
     area = geo.area_name(str(current.get("address") or ""))
     color, _ = _area_colors(current.get("address"))
     start = pd.to_datetime(current.get("start_date")).date()
@@ -1042,11 +1062,20 @@ def _detail_head_html(current: dict) -> tuple[str, str, str]:
     else:
         state = "진행 중"
     chars = str(current.get("characters") or "").strip()
-    top = ('<div class="dhead dtop">'
-           + f'<span class="dregion" style="color:{color}">{_mi("location_on") + escape(area) if area else ""}</span>'
-           + f'<span class="dstate{" ended" if state == "종료" else ""}">{state}</span></div>')
-    title = f'<div class="dtitle">{escape(str(current.get("work") or ""))}</div>'
-    sub = f'<div class="dsub"><span class="dchars">{escape(chars)}</span></div>' if chars else ""
+    top = ('<div class="ad-badges">'
+           + f'<span class="ad-state{" ended" if state == "종료" else ""}">{state}</span>'
+           + (f'<span class="ad-area" style="background:{color}">{escape(area)}</span>' if area else "")
+           + '</div>')
+    title = f'<div class="dtitle ad-title">{escape(str(current.get("work") or ""))}</div>'
+    sub = f'<div class="ad-chars">{escape(chars)}</div>' if chars else ""
+    # 평균 별점 줄: 다녀온 후기에 별점이 있을 때만 (리뷰를 막 쓴 직후에는 화면을 다시 열어야 바뀐다 — 리뷰 탭의 평균은 바로 바뀐다)
+    try:
+        avg, n_rated = review.average_rating(review.threads(reviews.current_rows(), str(current["entry_id"])))
+    except Exception:
+        avg, n_rated = 0.0, 0
+    if n_rated:
+        sub += (f'<div class="ad-avg">{_ad_stars_html(avg)}<strong>{avg:.1f}</strong>'
+                f'<span>다녀온 후기 {n_rated}개 평균</span></div>')
     return top, title, sub
 
 
@@ -1152,7 +1181,7 @@ def render_similar(current: dict, df: pd.DataFrame) -> None:
 
 @st.fragment
 def render_detail_tabs(current: dict) -> None:
-    """상세 화면 오른쪽: 리뷰 / 수정하기 탭.
+    """상세 화면 아래쪽, 화면 폭 전체 탭 (A안): 리뷰 n · 블로그 후기 n · 수정하기.
 
     조각(fragment)이라 리뷰 · 답글을 쓰거나 댓글을 펼칠 때 이 칸만 다시 그린다 (11/20 리뷰 등록 1초 안에).
     팝업 정보 수정처럼 화면 전체가 바뀌는 일은 그쪽에서 st.rerun() 으로 전체를 다시 그린다."""
@@ -1163,28 +1192,25 @@ def render_detail_tabs(current: dict) -> None:
     n = review.counts(reviews.current_rows()).get(entry_id, 0)
     # 키를 주고 고른 탭을 서버가 기억하게 한다. 그렇지 않으면 수정하기에서 이미지를 지우거나 올려
     # 다시 그릴 때마다 첫 탭(리뷰)으로 돌아가 버린다
-    tab_review, tab_edit = st.tabs([f":material/chat_bubble: 리뷰 {n}", ":material/edit: 수정하기"], key=f"detail_tabs_{entry_id}",
-                                   on_change="rerun")
+    tab_key = f"detail_tabs_{entry_id}"
+    names = ("리뷰", "블로그 후기", "수정하기")
+    picked = str(st.session_state.get(tab_key) or "")
+    cur = next((name for name in reversed(names) if name in picked), "리뷰")
+    # 블로그 글은 저장해 둔 것(blog_posts)에서 바로 읽는다. 건수도 저장된 글 수 (11/19 요청: 불러온 건 저장해 두고
+    # 추가된 것만 새로). 아직 저장된 게 없거나 '블로그 후기' 탭을 열면 그 자리에서 오늘 새 글을 확인한다
+    saved_n = _blog_counts().get(entry_id)
+    posts = _blog_list(current) if cur == "블로그 후기" or not saved_n else None
+    n_blog = len(posts) if posts is not None else saved_n
+    labels = {"리뷰": f"리뷰 {n}", "블로그 후기": f"블로그 후기 {n_blog or 0}", "수정하기": ":material/edit: 수정하기"}
+    # 탭 이름에 건수가 들어 있어서, 건수가 바뀌어도(리뷰 등록 · 새 블로그 글) 보고 있던 탭에 그대로 머물게 한다
+    if picked and picked != labels[cur]:
+        st.session_state[tab_key] = labels[cur]
+    tab_review, tab_blog, tab_edit = st.tabs(list(labels.values()), key=tab_key, on_change="rerun")
     with tab_review:
-        sub = st.session_state.get(f"rvsub_{entry_id}", "review")
-        # 블로그 글은 저장해 둔 것(blog_posts)에서 바로 읽는다. 건수도 저장된 글 수 (11/19 요청: 불러온 건 저장해 두고
-        # 추가된 것만 새로). 아직 저장된 게 없거나 '블로그 후기' 탭을 열면 그 자리에서 오늘 새 글을 확인한다
-        saved_n = _blog_counts().get(entry_id)
-        posts = _blog_list(current) if sub == "blog" or not saved_n else None
-        n_blog = len(posts) if posts is not None else saved_n
-
-        def subtabs() -> bool:
-            # 리뷰 쓰기 칸 아래에 '리뷰 후기 / 블로그 후기' (11/18 요청)
-            with st.container(horizontal=True, key="rv_subtabs"):
-                for k, label in (("review", f"리뷰 후기 ({n})"), ("blog", f"블로그 후기 ({n_blog or 0})")):
-                    st.button(label, key=f"rvsub_{'on_' if sub == k else ''}{k}_{entry_id}",
-                              on_click=lambda k=k: st.session_state.update({f"rvsub_{entry_id}": k}))
-            if sub == "blog":
-                _render_blog_tab(current, posts)
-                return False
-            return True
-
-        render_reviews(entry_id, after_write=subtabs)
+        render_reviews(entry_id)
+    with tab_blog:
+        if posts is not None:
+            _render_blog_tab(current, posts)
     with tab_edit:
         render_edit(current)
 
@@ -1223,55 +1249,74 @@ def _rerun_reviews() -> None:
         st.rerun()
 
 
-def _write_box(cafe_id: str, parent_id: str = "") -> None:
-    """글쓰기 칸. parent_id 가 있으면 답글 칸이다.
+AD_PHOTO_NOTE = "얼굴·영수증·연락처가 보이는 사진은 올리지 말아 주세요. 사진의 위치 정보는 지우고 저장해요."
+
+
+def _ad_me_html(nick: str, stamps: int, stamped_here: bool) -> str:
+    """리뷰 쓰기 칸의 작성자 줄: 내 32px 후기 도장 + 닉네임 · 내 랭크 · 다음 랭크까지 남은 수 (웹 .ad-me)."""
+    from common import stamp
+    tier, nxt = stamp.tier_of(stamps), stamp.next_tier(stamps)
+    mark = _ad_stamp(tier.lv, 32) if tier else f'<span class="ad-nostamp" aria-hidden="true"><img src="{AD_MASCOT}" alt=""></span>'
+    rank = f"내 도장 Lv.{tier.lv} {tier.name}" if tier else "아직 도장이 없어요"
+    more = ("이 팝업 도장은 이미 받았어요" if stamped_here else "다녀온 후기를 남기면 도장 +1")         + (f" · Lv.{nxt[0].lv}까지 {nxt[1]}개" if nxt else " · 가장 높은 랭크예요")
+    return (f'<div class="ad-me">{mark}<span class="ad-me-t"><span><b>{escape(_nick_only(nick))}</b><strong>{rank}</strong></span>'
+            f'<span>{more}</span></span></div>')
+
+
+def _write_box(cafe_id: str, parent_id: str = "", stamps: int = 0, stamped_here: bool = False) -> None:
+    """글쓰기 칸. parent_id 가 있으면 답글 칸이다 ('답글 쓰기' 를 눌렀을 때만 그린다).
+    stamps: 내 후기 도장 수, stamped_here: 이 팝업에 내 다녀온 후기가 이미 있는지 (도장은 팝업마다 1개).
 
     입력이 끝나면 칸을 비워야 해서, 저장할 때마다 키 번호(n)를 올려 새 입력칸을 그린다.
     """
-    if _login_gate("리뷰는 로그인하면 쓸 수 있어요.", f"lg_rv_{cafe_id}_{parent_id}"):
+    if not _member():
+        if not parent_id:
+            # 손님: 안내 + '로그인하고 계속하기' (웹 .side-note)
+            st.markdown('<p class="side-note">리뷰는 로그인하면 쓸 수 있어요. 다녀온 후기를 남기면 후기 도장도 받아요.</p>',
+                        unsafe_allow_html=True)
+            st.button("로그인하고 계속하기", type="primary", width="stretch", key=f"lg_rv_{cafe_id}_",
+                      on_click=_need_login, args=("리뷰는 로그인하면 쓸 수 있어요.",))
         return
     slot = f"rv_{cafe_id}_{parent_id or 'top'}"
     n = st.session_state.get(f"{slot}_n", 0)
     kind = ""
     nick = _me()
-    # 닉네임 → 종류 → 내용 순으로 한 줄씩, 같은 왼쪽 선에 맞춰 둔다
-    me_row = _member() or {}
-    st.markdown(f'<div class="rv-me">{_avatar_img(me_row.get("avatar"), 28, "rv-av")}<b>{escape(_nick_only(nick))}</b></div>',
-                unsafe_allow_html=True)
     rating = None
-    if not parent_id:
+    if parent_id:
+        me_row = _member() or {}
+        st.markdown(f'<div class="rv-me">{_avatar_img(me_row.get("avatar"), 28, "rv-av")}<b>{escape(_nick_only(nick))}</b></div>',
+                    unsafe_allow_html=True)
+    else:
+        # 내 도장 + 닉네임 → 종류 → 별점 → 내용 → 사진 순으로
+        st.markdown(_ad_me_html(nick, stamps, stamped_here), unsafe_allow_html=True)
         kind = st.pills("종류", review.KINDS, default=review.KINDS[0], key=f"{slot}_kind_{n}",
                         label_visibility="collapsed")
         # 다녀온 후기는 별점(1~5)을 고를 수 있다. st.feedback 은 0~4 를 돌려줘서 1 을 더한다
         if kind == review.RATED_KIND:
             with st.container(key=f"{slot}_rate_box_{n}"):
-                st.markdown('<div class="rv-rate-q">이 팝업 방문하셨나요?</div>'
-                            '<div class="rv-rate-sub">방문 예정인 분들에게 도움이 되는 후기를 작성해주세요</div>',
-                            unsafe_allow_html=True)
                 picked = st.feedback("stars", key=f"{slot}_rating_{n}")
+                st.markdown('<span class="ad-rate-note">별점만 골라도 등록돼요</span>', unsafe_allow_html=True)
             rating = picked + 1 if picked is not None else None
     body = st.text_area(
-        "내용", key=f"{slot}_body_{n}", height=80 if parent_id else 100, label_visibility="collapsed",
+        "내용", key=f"{slot}_body_{n}", height=80 if parent_id else 120, label_visibility="collapsed",
         max_chars=review.MAX_BODY,
-        placeholder="답글을 남겨 주세요" if parent_id else
-        "다녀온 후기나 기대하는 점을 남겨 주세요 (대기 시간, 특전 소진 여부 등)",
+        placeholder="답글을 남겨 주세요" if parent_id else "웨이팅, 특전 남은 수, 굿즈 꿀팁을 알려 주세요",
     )
     bad = _block_sensitive(body)
-    # 사진 첨부 (선택, 원글 · 답글 모두 — 11/20 답글에도). 처음엔 작은 '사진 첨부' 버튼만, 누르면 올리는 칸이 열린다.
-    # 답글 칸에서는 칸을 눌러 열었을 때만 버튼이 보인다 (CSS .st-key-rpbox_ … _pics_off_). 저장은 등록을 누를 때 한다
+    # 사진 첨부 (선택, 원글 · 답글 모두 — 11/20 답글에도). 리뷰 쓰기 칸은 올리는 칸이 늘 보이고,
+    # 답글 칸은 작은 '+ 사진 첨부' 버튼을 누르면 열린다. 저장은 등록을 누를 때 한다
     photos = []
     open_key = f"{slot}_pic_open_{n}"
-    opened = st.session_state.get(open_key, False)
+    opened = not parent_id or st.session_state.get(open_key, False)
     with st.container(key=f"{slot}_pics_{'on' if opened else 'off'}_{n}"):
-        # 열고 나면 버튼은 감추고 올리는 칸만 둔다
         if not opened:
             st.button("+ 사진 첨부", key=f"{slot}_pic_btn_{n}", type="tertiary",
                       on_click=lambda: st.session_state.update({open_key: True}))
         else:
             photos = list(st.file_uploader(
-                f"최대 {review.MAX_IMAGES}장 · 한 장 {review.IMAGE_MB}MB · 다른 사람 얼굴·영수증·연락처가 보이는 사진은 올리지 말아 주세요 "
-                "(사진 속 위치 정보는 자동으로 지워요)", type=images.TYPES,
+                f"사진 · 최대 {review.MAX_IMAGES}장 · 한 장 {review.IMAGE_MB}MB", type=images.TYPES,
                 accept_multiple_files=True, key=f"{slot}_img_{n}") or [])
+            st.markdown(f'<div class="ad-pics-note">{AD_PHOTO_NOTE}</div>', unsafe_allow_html=True)
     if len(photos) > review.MAX_IMAGES:
         st.caption(f":red[사진은 {review.MAX_IMAGES}장까지 올릴 수 있어요. 앞의 {review.MAX_IMAGES}장만 올라갑니다.]")
         photos = photos[:review.MAX_IMAGES]
@@ -1283,14 +1328,16 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
     c1, c2 = st.columns(2) if parent_id else (st.container(), None)
     with c1:
         # 입력칸이 비었는지는 화면에서 바로 본다 (_live_send). 입력칸은 칸을 벗어나야 값이 넘어와서
-        # 여기서 막으면 한 글자를 써도 버튼이 계속 꺼져 있다
-        clicked = st.button("답글 등록" if parent_id else "리뷰 등록", type="primary",
-                            width="stretch", disabled=bad, key=f"{slot}_send_{n}")
+        # 여기서 막으면 한 글자를 써도 버튼이 계속 꺼져 있다.
+        # 도장은 팝업마다 1개: 다녀온 후기이고 이 팝업에 내 다녀온 후기가 아직 없을 때만 '등록하고 도장 받기'
+        label = "답글 등록" if parent_id else ("등록하고 도장 받기" if kind == review.RATED_KIND and not stamped_here else "리뷰 등록")
+        clicked = st.button(label, type="primary", width="stretch", disabled=bad, key=f"{slot}_send_{n}")
     if c2 is not None:
         with c2:
-            # 답글 칸 비우기 (키 번호를 올려 빈 입력칸으로 다시 그린다)
+            # 답글 칸 닫기 (키 번호를 올려 다음에 열면 빈 입력칸으로 그린다)
             if st.button("취소", width="stretch", key=f"{slot}_cancel_{n}"):
                 st.session_state[f"{slot}_n"] = n + 1
+                st.session_state.pop(f"rv_reply_{cafe_id}", None)
                 _rerun_reviews()
 
     if clicked:
@@ -1310,7 +1357,8 @@ def _write_box(cafe_id: str, parent_id: str = "") -> None:
         st.session_state[f"{slot}_n"] = n + 1
         if parent_id:
             st.session_state[f"rv_open_{parent_id}"] = True     # 방금 단 답글이 보이게 댓글을 펼쳐 둔다
-        # 조각만 다시 그리면 화면 맨 위의 flash 는 돌지 않아서, 상세 오른쪽 칸 첫머리에서 띄운다 (render_detail_tabs)
+            st.session_state.pop(f"rv_reply_{cafe_id}", None)   # 답글 칸은 닫는다
+        # 조각만 다시 그리면 화면 맨 위의 flash 는 돌지 않아서, 상세 탭 첫머리에서 띄운다 (render_detail_tabs)
         st.session_state["rv_flash"] = "답글을 남겼습니다." if parent_id else "리뷰를 남겼습니다."
         _rerun_reviews()
 
@@ -1384,57 +1432,66 @@ def confirm_review_delete(entry_id: str, replies: int, as_admin: bool = False) -
         st.rerun()
 
 
-def _review_card(r: dict, reply: bool = False, replies: int = 0) -> None:
+def _review_card(r: dict, reply: bool = False, replies: int = 0, lv_table: dict | None = None) -> None:
+    """리뷰 카드 하나 (A안, 웹 Reviews.tsx 의 Card): 프로필 · 닉네임 · 20px 도장 + Lv.n 칩 · 시각 · 종류 → 별점 → 글 → 사진(120px).
+    lv_table: stamp.counts(리뷰 현재 행) — 닉네임 옆 후기 도장 랭크를 정한다."""
+    from common import stamp
     who, pic = _author(r.get("nickname"))
-    head = _avatar_img(pic, 26, "rv-av") + f" **{_plain(who)}**"
-    if r.get("kind"):
-        head = f":{KIND_COLORS.get(r['kind'], 'gray')}-badge[{r['kind']}] " + head
-    if reply:
-        # 대댓글 표시 (11/20 요청): 앞에 'ㄴ' — 위 댓글에 단 답글이라는 뜻 (웹 .rv-re 와 같게)
-        head = '<span class="rv-re" aria-label="답글">ㄴ</span> ' + head
     eid = str(r["entry_id"])
-    when = f" · :gray[{_when(r.get('updated_at'))}]"
-    if int(r.get("revision") or 1) > 1:
-        when += " :gray[(수정됨)]"
-    # 내가 쓴 글(접속 IP 로 정해진 닉네임이 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
+    if lv_table is None:
+        lv_table = stamp.counts(reviews.current_rows())
+    lv = 0 if who == auth.WITHDRAWN else stamp.lv_of(str(r.get("nickname") or ""), lv_table)
+    when = _when(r.get("updated_at")) + (" (수정됨)" if int(r.get("revision") or 1) > 1 else "")
+    kind = str(r.get("kind") or "")
+    head = ('<div class="rv-head">'
+            # 대댓글 표시 (11/20 요청): 앞에 'ㄴ' — 위 댓글에 단 답글이라는 뜻 (웹 .rv-re 와 같게)
+            + ('<span class="rv-re" aria-label="답글">ㄴ</span>' if reply else "")
+            + _avatar_img(pic, 28 if reply else 34, "rv-av") + f'<b>{escape(who)}</b>' + _ad_rank_chip(lv)
+            + f'<span class="rv-when">{when}</span>'
+            + (f'<span class="kb {KIND_COLORS.get(kind, "gray")}">{escape(kind)}</span>' if kind else "")
+            + '</div>')
+    # 내가 쓴 글(닉네임 끝 꼬리표가 같은 글)에만 '⋯' 를 보여 주고, 누르면 수정·삭제를 고른다
     mine = bool(_member()) and review.can_delete(r, _me())
     is_admin = _is_admin()
     if mine or is_admin:
         # 권한 (11/18 요청): 수정·삭제는 내가 쓴 글만. 관리자는 모든 글을 삭제할 수 있고, 사유를 적으면 쓴 사람에게 알림
-        t, b = st.columns([6, 1], vertical_alignment="center")
-        t.markdown(head + when, unsafe_allow_html=True)
-        with b.popover("⋯", key=f"rv_more_{eid}", type="tertiary"):
-            if mine and st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
-                st.session_state["rv_editing"] = eid
-                st.rerun()
-            # 창은 '⋯' 칸 밖에서 연다 (칸 안 버튼으로 열면 창 안의 '삭제' 누름이 다음 그리기에서 사라졌다)
-            if mine:
-                st.button("삭제", key=f"rv_delmine_{eid}", width="stretch",
-                          on_click=lambda: st.session_state.update(_rv_del=(eid, replies, False)))
-            if is_admin and not mine:
-                st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch",
-                          on_click=lambda: st.session_state.update(_rv_del=(eid, replies, True)))
+        with st.container(horizontal=True, key=f"rvhd_{eid}"):
+            st.markdown(head, unsafe_allow_html=True)
+            with st.popover("⋯", key=f"rv_more_{eid}", type="tertiary"):
+                if mine and st.button("수정", key=f"rv_edit_{eid}", width="stretch"):
+                    st.session_state["rv_editing"] = eid
+                    st.rerun()
+                # 창은 '⋯' 칸 밖에서 연다 (칸 안 버튼으로 열면 창 안의 '삭제' 누름이 다음 그리기에서 사라졌다)
+                if mine:
+                    st.button("삭제", key=f"rv_delmine_{eid}", width="stretch",
+                              on_click=lambda: st.session_state.update(_rv_del=(eid, replies, False)))
+                if is_admin and not mine:
+                    st.button("삭제 (관리자)", key=f"rv_del_{eid}", width="stretch",
+                              on_click=lambda: st.session_state.update(_rv_del=(eid, replies, True)))
         pend = st.session_state.get("_rv_del")
         if pend and pend[0] == eid:
             confirm_review_delete(eid, pend[1], as_admin=pend[2])
     else:
-        st.markdown(head + when, unsafe_allow_html=True)
-    # 다녀온 후기 별점: 머리 줄 다음 줄에, 내용보다 위에 크게
-    rated = review.stars(r.get("rating")) if r.get("kind") == review.RATED_KIND else ""
-    if rated and not (mine and st.session_state.get("rv_editing") == eid):
-        st.markdown(f'<div class="rv-stars">{rated}</div>', unsafe_allow_html=True)
-    text = str(r.get("body") or "").strip()
-    pics = images.paths(r.get("images"))
+        st.markdown(head, unsafe_allow_html=True)
     if mine and st.session_state.get("rv_editing") == eid:
         _review_edit_box(r)            # 고치는 동안 사진은 수정 칸의 '붙어 있는 사진' 으로 본다
-    elif pics:
-        # 사진이 있으면 사진 옆에 글 (11/20 요청, 웹 .rv-content 와 같게). 사진을 누르면 확대 보기(.rv-pics a)
-        body_html = f'<div class="rv-body">{escape(text).replace(chr(10), "<br>")}</div>' if text else ""
-        st.markdown('<div class="rv-content"><div class="rv-pics">' + "".join(
-            f'<a href="{images.url(p)}" target="_blank" rel="noopener"><img src="{images.url(p)}" alt="리뷰 사진"/></a>'
-            for p in pics) + "</div>" + body_html + "</div>", unsafe_allow_html=True)
-    elif text:
-        st.markdown(_plain(r.get("body", "")))
+        return
+    # 다녀온 후기 별점 → 글 → 사진 (120px 로 최대 4장, 더 있으면 넷째 칸에 +N. 누르면 확대 보기 — .rv-pics a)
+    rated = review.stars(r.get("rating")) if kind == review.RATED_KIND else ""
+    text = str(r.get("body") or "").strip()
+    pics = [images.url(p) for p in images.paths(r.get("images"))]
+    html = f'<div class="rv-stars">{rated}</div>' if rated else ""
+    if text:
+        html += f'<div class="rv-body">{escape(text).replace(chr(10), "<br>")}</div>'
+    if pics:
+        more = len(pics) - review.MAX_IMAGES
+        html += '<div class="rv-pics">' + "".join(
+            f'<a href="{u}" target="_blank" rel="noopener"{" hidden" if i >= review.MAX_IMAGES else ""}>'
+            f'<img src="{u}" alt="리뷰 사진" loading="lazy"/>'
+            + (f'<span>+{more}</span>' if more > 0 and i == review.MAX_IMAGES - 1 else "") + '</a>'
+            for i, u in enumerate(pics)) + '</div>'
+    if html:
+        st.markdown(f'<div class="rv-content">{html}</div>', unsafe_allow_html=True)
 
 
 def _review_edit_box(r: dict) -> None:
@@ -1593,64 +1650,128 @@ _REVIEW_LIGHTBOX_JS = """
 """
 
 
-def _avg_rating_html(avg: float, n: int) -> str:
-    """평균 별점 요약: 큰 숫자 + 평균만큼 채운 별 다섯 개 + '다녀온 후기 N개 평균'."""
+def _ad_stars_html(avg: float) -> str:
+    """별 다섯 개: 회색 위에 평균만큼 노랑을 덮는다 (웹 .ad-stars)."""
     pct = max(0.0, min(100.0, avg / 5 * 100))
-    return (f'<div class="rv-avg"><span class="rv-avg-num">{avg:.1f}</span>'
-            f'<span class="rv-avg-stars" aria-label="5점 만점에 {avg:.1f}점">'
-            f'<span class="rv-avg-bg">★★★★★</span><span class="rv-avg-fg" style="width:{pct:.0f}%">★★★★★</span></span>'
-            f'<span class="rv-avg-cnt">다녀온 후기 {n}개 평균</span></div>')
+    return (f'<span class="ad-stars" role="img" aria-label="5점 만점에 {avg:.1f}점"><span>★★★★★</span>'
+            f'<span style="width:{pct:.0f}%">★★★★★</span></span>')
 
 
-def render_reviews(cafe_id: str, after_write=None) -> None:
-    """after_write: 리뷰 쓰기 칸 바로 아래에 그릴 것 ('리뷰 후기 / 블로그 후기' 탭). False 를 돌려주면 리뷰 목록은 그리지 않는다."""
+def _avg_rating_html(threads: list) -> str:
+    """리뷰 목록 위 요약 (웹 .ad-sum): 평균 별점 + 점수 분포 막대 + 사진 후기 모아 보기(3칸, 더 있으면 +N).
+    별점도 사진도 없으면 빈 문자열."""
+    rated = []
+    for t in threads:
+        try:
+            n = int(t.post.get("rating"))
+        except (TypeError, ValueError):
+            continue
+        if t.post.get("kind") == review.RATED_KIND and 1 <= n <= 5:
+            rated.append(n)
+    photos = [images.url(p) for t in threads for p in images.paths(t.post.get("images"))]
+    if not rated and not photos:
+        return ""
+    out = ""
+    if rated:
+        avg = round(sum(rated) / len(rated), 1)
+        bars = "".join(
+            f'<div><span>{s}점</span><span class="ad-bar"><span style="width:{rated.count(s) / len(rated) * 100:.0f}%"></span></span>'
+            f'<span>{rated.count(s)}</span></div>' for s in (5, 4, 3, 2, 1))
+        out += (f'<div class="ad-sum-avg"><span class="rv-avg-num">{avg:.1f}</span>{_ad_stars_html(avg)}'
+                f'<span class="rv-avg-cnt">다녀온 후기 {len(rated)}개 평균</span></div>'
+                f'<div class="ad-sum-dist" aria-label="점수 분포">{bars}</div>')
+    if photos:
+        # .rv-pics 안의 <a> 는 누르면 확대 보기로 열린다 (_REVIEW_LIGHTBOX_JS). 넷째부터는 숨겨 두고 확대 보기에서 넘겨 본다
+        out += '<div class="rv-pics ad-sum-pics" aria-label="사진 후기 모아 보기">' + "".join(
+            f'<a href="{u}" target="_blank" rel="noopener"{" hidden" if i >= 3 else ""}><img src="{u}" alt="리뷰 사진" loading="lazy"/>'
+            + (f'<span>+{len(photos) - 3}</span>' if i == 2 and len(photos) > 3 else "") + '</a>'
+            for i, u in enumerate(photos)) + '</div>'
+    return f'<div class="ad-sum">{out}</div>'
+
+
+AD_RV_PAGE = 8       # 처음 보여 주는 리뷰 수 ('리뷰 더보기' 로 이만큼씩 더, 웹 Reviews.tsx 의 PAGE)
+AD_RV_SORTS = ["최신순", "별점 높은 순"]
+
+
+def render_reviews(cafe_id: str) -> None:
+    """리뷰 탭 (A안, 웹 .ad-rv): 왼쪽 리뷰 쓰기(내 도장 · 종류 · 별점 · 사진), 오른쪽 평균 · 점수 분포 · 사진 모아 보기 →
+    보기 칩 · 정렬 → 리뷰 카드(처음 8개 + 더보기). 모바일은 한 단으로 쌓인다."""
+    from common import stamp
     _review_lightbox()      # 리뷰 사진을 누르면 확대 보기 팝업
-    # 맨 위 리뷰 쓰기: 닉네임·종류·별점·입력칸·리뷰 등록 버튼을 처음부터 펼쳐 둔다. 그 아래에 리뷰를 보여 준다
-    with st.container(border=True, key=f"rvbox_{cafe_id}"):
-        _write_box(cafe_id)
-    if after_write is not None and after_write() is False:
-        return
+    rows = reviews.current_rows()
+    threads = review.threads(rows, cafe_id)
+    table = stamp.counts(rows)           # {글쓴이 꼬리표: 후기 도장 수} — 닉네임 옆 도장 칩
+    me = _me() if _member() else ""
+    # 도장은 같은 팝업에 1개: 이 팝업에 내 '다녀온 후기'가 이미 있으면 더 받지 않는다
+    stamped_here = bool(me) and any(t.post.get("kind") == review.RATED_KIND and review.can_delete(t.post, me) for t in threads)
+    with st.container(key="ad_rv"):
+        col_write, col_list = st.columns([38, 96], gap="medium")
+    with col_write, st.container(border=True, key=f"rvbox_{cafe_id}"):
+        st.markdown('<div class="ad-rv-h">리뷰 쓰기</div>', unsafe_allow_html=True)
+        _write_box(cafe_id, stamps=stamp.stamps_of(me, table), stamped_here=stamped_here)
 
-    threads = review.threads(reviews.current_rows(), cafe_id)
-    if not threads:
-        # 가운데 정렬 (11/19 요청, 웹 .rv-none.center 와 같게)
-        st.markdown('<div style="text-align:center;color:#8A9592;font-size:.88rem;padding:10px 0;">'
-                    '아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</div>', unsafe_allow_html=True)
-        return
+    with col_list, st.container(key="ad_rv_list"):
+        if not threads:
+            st.markdown('<div class="rv-none center">아직 리뷰가 없습니다. 다녀온 후기나 기대하는 점을 처음으로 남겨 보세요.</div>',
+                        unsafe_allow_html=True)
+            return
+        summary = _avg_rating_html(threads)
+        if summary:
+            st.markdown(summary, unsafe_allow_html=True)
 
-    # 다녀온 후기에 별점이 있으면 목록 위에 평균 별점
-    avg, n_rated = review.average_rating(threads)
-    if n_rated:
-        st.markdown(_avg_rating_html(avg, n_rated), unsafe_allow_html=True)
+        # 보기 칩: 전체 / 사진 후기만 / 종류 3개 (개수 함께) + 정렬
+        count = {"전체": len(threads), "사진 후기만": sum(1 for t in threads if images.paths(t.post.get("images"))),
+                 **{k: sum(1 for t in threads if t.post.get("kind") == k) for k in review.KINDS}}
+        limit_key = f"rv_limit_{cafe_id}"
 
-    # 다녀온 후기와 기대평을 따로 볼 수 있게 나눈다 (개수 함께 표시)
-    count = {k: sum(1 for t in threads if t.post.get("kind") == k) for k in review.KINDS}
-    labels = {"전체": f"전체 {len(threads)}", **{k: f"{k} {count[k]}" for k in review.KINDS}}
-    pick = st.segmented_control("리뷰 보기", list(labels), default="전체", key=f"rv_filter_{cafe_id}",
-                                format_func=lambda k: labels[k], label_visibility="collapsed")
-    shown = [t for t in threads if pick in (None, "전체") or t.post.get("kind") == pick]
-    if not shown:
-        st.caption(f"아직 {pick}이 없어요. 위에서 처음으로 남겨 보세요." if pick == "기대평"
-                   else f"아직 {pick}가 없어요. 위에서 처음으로 남겨 보세요.")
+        def first_page() -> None:
+            st.session_state.pop(limit_key, None)
 
-    for t in shown:
-        pid = str(t.post["entry_id"])
-        with st.container(border=True):
-            _review_card(t.post, replies=len(t.replies))
-            # 대댓글은 처음엔 접어 두고 '+N건의 댓글' 버튼만 (11/20 요청). 누르면 아래로 펼치고 '댓글 접기' 로 바뀐다
-            if t.replies:
+        with st.container(horizontal=True, key="ad_filter", vertical_alignment="center"):
+            pick = st.pills("리뷰 보기", list(count), default="전체", key=f"rv_filter_{cafe_id}",
+                            format_func=lambda k: f"{k} {count[k]}", label_visibility="collapsed", on_change=first_page)
+            sort = st.selectbox("정렬", AD_RV_SORTS, key=f"rv_sort_{cafe_id}", label_visibility="collapsed", width=150)
+        pick = pick or "전체"
+        shown = [t for t in threads if pick == "전체"
+                 or (bool(images.paths(t.post.get("images"))) if pick == "사진 후기만" else t.post.get("kind") == pick)]
+        if sort == AD_RV_SORTS[1]:
+            # 별점 높은 순 (별점 없는 글은 뒤로, 같은 별점끼리는 최신순 그대로)
+            shown = sorted(shown, key=lambda t: -(int(t.post.get("rating")) if str(t.post.get("rating") or "").isdigit() else 0))
+        if not shown:
+            st.markdown('<div class="rv-none center">'
+                        + ("아직 사진 후기가 없어요." if pick == "사진 후기만" else f"아직 {pick}{'이' if pick == '기대평' else '가'} 없어요.")
+                        + ' 처음으로 남겨 보세요.</div>', unsafe_allow_html=True)
+
+        limit = st.session_state.get(limit_key, AD_RV_PAGE)
+        reply_key = f"rv_reply_{cafe_id}"
+        for t in shown[:limit]:
+            pid = str(t.post["entry_id"])
+            with st.container(border=True, key=f"rvth_{pid}"):
+                _review_card(t.post, replies=len(t.replies), lv_table=table)
+                # 대댓글은 처음엔 접어 두고 'ㄴ 댓글 N개' 만 (11/20 요청). 누르면 아래로 펼치고 '댓글 접기' 로 바뀐다.
+                # 답글 칸은 회원이 '답글 쓰기' 를 눌렀을 때만 연다 (한 번에 한 곳)
                 open_key = f"rv_open_{pid}"
                 opened = st.session_state.get(open_key, False)
-                st.button("댓글 접기" if opened else f"+{len(t.replies)}건의 댓글", key=f"rv_tog_{pid}",
-                          type="tertiary", width="stretch", icon=":material/expand_less:" if opened else ":material/subdirectory_arrow_right:",
-                          on_click=lambda k=open_key: st.session_state.update({k: not st.session_state.get(k, False)}))
+                if t.replies or me:
+                    with st.container(horizontal=True, key=f"rvfoot_{pid}"):
+                        if t.replies:
+                            st.button("댓글 접기" if opened else f"ㄴ 댓글 {len(t.replies)}개", key=f"rv_tog_{pid}", type="tertiary",
+                                      on_click=lambda k=open_key: st.session_state.update({k: not st.session_state.get(k, False)}))
+                        if me:
+                            st.button("답글 쓰기", key=f"rv_rep_{pid}", type="tertiary",
+                                      on_click=lambda p=pid: st.session_state.update(
+                                          {reply_key: "" if st.session_state.get(reply_key) == p else p}))
                 if opened:
                     for r in t.replies:
-                        _review_card(r, reply=True)
-            # 답글은 입력칸만 보여 주고, 칸을 누르면(또는 글이 있으면) 닉네임과 등록·취소 버튼이 나온다
-            # (LIST_CSS 의 .st-key-rpbox_ — 칸을 눌렀는지는 브라우저만 알아서 CSS 로 처리한다)
-            with st.container(key=f"rpbox_{pid}"):
-                _write_box(cafe_id, parent_id=pid)
+                        with st.container(key=f"rvre_{r['entry_id']}"):
+                            _review_card(r, reply=True, lv_table=table)
+                if me and st.session_state.get(reply_key) == pid:
+                    with st.container(key=f"rvrep_{pid}"):
+                        _write_box(cafe_id, parent_id=pid)
+        if len(shown) > limit:
+            with st.container(key="ad_more"):
+                st.button("리뷰 더보기", key=f"rvlist_more_{cafe_id}",
+                          on_click=lambda: st.session_state.update({limit_key: limit + AD_RV_PAGE}))
 
 
 # ================================================================ 수정하기
@@ -1702,39 +1823,45 @@ def _poster_upload(slot: str, label: str, has_poster: bool, **kw):
     return up.name, data
 
 
-def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]], list[str]]:
-    """수정하기의 이미지 칸. 지금 이미지를 보여 주고 포스터 바꾸기·추가·지우기를 받는다.
+def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]], list[str], dict]:
+    """수정하기의 이미지 묶음 (A안, 웹 .ade-imgs). 지금 이미지를 3:4 작은 그림으로 보여 주고 포스터 바꾸기·추가·지우기를 받는다.
 
     돌려주는 목록은 (이름, 바이트) 이고 첫 번째가 포스터다. 바이트가 None 이면 이미 저장된 파일 이름이다.
+    셋째 값은 무엇이 바뀌는지 {"before": 지금 장 수, "after": 저장 뒤 장 수, "note": ["포스터 변경", "1장 삭제", …]}.
     """
     current_files = images.split(current.get("images"))
-    st.markdown("**이미지**")
-    # '삭제' 를 누른 이미지는 화면에서 바로 빠지고, '수정 저장' 을 눌러야 실제로 반영된다
+    # '삭제' 를 누른 이미지는 화면에서 바로 빠지고, '저장하기' 를 눌러야 실제로 반영된다
     removed: set[str] = st.session_state.setdefault(f"img_removed_{k}", set())
     keep = [(name, None) for name in current_files if name not in removed]
     if keep:
-        st.caption("첫 번째가 포스터예요.")
-        cols = st.columns(4)
-        for i, (name, _) in enumerate(keep):
-            with cols[i % 4]:
-                found = images.paths(name)      # 사진 저장소(https) 주소도 받는다 (공개 웹 · 11/19 부터 앱에서 올린 사진)
-                _show_pic(found[0] if found else None)
-                if st.button("삭제", key=f"img_del_{k}_{name}", width="stretch"):
-                    removed.add(name)
-                    st.rerun()
+        with st.container(horizontal=True, key="ade_imgs"):
+            for i, (name, _) in enumerate(keep):
+                with st.container(key=f"ade_im_{i}"):
+                    found = images.paths(name)      # 사진 저장소(https) 주소도 받는다 (공개 웹 · 11/19 부터 앱에서 올린 사진)
+                    pic = (f'<img src="{images.url(found[0])}" alt="" loading="lazy">' if found
+                           else '<span class="ed-nofile">(파일 없음)</span>')
+                    st.markdown(f'<div class="ade-img {"is-poster" if i == 0 else "is-extra"}">{pic}'
+                                f'<span class="ade-tag">{"포스터" if i == 0 else "추가"}</span></div>', unsafe_allow_html=True)
+                    if st.button("삭제", key=f"img_del_{k}_{name}", width="stretch"):
+                        removed.add(name)
+                        _rerun_reviews()      # 수정하기 탭(조각)만 다시 그린다
     else:
         st.caption("아직 이미지가 없어요.")
     if removed:
-        note, undo = st.columns([3, 1], vertical_alignment="center")
-        note.caption(f":material/delete: {len(removed)}장 삭제 예정 · **수정 저장**을 눌러야 반영돼요.")
-        if undo.button("삭제 취소", key=f"img_undo_{k}", width="stretch"):
-            removed.clear()
-            st.rerun()
+        with st.container(horizontal=True, key="ade_img_undo", vertical_alignment="center"):
+            st.caption(f":material/delete: {len(removed)}장 삭제 예정 · **저장하기**를 눌러야 반영돼요.")
+            if st.button("삭제 취소", key=f"img_undo_{k}"):
+                removed.clear()
+                _rerun_reviews()      # 수정하기 탭(조각)만 다시 그린다
 
-    poster = _poster_upload(f"img_poster_{k}", f"포스터 바꾸기 (1장, ~ {images.POSTER_MB} MB)",
-                            has_poster=bool(keep))
-    extras = st.file_uploader("이미지 추가", type=images.TYPES, accept_multiple_files=True,
-                              key=f"img_extras_{k}")
+    with st.container(key="ade_img_up"):
+        up1, up2 = st.columns(2)
+        with up1:
+            poster = _poster_upload(f"img_poster_{k}", f"포스터 바꾸기 (1장, ~ {images.POSTER_MB} MB)",
+                                    has_poster=bool(keep))
+        with up2:
+            extras = st.file_uploader(f"이미지 추가 (한 장 ~ {images.EXTRA_MB} MB)", type=images.TYPES,
+                                      accept_multiple_files=True, key=f"img_extras_{k}")
 
     errors = []
     if poster and images.too_big(poster[1], images.POSTER_MB):
@@ -1744,14 +1871,17 @@ def _edit_images(current: dict, k: str) -> tuple[list[tuple[str, bytes | None]],
 
     # 포스터는 한 장: 새 포스터로 변경하면 원래 포스터(맨 앞)를 빼고 그 자리에 둔다
     if poster:
-        st.caption(":material/check_circle: 새 포스터로 변경돼요. **수정 저장**을 눌러야 반영돼요.")
-        st.image(poster[1], width=160)
+        st.caption(":material/check_circle: 새 포스터로 변경돼요. **저장하기**를 눌러야 반영돼요.")
+        st.image(poster[1], width=120)
     result = (([poster] + keep[1:]) if poster else keep) + [(f.name, f.getvalue()) for f in extras or []]
     if len(result) - 1 > images.MAX_EXTRAS:
         errors.append(f"추가 이미지는 {images.MAX_EXTRAS}장까지 둘 수 있습니다. 몇 장 지워 주세요.")
     for e in errors:
         st.error(e)
-    return result, errors
+    st.markdown('<div class="ed-cap">첫 번째가 포스터예요. 사진 속 위치 정보는 지우고 저장해요.</div>', unsafe_allow_html=True)
+    note = (["포스터 변경"] if poster else []) + ([f"{len(removed)}장 삭제"] if removed else []) \
+        + ([f"{len(extras)}장 추가"] if extras else [])
+    return result, errors, {"before": len(current_files), "after": len(result), "note": note}
 
 
 def _clear_buttons() -> None:
@@ -1822,121 +1952,261 @@ def _keep_notion(note: str, current: dict) -> str:
     return f"{out} | {pdates.RAW_MARK}{raw}" if raw else out
 
 
+def _ad_legend(no: int, title: str, changed: bool, small: str = "") -> str:
+    """수정하기 묶음 제목: '2 · 카페 정보' + (바뀌었으면) '수정함' 표시."""
+    return (f'<div class="ade-legend">{no} · {escape(title)}'
+            + (f' <small>{escape(small)}</small>' if small else "")
+            + (' <span class="ade-mark">수정함</span>' if changed else "") + '</div>')
+
+
+def _ad_cut(text: str, n: int = 60) -> str:
+    text = str(text or "").strip() or "없음"
+    return text if len(text) <= n else text[:n] + "…"
+
+
+# 수정하기에서 바뀐 칸을 민트로 칠할 때 쓰는 선택자 (칸 이름 → 그 입력칸의 테두리 상자). 위젯 키는 render_edit 참고
+_AD_CHG_SEL = {
+    "work": '[class*="st-key-work_edit_"] .react-aria-ComboBox > div',
+    "chars": '[class*="st-key-chars_edit_"] .react-aria-ComboBox > div',
+    "name": '[class*="st-key-name_"] [data-testid="stTextInputRootElement"]',
+    "addr": '[class*="st-key-edit_"][class*="_addr"] [data-testid="stTextInputRootElement"]',
+    "start": '[class*="st-key-start_"] [data-testid="stDateInputField"]',
+    "end": '[class*="st-key-end_"] [data-testid="stDateInputField"]',
+    "perks": '[class*="st-key-perks_"] [data-testid="stTextInputRootElement"]',
+    "goods": '[class*="st-key-goods_"] [data-testid="stTextInputRootElement"]',
+    "links": '[class*="st-key-links_"] [data-testid="stTextAreaRootElement"]',
+    "intro": '[class*="st-key-intro_"] [data-testid="stTextAreaRootElement"]',
+}
+# 칸 이름 → 묶음 번호 (등록 단계와 같은 순서)
+_AD_CHG_SET = {"work": 1, "chars": 1, "name": 2, "addr": 2, "img": 3, "start": 4, "end": 4, "always": 4,
+               "perks": 5, "goods": 5, "tags": 5, "links": 6, "intro": 7}
+AD_HISTORY_FIRST = 4      # 수정 이력: 처음 4개, 나머지는 '이력 더보기' (웹 HistoryList 의 FIRST)
+
+
 def render_edit(current: dict) -> None:
+    """수정하기 탭 (A안, 웹 EditPanel.tsx): 등록 단계와 같은 순서의 묶음 7개로 저장 로직이 받는 모든 칸을 고친다.
+    바뀐 칸은 민트 + '수정함', 아래 저장 줄(바뀐 칸 수 · 되돌리기 · 저장하기), 오른쪽에 '저장하면 이렇게 바뀌어요' + 수정 이력.
+    저장은 지금처럼 append-only 새 행 + editor=_me(). 저장 로직이 받지 않는 칸(운영 시간 · 예약처 등)은 만들지 않는다."""
     entry_id = str(current["entry_id"])
-    if _login_gate("팝업 정보 수정은 로그인하면 할 수 있어요.", f"lg_ed_{entry_id}"):
+    if not _member():
+        msg = "팝업 정보 수정은 로그인하면 할 수 있어요."
+        with st.container(key="ade_gate"):
+            st.markdown(f'<div class="ntf-empty">{escape(msg)}</div>', unsafe_allow_html=True)
+            st.button("로그인하고 계속하기", icon=":material/login:", type="primary", key=f"lg_ed_{entry_id}",
+                      on_click=_need_login, args=(msg,))
         return
-    st.caption("누구나 수정할 수 있습니다. 기존 기록은 남기고 새 줄로 쌓여서 언제든 되돌릴 수 있습니다.")
+    st.markdown(f'<div class="ade-info">{_mi("info")}<span>회원이면 누구나 모든 칸을 고칠 수 있어요. 기존 기록은 남기고 새 줄로 쌓여서, '
+                '잘못 고쳐도 <strong>수정 이력</strong>에서 언제든 되돌릴 수 있어요.</span></div>', unsafe_allow_html=True)
 
-    # revision 을 키에 넣어야 되돌리기 후 입력칸이 새 값으로 다시 채워진다
-    k = f"{entry_id}_{current.get('revision')}"
-    new_work, new_chars = pick_work_and_characters(
-        str(current.get("work", "")), _split(current.get("characters") or ""), key=f"edit_{k}")
-    # 주소 검색·지도가 들어가서 st.form 을 쓰지 않는다 (폼 안에서는 검색 버튼·지도를 쓸 수 없다)
-    new_name = st.text_input("카페명", value=str(current.get("cafe_name", "")), key=f"name_{k}")
-
-    # 검색·우편번호로 고른 주소: 입력칸을 새 값으로 다시 그리려고 번호(ver)를 올리고 좌표를 보관한다
-    slot = f"edit_pick_{k}"
-    pick_state = st.session_state.setdefault(slot, {"ver": 0, "picked": None})
-
-    def pick(c: geo.Candidate) -> None:
-        pick_state["picked"] = _picked(c)
-        pick_state["ver"] += 1
-
-    picked = pick_state["picked"]
-    new_addr = address_field(
-        picked["address"] if picked else str(current.get("address", "")),
-        key=f"edit_{k}_{pick_state['ver']}", on_pick=pick,
-    )
-    d1, d2 = st.columns(2)
-    with d1:
-        new_start = st.date_input("시작", value=pd.to_datetime(current["start_date"]).date(),
-                                  key=f"start_{k}")
+    # revision 을 키에 넣어야 되돌리기 후 입력칸이 새 값으로 다시 채워진다.
+    # '되돌리기'(고치던 내용 버리기)는 번호(ver)를 올려 모든 입력칸을 처음 값으로 새로 그린다
+    ver_key = f"ade_ver_{entry_id}_{current.get('revision')}"
+    ver = st.session_state.get(ver_key, 0)
+    k = f"{entry_id}_{current.get('revision')}" + (f"_{ver}" if ver else "")
+    old_work = str(current.get("work", ""))
+    old_work = (catalog.canonical_work(old_work) if old_work else "").strip()
+    old_chars = _split(current.get("characters") or "")
+    old_name, old_addr = str(current.get("cafe_name", "")), str(current.get("address", ""))
     old_start, old_end = pd.to_datetime(current["start_date"]).date(), pd.to_datetime(current["end_date"]).date()
     was_always = pdates.is_always(old_end)
-    always = st.checkbox("종료일 없음 (상시)", value=was_always, key=f"always_{k}")
-    with d2:
-        new_end = st.date_input("종료", value=(old_start + timedelta(days=30)) if was_always else old_end,
-                                key=f"end_{k}", disabled=always)
-    if always:
-        new_end = pdates.ALWAYS_END
-    old_flags = [t for t in _split(current.get("tags") or "") if t in cafe.PERIOD_TAGS]
-    if pdates.TAG_CHECK in old_flags:
-        raw = pdates.raw_from_note(current.get("note"))
-        st.warning("기간을 정확히 읽지 못한 팝업이에요" + (f" (원문: '{raw}')" if raw and not raw.startswith("(") else "")
-                   + ". 공식 공지를 보고 시작·종료일을 고쳐 주세요.", icon=":material/event_busy:")
-    new_perks = st.text_input("특전", value=str(current.get("perks", "")), key=f"perks_{k}",
-                              help="쉼표로 구분")
-    new_goods = st.text_input("굿즈", value=str(current.get("goods", "")), key=f"goods_{k}",
-                              help="쉼표로 구분")
-    new_tags = st.pills("이벤트 추가 정보", cafe.EVENT_TAGS, selection_mode="multi",
-                        default=[t for t in _split(current.get("tags") or "") if t in cafe.EVENT_TAGS],
-                        key=f"tags_{k}")
-    new_links, bad_links = _links_field("\n".join(cafe.parse_links(current.get("links") or "")[0]),
-                                        key=f"links_{k}")
-    new_intro = _intro_field(str(current.get("intro") or ""), key=f"intro_{k}")
-    new_images, img_errors = _edit_images(current, k)
-    _clear_buttons()
-    bad = _block_sensitive(new_name, new_addr, new_perks, new_goods, new_intro)
-    # 수정 저장 · 지도에서 내리기를 한 줄에 (가로 묶음이라 모바일에서도 세로로 쌓이지 않는다)
-    with st.container(horizontal=True, key=f"edit_btns_{k}"):
-        submitted = st.button("수정 저장", type="primary", width="stretch", key=f"save_{k}",
-                              disabled=bad or bool(img_errors) or bad_links)
-        if _is_admin() and st.button("지도에서 내리기 (관리자)", width="stretch", key=f"delete_{k}"):
-            confirm_delete(entry_id)
-        if not _is_admin() and st.button("삭제 요청", width="stretch", key=f"dreq_{k}"):
-            delete_request_dialog("cafe", entry_id, f'{current.get("work") or ""} · {current.get("cafe_name") or ""}')
+    old_perks, old_goods = str(current.get("perks", "")), str(current.get("goods", ""))
+    old_tags = [t for t in _split(current.get("tags") or "") if t in cafe.EVENT_TAGS]
+    old_links = cafe.parse_links(current.get("links") or "")[0]
+    old_intro = str(current.get("intro") or "")[:cafe.MAX_INTRO]
 
-    if submitted:
-        entry = CafeEntry(
-            cafe_name=new_name, work=new_work, characters=new_chars, address=new_addr,
-            start_date=new_start, end_date=new_end,
-            perks=_split(new_perks), goods=_split(new_goods),
-            confidence="high",
-        )
-        # 기간 표시: 상시면 '상시', 사람이 기간을 고쳤으면 '기간 확인 필요' 를 지운다 (안 고쳤으면 그대로)
-        dates_changed = (new_start, new_end) != (old_start, old_end)
-        new_tags = list(new_tags) + ([pdates.TAG_ALWAYS] if always else []) \
-            + ([pdates.TAG_CHECK] if pdates.TAG_CHECK in old_flags and not dates_changed else [])
-        v = guard.validate_cafe(entry, today=TODAY)
-        g = locate(entry.address, picked)
-        if not g.ok:
-            v.fail(g.note)
-        if v.ok:
-            # 새로 올린 파일만 저장한다. 지운 이미지 파일은 남겨 둔다 (되돌리기가 옛 행을 쓸 수 있다)
-            try:
-                saved = [name if data is None else images.save(name, data) for name, data in new_images]
-            except ValueError as err:          # 그림으로 읽을 수 없는 파일 (위치 정보 지우기 단계에서 걸림)
-                st.error(str(err), icon=":material/error:")
-                return
-            store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=_keep_notion(g.badge, current), editor=_me(), intro=new_intro,
-                                           intro_src=str(current.get("intro_src") or "") if new_intro.strip() else "",
-                                           images=saved, tags=new_tags, links=new_links),
-                         entry_id=entry_id)
-            # 저장해도 상세에 그대로 머물고, 맨 위로 올려 바뀐 내용을 처음부터 보여 준다
-            st.session_state["flash"] = "수정했습니다."
-            st.session_state["scroll_top"] = True
-            st.rerun()
-        for err in v.errors:
-            st.error(err)
+    with st.container(key="ade_cols"):
+        col_form, col_side = st.columns([100, 54], gap="medium")
+    with col_form, st.container(key="ade_form"):
+        # 묶음 제목은 아래 칸을 다 그린 뒤에야 '수정함' 을 알 수 있어서, 자리만 잡아 두고 나중에 채운다
+        legends = {}
+        with st.container(border=True, key="ade_set1"):
+            legends[1] = st.empty()
+            with st.container(key="ade_work"):
+                new_work, new_chars = pick_work_and_characters(old_work, old_chars, key=f"edit_{k}")
+        with st.container(border=True, key="ade_set2"):
+            legends[2] = st.empty()
+            # 주소 검색·지도가 들어가서 st.form 을 쓰지 않는다 (폼 안에서는 검색 버튼·지도를 쓸 수 없다)
+            new_name = st.text_input("카페명 · 장소 이름", value=old_name, key=f"name_{k}")
+            # 검색·우편번호로 고른 주소: 입력칸을 새 값으로 다시 그리려고 번호(ver)를 올리고 좌표를 보관한다
+            slot = f"edit_pick_{k}"
+            pick_state = st.session_state.setdefault(slot, {"ver": 0, "picked": None})
 
-    with st.expander("수정 이력"):
+            def pick(c: geo.Candidate) -> None:
+                pick_state["picked"] = _picked(c)
+                pick_state["ver"] += 1
+
+            picked = pick_state["picked"]
+            with st.container(key="ade_addr"):
+                new_addr = address_field(picked["address"] if picked else old_addr,
+                                         key=f"edit_{k}_{pick_state['ver']}", on_pick=pick)
+        with st.container(border=True, key="ade_set3"):
+            legends[3] = st.empty()
+            new_images, img_errors, img_note = _edit_images(current, k)
+        with st.container(border=True, key="ade_set4"):
+            legends[4] = st.empty()
+            d1, d2 = st.columns(2)
+            with d1:
+                new_start = st.date_input("시작일", value=old_start, key=f"start_{k}")
+            always = st.checkbox("종료일 없음 (상시)", value=was_always, key=f"always_{k}")
+            with d2:
+                new_end = st.date_input("종료일", value=(old_start + timedelta(days=30)) if was_always else old_end,
+                                        key=f"end_{k}", disabled=always)
+            end_changed = always != was_always or (not always and new_end != old_end)
+            if always:
+                new_end = pdates.ALWAYS_END
+            old_flags = [t for t in _split(current.get("tags") or "") if t in cafe.PERIOD_TAGS]
+            if pdates.TAG_CHECK in old_flags:
+                raw = pdates.raw_from_note(current.get("note"))
+                st.warning("기간을 정확히 읽지 못한 팝업이에요" + (f" (원문: '{raw}')" if raw and not raw.startswith("(") else "")
+                           + ". 공식 공지를 보고 시작·종료일을 고쳐 주세요.", icon=":material/event_busy:")
+        with st.container(border=True, key="ade_set5"):
+            legends[5] = st.empty()
+            new_perks = st.text_input("특전", value=old_perks, key=f"perks_{k}", help="쉼표로 구분")
+            new_goods = st.text_input("굿즈", value=old_goods, key=f"goods_{k}", help="쉼표로 구분")
+            new_tags = st.pills("이벤트 추가 정보", cafe.EVENT_TAGS, selection_mode="multi", default=old_tags, key=f"tags_{k}")
+        with st.container(border=True, key="ade_set6"):
+            legends[6] = st.empty()
+            new_links, bad_links = _links_field("\n".join(old_links), key=f"links_{k}")
+        with st.container(border=True, key="ade_set7"):
+            legends[7] = st.empty()
+            new_intro = _intro_field(old_intro, key=f"intro_{k}", label="collapsed")   # 묶음 제목이 이미 '팝업 소개'
+            st.markdown('<div class="ed-cap">전화번호 · 이메일 · 계좌번호가 들어 있으면 저장되지 않아요.</div>', unsafe_allow_html=True)
+        _clear_buttons()
+
+        # ---- 바뀐 칸 (이전 → 이후). 입력칸은 칸을 벗어나거나 Enter 를 눌러야 값이 넘어와서, 그때 표시가 바뀐다 ----
+        nl = lambda v: str(v or "").replace("\r\n", "\n")     # noqa: E731
+        day = lambda d: "상시" if pdates.is_always(d) else f"{d:%Y.%m.%d}"     # noqa: E731
+        sites = lambda xs: ", ".join(_site_name(u) for u in xs)     # noqa: E731
+        diffs: list[tuple[str, str, str, str]] = []      # (칸 이름, 화면 이름, 이전, 이후)
+        if new_work != old_work:
+            diffs.append(("work", "작품", _ad_cut(old_work), _ad_cut(new_work)))
+        if list(new_chars) != old_chars:
+            diffs.append(("chars", "캐릭터", _ad_cut(", ".join(old_chars)), _ad_cut(", ".join(new_chars))))
+        if new_name != old_name:
+            diffs.append(("name", "카페명", _ad_cut(old_name), _ad_cut(new_name)))
+        if new_addr != old_addr:
+            diffs.append(("addr", "주소", _ad_cut(old_addr), _ad_cut(new_addr)))
+        if img_note["note"]:
+            diffs.append(("img", "이미지", f'{img_note["before"]}장', f'{img_note["after"]}장 ({" · ".join(img_note["note"])})'))
+        if new_start != old_start:
+            diffs.append(("start", "시작일", day(old_start), day(new_start)))
+        if end_changed:
+            diffs.append(("always" if always != was_always else "end", "종료일", day(old_end), day(new_end)))
+        if _split(new_perks) != _split(old_perks):
+            diffs.append(("perks", "특전", _ad_cut(", ".join(_split(old_perks)), 300), _ad_cut(", ".join(_split(new_perks)), 300)))
+        if _split(new_goods) != _split(old_goods):
+            diffs.append(("goods", "굿즈", _ad_cut(", ".join(_split(old_goods)), 300), _ad_cut(", ".join(_split(new_goods)), 300)))
+        if sorted(new_tags) != sorted(old_tags):
+            diffs.append(("tags", "이벤트", _ad_cut(", ".join(old_tags)), _ad_cut(", ".join(new_tags))))
+        if list(new_links) != old_links or bad_links:
+            diffs.append(("links", "참고 웹사이트", _ad_cut(sites(old_links)), _ad_cut(sites(new_links))))
+        if nl(new_intro) != nl(old_intro):
+            diffs.append(("intro", "팝업 소개", _ad_cut(old_intro), _ad_cut(new_intro)))
+        changed = {d[0] for d in diffs}
+        on_sets = {_AD_CHG_SET[c] for c in changed}
+        titles = {1: ("작품 · 캐릭터", ""), 2: ("카페 정보", ""), 3: ("이미지", f'{img_note["after"]}장'), 4: ("기간", ""),
+                  5: ("특전 · 굿즈 · 이벤트", ""), 6: ("참고 웹사이트", "http:// 또는 https:// 로 시작하는 주소"), 7: ("팝업 소개", "")}
+        for no, slot_ in legends.items():
+            slot_.markdown(_ad_legend(no, titles[no][0], no in on_sets, titles[no][1]), unsafe_allow_html=True)
+        # 바뀐 묶음은 민트 테두리, 바뀐 칸은 민트 테두리 + 연한 민트 바탕 (웹 .ade-set.chg · .ade-f.chg)
+        css = [f".st-key-ade_set{no}" + "{border-color:var(--accent)!important}" for no in sorted(on_sets)]
+        boxes = [f".st-key-ade_form {_AD_CHG_SEL[c]}" for c in sorted(changed) if c in _AD_CHG_SEL]
+        if boxes:
+            css.append(",".join(boxes) + "{border:2px solid var(--accent)!important;background:#f3fcfa!important}")
+        if "tags" in changed:
+            css.append('.st-key-ade_form [class*="st-key-tags_"] button[aria-checked="true"],'
+                       '.st-key-ade_form [class*="st-key-tags_"] button[aria-pressed="true"]'
+                       '{border-color:var(--accent)!important;background:#f3fcfa!important}')
+        if "always" in changed:
+            css.append('.st-key-ade_form [class*="st-key-always_"] label p{color:#0b5e57!important;font-weight:700!important}')
+        if css:
+            st.markdown("<style>" + "".join(css) + "</style>", unsafe_allow_html=True)
+
+        bad = _block_sensitive(new_name, new_addr, new_perks, new_goods, new_intro)
+        errors_box = st.container()
+        # 아래 저장 줄 (화면 아래에 붙어 따라온다): 바뀐 칸 수 · 되돌리기 · 저장하기. 바뀐 칸이 없으면 저장 버튼이 꺼진다
+        with st.container(horizontal=True, key="ade_bar", vertical_alignment="center"):
+            st.markdown('<div class="ade-bar-t">' + (
+                f'바뀐 칸 <strong>{len(diffs)}곳</strong> · {escape(", ".join(d[1] for d in diffs))}' if diffs
+                else "아직 바꾼 칸이 없어요") + '</div>', unsafe_allow_html=True)
+            if st.button("되돌리기", key=f"ade_reset_{k}", disabled=not diffs):
+                st.session_state[ver_key] = ver + 1
+                _rerun_reviews()
+            submitted = st.button("저장하기", type="primary", key=f"save_{k}",
+                                  disabled=not diffs or bad or bool(img_errors) or bad_links)
+        # 맨 아래: 삭제 요청 (관리자는 지도에서 내리기)
+        with st.container(horizontal=True, key="ade_del", vertical_alignment="center"):
+            st.markdown('<span class="ade-del-t">끝난 팝업이거나 잘못 올라온 팝업인가요?</span>', unsafe_allow_html=True)
+            if _is_admin() and st.button("지도에서 내리기 (관리자)", type="tertiary", key=f"delete_{k}"):
+                confirm_delete(entry_id)
+            if not _is_admin() and st.button("삭제 요청", type="tertiary", key=f"dreq_{k}"):
+                delete_request_dialog("cafe", entry_id, f'{current.get("work") or ""} · {current.get("cafe_name") or ""}')
+
+        if submitted:
+            entry = CafeEntry(
+                cafe_name=new_name, work=new_work, characters=new_chars, address=new_addr,
+                start_date=new_start, end_date=new_end,
+                perks=_split(new_perks), goods=_split(new_goods),
+                confidence="high",
+            )
+            # 기간 표시: 상시면 '상시', 사람이 기간을 고쳤으면 '기간 확인 필요' 를 지운다 (안 고쳤으면 그대로)
+            dates_changed = (new_start, new_end) != (old_start, old_end)
+            new_tags = list(new_tags) + ([pdates.TAG_ALWAYS] if always else []) \
+                + ([pdates.TAG_CHECK] if pdates.TAG_CHECK in old_flags and not dates_changed else [])
+            v = guard.validate_cafe(entry, today=TODAY)
+            g = locate(entry.address, picked)
+            if not g.ok:
+                v.fail(g.note)
+            if v.ok:
+                # 새로 올린 파일만 저장한다. 지운 이미지 파일은 남겨 둔다 (되돌리기가 옛 행을 쓸 수 있다)
+                try:
+                    saved = [name if data is None else images.save(name, data) for name, data in new_images]
+                except ValueError as err:          # 그림으로 읽을 수 없는 파일 (위치 정보 지우기 단계에서 걸림)
+                    errors_box.error(str(err), icon=":material/error:")
+                    return
+                store.append(cafe.entry_to_row(entry, g.lat, g.lng, source="직접 수정", note=_keep_notion(g.badge, current), editor=_me(), intro=new_intro,
+                                               intro_src=str(current.get("intro_src") or "") if new_intro.strip() else "",
+                                               images=saved, tags=new_tags, links=new_links),
+                             entry_id=entry_id)
+                # 저장해도 상세에 그대로 머물고, 맨 위로 올려 바뀐 내용을 처음부터 보여 준다
+                st.session_state["flash"] = "수정했습니다."
+                st.session_state["scroll_top"] = True
+                st.rerun()
+            for err in v.errors:
+                errors_box.error(err)
+
+    with col_side, st.container(key="ade_side"):
+        # 저장하면 이렇게 바뀌어요 (이전 → 이후)
+        with st.container(border=True, key="ade_diff"):
+            st.markdown('<div class="ade-h">저장하면 이렇게 바뀌어요</div>' + ("".join(
+                f'<div class="ade-diff-one"><span>{escape(name)}</span><del>{escape(a)}</del><ins>→ {escape(b)}</ins></div>'
+                for _, name, a, b in diffs) if diffs else
+                '<div class="ed-cap">칸을 고치면 이전 내용과 바뀐 내용을 여기에서 나란히 볼 수 있어요.</div>'), unsafe_allow_html=True)
+        # 수정 이력: 기록 하나가 카드 하나, 최근 것이 위. 지금 것 말고는 카드 안에 '이 버전으로 돌아가기'
+        from common import stamp
         history = [r for r in store.all_rows() if str(r["entry_id"]) == entry_id]
         history.sort(key=lambda r: int(r["revision"]), reverse=True)
-        # 기록 하나가 카드 하나. 지금 것 말고는 카드 안에 '이 버전으로 돌아가기' 버튼을 둔다
-        with st.container(key=f"hx_{entry_id}"):
-            for i, r in enumerate(history):
+        table = stamp.counts(reviews.current_rows())       # 고친 사람 이름 앞 20px 후기 도장
+        all_key = f"ade_hx_all_{entry_id}"
+        show_all = st.session_state.get(all_key, False)
+        with st.container(border=True, key="ade_hist"):
+            st.markdown(f'<div class="ade-h">수정 이력 <span>{len(history)}</span></div>', unsafe_allow_html=True)
+            for i, r in enumerate(history if show_all else history[:AD_HISTORY_FIRST]):
                 rev = int(r["revision"])
                 older = history[i + 1] if i + 1 < len(history) else None
-                with st.container(key=f"{'hxnow' if i == 0 else 'hxi'}_{entry_id}_{rev}"):
-                    st.markdown(_history_card_html(r, older, now=i == 0), unsafe_allow_html=True)
+                with st.container(key=f"{'ahxnow' if i == 0 else 'ahxi'}_{entry_id}_{rev}"):
+                    st.markdown(_history_card_html(r, older, now=i == 0, lv=stamp.lv_of(str(r.get("editor") or ""), table)),
+                                unsafe_allow_html=True)
                     if i > 0 and r.get("status") != "deleted" and st.button(
-                            "이 버전으로 돌아가기", icon=":material/restore:", type="tertiary",
-                            key=f"restore_{entry_id}_{rev}"):
+                            "이 버전으로 돌아가기", icon=":material/restore:", key=f"restore_{entry_id}_{rev}"):
                         store.restore(entry_id, rev, extra={"source": f"{rev}번째로 되돌리기", "editor": _me()})
                         st.session_state["flash"] = (f"{rev}번째 버전으로 되돌렸어요.", ":material/restore:")
                         st.session_state["scroll_top"] = True
                         st.rerun()
+            if not show_all and len(history) > AD_HISTORY_FIRST:
+                with st.container(key="ade_hx_more"):
+                    st.button(f"이력 더보기 ({len(history) - AD_HISTORY_FIRST})", key=f"ade_hx_more_{entry_id}",
+                              on_click=lambda: st.session_state.update({all_key: True}))
 
 
 # 수정 이력에 보이는 '방법' 이름과 아이콘. 저장된 값은 그대로 두고(append-only) 보여 줄 때만 바꾼다
@@ -2009,9 +2279,10 @@ def _image_changes(old, new) -> list[tuple[str, str, str]]:
     return out
 
 
-def _history_card_html(r: dict, older: dict | None, now: bool) -> str:
+def _history_card_html(r: dict, older: dict | None, now: bool, lv: int = 0) -> str:
     """수정 이력 카드 안쪽. 처음 기록만 카페·기간·주소를 다 보여 주고,
-    그다음 기록부터는 바로 앞 기록과 달라진 칸만 '(이전) → (이후)' 로 보여 준다."""
+    그다음 기록부터는 바로 앞 기록과 달라진 칸만 '(이전) → (이후)' 로 보여 준다.
+    lv: 고친 회원의 후기 도장 랭크 (있으면 이름 앞에 20px 도장, 없으면 사람 아이콘)."""
     source = str(r.get("source") or "")
     label, icon = _SOURCE_VIEW.get(source, (source or "기록", "undo" if source.endswith("되돌리기") else "history"))
     when = pd.to_datetime(r["updated_at"], utc=True).tz_convert("Asia/Seoul").strftime("%Y.%m.%d %H:%M")
@@ -2040,10 +2311,484 @@ def _history_card_html(r: dict, older: dict | None, now: bool) -> str:
         body = "".join(rows) or '<div class="hx-meta">바뀐 내용 없음</div>'
     return (f'<div class="hx-card">'
             f'<div class="hx-top"><b>{int(r["revision"])}번째</b><span class="hx-when">{when}</span>'
-            + ('<span class="hx-now">지금</span>' if now else "")
-            + f'<span class="hx-src">{_mi(icon)}{escape(label)}</span></div>'
-            f'<div class="hx-who">{_mi("person")}{escape(_nick_only(_editor(r)))}</div>'
+            + f'<span class="hx-src">{_mi(icon)}{escape(label)}</span>'
+            + ('<span class="hx-now">지금 내용</span>' if now else "") + '</div>'
+            f'<div class="hx-who">{_ad_stamp(lv, 20) or _mi("person")}{escape(_nick_only(_editor(r)))}</div>'
             f'{body}</div>')
+
+
+# ================================================================ A안 팝업 상세 (11/25)
+# docs/design/handoff 의 A-Detail · A-DetailEdit 시안을 웹(web/app/a-detail.css 의 .ad* · .ade*)과 같은 값으로 옮긴 것.
+# render_detail 이 한 번 내보낸다 (LIST_CSS 뒤라서 예전 상세 규칙을 덮는다). 위 = 사진 + 정보 2단, 아래 = 화면 폭 전체 탭.
+AD_MASCOT = "app/static/mascot.png"
+
+
+def _ad_tier(lv: int):
+    from common import stamp
+    return next((t for t in stamp.TIERS if t.lv == lv), None)
+
+
+def _ad_stamp(lv: int, size: int = 20) -> str:
+    """후기 도장 (웹 RankStamp): 색 테두리 동그라미 + 마스코트. 20px 리뷰 닉네임 옆 · 32px 리뷰 쓰기 칸. 도장이 없으면 빈 문자열."""
+    t = _ad_tier(lv)
+    if not t:
+        return ""
+    border = {20: 2, 32: 2.5, 40: 3}.get(size, 2)
+    return (f'<span class="rk-stamp" role="img" aria-label="Lv.{t.lv} {t.name} 도장" style="width:{size}px;height:{size}px;'
+            f'border-width:{border}px;border-color:{t.ring};background:{"#fff" if size == 20 else t.fill}">'
+            f'<img src="{AD_MASCOT}" alt=""></span>')
+
+
+def _ad_rank_chip(lv: int) -> str:
+    """리뷰 닉네임 옆: 20px 도장 + 'Lv.2' 알약 (웹 RankChip)."""
+    t = _ad_tier(lv)
+    if not t:
+        return ""
+    return (f'<span class="rk-chip" style="background:{t.fill}" aria-label="Lv.{t.lv} {t.name}">{_ad_stamp(lv, 20)}'
+            f'<span style="color:{t.fg}">Lv.{t.lv}</span></span>')
+
+
+A_DETAIL_CSS = """
+<style>
+/* ---------------------------------------------------------------- 틀: 위 2단 + 아래 화면 폭 전체 탭
+   page_map 이 만든 두 칸(왼쪽 정보 · 오른쪽 탭)을 위아래로 쌓는다 */
+.stHorizontalBlock:has(> .stColumn > .stVerticalBlock > [data-testid="stLayoutWrapper"] > .st-key-detail_left) {
+  flex-direction: column !important; flex-wrap: nowrap !important; gap: 28px !important; color: #26302d; }
+.stHorizontalBlock:has(> .stColumn > .stVerticalBlock > [data-testid="stLayoutWrapper"] > .st-key-detail_left) > .stColumn {
+  width: 100% !important; flex: 0 0 auto !important; min-width: 0 !important; }
+/* 수정하기 탭(셋째 탭)이 열려 있으면 위 2단 대신 작은 머리(포스터 60×80 + 제목)만 */
+[data-testid="stLayoutWrapper"]:has(> .st-key-ad_mini) { display: none; }
+.stHorizontalBlock:has([class*="st-key-detail_tabs_"] [data-testid="stTab"]:nth-child(3)[aria-selected="true"])
+  [data-testid="stLayoutWrapper"]:has(> .st-key-ad_mini) { display: block; }
+.stHorizontalBlock:has([class*="st-key-detail_tabs_"] [data-testid="stTab"]:nth-child(3)[aria-selected="true"])
+  [data-testid="stLayoutWrapper"]:has(> .st-key-ad_hero) { display: none; }
+/* 이 화면의 HTML 조각은 칸 아래 음수 여백(-1rem)을 쓰지 않는다 (아래 버튼 · 칸과 겹치지 않게) */
+.st-key-detail_left [data-testid="stMarkdownContainer"], [class*="st-key-detail_tabs_"] [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0 !important; }
+.ad-mini { display: flex; align-items: center; gap: 16px; }
+.ad-mini img { flex: none; width: 60px; height: 80px; border-radius: 10px; border: 2px solid #9eddcc; object-fit: cover;
+  background: #f4f6f5; box-sizing: border-box; }
+.ad-mini > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ad-mini span { font-size: 13px; color: #5f6b68; }
+.ad-mini .ad-title { font-size: 30px; }
+
+/* ---------------------------------------------------------------- 위쪽 2단: 사진 | 정보 */
+.st-key-detail_left { gap: 0 !important; }
+.st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) { gap: 32px !important; align-items: flex-start !important; }
+@media (min-width: 641px) {
+  .st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) { flex-wrap: nowrap !important; }
+  .st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) > .stColumn:first-child {
+    flex: 0 1 420px !important; width: 420px !important; max-width: 420px; min-width: 280px !important; }
+  .st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) > .stColumn:last-child {
+    flex: 1 1 0 !important; min-width: 0 !important; }
+}
+.st-key-ad_hero .stColumn:has(.st-key-detail_actions) > .stVerticalBlock { gap: 10px !important; }
+html body .st-key-detail_left [data-testid="stElementContainer"]:has(iframe[title*="gallery"]) { margin-bottom: 0 !important; }
+.st-key-ad_hero iframe[title*="gallery"] { display: block; }
+.ad-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+html body .st-key-detail_actions [data-testid="stColumn"]:first-child { margin-top: 0; }
+.ad-state, .ad-area { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; line-height: 1.5; }
+.ad-state { color: #0b5e57; background: var(--accent-soft); }
+.ad-state.ended { color: #5f6b68; background: #f4f6f5; }
+.ad-area { color: #fff; }
+html body .ad-title { font-family: "Jua", sans-serif; font-weight: 400; font-size: 38px; line-height: 1.2; color: #1f2a27;
+  word-break: keep-all; overflow-wrap: anywhere; }
+.ad-chars { font-size: 14px; color: #5f6b68; line-height: 1.6; }
+.ad-avg { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; margin-top: 10px; }
+.ad-avg > span:last-child { color: #5f6b68; }
+/* 별 다섯 개: 회색 위에 평균만큼 노랑을 덮는다 */
+.ad-stars { position: relative; display: inline-block; color: #d3dad8; letter-spacing: 1px; line-height: 1.2; white-space: nowrap; }
+.ad-stars > span:last-child { position: absolute; left: 0; top: 0; overflow: hidden; color: #f4b63f; }
+/* 공유 · 북마크: 44px (공유 = 동그라미, 북마크 = 모서리 12px, 북마크하면 포인트 색으로 채움) */
+html body .st-key-detail_actions { margin-bottom: 0; }
+html body .st-key-detail_actions [data-testid="stHorizontalBlock"] { gap: 10px !important; }
+html body .st-key-detail_actions [data-testid="stColumn"]:not(:first-child) { margin-top: 1px; flex: 0 0 44px !important;
+  width: 44px !important; }
+html body .st-key-detail_actions [data-testid="stColumn"]:last-child { flex: 0 0 44px !important; width: 44px !important; }
+html body .st-key-detail_actions [data-testid="stColumn"]:not(:first-child) [data-testid="stElementContainer"] { height: 44px; }
+html body .st-key-detail_actions [class*="st-key-fav_"] button { width: 44px !important; min-width: 44px !important;
+  height: 44px !important; min-height: 44px !important; border-radius: 12px !important; border: 1px solid #e3e9e7 !important; }
+html body .st-key-detail_actions [class*="st-key-fav_on_"] button { border-color: var(--accent) !important; }
+html body .st-key-detail_actions [class*="st-key-fav_"] button span { font-size: 1.5rem !important; }
+
+/* 방문 전 확인: 위치 칸 · 일정 칸 */
+.ad-info { display: flex; flex-direction: column; gap: 20px; margin-top: 10px; }
+.ad-chars + .ad-info, .ad-avg + .ad-info { margin-top: 20px; }
+.ad-check { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.ad-box { background: #f6f8f7; border-radius: 16px; padding: 16px; display: flex; gap: 12px; min-width: 0; }
+.ad-box > .mi { flex: none; font-size: 22px; line-height: 1; color: var(--accent-deep); margin: 0; }
+.ad-box > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ad-box strong { font-size: 15px; line-height: 1.5; color: #26302d; overflow-wrap: anywhere; }
+.ad-box span { font-size: 13.5px; line-height: 1.5; color: #5f6b68; overflow-wrap: anywhere; }
+.ad-box a { align-self: flex-start; font-size: 13.5px; font-weight: 700; color: var(--accent-deep) !important; padding: 4px 0;
+  text-decoration: none; }
+.ad-box a:hover { text-decoration: underline; }
+.ad-sec { display: flex; flex-direction: column; gap: 10px; }
+.ad-h2 { font-family: "Jua", sans-serif; font-weight: 400; font-size: 21px; line-height: 1.3; color: #1f2a27; }
+.ad-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ad-chips > span { font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: #f4f6f5;
+  line-height: 1.5; overflow-wrap: anywhere; color: #26302d; }
+.ad-chips > span.perk { background: var(--accent-soft); color: #0b5e57; }
+.ad-chips b { font-weight: 700; }
+.ad-chips b::after { content: " · "; }
+.ad-none { font-size: 14px; color: #5f6b68; }
+.ad-links { display: flex; flex-wrap: wrap; gap: 8px; }
+html body .ad-links a.dlink { display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px; max-width: 100%;
+  min-height: 44px; margin: 0; padding: 0 14px; border-radius: 12px; border: 1px solid #e3e9e7; background: #fff;
+  color: #26302d !important; font-size: 14px; font-weight: 700; box-sizing: border-box; text-decoration: none !important; }
+.ad-links a.dlink > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-links a.dlink > .mi { flex: none; font-size: 15px; color: #5f6b68; margin: 0; }
+html body .ad-links a.dlink:hover { border-color: var(--accent); color: var(--accent-deep) !important; background: #fff; }
+html body .ad-links a.dlink.broken { background: #fff4ea; border-color: #f5c9a6; }
+.ad-links .dlink-warn { margin-left: 0; flex: none; }
+.ad-intro { background: #f6f8f7; border-radius: 14px; padding: 16px 18px; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere;
+  color: #26302d; }
+.ad-intro .dintro-gap { display: block; height: .7em; }
+.ad-intro .dintro-h { color: #0f6b5c; font-weight: 700; margin-right: 4px; }
+.ad-intro .dintro-h::before { content: "["; }
+.ad-intro .dintro-h::after { content: "]"; }
+
+/* ---------------------------------------------------------------- 후기 도장 (웹 a-shell.css 의 .rk-*) */
+.rk-stamp { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%;
+  border-style: solid; box-sizing: border-box; vertical-align: middle; }
+.rk-stamp img { width: 62%; height: auto; display: block; }
+.rk-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 2px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 800; line-height: 1.4; white-space: nowrap; vertical-align: middle; }
+
+/* ---------------------------------------------------------------- 화면 폭 전체 탭 */
+[class*="st-key-detail_tabs_"] [role="tablist"] { gap: 4px !important; border-bottom: 2px solid #eef2f1 !important;
+  box-shadow: none !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"] { height: auto !important; padding: 14px 22px !important;
+  margin: 0 0 -2px !important; border-bottom: 3px solid transparent !important; background: none !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"] p { font-size: 16px !important; font-weight: 600 !important;
+  color: #5f6b68 !important; white-space: nowrap; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"]:hover p { color: #1f2a27 !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"][aria-selected="true"] { border-bottom-color: var(--accent) !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTab"][aria-selected="true"] p { font-weight: 800 !important; color: #1f2a27 !important; }
+[class*="st-key-detail_tabs_"] .react-aria-SelectionIndicator { display: none !important; }
+[class*="st-key-detail_tabs_"] [data-testid="stTabPanel"] { padding-top: 28px !important; }
+
+/* ---------------------------------------------------------------- 리뷰 탭: 왼쪽 쓰기 | 오른쪽 목록 */
+.st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) { gap: 28px !important; align-items: flex-start !important; }
+@media (min-width: 641px) {
+  .st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) { flex-wrap: nowrap !important; }
+  .st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) > .stColumn:first-child {
+    flex: 0 1 380px !important; width: 380px !important; max-width: 380px; min-width: 300px !important; }
+  .st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) > .stColumn:last-child {
+    flex: 1 1 0 !important; min-width: 0 !important; }
+}
+html body [class*="st-key-rvbox_"] { border: 1.5px solid #9eddcc !important; border-radius: 20px !important;
+  padding: 20px !important; gap: 14px !important; box-sizing: border-box; background: #fff; }
+.ad-rv-h { font-size: 17px; font-weight: 800; color: #1f2a27; line-height: 1.4; }
+.side-note { margin: 0 !important; font-size: 14px; line-height: 1.6; color: #5f6b68; }
+/* 작성자 줄: 32px 도장 + 닉네임 · 내 랭크 */
+.ad-me { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #f6f8f7; }
+.ad-nostamp { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 2px dashed #c6d0cd; background: #fff;
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.ad-nostamp img { width: 62%; height: auto; opacity: .45; filter: grayscale(1); }
+.ad-me-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 12.5px; line-height: 1.4; color: #5f6b68; }
+.ad-me-t > span:first-child { display: flex; flex-wrap: wrap; gap: 0 8px; }
+.ad-me-t b { color: #26302d; font-size: 13px; overflow-wrap: anywhere; }
+.ad-me-t strong { color: #0f6b5c; }
+/* 종류 고르기: 회색 알약 안에 세 칸, 고른 칸만 흰색 */
+[class*="st-key-rv_"][class*="_kind_"], [class*="st-key-rv_"][class*="_kind_"] [data-testid="stButtonGroup"] { width: 100% !important; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] { width: 100% !important; min-width: 100% !important; max-width: none !important; box-sizing: border-box; display: flex !important; flex-wrap: nowrap !important; gap: 4px !important;
+  background: #f4f6f5; border-radius: 999px; padding: 4px; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] button { flex: 1 1 0 !important; min-width: 0 !important; border: 0 !important;
+  border-radius: 999px !important; padding: 10px 4px !important; min-height: 0 !important; height: auto !important;
+  background: none !important; box-shadow: none !important; justify-content: center !important; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] button p { font-size: 13.5px !important; font-weight: 500 !important;
+  color: #5f6b68 !important; white-space: nowrap; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] button[aria-checked="true"] { background: #fff !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08) !important; }
+[class*="st-key-rv_"][class*="_kind_"] [role="radiogroup"] button[aria-checked="true"] p { font-weight: 800 !important; color: #26302d !important; }
+/* 별점: 왼쪽 정렬 40px 버튼 · 28px 별 (회색, 고른 별까지 노랑) + 안내 한 줄 */
+html body [class*="_rate_box_"] { flex-direction: row !important; flex-wrap: wrap !important; align-items: center !important;
+  justify-content: flex-start !important; text-align: left; gap: 2px 8px !important; padding: 0 !important; }
+html body [class*="_rate_box_"] > div, html body [class*="_rate_box_"] [data-testid="stElementContainer"] {
+  width: auto !important; flex: 0 0 auto !important; justify-content: flex-start; }
+html body [class*="_rate_box_"] [data-testid="stFeedback"] { margin-top: 0; }
+html body [class*="_rate_box_"] [data-testid="stFeedback"] [role="radiogroup"] { gap: 2px !important; justify-content: flex-start; }
+html body [class*="_rate_box_"] [data-testid^="stFeedbackButton"] { height: 40px !important; width: 40px !important; min-width: 40px !important; }
+html body [class*="_rate_box_"] [data-testid="stFeedbackButtonActive"] > span::before { font-size: 28px; color: #f4b63f; }
+html body [class*="_rate_box_"] [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"]::before { font-size: 28px; }
+html body [class*="_rate_box_"] [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"] { color: #d3dad8 !important; }
+html body [class*="_rate_box_"] [data-testid="stFeedbackButton"][aria-checked="true"] [data-testid="stIconMaterial"],
+html body [class*="_rate_box_"] [data-testid="stFeedbackButton"]:has(~ [aria-checked="true"]) [data-testid="stIconMaterial"],
+html body [class*="_rate_box_"] [role="radiogroup"]:hover [data-testid="stFeedbackButton"] [data-testid="stIconMaterial"] {
+  color: #f4b63f !important; }
+html body [class*="_rate_box_"] [role="radiogroup"]:hover [data-testid="stFeedbackButton"]:hover ~ [data-testid="stFeedbackButton"]
+  [data-testid="stIconMaterial"] { color: #d3dad8 !important; }
+html body [class*="_rate_box_"] [role="radiogroup"]:hover [data-testid^="stFeedbackButton"]:hover
+  ~ [data-testid="stFeedbackButtonActive"] > span::before { color: #d3dad8; }
+.ad-rate-note { font-size: 13px; color: #5f6b68; }
+/* 입력칸: 흰 바탕 · 연회색 테두리 12px (리뷰 쓰기 · 수정하기) */
+.st-key-ad_rv [data-testid="stTextAreaRootElement"], .st-key-ade_form [data-testid="stTextAreaRootElement"], .st-key-ade_form [data-testid="stTextInputRootElement"], .st-key-ade_form [data-testid="stDateInputField"],
+.st-key-ade_form .react-aria-ComboBox > div { border: 1px solid #e3e9e7 !important; border-radius: 12px !important;
+  background: #fff !important; box-sizing: border-box; }
+.st-key-ad_rv textarea, .st-key-ade_form textarea { font-size: 14px !important; line-height: 1.6 !important; color: #26302d !important; }
+.st-key-ad_rv [data-testid="stTextAreaRootElement"]:focus-within, .st-key-ade_form [data-testid="stTextAreaRootElement"]:focus-within, .st-key-ade_form [data-testid="stTextInputRootElement"]:focus-within,
+.st-key-ade_form [data-testid="stDateInputField"]:focus-within, .st-key-ade_form .react-aria-ComboBox > div:focus-within { border-color: var(--accent) !important; }
+/* 사진 올리는 칸: 점선 테두리 작은 칸 + 주의 문구 */
+.st-key-ad_rv [class*="st-key-rv_"][class*="_img_"] label p { font-size: 13px !important; font-weight: 700; color: #26302d !important; }
+.st-key-ad_rv [data-testid="stFileUploaderDropzone"], .st-key-ade_form [data-testid="stFileUploaderDropzone"] {
+  border: 2px dashed #c6d0cd !important; border-radius: 12px !important; background: #fff !important; padding: .6rem .8rem !important;
+  min-height: 0 !important; }
+.st-key-ad_rv [data-testid="stFileUploaderDropzone"]:hover, .st-key-ade_form [data-testid="stFileUploaderDropzone"]:hover {
+  border-color: var(--accent) !important; }
+.ad-pics-note { font-size: 12px; color: #5f6b68; line-height: 1.5; }
+[class*="st-key-rv_"][class*="_pics_on_"] { gap: 8px !important; }
+.st-key-ad_rv [class*="st-key-rv_"][class*="_send_"] button { min-height: 48px !important; }
+.st-key-ad_rv [class*="st-key-rv_"][class*="_send_"] button p { font-size: 15px !important; font-weight: 800 !important; }
+[class*="st-key-lg_rv_"] button { min-height: 48px !important; }
+
+/* 오른쪽: 평균 · 분포 · 사진 모아 보기 */
+.st-key-ad_rv_list { gap: 16px !important; }
+html body .st-key-ad_rv_list .rv-none.center, [class*="st-key-detail_tabs_"] .blog-empty { padding: 40px 16px; border-radius: 18px;
+  background: #f6f8f7; font-size: 14px; color: #5f6b68; text-align: center; }
+.ad-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 18px 20px; border-radius: 18px; background: #f6f8f7; }
+.ad-sum-avg { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+html body .ad-sum-avg .rv-avg-num { font-family: "Jua", sans-serif; font-size: 44px; font-weight: 400; line-height: 1; color: #1f2a27; }
+html body .ad-sum-avg .rv-avg-cnt { margin: 0; font-size: 12px; color: #5f6b68; }
+.ad-sum-dist { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 5px; }
+.ad-sum-dist > div { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #5f6b68; }
+.ad-sum-dist > div > span:first-child { width: 26px; }
+.ad-sum-dist > div > span:last-child { width: 18px; text-align: right; }
+.ad-bar { flex: 1; height: 8px; border-radius: 999px; background: #e3e9e7; overflow: hidden; }
+.ad-bar span { display: block; height: 100%; background: #f4b63f; border-radius: 999px; }
+html body .rv-pics.ad-sum-pics { display: grid; grid-template-columns: repeat(3, 64px); gap: 6px; margin: 0; max-width: none; }
+html body .rv-pics a { position: relative; display: block; overflow: hidden; background: #f4f6f5; cursor: zoom-in; }
+html body .rv-pics a[hidden] { display: none; }
+html body .rv-pics a img { width: 100%; height: 100%; object-fit: cover; display: block; border: 0; border-radius: 0; }
+html body .rv-pics a span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(31,42,39,.55); color: #fff; font-size: 16px; font-weight: 800; }
+html body .ad-sum-pics a { aspect-ratio: 1; border-radius: 10px; }
+html body .ad-sum-pics a span { font-size: 13px; }
+/* 보기 칩 · 정렬 */
+.st-key-ad_filter { flex-wrap: wrap !important; gap: 8px !important; align-items: center !important; }
+.st-key-ad_filter > div:first-child { flex: 1 1 320px !important; width: auto !important; min-width: 0 !important; }
+.st-key-ad_filter > div:last-child { flex: 0 0 150px !important; width: 150px !important; margin-left: auto; }
+.st-key-ad_filter [role="radiogroup"] { gap: 6px !important; flex-wrap: wrap !important; }
+.st-key-ad_filter [role="radiogroup"] button { min-height: 36px !important; padding: 0 14px !important; border-radius: 999px !important;
+  border: 1px solid #e3e9e7 !important; background: #fff !important; box-shadow: none !important; }
+.st-key-ad_filter [role="radiogroup"] button p { font-size: 13px !important; font-weight: 500 !important; color: #26302d !important; }
+.st-key-ad_filter [role="radiogroup"] button[aria-checked="true"] { border-color: var(--accent) !important;
+  background: var(--accent-soft) !important; }
+.st-key-ad_filter [role="radiogroup"] button[aria-checked="true"] p { font-weight: 800 !important; color: #0b5e57 !important; }
+.st-key-ad_filter .react-aria-ComboBox > div { min-height: 38px !important; border: 1px solid #e3e9e7 !important;
+  border-radius: 999px !important; background: #fff !important; font-size: 13px !important; font-weight: 700; }
+/* 리뷰 카드 */
+html body [class*="st-key-rvth_"] { border: 1.5px solid #e3e9e7 !important; border-radius: 18px !important; padding: 18px !important;
+  gap: 12px !important; box-shadow: none !important; background: #fff; }
+.rv-head { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 14px; min-height: 36px;
+  color: #26302d; }
+.rv-head b { font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+html body .rv-head .rv-av { width: 34px; height: 34px; margin: 0; flex: none; }
+html body .rv-head .rv-re ~ .rv-av { width: 28px; height: 28px; }
+.rv-head .rv-when { font-size: 12.5px; color: #5f6b68; }
+.rv-head .kb { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 2px 9px; line-height: 1.5; }
+.rv-head .kb.green { background: var(--accent-soft); color: #0b5e57; }
+.rv-head .kb.blue { background: #eaf0fc; color: #2c5bc5; }
+.rv-head .kb.gray { background: #f4f6f5; color: #5f6b68; }
+/* ⋯ 버튼은 늘 오른쪽 위 (닉네임 줄이 두 줄로 넘어가도) */
+[class*="st-key-rvhd_"] { flex-wrap: nowrap !important; align-items: flex-start !important; gap: 8px !important; }
+[class*="st-key-rvhd_"] > div:first-child { flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; }
+[class*="st-key-rvhd_"] > div:last-child { flex: 0 0 36px !important; width: 36px !important; }
+[class*="st-key-rv_more_"] button { width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important;
+  border-radius: 50% !important; background: #f4f6f5 !important; padding: 0 !important; border: 0 !important; }
+[class*="st-key-rv_more_"] button p { font-size: 16px !important; color: #26302d !important; }
+[class*="st-key-rv_more_"] button [data-testid="stIconMaterial"] { display: none !important; }
+html body .rv-content { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin: 0; }
+html body .rv-content .rv-stars { display: block; margin: 0; font-size: 14px; font-weight: 800; letter-spacing: 0; line-height: 1.4;
+  color: #9a6a00; background: none; -webkit-background-clip: border-box; background-clip: border-box;
+  -webkit-text-fill-color: currentColor; animation: none; filter: none; }
+html body .rv-content .rv-body { flex: none; margin: 0; font-size: 15px; line-height: 1.7; color: #26302d; word-break: break-word; }
+html body .rv-content .rv-pics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; max-width: none; }
+html body .rv-content .rv-pics a { width: 120px; height: 120px; border-radius: 12px; }
+/* 카드 아래: 'ㄴ 댓글 n개' · '답글 쓰기' (글자 버튼) */
+[class*="st-key-rvfoot_"] { gap: 14px !important; align-items: center !important; }
+[class*="st-key-rvfoot_"] > div { width: auto !important; flex: 0 0 auto !important; }
+html body [class*="st-key-rvfoot_"] button { width: auto !important; min-height: 0 !important; padding: 6px 0 !important; border: 0 !important;
+  background: none !important; border-radius: 0 !important; justify-content: flex-start !important; }
+html body [class*="st-key-rvfoot_"] button p { font-size: 13px !important; font-weight: 500 !important; color: #5f6b68 !important; }
+html body [class*="st-key-rvfoot_"] [class*="st-key-rv_tog_"] { width: auto !important; }
+html body [class*="st-key-rvfoot_"] [class*="st-key-rv_tog_"] button p { font-weight: 700 !important; color: #0f6b5c !important; }
+html body [class*="st-key-rvfoot_"] button:hover { background: none !important; }
+html body [class*="st-key-rvfoot_"] button:hover p { text-decoration: underline; }
+[class*="st-key-rvre_"] { border-top: 1px dashed #e3e9e7; padding: 12px 0 0 14px !important; gap: 10px !important; }
+[class*="st-key-rvrep_"] { border-top: 1px dashed #e3e9e7; padding-top: 12px !important; gap: 10px !important; }
+.st-key-ad_more { align-items: center; }
+.st-key-ad_more button { height: 46px !important; padding: 0 28px !important; border-radius: 999px !important; border: 0 !important;
+  background: var(--accent-soft) !important; }
+.st-key-ad_more button p { font-size: 14px !important; font-weight: 800 !important; color: #0b5e57 !important; }
+.st-key-ad_more button:hover { background: #d3f5ee !important; }
+
+/* 블로그 후기 탭: 넓은 폭에서는 두 줄로 */
+[class*="st-key-detail_tabs_"] .bcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 12px; }
+[class*="st-key-detail_tabs_"] .bcard { margin: 0; }
+[class*="st-key-detail_tabs_"] .blog-note { margin-bottom: 2px; }
+
+/* ---------------------------------------------------------------- 수정하기 탭 */
+.st-key-ade_gate { align-items: center; gap: 14px !important; padding: 40px 16px !important; border-radius: 18px; background: #f6f8f7;
+  text-align: center; }
+.st-key-ade_gate .ntf-empty { padding: 0 !important; font-size: 14px; color: #5f6b68; }
+.st-key-ade_gate [data-testid="stElementContainer"] { width: auto !important; }
+.st-key-ade_gate button { height: 46px !important; padding: 0 24px !important; }
+.ade-info { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-radius: 14px; background: var(--accent-soft);
+  font-size: 14px; line-height: 1.6; color: #0b5e57; }
+.ade-info .mi { flex: none; font-size: 20px; line-height: 1.1; margin: 1px 0 0; }
+.st-key-ade_cols .stHorizontalBlock:has(> .stColumn .st-key-ade_side) { gap: 24px !important; align-items: flex-start !important; }
+@media (min-width: 641px) {
+  .st-key-ade_cols .stHorizontalBlock:has(> .stColumn .st-key-ade_side) { flex-wrap: nowrap !important; }
+  .st-key-ade_cols .stHorizontalBlock:has(> .stColumn .st-key-ade_side) > .stColumn:first-child { flex: 1 1 0 !important; min-width: 0 !important; }
+  .st-key-ade_cols .stHorizontalBlock:has(> .stColumn .st-key-ade_side) > .stColumn:last-child {
+    flex: 0 1 360px !important; width: 360px !important; max-width: 360px; min-width: 280px !important; }
+}
+.st-key-ade_form { gap: 16px !important; }
+html body [class*="st-key-ade_set"] { border: 1.5px solid #e3e9e7 !important; border-radius: 18px !important;
+  padding: 14px 20px 20px !important; gap: 14px !important; background: #fff; }
+.ade-legend { font-size: 16px; font-weight: 800; color: #1f2a27; line-height: 1.5; }
+.ade-legend small { font-size: 13px; font-weight: 500; color: #5f6b68; margin-left: 4px; }
+.ade-mark { display: inline-block; font-size: 12px; font-weight: 800; color: #fff; background: var(--accent); padding: 1px 8px;
+  border-radius: 999px; margin-left: 4px; vertical-align: 1px; }
+.st-key-ade_form [data-testid="stWidgetLabel"] p { font-size: 13px !important; font-weight: 700 !important; color: #5f6b68 !important; }
+.st-key-ade_form [data-testid="stTextInputRootElement"], .st-key-ade_form [data-testid="stDateInputField"] { min-height: 44px; }
+.st-key-ade_form .react-aria-ComboBox > div { min-height: 44px; }
+.st-key-ade_form [data-testid="stCheckbox"] p { font-size: 14px !important; font-weight: 500 !important; color: #26302d !important; }
+@media (min-width: 641px) {
+  .st-key-ade_work { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px !important; align-items: start; }
+  .st-key-ade_work > div { width: auto !important; min-width: 0; }
+}
+.ed-cap { font-size: 12.5px; color: #5f6b68; line-height: 1.5; }
+/* 이벤트 칩 */
+.st-key-ade_form [class*="st-key-tags_"] [role="group"] button, .st-key-ade_form [class*="st-key-tags_"] button[data-variant="pills"] {
+  min-height: 36px !important; }
+/* 이미지: 한 줄 6칸 (모바일 3칸), 3:4 작은 그림 + '포스터' · '추가' 표시 + 삭제 */
+.st-key-ade_imgs { flex-wrap: wrap !important; gap: 10px !important; align-items: flex-start !important; }
+.st-key-ade_imgs > div { flex: 0 0 calc((100% - 50px) / 6) !important; width: calc((100% - 50px) / 6) !important; min-width: 0 !important; }
+[class*="st-key-ade_im_"] { gap: 6px !important; }
+.ade-img { position: relative; aspect-ratio: 3 / 4; border-radius: 12px; background: #f4f6f5; overflow: hidden; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; }
+.ade-img.is-poster { border: 2.5px solid #0b7a70; }
+.ade-img > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ade-img .ed-nofile { font-size: 12px; color: #5f6b68; }
+.ade-tag { position: absolute; left: 6px; top: 6px; font-size: 11px; font-weight: 800; line-height: 1.5; color: #fff; background: #0b7a70;
+  padding: 1px 7px; border-radius: 999px; }
+.ade-img.is-extra .ade-tag { background: var(--accent-deep); }
+[class*="st-key-ade_im_"] button { min-height: 30px !important; padding: 0 !important; border-radius: 999px !important;
+  border: 1px solid #e3e9e7 !important; background: #fff !important; }
+[class*="st-key-ade_im_"] button p { font-size: 12px !important; font-weight: 700 !important; color: #5f6b68 !important; }
+[class*="st-key-ade_im_"] button:hover { border-color: #c0313f !important; }
+[class*="st-key-ade_im_"] button:hover p { color: #c0313f !important; }
+.st-key-ade_img_undo { gap: 8px !important; flex-wrap: wrap !important; }
+.st-key-ade_img_undo > div { width: auto !important; flex: 0 1 auto !important; }
+.st-key-ade_img_undo button { min-height: 34px !important; padding: 0 12px !important; }
+.st-key-ade_img_undo button p { font-size: 12.5px !important; }
+/* 아래 저장 줄: 화면 아래에 붙어 따라온다 */
+[data-testid="stLayoutWrapper"]:has(> .st-key-ade_bar) { position: sticky; bottom: 12px; z-index: 30; }
+html body .st-key-ade_bar { flex-wrap: wrap !important; align-items: center !important;
+  gap: 12px !important; padding: 14px 18px !important; border-radius: 18px !important; background: #1f2a27 !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); border: 0 !important; }
+.st-key-ade_bar > div { width: auto !important; flex: 0 0 auto !important; }
+.st-key-ade_bar > div:first-child { flex: 1 1 200px !important; min-width: 0 !important; }
+.ade-bar-t { font-size: 14px; line-height: 1.5; color: #fff; overflow-wrap: anywhere; }
+.ade-bar-t strong { color: #5eead4; }
+html body .st-key-ade_bar button { height: 46px !important; min-height: 46px !important; border-radius: 999px !important; }
+html body .st-key-ade_bar [class*="st-key-ade_reset_"] button { padding: 0 18px !important; border: 1px solid #5f6b68 !important;
+  background: none !important; }
+html body .st-key-ade_bar [class*="st-key-ade_reset_"] button p { color: #fff !important; font-size: 14px !important; font-weight: 700 !important; }
+html body .st-key-ade_bar [class*="st-key-save_"] button { padding: 0 24px !important; border: 0 !important; background: var(--accent) !important; }
+html body .st-key-ade_bar [class*="st-key-save_"] button p { color: #fff !important; font-size: 15px !important; font-weight: 800 !important; }
+html body .st-key-ade_bar button:disabled { opacity: .45; }
+/* 수정하기 탭이 열려 있을 때: 떠 있는 '맨 위로' 버튼이 아래 저장 줄을 가리지 않게 위로 올린다 */
+body:has([class*="st-key-detail_tabs_"] [data-testid="stTab"]:nth-child(3)[aria-selected="true"]) #aw-top { bottom: 104px !important; }
+@media (max-width: 640px) {
+  body:has([class*="st-key-detail_tabs_"] [data-testid="stTab"]:nth-child(3)[aria-selected="true"]) #aw-top { bottom: 132px !important; }
+}
+/* 맨 아래: 삭제 요청 · 관리자 지도에서 내리기 */
+.st-key-ade_del { justify-content: space-between !important; flex-wrap: wrap !important; gap: 4px 12px !important; padding: 0 4px !important; }
+.st-key-ade_del > div { width: auto !important; flex: 0 1 auto !important; }
+.ade-del-t { font-size: 13px; color: #5f6b68; }
+html body .st-key-ade_del button { min-height: 44px !important; padding: 0 4px !important; border: 0 !important; background: none !important; }
+html body .st-key-ade_del button p { font-size: 14px !important; font-weight: 700 !important; color: #c0313f !important; }
+html body .st-key-ade_del button:hover p { text-decoration: underline; }
+/* 오른쪽: 바뀌는 내용 + 수정 이력 */
+.st-key-ade_side { gap: 14px !important; }
+html body .st-key-ade_diff, html body .st-key-ade_hist { border: 1.5px solid #e3e9e7 !important; border-radius: 18px !important;
+  padding: 18px !important; gap: 10px !important; background: #fff; }
+html body .st-key-ade_diff { border-color: var(--accent) !important; }
+.ade-h { font-size: 16px; font-weight: 800; color: #1f2a27; line-height: 1.5; margin-bottom: 10px; }
+.st-key-ade_hist .ade-h { margin-bottom: 0; }
+.ade-h span { color: #5f6b68; font-weight: 500; }
+.ade-diff-one { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 12px; background: #f6f8f7;
+  overflow-wrap: anywhere; margin-bottom: 10px; }
+.ade-diff-one:last-child { margin-bottom: 0; }
+.ade-diff-one span { font-size: 12.5px; font-weight: 800; color: #5f6b68; }
+.ade-diff-one del { font-size: 13.5px; color: #5f6b68; }
+.ade-diff-one ins { font-size: 13.5px; font-weight: 800; color: #0b5e57; text-decoration: none; }
+[class*="st-key-ahxi_"], [class*="st-key-ahxnow_"] { border-radius: 14px; padding: 12px !important; background: #f6f8f7; gap: 8px !important; }
+[class*="st-key-ahxnow_"] { background: #f3fcfa; }
+.st-key-ade_hist .hx-top { gap: 4px 6px; font-size: 13.5px; }
+.st-key-ade_hist .hx-when { font-size: 12px; color: #5f6b68; }
+.st-key-ade_hist .hx-src { margin: 0; padding: 0; background: none; color: #5f6b68; font-size: 12px; font-weight: 500; }
+.st-key-ade_hist .hx-src .mi { display: none; }
+.st-key-ade_hist .hx-src::before { content: "· "; }
+.st-key-ade_hist .hx-now { margin-left: auto; font-size: 11.5px; font-weight: 800; color: #0b5e57; background: var(--accent-soft); }
+.st-key-ade_hist .hx-who { margin: 4px 0; display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: #26302d; }
+.st-key-ade_hist .hx-who .mi { font-size: 18px; margin: 0; color: #9aa5a1; }
+.st-key-ade_hist .hx-chg, .st-key-ade_hist .hx-meta, .st-key-ade_hist .hx-diff { font-size: 13px; }
+.st-key-ade_hist .hx-k { min-width: 0; }
+html body .st-key-ade_hist [class*="st-key-restore_"] { justify-content: flex-start; margin-top: 0; }
+html body .st-key-ade_hist [class*="st-key-restore_"] .stButton { margin-left: 0; }
+html body .st-key-ade_hist [class*="st-key-restore_"] button { height: 36px !important; min-height: 36px !important; padding: 0 12px !important;
+  border: 1px solid #e3e9e7 !important; border-radius: 999px !important; background: none !important; }
+html body .st-key-ade_hist [class*="st-key-restore_"] button p { font-size: 12.5px !important; font-weight: 700 !important; color: #26302d !important; }
+html body .st-key-ade_hist [class*="st-key-restore_"] button:hover { border-color: var(--accent) !important; background: #fff !important; }
+.st-key-ade_hx_more { align-items: center; }
+.st-key-ade_hx_more button { height: 38px !important; min-height: 38px !important; padding: 0 14px !important; border-radius: 999px !important;
+  border: 1px dashed #9eddcc !important; background: #fff !important; }
+.st-key-ade_hx_more button p { font-size: 13px !important; font-weight: 700 !important; color: var(--accent-deep) !important; }
+
+/* ---------------------------------------------------------------- 비슷한 팝업 · 이 근처 다른 팝업 (카드 180px, 민트 테두리) */
+html body .st-key-similar { margin-top: 28px; border-top: 1px solid #eef2f1; padding-top: 28px; gap: 24px !important; }
+html body [class*="st-key-simsec_"] { margin-bottom: 0; }
+html body .sim-head { font-size: 19px; font-weight: 800; margin-bottom: 6px; color: #1f2a27; }
+html body [class*="st-key-sim_row_"] { gap: 14px !important; }
+html body [class*="st-key-sim_row_"] > div { flex: 0 0 180px !important; width: 180px !important; min-width: 180px !important; }
+html body .simc .simp { border-radius: 12px; border: 2.5px solid #9eddcc; box-sizing: border-box; }
+html body .simc .simt { margin-top: 8px; font-family: "Jua", sans-serif; font-weight: 400; font-size: 16px; color: #0f6b5c; }
+html body .simc .simm { font-size: 12.5px; color: #5f6b68; }
+
+/* ---------------------------------------------------------------- 모바일 (≤640px): 한 단으로 */
+@media (max-width: 640px) {
+  .stHorizontalBlock:has(> .stColumn > .stVerticalBlock > [data-testid="stLayoutWrapper"] > .st-key-detail_left) { gap: 22px !important; }
+  .st-key-ad_hero .stHorizontalBlock:has(> .stColumn iframe[title*="gallery"]) { gap: 20px !important; }
+  html body .ad-title { font-size: 28px; }
+  .ad-mini .ad-title { font-size: 22px; }
+  .ad-check { grid-template-columns: minmax(0, 1fr); }
+  [class*="st-key-detail_tabs_"] [role="tablist"] { overflow-x: auto; scrollbar-width: none; }
+  [class*="st-key-detail_tabs_"] [data-testid="stTab"] { padding: 13px 14px !important; }
+  [class*="st-key-detail_tabs_"] [data-testid="stTab"] p { font-size: 15px !important; }
+  [class*="st-key-detail_tabs_"] [data-testid="stTabPanel"] { padding-top: 20px !important; }
+  .st-key-ad_rv .stHorizontalBlock:has(> .stColumn [class*="st-key-rvbox_"]) { gap: 20px !important; }
+  html body [class*="st-key-rvbox_"] { padding: 16px !important; }
+  .ad-sum { gap: 16px; padding: 16px; }
+  .ad-sum-dist { min-width: 150px; }
+  .st-key-ad_filter > div:last-child { margin-left: 0; }
+  html body [class*="st-key-rvth_"] { padding: 14px !important; }
+  html body .rv-content .rv-pics a { width: calc((100% - 24px) / 4); height: auto; aspect-ratio: 1; }
+  html body [class*="st-key-ade_set"] { padding: 12px 14px 16px !important; }
+  .st-key-ade_imgs > div { flex-basis: calc((100% - 20px) / 3) !important; width: calc((100% - 20px) / 3) !important; }
+  [data-testid="stLayoutWrapper"]:has(> .st-key-ade_bar) { bottom: 8px; }
+  html body .st-key-ade_bar { padding: 12px 14px !important; gap: 8px !important; }
+  .st-key-ade_bar > div:first-child { flex-basis: 100% !important; }
+  .ade-bar-t { font-size: 13px; }
+  .st-key-ade_bar > div:not(:first-child) { flex: 1 1 0 !important; }
+  .st-key-ade_bar > div:not(:first-child) button { width: 100% !important; padding: 0 12px !important; }
+  html body [class*="st-key-sim_row_"] > div { flex-basis: 140px !important; width: 140px !important; min-width: 140px !important; }
+}
+</style>
+"""
 
 
 # ================================================================ 카드 리스트
