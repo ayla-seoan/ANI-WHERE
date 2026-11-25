@@ -112,14 +112,14 @@
 }
 
 /* ---------- 북마크 팝업 / 특전 있는 작품들: 72px 동그라미 줄 ---------- */
-.ah .stories {
+.ah .stories:not(.stories-old) {
   margin: 0;
 }
-.ah .story-row {
+.ah .stories:not(.stories-old) .story-row {
   gap: 14px;
   padding: 8px 2px 4px;
 }
-.ah .story {
+.ah .stories:not(.stories-old) .story {
   flex: 0 0 84px;
   width: 84px;
   gap: 6px;
@@ -130,18 +130,18 @@
   color: var(--ink);
   cursor: pointer;
 }
-.ah .story .ring,
-.ah .story.mark .ring {
+.ah .stories:not(.stories-old) .story .ring,
+.ah .stories:not(.stories-old) .story.mark .ring {
   width: 72px;
   height: 72px;
   padding: 3px;
   background: var(--accent);
 }
-.ah .story .pic {
+.ah .stories:not(.stories-old) .story .pic {
   border: 3px solid #fff;
 }
 /* 위쪽 배지: 회원 = 지역, 손님 = 특전 있는 팝업 수 */
-.ah .story .rg {
+.ah .stories:not(.stories-old) .story .rg {
   top: -8px;
   bottom: auto;
   font-size: 10px;
@@ -152,8 +152,8 @@
   padding: 1px 7px;
   border: 1.5px solid #fff;
 }
-.ah .story .nm,
-.ah .story.add .nm {
+.ah .stories:not(.stories-old) .story .nm,
+.ah .stories:not(.stories-old) .story.add .nm {
   margin: 0;
   width: auto;
   max-width: 84px;
@@ -162,16 +162,16 @@
   line-height: 1.4;
   white-space: nowrap;
 }
-.ah .story.add .ring {
+.ah .stories:not(.stories-old) .story.add .ring {
   background: none;
   border: 2px dashed #c6d0cd;
 }
-.ah .story.add .ring svg {
+.ah .stories:not(.stories-old) .story.add .ring svg {
   width: 28px;
   height: 28px;
   color: var(--accent-deep);
 }
-.ah .story-empty {
+.ah .stories:not(.stories-old) .story-empty {
   font-size: 13px;
   color: var(--ink-soft);
   padding-top: 26px;
@@ -885,28 +885,28 @@
   }
 
   /* 동그라미 62px */
-  .ah .story-row {
+  .ah .stories:not(.stories-old) .story-row {
     gap: 10px;
     padding: 8px 2px 2px;
   }
-  .ah .story {
+  .ah .stories:not(.stories-old) .story {
     flex: 0 0 66px;
     width: 66px;
   }
-  .ah .story .ring,
-  .ah .story.mark .ring {
+  .ah .stories:not(.stories-old) .story .ring,
+  .ah .stories:not(.stories-old) .story.mark .ring {
     width: 62px;
     height: 62px;
   }
-  .ah .story .rg {
+  .ah .stories:not(.stories-old) .story .rg {
     padding: 1px 6px;
   }
-  .ah .story .nm,
-  .ah .story.add .nm {
+  .ah .stories:not(.stories-old) .story .nm,
+  .ah .stories:not(.stories-old) .story.add .nm {
     max-width: 66px;
     font-size: 12px;
   }
-  .ah .story.add .nm {
+  .ah .stories:not(.stories-old) .story.add .nm {
     letter-spacing: -0.04em;
   }
 

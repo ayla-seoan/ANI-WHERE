@@ -3630,17 +3630,17 @@ html body .st-key-home [class*="st-key-hp_"] button[aria-checked="true"] * { col
 .ah-st.gray { color: #5f6b68; background: #eef2f1; }
 
 /* ---------- 북마크 팝업 / 특전 있는 작품들: 72px 동그라미 줄, 배지는 위쪽 ---------- */
-html body .st-key-home .st-key-story_row { gap: 14px !important; padding: 8px 2px 4px !important; }
-html body .st-key-home .story { padding-bottom: 0; gap: 6px; }
-html body .st-key-home .story .ring, html body .st-key-home .story.mark .ring, html body .st-key-home .story.hot .ring {
+html body .st-key-home .st-key-story_row:has(.story.hot) { gap: 14px !important; padding: 8px 2px 4px !important; }
+html body .st-key-home .story.hot { padding-bottom: 0; gap: 6px; }
+html body .st-key-home .story.hot .ring {
   width: 72px; height: 72px; padding: 3px; background: var(--accent); }
-html body .st-key-home .story .pic { border: 3px solid #fff; }
-html body .st-key-home .story .rg { top: -8px; bottom: auto; font-size: 10px; font-weight: 800; line-height: 1.5; color: #fff;
+html body .st-key-home .story.hot .pic { border: 3px solid #fff; }
+html body .st-key-home .story.hot .rg { top: -8px; bottom: auto; font-size: 10px; font-weight: 800; line-height: 1.5; color: #fff;
   background: var(--accent-deep); padding: 1px 7px; border: 1.5px solid #fff; }
-html body .st-key-home .story .nm, html body .st-key-home .story.add .nm { margin: 0; width: auto; max-width: 84px;
+html body .st-key-home .story.hot .nm { margin: 0; width: auto; max-width: 84px;
   font-size: 12.5px; font-weight: 700; line-height: 1.4; white-space: nowrap; color: var(--ah-ink); }
-html body .st-key-home .story.add .ring { background: none; border: 2px dashed #c6d0cd; }
-html body .st-key-home .story.add .ring .mi { font-size: 28px; margin: 0; color: var(--accent-deep); }
+/* (11/25 요청) 회원 북마크 줄은 예전 모양 그대로 — 최애 추가하기 · 지역 배지 규칙은 STORY_CSS */
+
 html body .st-key-home .story-empty { font-size: 13px; color: var(--ah-soft); padding-top: 26px; }
 
 /* ---------- 따끈따끈 신규 등록 팝업: 196px 포스터 카드 줄 ---------- */
@@ -3857,14 +3857,14 @@ html body .st-key-home .st-key-ah_rv_more button:hover { background: #d3f6ee !im
   html body .st-key-home [class*="st-key-hp_"] button p, html body .st-key-home [class*="st-key-hp_"] button * { font-size: 12.5px !important; }
 
   /* 동그라미 62px */
-  html body .st-key-home .st-key-story_row { gap: 10px !important; padding: 8px 2px 2px !important; }
-  html body .st-key-home .st-key-story_row > div { flex: 0 0 66px !important; width: 66px !important; min-width: 66px !important; }
+  html body .st-key-home .st-key-story_row:has(.story.hot) { gap: 10px !important; padding: 8px 2px 2px !important; }
+  html body .st-key-home .st-key-story_row:has(.story.hot) > div { flex: 0 0 66px !important; width: 66px !important; min-width: 66px !important; }
   html body .st-key-home .st-key-story_row > div:has(.story-empty) { flex: 0 1 auto !important; width: auto !important; min-width: 0 !important; }
-  html body .st-key-home .story .ring, html body .st-key-home .story.mark .ring, html body .st-key-home .story.hot .ring {
+  html body .st-key-home .story.hot .ring {
     width: 62px; height: 62px; }
-  html body .st-key-home .story .rg { padding: 1px 6px; }
-  html body .st-key-home .story .nm, html body .st-key-home .story.add .nm { max-width: 66px; font-size: 12px; line-height: 17px; }
-  html body .st-key-home .story.add .nm { letter-spacing: -.04em; }
+  html body .st-key-home .story.hot .rg { padding: 1px 6px; }
+  html body .st-key-home .story.hot .nm { max-width: 66px; font-size: 12px; line-height: 17px; }
+  
 
   /* 신규: 150px 카드, 상태 배지만 */
   html body .st-key-home .st-key-home_row_new { gap: 12px !important; padding: 2px 0 4px !important; }
@@ -4042,7 +4042,7 @@ def _guest_stories(rows: list[dict], limit: int = 12) -> None:
             for i, w in enumerate(works):
                 with st.container(key=f"card_story_{i}"):
                     st.markdown(
-                        f'<div class="story hot"><div class="ring"><span class="rg">특전 {count[w]}</span>'
+                        f'<div class="story hot"><div class="ring"><span class="rg">{count[w]}</span>'
                         f'<div class="pic" style="background-image:url(&quot;{posters.get(w, images.DEFAULT_POSTER_URL)}&quot;)"></div>'
                         f'</div><div class="nm">{escape(w)}</div></div>', unsafe_allow_html=True)
                     st.button("보기", key=f"open_story_{i}", on_click=_story_pick, args=(w,))
@@ -4059,7 +4059,7 @@ def render_stories(df: pd.DataFrame) -> None:
     _, mine, _ = _fav_state()
     marked = sorted([r for r in rows if str(r.get("entry_id")) in mine], key=lambda r: (_status(r)[2], str(r.get("end_date"))))
     with st.container(key="stories"):
-        st.markdown(f'<div class="ah-h">{_mi("bookmark")}<span class="story-head">북마크 팝업</span></div>', unsafe_allow_html=True,
+        st.markdown('<div class="story-head">북마크 팝업</div>', unsafe_allow_html=True,
                     help="내가 북마크한 팝업(진행 중 · 오픈 예정)이 여기에 모여요. 동그라미를 누르면 그 팝업으로 가고, "
                          "'최애 추가하기' 로 팝업을 골라 한 번에 북마크할 수 있어요.")
         with st.container(horizontal=True, key="story_row"):
@@ -4075,7 +4075,7 @@ def render_stories(df: pd.DataFrame) -> None:
                 rg = geo.area_name(str(r.get("address") or ""))
                 with st.container(key=f"card_story_{i}"):
                     st.markdown(
-                        '<div class="story mark"><div class="ring">' + (f'<span class="rg">{escape(rg)}</span>' if rg else "")
+                        '<div class="story mark"><div class="ring">' + (_area_chip(r.get("address"), "rg") if rg else "")
                         + f'<div class="pic" style="background-image:url(&quot;{_poster_url(r.get("images"))}&quot;)"></div>'
                         + f'</div><div class="nm">{escape(str(r.get("work") or ""))}</div></div>', unsafe_allow_html=True)
                     st.button("보기", key=f"open_story_{i}", on_click=_story_open, args=(eid,))
@@ -7967,6 +7967,8 @@ DAILY_CSS = """
 .dn-title { display: flex; align-items: center; font-family: "Jua", sans-serif; font-weight: 400; font-size: 22px; line-height: 1.3; color: #26302d; }
 .st-key-daily_nav, .st-key-daily_areas { align-items: center !important; justify-content: space-between !important; gap: 2px !important;
   flex-wrap: nowrap !important; padding: 4px; border-radius: 999px; background: #fff; }
+/* 지역 줄은 알약 테두리(바탕) 없이 ‹ 지역 › 만 (11/25 요청). 날짜 줄만 알약 */
+html body .st-key-daily_areas { background: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 4px !important; }
 .st-key-daily_nav > div, .st-key-daily_areas > div { width: auto !important; flex: 0 0 auto !important; min-width: 0; }
 .st-key-daily_nav > div:has(.dn-date), .st-key-daily_areas > div:has(.dn-area) { flex: 0 1 auto !important; overflow: hidden; }
 .st-key-daily_nav button, .st-key-daily_areas button { min-height: 0 !important; width: 36px !important; height: 36px !important; padding: 0 !important;
@@ -8029,6 +8031,7 @@ DAILY_CSS = """
   .dn-title { font-size: 21px; }
   .dn-hint { font-size: 12.5px; }
   .st-key-daily_nav, .st-key-daily_areas { padding: 2px; background: #f6f8f7; }
+  html body .st-key-daily_areas { padding: 0 !important; background: none !important; }
   .st-key-daily_nav button, .st-key-daily_areas button { width: 40px !important; height: 40px !important; }
   .st-key-daily_nav button span[data-testid="stIconMaterial"], .st-key-daily_areas button span[data-testid="stIconMaterial"] { font-size: 20px !important; }
   .dn-date, .dn-area { font-size: 13.5px; }

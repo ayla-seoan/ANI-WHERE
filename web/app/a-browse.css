@@ -1098,6 +1098,12 @@
   border-radius: 999px;
   background: #fff;
 }
+/* 지역 줄은 알약 테두리(바탕) 없이 ‹ 지역 › 만 (11/25 요청). 날짜 줄만 알약 */
+.dn-nav.dn-areanav {
+  padding: 0 4px;
+  border-radius: 0;
+  background: none;
+}
 .dn-nav button {
   display: flex;
   align-items: center;
@@ -1483,6 +1489,10 @@
   .dn-nav {
     padding: 2px;
     background: var(--surface-soft);
+  }
+  .dn-nav.dn-areanav {
+    padding: 0;
+    background: none;
   }
   .dn-nav button {
     width: 40px;

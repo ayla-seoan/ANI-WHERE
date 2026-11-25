@@ -10,7 +10,7 @@ import {
   type Item,
 } from "@/lib/popup";
 import BookmarkPicker from "@/components/member/BookmarkPicker";
-import { posterBg } from "@/components/cards";
+import { areaFill, posterBg } from "@/components/cards";
 import HScroll from "@/components/HScroll";
 import RankBanner from "@/components/home/RankBanner";
 import NewSection from "@/components/home/NewSection";
@@ -18,7 +18,7 @@ import WeekCalendar from "@/components/home/WeekCalendar";
 import ReviewSection from "@/components/home/ReviewSection";
 import ReserveSection from "@/components/home/ReserveSection";
 import SecHead from "@/components/home/SecHead";
-import { BookmarkLine, ClockLine } from "@/components/home/Icons2";
+import { ClockLine } from "@/components/home/Icons2";
 import EmptyState from "@/components/EmptyState";
 import { getMe, getMyFavs } from "@/lib/server/session";
 import { rankScores } from "@/lib/server/rank";
@@ -87,22 +87,19 @@ export default async function Home() {
       <h1 className="sr-only">ANI:WHERE 홈 — 애니 팝업·콜라보 카페</h1>
 
       {me ? (
+        // 회원: '북마크 팝업' — 사용자 요청(11/25)으로 A안 이전 모양 그대로 (a-home.css 의 동그라미 규칙은 손님 줄에만).
         // 회원: '북마크 팝업' — 내가 북마크한 (진행 중 · 예정) 팝업 하나에 동그라미 하나, 위에 지역, 아래 작품 (앱 render_stories)
-        <section className="stories ah-sec" aria-labelledby="story-h">
-          <SecHead
-            id="story-h"
-            title="북마크 팝업"
-            icon={<BookmarkLine />}
-            help={
-              <span className="help" tabIndex={0}>
-                <HelpIcon />
-                <span className="tip">
-                  내가 북마크한 팝업(진행 중 · 오픈 예정)이 여기에 모여요. 동그라미를 누르면 그 팝업으로 가고, &apos;최애
-                  추가하기&apos; 로 팝업을 골라 한 번에 북마크할 수 있어요.
-                </span>
+        <section className="stories stories-old" aria-labelledby="story-h">
+          <div className="story-head" id="story-h">
+            북마크 팝업
+            <span className="help" tabIndex={0}>
+              <HelpIcon />
+              <span className="tip">
+                내가 북마크한 팝업(진행 중 · 오픈 예정)이 여기에 모여요. 동그라미를 누르면 그 팝업으로 가고, &apos;최애
+                추가하기&apos; 로 팝업을 골라 한 번에 북마크할 수 있어요.
               </span>
-            }
-          />
+            </span>
+          </div>
           <HScroll className="story-row" label="북마크 팝업">
             <BookmarkPicker
               items={live.map((p) => ({
@@ -120,7 +117,11 @@ export default async function Home() {
             {marked.map((p) => (
               <Link key={p.id} href={`/popup/${p.id}`} className="story mark" prefetch={false}>
                 <span className="ring">
-                  {p.area && <span className="rg">{p.area}</span>}
+                  {p.area && (
+                    <span className="rg" style={areaFill(p.city)}>
+                      {p.area}
+                    </span>
+                  )}
                   <span className="pic" style={posterBg(p.images[0] ?? "")} />
                 </span>
                 <span className="nm">{p.work}</span>
@@ -152,7 +153,7 @@ export default async function Home() {
             {works.map((w) => (
               <Link key={w} href={`/list?work=${encodeURIComponent(w)}`} className="story hot" prefetch={false}>
                 <span className="ring">
-                  <span className="rg">특전 {count.get(w)}</span>
+                  <span className="rg" aria-label={`특전 있는 팝업 ${count.get(w)}곳`}>{count.get(w)}</span>
                   <span className="pic" style={posterBg(posterOf.get(w) ?? "")} />
                 </span>
                 <span className="nm">{w}</span>
