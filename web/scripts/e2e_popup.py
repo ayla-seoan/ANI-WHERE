@@ -144,10 +144,10 @@ def edit_flow(page):
     name_in.fill(new_name)
     old_perks = perks_in.input_value()
     perks_in.fill((old_perks + ", " if old_perks else "") + f"테스트 특전 {RUN}")
-    panel.get_by_role("button", name="수정 저장").click()
+    panel.get_by_role("button", name="저장하기").click()
     toast_has(page, "수정했습니다.")
     expect(page.locator(".dcafe")).to_have_text(new_name, timeout=15000)
-    expect(page.locator(".dbox").first).to_contain_text(f"테스트 특전 {RUN}")
+    expect(page.locator(".ad-chips").first).to_contain_text(f"테스트 특전 {RUN}")
     rows = cafes_local()
     last = rows[-1]
     assert last["entry_id"] == cid and int(last["revision"]) == base_rev + 1, last
@@ -160,7 +160,7 @@ def edit_flow(page):
     panel = page.locator(".ed-panel")
     field(panel, "특전").fill("문의 010-1234-5678")
     expect(panel.locator(".ed-err").first).to_contain_text("민감한 개인정보(전화번호)")
-    save = panel.get_by_role("button", name="수정 저장")
+    save = panel.get_by_role("button", name="저장하기")
     expect(save).to_be_disabled()
     shot(page, "pc_edit_sensitive")
     save.evaluate("b => { b.disabled = false; b.click(); }")
@@ -170,7 +170,6 @@ def edit_flow(page):
 
     # 수정 이력 → 이전 버전으로 되돌리기
     page.goto(f"{BASE}/popup/{cid}?tab=edit")
-    page.locator(".hx-exp summary").click()
     expect(page.locator(".hx-item.now")).to_contain_text(f"{base_rev + 1}번째")
     expect(page.locator(".hx-item.now")).to_contain_text("직접 수정")
     shot(page, "pc_history")
@@ -185,17 +184,17 @@ def edit_flow(page):
     # 포스터 바꾸기(png) + 이미지 추가(EXIF jpg)
     panel = open_edit(page, cid)
     had = len([x for x in str(target.get("images") or "").split(",") if x.strip()])
-    panel.locator(".ed-drop input[aria-label='포스터 바꾸기']").set_input_files(str(TMP / "poster.png"))
+    panel.locator("input[aria-label='포스터 바꾸기']").set_input_files(str(TMP / "poster.png"))
     if had:
         dlg = page.locator(".dlg", has_text="포스터 변경")
         expect(dlg).to_contain_text("변경하시겠습니까?")
         shot(page, "pc_edit_poster_confirm", full=False)
         dlg.get_by_role("button", name="변경").click()
     expect(panel.locator(".ed-newposter")).to_contain_text("새 포스터로 변경돼요")
-    panel.locator(".ed-drop input[aria-label='이미지 추가']").set_input_files(str(TMP / "exif.jpg"))
-    expect(panel.locator(".ed-files li")).to_have_count(1)
+    panel.locator("input[aria-label='이미지 추가']").set_input_files(str(TMP / "exif.jpg"))
+    expect(panel.locator(".ade-img.is-extra")).to_have_count(1)
     shot(page, "pc_edit_images")
-    panel.get_by_role("button", name="수정 저장").click()
+    panel.get_by_role("button", name="저장하기").click()
     toast_has(page, "수정했습니다.")
     last = cafes_local()[-1]
     imgs = [x.strip() for x in last["images"].split(",") if x.strip()]
@@ -208,11 +207,10 @@ def edit_flow(page):
     old_imgs = [x.strip() for x in str(target.get("images") or "").split(",") if x.strip()]
     assert imgs[1:len(old_imgs)] == old_imgs[1:], (imgs, old_imgs)
     print("포스터 바꾸기 + 추가 이미지 OK, EXIF 지워짐:", imgs[0], jpg[-1])
-    expect(page.locator(".gallery img").first).to_have_attribute("src", imgs[0], timeout=15000)
+    expect(page.locator(".ad-gal-stage img").first).to_have_attribute("src", imgs[0], timeout=15000)
 
     # 이력 카드에 '포스터 변경' · '이미지 1장 추가'
     page.goto(f"{BASE}/popup/{cid}?tab=edit")
-    page.locator(".hx-exp summary").click()
     now = page.locator(".hx-item.now")
     expect(now).to_contain_text("포스터 변경" if had else "포스터 추가")
     expect(now).to_contain_text("이미지 1장 추가")
@@ -334,7 +332,7 @@ def wizard_flow(page, tag):
     # 모바일 상세 수정하기 탭 · 이력
     page.get_by_role("tab", name="수정하기").click()
     shot(page, f"{tag}_edit_tab")
-    page.locator(".hx-exp summary").click()
+    expect(page.locator(".hx-item.now")).to_contain_text("1번째")
     shot(page, f"{tag}_history")
 
 

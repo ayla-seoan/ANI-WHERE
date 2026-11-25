@@ -3,7 +3,7 @@
  * - 화면(HTML): 네트워크 먼저, 실패하면 저장된 화면 → 그것도 없으면 /offline
  * - 바꿀 때는 VERSION 을 올린다. activate 때 예전 캐시를 지운다.
  */
-const VERSION = "v4"; // v4: 관리자·등록하기도 저장하지 않는다 (v3: 회원 기능 — 로그인·내 캘린더 화면은 저장하지 않는다, v2: 앱과 같은 화면)
+const VERSION = "v5"; // v5: A안 로고 · 마스코트 (11/25), v4: 관리자·등록하기도 저장하지 않는다 (v3: 회원 기능 — 로그인·내 캘린더 화면은 저장하지 않는다, v2: 앱과 같은 화면)
 const STATIC_CACHE = `aniwhere-static-${VERSION}`;
 const PAGE_CACHE = `aniwhere-pages-${VERSION}`;
 const IMAGE_CACHE = `aniwhere-images-${VERSION}`;

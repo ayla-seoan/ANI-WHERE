@@ -3,10 +3,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { goLogin, useMember } from "../member/MemberContext";
 import type { Item } from "@/lib/popup";
-import { PosterCard } from "../cards";
-import { BookmarkIcon, ChatIcon, CloseIcon, ExpandMore, HelpIcon, TuneIcon } from "../Icons";
+import { BookmarkIcon, ChatIcon, CloseIcon, HelpIcon } from "../Icons";
 import FilterBar from "./FilterBar";
 import AreaPicker from "./AreaPicker";
+import BrowseCard from "./BrowseCard";
+import CondChips from "./CondChips";
+import { FilterLines } from "./BrowseIcons";
 import AskPanel from "../ask/AskPanel";
 import AskFab from "../ask/AskFab";
 import NoResult from "./NoResult";
@@ -73,7 +75,7 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
   };
 
   return (
-    <>
+    <div className="list-page">
       <FilterBar
         cond={cond}
         set={set}
@@ -84,7 +86,7 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
         count={view.length}
       />
       <div className="list-layout">
-        <div className="list-main">
+        <section className="list-main" aria-labelledby="l-count">
           {cond.ids.length > 0 && (
             <div className="ask-only-bar">
               <div className="ask-only">
@@ -97,9 +99,10 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
               </button>
             </div>
           )}
+          {/* 목록 위 줄 (A-List): 팝업 카페 N곳 · 북마크 · 지역 고르기 · 걸린 필터 칩 · 정렬. 모바일은 제목 + 필터 버튼, 그 아래 칩 줄 */}
           <div className="listtools">
-            <h1 className="listbar">
-              팝업 카페 <b>{view.length}</b>곳
+            <h1 className="listbar" id="l-count">
+              팝업 카페 <b>{view.length}곳</b>
               <span className="help" tabIndex={0}>
                 <HelpIcon />
                 <span className="tip">조건에 맞는 팝업 {view.length}곳 · 카드를 누르면 상세를 볼 수 있어요.</span>
@@ -109,48 +112,52 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
               type="button"
               className="m-filter m-only"
               aria-label="필터 열기"
+              aria-expanded={sheet}
               onClick={() => setSheet((o) => !o)}
             >
-              <TuneIcon />
+              <FilterLines />
               {act ? <span>{act}</span> : null}
             </button>
-            <button
-              type="button"
-              className={`fav-only${favOnly ? " on" : ""}`}
-              aria-pressed={favOnly}
-              onClick={toggleFavOnly}
-            >
-              <BookmarkIcon />
-              북마크
-            </button>
-            {/* 앱 목록 위 '지역 고르기' 칸 (PC). 필터 상자의 지역과 같은 값 */}
-            <AreaPicker className="pc-only" value={cond.area} areas={areas} onChange={(v) => set({ area: v })} />
-            <select
-              className="sort"
-              value={cond.sort}
-              aria-label="정렬"
-              onChange={(e) => set({ sort: e.target.value as SortKey })}
-            >
-              {SORTS.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <div className="tool-chips">
+              <button
+                type="button"
+                className={`fav-only${favOnly ? " on" : ""}`}
+                aria-pressed={favOnly}
+                onClick={toggleFavOnly}
+              >
+                <BookmarkIcon />
+                북마크
+              </button>
+              {/* 앱 목록 위 '지역 고르기' 칸. 필터 상자의 지역과 같은 값 */}
+              <AreaPicker variant="chip" value={cond.area} areas={areas} onChange={(v) => set({ area: v })} />
+              <CondChips cond={cond} set={set} />
+              <label className="sort-wrap">
+                <span className="pc-only">정렬</span>
+                <select
+                  className="sort"
+                  value={cond.sort}
+                  aria-label="정렬"
+                  onChange={(e) => set({ sort: e.target.value as SortKey })}
+                >
+                  {SORTS.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
           {view.length ? (
             <>
-              <div className="wide-grid">
+              <div className="bc-grid">
                 {view.slice(0, n).map((p) => (
-                  <div key={p.id} data-card={p.id}>
-                    <PosterCard p={p} today={today} />
-                  </div>
+                  <BrowseCard key={p.id} p={p} today={today} />
                 ))}
               </div>
               {view.length > n && (
                 <div className="list-more">
                   <button type="button" onClick={more}>
-                    <ExpandMore />
                     {view.length - n}건 더보기
                   </button>
                 </div>
@@ -171,7 +178,7 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
               <NoResult items={items} cond={cond} set={set} reset={reset} today={today} />
             )
           )}
-        </div>
+        </section>
         <div className="list-side pc-only">
           <AskPanel items={items} today={today} onShowAll={showAll} />
         </div>
@@ -179,6 +186,6 @@ export default function ListView({ items, today }: { items: Item[]; today: strin
       <div className="m-only">
         <AskFab items={items} today={today} onShowAll={showAll} />
       </div>
-    </>
+    </div>
   );
 }

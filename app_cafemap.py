@@ -4490,6 +4490,50 @@ html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-k
 }</style>
 """
 
+# A안 메뉴바 (11/25, docs/design/handoff A-Home · A-Mobile header): GNB_CSS 뒤에 불러서 덮는다 (웹 web/app/a-shell.css 와 같은 값)
+#   연민트 바탕 · 로고 52px · 알약 탭(고른 탭 = 흰 알약 + 굵게) · 오른쪽 44px 흰 동그라미 버튼. 모바일: 로고 44px, 탭 네 칸
+A_GNB_CSS = """
+<style>
+html body .st-key-gnb { padding: 12px 24px !important; gap: 12px !important; min-height: 52px; }
+html body .st-key-gnb .st-key-home_brand button { width: 186px !important; height: 52px !important; }
+html body .st-key-gnb .st-key-gnb_tabs { gap: 4px !important; }
+html body .st-key-gnb .st-key-gnb_tabs button { padding: 9px 18px !important; border: 0 !important; border-radius: 999px !important; }
+html body .st-key-gnb .st-key-gnb_tabs button p { font-family: inherit !important; font-size: 15px !important; font-weight: 600 !important;
+  color: #26302D !important; letter-spacing: 0 !important; line-height: 1.3 !important; }
+html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button { background: #fff !important; }
+html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button p { font-size: 15px !important;
+  font-weight: 800 !important; color: #1F2A27 !important; }
+html body .st-key-gnb .st-key-gnb_right { gap: 6px !important; }
+/* 검색 · 알림: 44px 흰 동그라미, 아이콘 22px */
+html body .st-key-gnb .st-key-gnb_right [class*="st-key-gnb_search_"] button,
+html body .st-key-gnb .st-key-gnb_right [data-testid="stPopover"] button { width: 44px !important; min-width: 44px !important;
+  height: 44px !important; min-height: 44px !important; border-radius: 50% !important; background-color: #fff !important;
+  background-size: 22px 22px !important; padding: 0 !important; }
+/* 프로필 사진 동그라미 44px, 손님 '로그인' 은 흰 알약 */
+html body .st-key-gnb .st-key-gnb_right .st-key-login_btn button { min-height: 44px !important; }
+html body .st-key-gnb .st-key-gnb_right .st-key-login_btn.aw-member button,
+html body.aw-member .st-key-gnb .st-key-gnb_right .st-key-login_btn button { width: 44px !important; height: 44px !important;
+  border: 2px solid #fff !important; }
+html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button { background: #fff !important; border-radius: 999px !important;
+  padding: 0 18px !important; height: 44px !important; }
+html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button p { font-family: inherit !important; font-size: 14px !important;
+  font-weight: 800 !important; color: #1F2A27 !important; }
+@media (max-width: 640px) {
+  html body .st-key-gnb { padding: 14px 16px 10px !important; border-radius: 0 0 24px 24px !important; row-gap: 10px !important; }
+  html body .st-key-gnb .st-key-home_brand button { width: 157px !important; height: 44px !important; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs { gap: 4px !important; margin-top: 0 !important; justify-content: stretch !important; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs > div { flex: 1 1 0 !important; width: auto !important; min-width: 0; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button { width: 100% !important; padding: 10px 0 !important; }
+  html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button p,
+  html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button p { font-size: 13.5px !important;
+    letter-spacing: -.02em !important; white-space: nowrap; }
+  html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button { height: 40px !important; min-height: 40px !important;
+    padding: 0 14px !important; }
+  html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button p { font-size: 13px !important; }
+}
+</style>
+"""
+
 
 ASK_FAB_CSS = """
 <style>
@@ -4715,6 +4759,9 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
     if st.session_state.pop("_gnb_to_map", False) and not on_map:
         go("map")                            # 다른 화면에서 지도·리스트·내 캘린더 탭을 누름 (메인이면 표시만 지운다)
     st.markdown(GNB_CSS, unsafe_allow_html=True)
+    # A안 메뉴바 (11/25). 회원이면 body 에 aw-member 를 달아 프로필 동그라미 / 손님 '로그인' 알약을 가른다
+    st.markdown(A_GNB_CSS, unsafe_allow_html=True)
+    components.html("<script>window.parent.document.body.classList.toggle('aw-member', %s);</script>" % ('true' if _member() else 'false'), height=0)
     components.html(f"<script>window.parent.eval({json.dumps(_TOP_BTN_JS)});</script>", height=0)   # 모바일 '맨 위로'
     components.html(f"<script>window.parent.eval({json.dumps(_GNB_MOTION_JS)});</script>", height=0)   # 메뉴바 모션 (11/19)
     wide = bool(st.session_state.get("list_only"))
@@ -4806,9 +4853,9 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
             if who:
                 # 회원: 닉네임 글자 대신 프로필 사진 동그라미 (11/18 요청). 글자는 화면에서만 숨겨 읽기 프로그램 · 테스트는 그대로 읽는다
                 av = _avatar_url(who.get("avatar")).replace('"', "%22")
-                st.markdown(f'<style>.st-key-gnb_right .st-key-login_btn button {{ width: 36px !important; height: 36px !important;'
+                st.markdown(f'<style>html body .st-key-gnb .st-key-gnb_right .st-key-login_btn button {{ width: 44px !important; height: 44px !important;'
                             f' min-height: 0 !important; padding: 0 !important; border-radius: 50% !important;'
-                            f' border: 2px solid #9EDDCC !important; background: #DDF3EC url("{av}") center / cover no-repeat !important; }}'
+                            f' border: 2px solid #fff !important; background: #DDF3EC url("{av}") center / cover no-repeat !important; }}'
                             f' .st-key-gnb_right .st-key-login_btn button p {{ font-size: 0 !important; line-height: 0 !important; }}'
                             f' .st-key-gnb_right .st-key-login_btn button:hover {{ border-color: var(--accent) !important; }}</style>',
                             unsafe_allow_html=True)

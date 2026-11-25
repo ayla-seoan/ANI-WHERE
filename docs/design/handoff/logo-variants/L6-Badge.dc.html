@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>로고 06 원형 엠블럼과 다크</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Titan+One&amp;family=Noto+Sans+KR:wght@500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="position: relative; width: 880px; height: 440px; overflow: hidden; background: #ffffff; font-family: 'Noto Sans KR', sans-serif; color: #26302d">
+  <div style="position: absolute; left: 440px; top: 0; width: 440px; height: 440px; background: #1f2a27"></div>
+  <svg width="880" height="440" viewBox="0 0 880 440" role="img" aria-label="ANI:WHERE 원형 엠블럼과 어두운 바탕 로고" style="position: absolute; left: 0; top: 0">
+    <defs>
+      <linearGradient id="l6-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fd6a2"></stop><stop offset="1" stop-color="#1aa77b"></stop></linearGradient>
+      <linearGradient id="l6-neon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ff5cc"></stop><stop offset="1" stop-color="#21b287"></stop></linearGradient>
+      <linearGradient id="l6-sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".7"></stop><stop offset=".38" stop-color="#ffffff" stop-opacity="0"></stop></linearGradient>
+      <filter id="l6-glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="8" result="b"></feGaussianBlur><feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
+      <path id="l6-ring" d="M220 210 m-120 0 a120 120 0 1 1 240 0 a120 120 0 1 1 -240 0"></path>
+    </defs>
+    <circle cx="220" cy="210" r="160" fill="#e9f7f2"></circle>
+    <circle cx="220" cy="210" r="160" fill="none" stroke="url(#l6-fill)" stroke-width="10"></circle>
+    <circle cx="220" cy="210" r="96" fill="#ffffff"></circle>
+    <text font-family="Titan One, sans-serif" font-size="25" fill="#1aa77b" letter-spacing="3"><textPath href="#l6-ring">ANI:WHERE ✦ ANIME POP-UP MAP ✦</textPath></text>
+    <svg x="340" y="56" width="40" height="40" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 0C54 40 60 46 100 50 60 54 54 60 50 100 46 60 40 54 0 50 40 46 46 40 50 0Z" fill="#a6a2f6"></path></svg>
+
+    <g filter="url(#l6-glow)">
+      <text x="660" y="236" text-anchor="middle" font-family="Titan One, sans-serif" font-size="58" textLength="360" lengthAdjust="spacingAndGlyphs" fill="url(#l6-neon)">ANI:WHERE</text>
+    </g>
+    <text x="660" y="236" text-anchor="middle" font-family="Titan One, sans-serif" font-size="58" textLength="360" lengthAdjust="spacingAndGlyphs" fill="url(#l6-sheen)">ANI:WHERE</text>
+    <svg x="474" y="132" width="36" height="36" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 0C54 40 60 46 100 50 60 54 54 60 50 100 46 60 40 54 0 50 40 46 46 40 50 0Z" fill="#7ff5cc"></path></svg>
+    <svg x="800" y="262" width="28" height="28" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 0C54 40 60 46 100 50 60 54 54 60 50 100 46 60 40 54 0 50 40 46 46 40 50 0Z" fill="#a6a2f6"></path></svg>
+  </svg>
+  <img src="../assets/aniwhere_mascot.png" alt="" style="position: absolute; left: 158px; top: 156px; width: 124px; height: auto; display: block">
+  <img src="../assets/aniwhere_mascot.png" alt="" style="position: absolute; left: 790px; top: 120px; width: 64px; height: auto; display: block">
+  <span style="position: absolute; left: 28px; bottom: 18px; font-size: 13px; font-weight: 700; color: #5f6b68">06-1 · 원형 엠블럼 — 굿즈 뱃지, 방문 인증 도장</span>
+  <span style="position: absolute; left: 468px; bottom: 18px; font-size: 13px; font-weight: 700; color: #c9d3d0">06-2 · 다크 — 랭킹 배너, 야간 화면</span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":880,"height":440}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

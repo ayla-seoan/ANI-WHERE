@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPopup, getPopupData } from "@/lib/data";
 import {
+  dayLabel,
+  daysBetween,
   detailSpan,
   detailState,
   hostOf,
+  isReserve,
   mapLink,
   periodText,
   regionColor,
@@ -17,7 +20,7 @@ import {
 import Gallery from "@/components/detail/Gallery";
 import { SimCard } from "@/components/cards";
 import HScroll from "@/components/HScroll";
-import { BagIcon, GiftIcon, PartyIcon, PinIcon, SparkleIcon } from "@/components/Icons";
+import { CalendarIcon, OpenIcon, PinIcon, SparkleIcon } from "@/components/Icons";
 import Reviews from "@/components/detail/Reviews";
 import SideTabs from "@/components/detail/SideTabs";
 import EditPanel, { type EditData } from "@/components/detail/EditPanel";
@@ -27,8 +30,9 @@ import RememberRecent from "@/components/member/RememberRecent";
 import { displayName } from "@/lib/server/auth";
 import { threadsFor } from "@/lib/server/member";
 import { getMe } from "@/lib/server/session";
+import { lvOfNick, myStamps } from "@/lib/server/stamp";
 import { charactersByWork, currentCafes, cafeHistory, historyCards, type HistoryCard } from "@/lib/server/cafe";
-import { parseLinks, rawFromNote, split, splitImages, TAG_CHECK, EVENT_TAGS } from "@/lib/cafe-rules";
+import { ALWAYS_END, parseLinks, rawFromNote, split, splitImages, TAG_CHECK, EVENT_TAGS } from "@/lib/cafe-rules";
 import { PLACEHOLDER_POSTER } from "@/lib/popup";
 import type { Row } from "@/lib/server/store";
 
@@ -146,10 +150,10 @@ export default async function PopupPage({ params }: Props) {
   const today = todayKST();
   const state = detailState(p, today);
   const color = regionColor(p.city);
-  const groups: [string, React.ReactNode, string[]][] = [
-    ["특전", <GiftIcon key="g" />, p.perks],
-    ["굿즈", <BagIcon key="b" />, p.goods],
-    ["이벤트", <PartyIcon key="p" />, p.tags.filter((t) => t !== "상시" && t !== "기간 확인 필요")],
+  const groups: [string, string[]][] = [
+    ["특전", p.perks],
+    ["굿즈", p.goods],
+    ["이벤트", p.tags.filter((t) => t !== "상시" && t !== "기간 확인 필요")],
   ];
   let threads: Awaited<ReturnType<typeof threadsFor>> = [];
   try {
@@ -161,7 +165,14 @@ export default async function PopupPage({ params }: Props) {
   let edit: EditData | null = null;
   let byWork: Record<string, string[]> = {};
   let history: HistoryCard[] = [];
+  let histLv: Record<number, number> = {}; // 수정 이력: 기록 번호 → 고친 회원의 후기 도장 랭크 (0 = 없음)
+  let stamps = 0; // 내 후기 도장 수 (리뷰 쓰기 칸)
   if (me) {
+    try {
+      stamps = await myStamps(displayName(me.row));
+    } catch {
+      /* 도장을 못 세면 도장 없이 */
+    }
     try {
       const all = await cafeHistory(p.id);
       const cur: Row | undefined = all[all.length - 1];
@@ -185,136 +196,180 @@ export default async function PopupPage({ params }: Props) {
           check: tags.includes(TAG_CHECK) ? { raw: rawFromNote(cur.note) } : null,
           title: `${cur.work || ""} · ${cur.cafe_name || ""}`,
         };
-        const [cafes, cards] = await Promise.all([currentCafes(), historyCards(all)]);
+        const [cafes, cards, lvOf] = await Promise.all([currentCafes(), historyCards(all), lvOfNick()]);
         byWork = charactersByWork(cafes);
         history = cards;
+        histLv = Object.fromEntries(all.map((r) => [Number(r.revision), lvOf(String(r.editor || ""))]));
       }
     } catch (e) {
       console.error("[detail] 수정하기 기록을 읽지 못함", e instanceof Error ? e.message : e);
     }
   }
   const reviewCount = threads.reduce((a, t) => a + 1 + t.replies.length, 0);
+  const rated = threads.filter((t) => t.post.kind === "다녀온 후기" && t.post.rating).map((t) => t.post.rating as number);
+  const avg = rated.length ? Math.round((rated.reduce((a, b) => a + b, 0) / rated.length) * 10) / 10 : 0;
   const sims = similar(p, popups, today);
   const near = nearby(p, popups, today);
+  const title = `${p.work} · ${p.name}`;
+  // 일정 칸 둘째 줄: 남은 날 (운영 시간은 데이터에 없어서 넣지 않는다)
+  const left =
+    !p.start || !p.end
+      ? "공식 공지에서 기간을 확인해 주세요"
+      : p.end < today
+        ? "끝난 팝업이에요"
+        : p.start > today
+          ? `시작까지 ${daysBetween(today, p.start)}일`
+          : p.tags.includes("상시")
+            ? "상시 운영"
+            : p.end === today
+              ? "오늘까지예요"
+              : `끝나는 날까지 ${daysBetween(today, p.end)}일`;
 
-  return (
-    <article className="detail">
-      <RememberRecent id={p.id} />
-      <div className="detail-cols">
-        <div className="detail-left">
-          <Gallery images={p.images} alt={`${p.work} 포스터`} />
-
-          <div className="dhead dtop">
-            <span className="dregion" style={{ color }}>
-              {p.area && (
-                <>
-                  <PinIcon />
-                  {p.area}
-                </>
-              )}
-            </span>
-            <span className={`dstate${state === "종료" ? " ended" : ""}`}>{state}</span>
+  const hero = (
+    <div className="ad-hero">
+      <div className="ad-hero-pic">
+        <Gallery images={p.images} alt={`${p.work} 포스터`} />
+      </div>
+      <div className="ad-hero-info">
+        <div className="ad-head">
+          <div className="ad-badges">
+            <span className={`ad-state${state === "종료" ? " ended" : ""}`}>{state}</span>
+            {p.area && (
+              <span className="ad-area" style={{ background: color }}>
+                {p.area}
+              </span>
+            )}
           </div>
-          <div className="dtitle-row">
-            <h1 className="dtitle">{p.work}</h1>
+          <div className="ad-title-row">
+            <h1 className="ad-title">{p.work}</h1>
             <ShareButtons
               id={p.id}
-              title={`${p.work} · ${p.name}`}
+              title={title}
               text={`${p.start} ~ ${p.end} · ${p.address}`}
               image={p.images[0] || PLACEHOLDER_POSTER}
             />
             <BookmarkButton cafeId={p.id} variant="detail" />
           </div>
-          {p.characters && (
-            <div className="dsub">
-              <span className="dchars">{p.characters}</span>
+          {p.characters && <div className="ad-chars">{p.characters}</div>}
+          {rated.length > 0 && (
+            <div className="ad-avg">
+              <span className="ad-stars" aria-hidden>
+                <span>★★★★★</span>
+                <span style={{ width: `${(avg / 5) * 100}%` }}>★★★★★</span>
+              </span>
+              <strong>{avg.toFixed(1)}</strong>
+              <span>다녀온 후기 {rated.length}개 평균</span>
             </div>
-          )}
-
-          <div className="dinfo">
-            <div className="dinfo-title">방문 전 확인</div>
-            <div className="drow">
-              <div className="dlabel">위치</div>
-              <div className="dval">
-                <div className="dcafe">{p.name}</div>
-                <div className="daddr">{p.address || "-"}</div>
-              </div>
-              <a className="dbtn" href={mapLink(p)} target="_blank" rel="noopener noreferrer">
-                <PinIcon />
-                지도에서 확인하기
-              </a>
-            </div>
-            <div className="drow">
-              <div className="dlabel">일정</div>
-              <div className="dval">{detailSpan(p)}</div>
-            </div>
-          </div>
-
-          <section className="dsec">
-            <h2 className="dsec-title">혜택</h2>
-            {groups.some(([, , xs]) => xs.length) ? (
-              groups
-                .filter(([, , xs]) => xs.length)
-                .map(([name, icon, xs]) => (
-                  <div key={name} className="dgroup">
-                    <span className="dpill">{name}</span>
-                    <ul className="dbox">
-                      {xs.map((x, i) => (
-                        <li key={`${x}-${i}`}>
-                          {icon}
-                          <span>{x}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))
-            ) : (
-              <div className="dnone">등록된 특전·굿즈가 없어요</div>
-            )}
-          </section>
-
-          {p.links.length > 0 && (
-            <section className="dsec">
-              <h2 className="dsec-title">참고 웹사이트</h2>
-              {p.links.map((u) => (
-                <a key={u} className="dlink" href={u} target="_blank" rel="noopener noreferrer nofollow">
-                  <span className="dlink-text">
-                    <span className="dlink-title">{hostOf(u)}</span>
-                    <span className="dlink-url">{u}</span>
-                  </span>
-                  <span className="dlink-go" aria-hidden>
-                    ↗
-                  </span>
-                </a>
-              ))}
-            </section>
-          )}
-
-          {p.intro && (
-            <section className="dsec">
-              <h2 className="dsec-title">팝업 소개</h2>
-              <div className="dintro">
-                <IntroBody text={p.intro} />
-              </div>
-            </section>
           )}
         </div>
 
-        <SideTabs
-          reviewCount={reviewCount}
-          review={
-            <Reviews
-              cafeId={p.id}
-              threads={threads}
-              me={me ? { nick: String(me.row.nickname || ""), avatar: String(me.row.avatar || "") } : null}
-            />
-          }
-          edit={<EditPanel entryId={p.id} data={edit} byWork={byWork} history={history} />}
-        />
+        <section className="ad-check" aria-labelledby="ad-check-h">
+          <h2 id="ad-check-h" className="sr-only">
+            방문 전 확인
+          </h2>
+          <div className="ad-box" role="group" aria-label="위치">
+            <PinIcon />
+            <div>
+              <strong className="dcafe">{p.name}</strong>
+              <span className="daddr">{p.address || "-"}</span>
+              <a href={mapLink(p)} target="_blank" rel="noopener noreferrer">
+                지도에서 확인하기
+              </a>
+            </div>
+          </div>
+          <div className="ad-box" role="group" aria-label="일정">
+            <CalendarIcon />
+            <div>
+              <strong>{p.start && p.end === ALWAYS_END ? `${dayLabel(p.start, true)} ~ 상시` : detailSpan(p)}</strong>
+              <span>
+                {left}
+                {isReserve(p) ? " · 사전 예약" : ""}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section className="ad-sec" aria-labelledby="ad-gift-h">
+          <h2 id="ad-gift-h" className="ad-h2">
+            혜택
+          </h2>
+          {groups.some(([, xs]) => xs.length) ? (
+            <ul className="ad-chips">
+              {groups.flatMap(([name, xs]) =>
+                xs.map((x, i) => (
+                  <li key={`${name}-${x}-${i}`} className={name === "특전" ? "perk" : undefined}>
+                    <b>{name}</b>
+                    {x}
+                  </li>
+                )),
+              )}
+            </ul>
+          ) : (
+            <div className="ad-none">등록된 특전·굿즈가 없어요</div>
+          )}
+        </section>
+
+        {p.links.length > 0 && (
+          <section className="ad-sec" aria-labelledby="ad-link-h">
+            <h2 id="ad-link-h" className="ad-h2">
+              참고 웹사이트
+            </h2>
+            <div className="ad-links">
+              {p.links.map((u) => (
+                <a key={u} href={u} target="_blank" rel="noopener noreferrer nofollow">
+                  <span>{hostOf(u)}</span>
+                  <OpenIcon />
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {p.intro && (
+          <section className="ad-sec" aria-labelledby="ad-intro-h">
+            <h2 id="ad-intro-h" className="ad-h2">
+              팝업 소개
+            </h2>
+            <div className="ad-intro">
+              <IntroBody text={p.intro} />
+            </div>
+          </section>
+        )}
       </div>
+    </div>
+  );
+
+  const mini = (
+    <div className="ad-mini">
+      <img src={p.images[0] || PLACEHOLDER_POSTER} alt="" />
+      <div>
+        <span>팝업 상세 · {p.name}</span>
+        <h1 className="ad-title">{p.work}</h1>
+      </div>
+    </div>
+  );
+
+  return (
+    <article className="ad">
+      <RememberRecent id={p.id} />
+      <SideTabs
+        cafeId={p.id}
+        reviewCount={reviewCount}
+        hero={hero}
+        mini={mini}
+        review={
+          <Reviews
+            cafeId={p.id}
+            threads={threads}
+            me={me ? { nick: String(me.row.nickname || ""), avatar: String(me.row.avatar || "") } : null}
+            stamps={stamps}
+          />
+        }
+        edit={<EditPanel entryId={p.id} data={edit} byWork={byWork} history={history} histLv={histLv} />}
+      />
 
       {(sims.length > 0 || near.length > 0) && (
-        <div className="similar">
+        <div className="ad-similar">
           {sims.length > 0 && (
             <section className="simsec">
               <h2 className="sim-head">

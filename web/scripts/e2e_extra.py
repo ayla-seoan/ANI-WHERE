@@ -8,6 +8,7 @@
 """
 import hashlib
 import json
+import re
 import sys
 import time
 import urllib.request
@@ -103,7 +104,7 @@ def login(page, lid):
 
 
 def logout(page):
-    page.goto(f"{BASE}/login")
+    page.goto(f"{BASE}/mypage")
     page.get_by_role("button", name="로그아웃").click()
     wait_path(page, "/login")
     expect(page.locator(".gnb-login")).to_be_visible(timeout=15000)  # 같은 주소라 경로만으로는 끝난 걸 모른다
@@ -159,11 +160,10 @@ def run(page, tag):
     page.goto(f"{BASE}{href}")
     box = page.locator(".rvbox")
     box.get_by_role("radio", name="5점").click()
-    box.get_by_role("button", name="+ 사진 첨부").click()
     box.locator(".pic-drop input[type=file]").set_input_files([str(IMG / "a.png"), str(IMG / "gps.jpg")])
     expect(box.locator(".pic-one")).to_have_count(2)
     shot(page, f"web_{tag}_review_photo_pick", full=False)
-    box.get_by_role("button", name="리뷰 등록").click()
+    box.get_by_role("button", name=re.compile("리뷰 등록|등록하고 도장 받기")).click()
     toast(page, "리뷰를 남겼습니다.", f"toast_{tag}_review_saved")
     th = page.locator(".rv-thread").first
     expect(th.locator(".rv-pics img")).to_have_count(2)
@@ -189,7 +189,7 @@ def run(page, tag):
     print(tag, "리뷰 사진 고치기 OK")
 
     # ---- 프로필 사진 ----
-    page.goto(f"{BASE}/login")
+    page.goto(f"{BASE}/mypage")
     page.locator("summary", has_text="프로필 사진 바꾸기").click()
     page.locator("input[name=photo]").set_input_files(str(IMG / "gps.jpg"))
     expect(page.locator(".av-preview img")).to_be_visible()
@@ -234,7 +234,9 @@ def bell_and_picker(page, tag, lid):
     dlg = page.locator(".fw-dlg")
     expect(dlg).to_be_visible()
     dlg.locator(".fw-search input").fill(str(target.get("cafe_name") or target.get("work")))
-    dlg.locator(".fwc").first.click()
+    # 같은 매장에 팝업이 여럿이면 첫 결과가 다른 팝업일 수 있다 → 작품 이름이 맞는 칸을 고른다 (11/25)
+    want = str(target.get("work") or "")
+    (dlg.locator(".fwc", has_text=want) if want else dlg.locator(".fwc")).first.click()
     expect(dlg.locator(".fw-count b")).to_have_text("1")
     shot(page, f"web_{tag}_picker", full=False)
     dlg.get_by_role("button", name="저장하기").click()
@@ -271,8 +273,8 @@ def bell_and_picker(page, tag, lid):
     print(tag, "종: 빨간 점 → 모두 읽음 → 새로고침해도 읽음 OK, 쿠키", cname, "번호", want_id)
     # 내 캘린더 '알림 받은 내역' 에서도 같은 번호로 '읽음'
     page.goto(f"{BASE}/calendar")
-    today_item = page.locator(".ntf-box .ntf-item", has_text=label).first
-    expect(today_item.locator(".ntf-st")).to_have_text("읽음")
+    today_item = page.locator(".ntf-box .nh-item", has_text=label).first
+    expect(today_item.locator(".nh-st")).to_have_text("읽음")
     shot(page, f"web_{tag}_calendar_ntf")
     print(tag, "내 캘린더 알림 내역 읽음 공유 OK")
 
@@ -294,7 +296,7 @@ def bell_and_picker(page, tag, lid):
         ck = {x["name"]: x for x in page.context.cookies()}
         print(tag, "내 주변 추천 OK (가까운 곳 번호", nid, "읽음 쿠키 수", len(ck[cname]["value"].split(".")), ")")
         page.goto(f"{BASE}/calendar")
-        expect(page.locator(".ntf-box .ntf-item", has_text="내 주변")).not_to_have_count(0, timeout=15000)
+        expect(page.locator(".ntf-box .nr-item")).not_to_have_count(0, timeout=15000)
         shot(page, f"web_{tag}_calendar_near")
         print(tag, "내 캘린더 내 주변 추천 OK")
     return eid
@@ -330,7 +332,7 @@ def admin_flow(page, tag, writer_lid, cafe_href):
     expect(item).to_contain_text("시험용 사유입니다")
     shot(page, f"web_{tag}_bell_inbox", full=False)
     page.goto(f"{BASE}/calendar")
-    expect(page.locator(".ntf-box .ntf-item.plain", has_text="작성하신 리뷰가 삭제되었어요")).to_have_count(1)
+    expect(page.locator(".ntf-box .nh-item.plain", has_text="작성하신 리뷰가 삭제되었어요")).to_have_count(1)
     print(tag, "받은 알림(리뷰 삭제 사유) — 종 · 내 캘린더 OK")
     # 손님이 북마크를 누르면 로그인 화면 + 안내 토스트
     logout(page)

@@ -153,14 +153,14 @@ def blog_and_share(page, tag, pid):
         print(tag, "공유 버튼: 펼치기 · 링크 복사 OK", clip)
     else:
         print(tag, "공유 버튼: 상세에 아직 안 붙음 (SKIP)")
-    tab = page.locator(".rv-subtabs button", has_text="블로그 후기")
+    tab = page.get_by_role("tab", name=re.compile("블로그 후기"))
     if tab.count():
         txt = tab.first.inner_text()
         tab.first.click()
         if page.locator(".blog-tab").count():
             expect(page.locator(".blog-tab .blog-empty")).to_have_text("블로그 후기는 네이버 검색을 연결한 뒤에 보여요.")
             expect(page.locator(".blog-tab .blog-note")).to_contain_text("네이버 블로그 검색 결과예요")
-            assert re.search(r"\(0\)", tab.first.inner_text()) or "(" not in txt, tab.first.inner_text()
+            assert re.search(r"블로그 후기( 0)?$", tab.first.inner_text().strip()), (txt, tab.first.inner_text())
             shot(page, f"web_blog_{tag}")
             print(tag, "블로그 후기 탭: 빈 상태 OK —", tab.first.inner_text())
         else:

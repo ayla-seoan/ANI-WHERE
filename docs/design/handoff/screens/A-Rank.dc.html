@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>A 후기 도장 랭크</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Titan+One&amp;family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 780px; box-sizing: border-box; background: #f6f8f7; font-family: 'Noto Sans KR', sans-serif; color: #26302d; padding: 44px 48px; display: flex; flex-direction: column; gap: 22px">
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h1 style="margin: 0; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 36px">후기 도장 랭크</h1>
+      <p style="margin: 0; font-size: 15px; color: #5f6b68">다녀온 후기를 남기면 도장이 하나씩 쌓이고, 쌓인 도장 수만큼 랭크가 올라가요.</p>
+    </div>
+    <span style="font-size: 13px; font-weight: 800; color: #0b5e57; background: #e6fbf7; padding: 6px 14px; border-radius: 999px">후기 1개 = 도장 1개</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px">
+    <sc-for list="{{tiers}}" as="t" hint-placeholder-count="5">
+      <div style="background: #ffffff; border-radius: 22px; padding: 22px 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; border: 2px solid {{t.cardLine}}">
+        <span style="position: relative; width: 116px; height: 116px">
+          <svg width="116" height="116" viewBox="0 0 80 80" role="img" aria-label="{{t.name}} 도장" style="position: absolute; left: 0; top: 0">
+            <defs><path id="{{t.ringId}}" d="M40 40 m-29.5 0 a29.5 29.5 0 1 1 59 0 a29.5 29.5 0 1 1 -59 0"></path></defs>
+            <circle cx="40" cy="40" r="38" fill="{{t.fill}}"></circle>
+            <circle cx="40" cy="40" r="38" fill="none" stroke="{{t.ring}}" stroke-width="3.5"></circle>
+            <circle cx="40" cy="40" r="22.5" fill="#ffffff" stroke="{{t.ring}}" stroke-width="1.2"></circle>
+            <text font-family="Titan One, sans-serif" font-size="7.6" fill="{{t.fg}}" letter-spacing=".8"><textPath href="#{{t.ringId}}">ANI:WHERE ✦ LV.{{t.lv}} {{t.en}} ✦</textPath></text>
+          </svg>
+          <img src="../assets/aniwhere_mascot.png" alt="" style="position: absolute; left: 34px; top: 34px; width: 48px; height: auto; display: block">
+          <span style="position: absolute; right: -2px; bottom: 2px; min-width: 30px; height: 26px; border-radius: 999px; background: {{t.ring}}; border: 3px solid #ffffff; color: #ffffff; font-family: 'Titan One', sans-serif; font-size: 13px; line-height: 20px; text-align: center; box-sizing: border-box">{{t.lv}}</span>
+        </span>
+        <span style="font-family: 'Jua', sans-serif; font-size: 22px; color: {{t.fg}}">{{t.name}}</span>
+        <span style="font-size: 13px; font-weight: 800; padding: 3px 12px; border-radius: 999px; background: {{t.fill}}; color: {{t.fg}}">다녀온 후기 {{t.need}}</span>
+        <span style="font-size: 12.5px; color: #5f6b68; text-align: center; line-height: 1.5; white-space: pre-line">{{t.perk}}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display: flex; gap: 14px; flex: 1">
+    <div style="flex: 1.3; background: #ffffff; border-radius: 22px; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px">
+      <strong style="font-size: 15px">크기 규칙 — 어디서나 같은 도장, 크기만 다르게</strong>
+      <div style="display: flex; align-items: flex-end; gap: 28px">
+        <sc-for list="{{sizes}}" as="s" hint-placeholder-count="4">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+            <span style="width: {{s.px}}; height: {{s.px}}; border-radius: 50%; background: #e9f7f2; border: {{s.bw}} solid #21b287; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span>
+            <span style="font-size: 12.5px; font-weight: 800">{{s.label}}</span>
+            <span style="font-size: 12px; color: #5f6b68">{{s.where}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <span style="font-size: 12.5px; color: #5f6b68">40px 이하에서는 둘레 글자를 빼고 색 테두리 + 토끼만 보여요.</span>
+    </div>
+    <div style="flex: 1; background: #ffffff; border-radius: 22px; padding: 20px 24px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.6">
+      <strong style="font-size: 15px">세는 규칙 (악용 막기)</strong>
+      <span>· 별점만 남긴 다녀온 후기도 1개로 세요</span>
+      <span>· 같은 팝업에는 도장 1개만 (여러 번 써도 1개)</span>
+      <span>· 기대평 · 답글은 세지 않아요</span>
+      <span>· 지운 후기, 관리자가 지운 후기는 빼고 세요</span>
+      <span>· 탈퇴하면 도장도 함께 지워져요</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":780}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      tiers: [
+        { lv: 1, name: '새싹 팬', en: 'SPROUT', need: '1개', ring: '#5fbf9f', fill: '#f0faf6', fg: '#0f6b5c', cardLine: '#ffffff', perk: '첫 후기 기념 도장\n리뷰 닉네임 옆에 도장 표시', ringId: 'rk-1' },
+        { lv: 2, name: '단골 팬', en: 'REGULAR', need: '3개', ring: '#21b287', fill: '#e9f7f2', fg: '#0f6b5c', cardLine: '#21b287', perk: '지금 내 랭크 (예시)\n후기 모음에 먼저 소개될 기회', ringId: 'rk-2' },
+        { lv: 3, name: '성지순례러', en: 'PILGRIM', need: '10개', ring: '#2c5bc5', fill: '#eaf0fc', fg: '#2c5bc5', cardLine: '#ffffff', perk: '리뷰 카드에 파란 테두리\n새 팝업 소식 먼저 알림', ringId: 'rk-3' },
+        { lv: 4, name: '덕질 마스터', en: 'MASTER', need: '25개', ring: '#7656c4', fill: '#f1ecff', fg: '#5b3fae', cardLine: '#ffffff', perk: '닉네임 옆 보라 반짝이\n마이페이지 꾸미기 배경', ringId: 'rk-4' },
+        { lv: 5, name: '전설의 덕후', en: 'LEGEND', need: '50개', ring: '#c99a00', fill: '#fff6d6', fg: '#7a5a00', cardLine: '#ffffff', perk: '금색 도장과 명예의 전당\n(운영 판단 필요)', ringId: 'rk-5' }
+      ],
+      sizes: [
+        { px: '96px', bw: '4px', label: '96px', where: '마이페이지 대표' },
+        { px: '40px', bw: '3px', label: '40px', where: '다녀온 팝업 카드' },
+        { px: '32px', bw: '2.5px', label: '32px', where: '리뷰 작성칸' },
+        { px: '20px', bw: '2px', label: '20px', where: '리뷰 닉네임 옆' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>A 로고 (확정)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0d9488}a:hover{color:#0b7a70}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; background: #f6f8f7; font-family: 'Noto Sans KR', sans-serif; color: #26302d; padding: 48px; display: grid; grid-template-columns: 760px 1fr; grid-template-rows: 1fr 168px; gap: 24px">
+
+  <div style="grid-row: 1; background: #ffffff; border-radius: 28px; padding: 48px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <span style="font-size: 13px; font-weight: 700; letter-spacing: .08em; color: #5f6b68">PRIMARY LOGO</span>
+      <span style="font-size: 13px; font-weight: 700; color: #0b5e57; background: #e6fbf7; padding: 4px 12px; border-radius: 999px">확정 · 배경 투명 PNG</span>
+    </div>
+    <img src="../assets/aniwhere_logo.png" alt="ANI:WHERE 로고" style="width: 640px; height: auto; display: block; align-self: center">
+    <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #5f6b68; max-width: 620px">보내 주신 로고의 흰 배경을 지워 투명하게 정리했어요. 연민트 메뉴바나 어두운 바탕 위에 올려도 흰 상자가 생기지 않아요. 오른쪽 토끼 얼굴은 떼어서 앱 아이콘과 물어보기 도우미로 씁니다.</p>
+  </div>
+
+  <div style="grid-row: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 16px">
+    <div style="background: #e9f7f2; border-radius: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px">
+      <img src="../assets/aniwhere_logo.png" alt="연민트 메뉴바 위 로고" style="width: 190px; height: auto; display: block">
+      <span style="font-size: 13px; font-weight: 700; color: #5f6b68">메뉴바 (연민트 위)</span>
+    </div>
+    <div style="background: #1f2a27; border-radius: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px">
+      <img src="../assets/aniwhere_logo.png" alt="어두운 바탕 위 로고" style="width: 190px; height: auto; display: block">
+      <span style="font-size: 13px; font-weight: 700; color: #c9d3d0">어두운 바탕 (랭킹 배너)</span>
+    </div>
+    <div style="background: #ffffff; border-radius: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px">
+      <div style="width: 120px; height: 120px; border-radius: 30px; background: #ffffff; border: 2.5px solid #9eddcc; display: flex; align-items: center; justify-content: center; box-sizing: border-box">
+        <img src="../assets/aniwhere_mascot.png" alt="앱 아이콘" style="width: 86px; height: auto; display: block">
+      </div>
+      <span style="font-size: 13px; font-weight: 700; color: #5f6b68">앱 아이콘 · PWA</span>
+    </div>
+    <div style="background: #ffffff; border-radius: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px">
+      <div style="display: flex; align-items: flex-end; gap: 18px">
+        <img src="../assets/aniwhere_mascot.png" alt="" style="width: 56px; height: auto; display: block">
+        <img src="../assets/aniwhere_mascot.png" alt="" style="width: 36px; height: auto; display: block">
+        <img src="../assets/aniwhere_mascot.png" alt="" style="width: 22px; height: auto; display: block">
+      </div>
+      <span style="font-size: 13px; font-weight: 700; color: #5f6b68">마스코트 · 물어보기 / 파비콘</span>
+    </div>
+  </div>
+
+  <div style="grid-column: 1 / span 2; grid-row: 2; background: #ffffff; border-radius: 24px; padding: 24px 32px; display: flex; align-items: center; gap: 24px; box-sizing: border-box">
+    <sc-for list="{{swatches}}" as="s" hint-placeholder-count="6">
+      <div style="display: flex; flex-direction: column; gap: 8px; width: 104px">
+        <div style="height: 56px; border-radius: 14px; background: {{s.hex}}; border: 1px solid #e3e9e7"></div>
+        <div style="font-size: 13px; font-weight: 800">{{s.name}}</div>
+        <div style="font-size: 12px; color: #5f6b68">{{s.hex}}</div>
+      </div>
+    </sc-for>
+    <div style="flex: 1; border-left: 1px solid #e3e9e7; padding-left: 24px; font-size: 14px; line-height: 1.7">
+      <strong>쓰는 규칙</strong><br>
+      · 로고는 높이 32px 이상에서만. 그보다 작으면 토끼 얼굴만<br>
+      · 흰색 · 연민트 · 먹 바탕 위에만 두고, 늘리거나 색을 바꾸지 않기<br>
+      · 로고 초록(#21b287)과 앱 포인트(#14b8a6)는 살짝 달라요 — 맞출지 결정 필요
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      swatches: [
+        { name: '로고 초록', hex: '#21b287' },
+        { name: '앱 포인트', hex: '#14b8a6' },
+        { name: '포인트 글자', hex: '#0d9488' },
+        { name: '메뉴바', hex: '#e9f7f2' },
+        { name: '글자', hex: '#26302d' },
+        { name: '보라 반짝이', hex: '#a6a2f6' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

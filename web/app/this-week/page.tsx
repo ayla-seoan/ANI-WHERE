@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { getPopupData } from "@/lib/data";
 import { shortDate, sortPopups, thisSunday, todayKST, toItem, type Popup } from "@/lib/popup";
-import { PosterCard } from "@/components/cards";
+import BrowseCard from "@/components/browse/BrowseCard";
 import EmptyState from "@/components/EmptyState";
 
 export const revalidate = 600;
@@ -35,7 +35,7 @@ export default async function ThisWeek() {
   return (
     <div className="week-page">
       <h1 className="listbar">
-        이번 주 갈 수 있는 팝업 <b>{week.length}</b>곳
+        이번 주 갈 수 있는 팝업 <b>{week.length}곳</b>
       </h1>
       <p className="page-sub">
         {today === sunday
@@ -59,9 +59,9 @@ export default async function ThisWeek() {
               <h2 className="home-h">
                 {r} <small>{list.length}곳</small>
               </h2>
-              <div className="wide-grid">
+              <div className="bc-grid">
                 {list.map((p) => (
-                  <PosterCard key={p.id} p={toItem(p)} today={today} />
+                  <BrowseCard key={p.id} p={toItem(p)} today={today} />
                 ))}
               </div>
             </section>

@@ -1,0 +1,1253 @@
+/* A안 홈 (11/25, docs/design/handoff/screens/A-Home · A-Mobile). 공통 틀은 a-shell.css.
+   새 조각은 .ah-* 이름, 예전 .story* 만 같은 이름으로 덮는다.
+   실시간 랭킹(.rank · .hb · .hl · .aw-dots · .aw-arrow.big)은 사용자 요청으로 그대로 — 여기서 건드리지 않는다. */
+
+/* ---------- 틀: 섹션 사이 44px (모바일 28px), 섹션 안 14px (모바일 10px) ---------- */
+.home.ah {
+  gap: 44px;
+  padding-top: 4px;
+}
+.ah-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+}
+.ah-hh {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ah-h {
+  margin: 0;
+  font-family: inherit;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.4;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ah-h > svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--accent);
+}
+.ah-h .help {
+  margin-left: 0;
+}
+.ah-h .help .tip {
+  left: 0;
+  transform: none;
+}
+.ah-more {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.ah-more:hover {
+  color: var(--accent-deep);
+}
+.ah-empty {
+  font-size: 14px;
+  color: var(--ink-soft);
+  padding: 6px 2px;
+}
+
+/* 칩 (지역 · 후기 종류): 고른 것은 민트 테두리 + 연민트 바탕 */
+.ah-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ah-chip {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ah-chip:hover {
+  border-color: var(--accent);
+}
+.ah-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: #0b5e57;
+  font-weight: 700;
+}
+
+/* 상태 배지 (진행 중 · D-n · 마감임박 · 종료) */
+.ah-st {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  padding: 2px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: #0b5e57;
+  background: #e6fbf7;
+}
+.ah-st.blue {
+  color: #2c5bc5;
+  background: #eaf0fc;
+}
+.ah-st.red {
+  color: #c0313f;
+  background: #fdecee;
+}
+.ah-st.gray {
+  color: #5f6b68;
+  background: #eef2f1;
+}
+
+/* ---------- 북마크 팝업 / 특전 있는 작품들: 72px 동그라미 줄 ---------- */
+.ah .stories {
+  margin: 0;
+}
+.ah .story-row {
+  gap: 14px;
+  padding: 8px 2px 4px;
+}
+.ah .story {
+  flex: 0 0 84px;
+  width: 84px;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+.ah .story .ring,
+.ah .story.mark .ring {
+  width: 72px;
+  height: 72px;
+  padding: 3px;
+  background: var(--accent);
+}
+.ah .story .pic {
+  border: 3px solid #fff;
+}
+/* 위쪽 배지: 회원 = 지역, 손님 = 특전 있는 팝업 수 */
+.ah .story .rg {
+  top: -8px;
+  bottom: auto;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: #fff;
+  background: var(--accent-deep);
+  padding: 1px 7px;
+  border: 1.5px solid #fff;
+}
+.ah .story .nm,
+.ah .story.add .nm {
+  margin: 0;
+  width: auto;
+  max-width: 84px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.ah .story.add .ring {
+  background: none;
+  border: 2px dashed #c6d0cd;
+}
+.ah .story.add .ring svg {
+  width: 28px;
+  height: 28px;
+  color: var(--accent-deep);
+}
+.ah .story-empty {
+  font-size: 13px;
+  color: var(--ink-soft);
+  padding-top: 26px;
+}
+
+/* ---------- 따끈따끈 신규 등록 팝업: 196px 포스터 카드 줄 ---------- */
+.ah-row {
+  --pw: 196px;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 2px 2px 6px;
+  scrollbar-width: none;
+}
+.ah-row::-webkit-scrollbar {
+  display: none;
+}
+.ah-pc {
+  position: relative;
+  flex: 0 0 var(--pw);
+  width: var(--pw);
+  min-width: 0;
+}
+.ah-pc-a {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--ink);
+}
+.ah-pc-pic {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  border: 2.5px solid var(--mint-line);
+  border-radius: 12px;
+  background-color: #eef3f1;
+  background-size: cover;
+  background-position: center;
+  transition: border-color 0.15s ease;
+}
+.ah-pc-a:hover .ah-pc-pic {
+  border-color: var(--accent);
+}
+.ah-pc-pic .ah-st {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+}
+.ah-area {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  padding: 1px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.ah-pc-t {
+  font-family: "Jua", sans-serif;
+  font-size: 17px;
+  line-height: 1.25;
+  color: #0f6b5c;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ah-pc-m {
+  margin-top: -6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 북마크 버튼: 포스터 오른쪽 아래 (포스터 높이 = 폭 × 4/3) */
+.ah-pc .bm-card {
+  top: calc(var(--pw) * 4 / 3 - 44px);
+  right: 10px;
+  bottom: auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: none;
+}
+.ah-pc .bm-card svg {
+  width: 18px;
+  height: 18px;
+}
+.ah-pc .bm-card:hover {
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+/* 맨 끝 점선 '더보기' 카드 */
+.ah-morecard {
+  flex: 0 0 var(--pw);
+  width: var(--pw);
+  aspect-ratio: 3 / 4;
+  border-radius: 12px;
+  border: 2px dashed var(--mint-line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #0f6b5c;
+  font-size: 15px;
+  font-weight: 800;
+}
+.ah-morecard span {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+.ah-morecard:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* 넘기기 버튼: 44px 흰 동그라미 (이 줄만 — 랭킹 배너의 버튼은 그대로) */
+.ah-new .aw-arrow {
+  top: 120px;
+  transform: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  color: var(--ink);
+  font-size: 0;
+  line-height: 0;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.ah-new .aw-arrow.show {
+  display: flex;
+}
+.ah-new .aw-arrow::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-top: 2.4px solid currentColor;
+  border-right: 2.4px solid currentColor;
+  border-radius: 1px;
+  transform: translateX(-2px) rotate(45deg);
+}
+.ah-new .aw-arrow.l::before {
+  transform: translateX(2px) rotate(-135deg);
+}
+.ah-new .aw-arrow.l {
+  left: -8px;
+}
+.ah-new .aw-arrow.r {
+  right: -8px;
+}
+.ah-new .aw-arrow:hover {
+  color: var(--accent-deep);
+}
+
+/* ---------- 곧 끝나는 팝업: 7일 칸 ---------- */
+.ah-week-scroll {
+  overflow-x: auto;
+}
+.ah-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(140px, 1fr));
+  gap: 8px;
+  min-width: 1000px;
+}
+.ah-wk {
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--surface-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 170px;
+  min-width: 0;
+}
+.ah-wk.today {
+  background: var(--accent-soft);
+}
+.ah-wk.past {
+  opacity: 0.55;
+}
+.ah-wk-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.ah-wk.today .ah-wk-h {
+  color: #0b5e57;
+}
+.ah-wk.past .ah-wk-h {
+  color: var(--ink-soft);
+}
+.ah-wk-n {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.ah-wk-i {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px;
+  color: var(--ink);
+  min-width: 0;
+}
+.ah-wk-i:hover {
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+.ah-wk-d,
+.ah-wk-s {
+  display: none;
+}
+.ah-wk-p {
+  flex: none;
+  width: 32px;
+  height: 42px;
+  border-radius: 6px;
+  background-color: #eef3f1;
+  background-size: cover;
+  background-position: center;
+}
+.ah-wk-b {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ah-wk-t {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ah-wk-more {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  background: none;
+  padding: 2px 2px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #0b5e57;
+  cursor: pointer;
+}
+.ah-wk-more svg {
+  width: 16px;
+  height: 16px;
+}
+.ah-wk-more:hover {
+  text-decoration: underline;
+}
+.ah-wk-none {
+  display: none;
+}
+
+/* ---------- 사전예약 팝업 (보라): 요약 카드 + 타임라인 ---------- */
+.ah-pre {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: stretch;
+  min-width: 0;
+}
+.ah-pre-sum {
+  flex: 1 1 240px;
+  max-width: 280px;
+  background: var(--purple-soft);
+  border-radius: 18px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ah-pre-sum .ah-h > svg {
+  color: var(--purple);
+}
+.ah-pre-p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.ah-pre-n {
+  font-family: "Jua", sans-serif;
+  font-size: 40px;
+  line-height: 1;
+  color: var(--purple-deep);
+}
+.ah-pre-n span {
+  font-size: 18px;
+  color: var(--ink);
+}
+.ah-pre-all {
+  margin-top: auto;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--purple);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ah-pre-all:hover {
+  background: var(--purple-deep);
+}
+.ah-pre-none {
+  flex: 999 1 300px;
+  align-self: center;
+  padding: 0 8px;
+}
+.ah-pre-line {
+  flex: 999 1 560px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 4px;
+  list-style: none;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 42px) / 4);
+  gap: 14px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.ah-pre-i {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+/* 가로 줄: 점 가운데 높이 (날짜 알약 28 + 사이 10 + 점 반 7) */
+.ah-pre-i::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: -14px;
+  top: 43.5px;
+  height: 3px;
+  background: var(--purple-line);
+}
+.ah-pre-i:first-child::before {
+  border-radius: 2px 0 0 2px;
+}
+.ah-pre-i:last-child::before {
+  right: 0;
+  border-radius: 0 2px 2px 0;
+}
+.ah-pre-date {
+  position: relative;
+  align-self: flex-start;
+  max-width: 100%;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--purple-deep);
+  background: #fff;
+  border: 1.5px solid var(--purple-line);
+  padding: 0 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ah-pre-dot {
+  position: relative;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #a99cf2;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px #a99cf2;
+  margin-left: 12px;
+}
+.ah-pre-i.first .ah-pre-dot {
+  background: var(--purple);
+  box-shadow: 0 0 0 2px var(--purple);
+}
+.ah-pre-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.ah-pre-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  color: var(--ink);
+  min-width: 0;
+}
+.ah-pre-card:hover {
+  border-color: var(--purple);
+}
+.ah-pre-pic {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 3;
+  background-color: #eef3f1;
+  background-size: cover;
+  background-position: center top;
+}
+.ah-pre-badge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: #fff;
+  background: var(--purple);
+  padding: 2px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.ah-pre-badge.m {
+  display: none;
+}
+.ah-pre-txt {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.ah-pre-t {
+  font-family: "Jua", sans-serif;
+  font-size: 17px;
+  line-height: 1.25;
+  color: #0f6b5c;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ah-pre-m {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.ah-pre-btn {
+  flex: none;
+  min-height: 40px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--purple);
+  background: #fff;
+  color: var(--purple-deep);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.ah-pre-btn svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.ah-pre-btn:hover {
+  background: var(--purple-soft);
+}
+.ah-pre-btn.on {
+  background: var(--purple);
+  color: #fff;
+}
+
+/* ---------- 꿀팁 가득! 실시간 후기 모음: 높이 제각각 3단 ---------- */
+.ah-wall {
+  columns: 3 300px;
+  column-gap: 16px;
+}
+.ah-rv {
+  break-inside: avoid;
+  display: inline-block;
+  width: 100%;
+  margin-bottom: 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  vertical-align: top;
+}
+.ah-rv-ph {
+  position: relative;
+  display: block;
+  background: var(--surface-soft);
+  line-height: 0;
+}
+.ah-rv-ph img {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 140px;
+  max-height: 300px;
+  object-fit: cover;
+}
+.ah-rv-cnt {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: #fff;
+  background: rgba(31, 42, 39, 0.7);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.ah-rv-in {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ah-rv-kind {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: #0b5e57;
+  background: #e6fbf7;
+}
+.ah-rv-kind.hope {
+  color: #2c5bc5;
+  background: #eaf0fc;
+}
+.ah-rv-kind.etc {
+  color: #9a6a00;
+  background: #fff6d6;
+}
+.ah-rv-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.ah-rv-av {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-soft);
+}
+.ah-rv-who strong {
+  font-size: 13.5px;
+  font-weight: 800;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ah-rv-time {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.ah-rv-stars {
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.4;
+  color: #9a6a00;
+  letter-spacing: 1px;
+}
+.ah-rv-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-line-clamp: 8;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ah-rv-pop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  min-width: 0;
+}
+.ah-rv-pop:hover {
+  background: var(--accent-soft);
+}
+.ah-rv-pp {
+  flex: none;
+  width: 28px;
+  height: 36px;
+  border-radius: 6px;
+  background-color: #eef3f1;
+  background-size: cover;
+  background-position: center;
+}
+.ah-rv-pn {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ah-rv-pop .ah-st {
+  font-size: 11.5px;
+  padding: 1px 8px;
+}
+.ah-morebtn {
+  align-self: center;
+  height: 46px;
+  padding: 0 28px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--accent-soft);
+  color: #0b5e57;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.ah-morebtn:hover {
+  background: #d3f6ee;
+}
+
+/* 좁은 PC: 사전예약 타임라인 칸을 3 · 2칸으로 */
+@media (max-width: 1100px) and (min-width: 641px) {
+  .ah-pre-line {
+    grid-auto-columns: calc((100% - 28px) / 3);
+  }
+}
+@media (max-width: 860px) and (min-width: 641px) {
+  .ah-pre-line {
+    grid-auto-columns: calc((100% - 14px) / 2);
+  }
+}
+
+/* ================= 모바일 (A-Mobile) ================= */
+@media (max-width: 640px) {
+  .home.ah {
+    gap: 28px;
+    padding-top: 0;
+  }
+  .ah-sec {
+    gap: 10px;
+  }
+  .ah-hh {
+    gap: 8px;
+  }
+  .ah-h {
+    font-size: 17px;
+  }
+  .ah-h > svg {
+    display: none;
+  }
+  /* 칩은 한 줄로, 넘치면 옆으로 민다 */
+  .ah-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    scrollbar-width: none;
+  }
+  .ah-chips::-webkit-scrollbar {
+    display: none;
+  }
+  .ah-chip {
+    flex: none;
+    font-size: 12.5px;
+    padding: 7px 12px;
+  }
+
+  /* 동그라미 62px */
+  .ah .story-row {
+    gap: 10px;
+    padding: 8px 2px 2px;
+  }
+  .ah .story {
+    flex: 0 0 66px;
+    width: 66px;
+  }
+  .ah .story .ring,
+  .ah .story.mark .ring {
+    width: 62px;
+    height: 62px;
+  }
+  .ah .story .rg {
+    padding: 1px 6px;
+  }
+  .ah .story .nm,
+  .ah .story.add .nm {
+    max-width: 66px;
+    font-size: 12px;
+  }
+  .ah .story.add .nm {
+    letter-spacing: -0.04em;
+  }
+
+  /* 신규: 150px 카드, 상태 배지만 */
+  .ah-row {
+    --pw: 150px;
+    gap: 12px;
+    padding: 2px 0 4px;
+  }
+  .ah-pc-a {
+    gap: 6px;
+  }
+  .ah-pc-pic .ah-st {
+    left: 8px;
+    top: 8px;
+    font-size: 11px;
+    padding: 1px 8px;
+  }
+  .ah-area {
+    display: none;
+  }
+  .ah-pc-t {
+    font-size: 15.5px;
+  }
+  .ah-pc-m {
+    margin-top: -4px;
+    font-size: 12px;
+  }
+  .ah-pc .bm-card {
+    top: calc(var(--pw) * 4 / 3 - 38px);
+    right: 8px;
+    width: 30px;
+    height: 30px;
+  }
+  .ah-morecard {
+    font-size: 14px;
+  }
+  .ah-new .aw-arrow,
+  .ah-new .aw-arrow.show {
+    display: none;
+  }
+
+  /* 곧 끝나는: 팝업 하나에 한 줄 (날짜 · 포스터 · 이름 · 지역) */
+  .ah-week-scroll {
+    overflow: visible;
+  }
+  .ah-week {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+  .ah-wk {
+    display: contents;
+  }
+  .ah-wk-h {
+    display: none;
+  }
+  .ah-wk-i {
+    gap: 12px;
+    padding: 10px;
+    border-radius: 14px;
+    background: var(--surface-soft);
+  }
+  .ah-wk-i.today {
+    background: var(--accent-soft);
+  }
+  .ah-wk-i.past {
+    opacity: 0.55;
+  }
+  .ah-wk-d {
+    display: block;
+    flex: none;
+    width: 52px;
+    text-align: center;
+    font-size: 12.5px;
+    font-weight: 800;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .ah-wk-i.today .ah-wk-d {
+    color: #0b5e57;
+  }
+  .ah-wk-p {
+    width: 40px;
+    height: 52px;
+    border-radius: 8px;
+  }
+  .ah-wk-t {
+    font-size: 14px;
+    font-weight: 800;
+    -webkit-line-clamp: 1;
+  }
+  .ah-wk-s {
+    display: block;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--ink-soft);
+  }
+  .ah-wk-more {
+    align-self: center;
+    margin-top: -4px;
+    font-size: 13px;
+  }
+  .ah-week.none .ah-wk-none {
+    display: block;
+  }
+
+  /* 사전예약: 요약 띠 + 세로 타임라인 */
+  .ah-pre {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 12px;
+  }
+  .ah-pre-sum {
+    flex: none;
+    max-width: none;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 2px;
+  }
+  .ah-pre-p {
+    grid-column: 1;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .ah-pre-p span {
+    display: none;
+  }
+  .ah-pre-n {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    font-size: 30px;
+    white-space: nowrap;
+  }
+  .ah-pre-n span {
+    font-size: 14px;
+  }
+  .ah-pre-all {
+    grid-column: 1 / -1;
+    margin-top: 10px;
+    height: 40px;
+    font-size: 13px;
+  }
+  .ah-pre-none {
+    flex: none;
+    align-self: stretch;
+    padding: 0 2px;
+  }
+  .ah-pre-line {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0 0 0 4px;
+    overflow: visible;
+  }
+  .ah-pre-i {
+    gap: 8px;
+    padding: 0 0 14px 22px;
+  }
+  .ah-pre-i::before,
+  .ah-pre-i:first-child::before,
+  .ah-pre-i:last-child::before {
+    left: 6px;
+    right: auto;
+    top: 6px;
+    bottom: 0;
+    width: 2px;
+    height: auto;
+    border-radius: 0;
+  }
+  .ah-pre-i:last-child {
+    padding-bottom: 0;
+  }
+  .ah-pre-dot {
+    position: absolute;
+    left: 0;
+    top: 2px;
+    margin: 0;
+  }
+  .ah-pre-date {
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    line-height: 1.45;
+  }
+  .ah-pre-body {
+    flex-direction: row;
+    align-items: center;
+    padding: 10px;
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    background: #fff;
+  }
+  .ah-pre-card {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
+  .ah-pre-pic {
+    flex: none;
+    width: 46px;
+    height: 60px;
+    aspect-ratio: auto;
+    border-radius: 8px;
+  }
+  .ah-pre-pic .ah-pre-badge {
+    display: none;
+  }
+  .ah-pre-badge.m {
+    display: inline-block;
+    position: static;
+    align-self: flex-start;
+    font-size: 11px;
+    padding: 1px 8px;
+  }
+  .ah-pre-txt {
+    flex: 1;
+    padding: 0;
+    gap: 2px;
+  }
+  .ah-pre-t {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.4;
+    color: var(--ink);
+    -webkit-line-clamp: 1;
+  }
+  .ah-pre-m {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ah-pre-btn {
+    width: 44px;
+    height: 44px;
+    min-height: 0;
+    padding: 0;
+    border-radius: 50%;
+  }
+  .ah-pre-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+  .ah-pre-btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  /* 후기: 2단, 간단한 카드 */
+  .ah-wall {
+    columns: 2;
+    column-gap: 10px;
+  }
+  .ah-rv {
+    margin-bottom: 10px;
+    border-radius: 14px;
+  }
+  .ah-rv-ph img {
+    min-height: 110px;
+    max-height: 190px;
+  }
+  .ah-rv-cnt {
+    right: 6px;
+    bottom: 6px;
+    font-size: 11px;
+    padding: 1px 6px;
+  }
+  .ah-rv-in {
+    padding: 10px;
+    gap: 6px;
+  }
+  .ah-rv-kind {
+    font-size: 11px;
+    padding: 1px 8px;
+  }
+  .ah-rv-who {
+    gap: 5px;
+    flex-wrap: nowrap;
+  }
+  .ah-rv-av,
+  .ah-rv-time {
+    display: none;
+  }
+  .ah-rv-who strong {
+    font-size: 12.5px;
+  }
+  /* 랭크는 20px 도장만, 닉네임 앞에 */
+  .ah-rv-who .rk-chip {
+    order: -1;
+    padding: 0;
+    background: none !important;
+  }
+  .ah-rv-who .rk-chip > span:last-child {
+    display: none;
+  }
+  .ah-rv-stars {
+    font-size: 11.5px;
+  }
+  .ah-rv-body {
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-line-clamp: 7;
+  }
+  .ah-rv-pop {
+    padding: 0;
+    background: none;
+  }
+  .ah-rv-pop:hover {
+    background: none;
+  }
+  .ah-rv-pp,
+  .ah-rv-pop .ah-st {
+    display: none;
+  }
+  .ah-rv-pn {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #0f6b5c;
+  }
+  .ah-morebtn {
+    align-self: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ah-pc-pic {
+    transition: none;
+  }
+}

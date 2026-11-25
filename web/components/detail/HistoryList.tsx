@@ -1,12 +1,15 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { restoreAction } from "@/app/popup-actions";
 import type { HistoryCard } from "@/lib/server/cafe";
 import { toast } from "../member/Toast";
+import { RankStamp } from "../RankStamp";
 
-// 수정 이력 (앱 render_edit 의 '수정 이력' 접기 상자 · _history_card_html): 기록 하나가 카드 하나, 최근 것이 위.
-// 왼쪽 세로선 위 점 + 카드, 지금 내용은 포인트 색. 지금 것 말고는 '이 버전으로 돌아가기' (지도에서 내린 기록은 빼고).
+// 수정 이력 (A-DetailEdit 시안 오른쪽 칸 · 앱 _history_card_html): 기록 하나가 카드 하나, 최근 것이 위.
+// 지금 내용은 민트 바탕 + '지금 내용'. 지금 것 말고는 '이 버전으로 돌아가기' (지도에서 내린 기록은 빼고).
+// 고친 회원 이름 앞에는 그 회원의 20px 후기 도장 (도장이 없으면 사람 아이콘). 처음엔 4개만 보이고 '이력 더보기'.
+const FIRST = 4;
 
 const P: Record<string, React.ReactNode> = {
   auto_awesome: <path d="M12 3l1.8 4.6L18 9.5l-4.2 1.9L12 16l-1.8-4.6L6 9.5l4.2-1.9L12 3zM18.5 15l.8 2 2 .8-2 .9-.8 2-.9-2-2-.9 2-.8.9-2z" />,
@@ -45,25 +48,35 @@ export function Mi({ name }: { name: string }) {
   );
 }
 
-export default function HistoryList({ entryId, cards }: { entryId: string; cards: HistoryCard[] }) {
+export default function HistoryList({
+  entryId,
+  cards,
+  lv = {},
+}: {
+  entryId: string;
+  cards: HistoryCard[];
+  /** 기록 번호 → 고친 회원의 후기 도장 랭크 (0 = 없음) */
+  lv?: Record<number, number>;
+}) {
   const router = useRouter();
   const [busy, start] = useTransition();
+  const [all, setAll] = useState(false);
   return (
-    <div className="hx">
-      {cards.map((c) => (
+    <div className="hx ade-hx">
+      {(all ? cards : cards.slice(0, FIRST)).map((c) => (
         <div key={c.revision} className={`hx-item${c.now ? " now" : ""}`}>
           <div className="hx-card">
             <div className="hx-top">
               <b>{c.revision}번째</b>
               <span className="hx-when">{c.when}</span>
-              {c.now && <span className="hx-now">지금</span>}
               <span className="hx-src">
                 <Mi name={c.icon} />
                 {c.label}
               </span>
+              {c.now && <span className="hx-now">지금 내용</span>}
             </div>
             <div className="hx-who">
-              <Mi name="person" />
+              {lv[c.revision] ? <RankStamp lv={lv[c.revision]} size={20} /> : <Mi name="person" />}
               {c.who}
             </div>
             {c.first ? (
@@ -116,7 +129,7 @@ export default function HistoryList({ entryId, cards }: { entryId: string; cards
                       return;
                     }
                     toast(r.ok || "", "restore");
-                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    document.querySelector(".ad-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
                     router.refresh();
                   })
                 }
@@ -127,6 +140,11 @@ export default function HistoryList({ entryId, cards }: { entryId: string; cards
           )}
         </div>
       ))}
+      {!all && cards.length > FIRST && (
+        <button type="button" className="ade-add" onClick={() => setAll(true)}>
+          이력 더보기 ({cards.length - FIRST})
+        </button>
+      )}
     </div>
   );
 }

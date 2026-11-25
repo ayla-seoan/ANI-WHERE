@@ -5,6 +5,12 @@ import "./member.css";
 import "./admin.css";
 import "./edit.css";
 import "./pages.css";
+// A안 디자인 (11/25): 예전 규칙 뒤에 불러서 덮는다
+import "./a-shell.css";
+import "./a-home.css";
+import "./a-browse.css";
+import "./a-detail.css";
+import "./a-member.css";
 import { getPopupData } from "@/lib/data";
 import Gnb from "@/components/Gnb";
 import Footer from "@/components/Footer";
@@ -78,7 +84,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="" />
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Jua&family=Titan+One&display=swap" rel="stylesheet" />
         <link
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"
           rel="stylesheet"

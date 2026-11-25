@@ -18,6 +18,7 @@
     e2e_pages.py  — /privacy · /guide · /design · /ask · 블로그 후기 · 공유 버튼
 """
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -67,7 +68,7 @@ def run(page, tag):
     print(tag, "가입 OK, 자동 닉네임:", nick_ph)
 
     # ---- 로그아웃 → 틀린 비밀번호 → 로그인 ----
-    page.goto(f"{BASE}/login")
+    page.goto(f"{BASE}/mypage")
     page.get_by_role("button", name="로그아웃").click()
     wait_path(page, "/login")
     expect(page.locator(".gnb-login")).to_be_visible()
@@ -89,7 +90,7 @@ def run(page, tag):
     card.locator(".bm").click()
     toast_has(page, "북마크했어요")
     page.goto(f"{BASE}/calendar")
-    expect(page.locator(".up-item").first).to_contain_text(work)
+    expect(page.locator(".am-up").first).to_contain_text(work)
     shot(page, f"web_{tag}_calendar")
     print(tag, "북마크 → 내 캘린더 OK:", work)
 
@@ -99,13 +100,13 @@ def run(page, tag):
     box.get_by_role("radio", name="4점").click()
     box.locator("textarea").fill("연락은 010-1234-5678 로 주세요")
     expect(box.locator(".auth-warn")).to_contain_text("민감한 개인정보(전화번호)")
-    expect(box.get_by_role("button", name="리뷰 등록")).to_be_disabled()
+    expect(box.get_by_role("button", name=re.compile("리뷰 등록|등록하고 도장 받기"))).to_be_disabled()
     # 화면 검사를 건너뛰고 보내도 서버가 거절해야 한다
-    box.get_by_role("button", name="리뷰 등록").evaluate("b => { b.disabled = false; b.form.requestSubmit(b); }")
+    box.get_by_role("button", name=re.compile("리뷰 등록|등록하고 도장 받기")).evaluate("b => { b.disabled = false; b.form.requestSubmit(b); }")
     expect(box.locator(".auth-warn").last).to_contain_text("입력할 수 없습니다", timeout=8000)
     print(tag, "전화번호 리뷰 거절 OK (화면 + 서버)")
     box.locator("textarea").fill("굿즈가 많고 대기 20분 정도였어요")
-    box.get_by_role("button", name="리뷰 등록").click()
+    box.get_by_role("button", name=re.compile("리뷰 등록|등록하고 도장 받기")).click()
     toast_has(page, "리뷰를 남겼습니다")
     th = page.locator(".rv-thread").first
     expect(th).to_contain_text("굿즈가 많고")
@@ -119,6 +120,7 @@ def run(page, tag):
     expect(page.locator(".rv-thread").first).to_contain_text("(수정됨)")
     # 답글
     th = page.locator(".rv-thread").first
+    th.get_by_role("button", name="답글 쓰기").click()
     th.locator("form.reply textarea").click()
     th.locator("form.reply textarea").fill("정보 고마워요")
     th.get_by_role("button", name="답글 등록").click()
@@ -135,7 +137,7 @@ def run(page, tag):
     print(tag, "리뷰 등록·수정·답글·삭제 OK")
 
     # ---- 마이페이지: 닉네임 바꾸기 ----
-    page.goto(f"{BASE}/login")
+    page.goto(f"{BASE}/mypage")
     newnick = f"테스트{tag}닉"
     page.fill("input[name=nickname]", newnick)
     page.get_by_role("button", name="저장", exact=True).click()
@@ -143,7 +145,7 @@ def run(page, tag):
     shot(page, f"web_{tag}_mypage")
     page.goto(f"{BASE}/")
     shot(page, f"web_{tag}_home_member")
-    page.goto(f"{BASE}/login")
+    page.goto(f"{BASE}/mypage")
     page.get_by_role("button", name="로그아웃").click()
     wait_path(page, "/login")
     print(tag, "닉네임 바꾸기 · 로그아웃 OK")
@@ -159,15 +161,15 @@ def social(page):
     page.get_by_role("button", name="가입하고 시작하기").click()
     wait_path(page, "/")
     expect(page.locator(".gnb-me")).to_be_visible()
-    page.goto(f"{BASE}/login")
-    expect(page.locator(".auth-note")).to_contain_text("카카오 계정으로 로그인 중")
+    page.goto(f"{BASE}/mypage")
+    expect(page.locator(".mp-meta").first).to_contain_text("카카오로 로그인")  # 마이페이지 프로필 (11/25: /login '내 계정' → /mypage)
     page.get_by_role("button", name="로그아웃").click()
     wait_path(page, "/login")
     # 두 번째: 이미 가입한 계정 → 바로 로그인
     page.get_by_role("link", name="카카오로 로그인").click()
     wait_path(page, "/")
     expect(page.locator(".gnb-me")).to_be_visible()
-    page.goto(f"{BASE}/login")
+    page.goto(f"{BASE}/mypage")
     page.get_by_role("button", name="로그아웃").click()
     wait_path(page, "/login")
     expect(page.locator(".gnb-login")).to_be_visible()

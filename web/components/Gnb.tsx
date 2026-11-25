@@ -11,9 +11,9 @@ import GnbMotion from "./GnbMotion";
 // 앱(Streamlit) 상단 메뉴바와 같은 모양: 연민트 바탕 + 아래 둥근 모서리, 왼쪽 로고, 가운데 탭 (홈 · 지도로 보기 · 리스트로 보기
 // · 회원이면 내 캘린더). 오른쪽: 검색(지도·리스트) · 알림(회원) · 관리자(관리자 회원, 앱의 관리자 화면으로) · 로그인 / 프로필 사진.
 const TABS = [
-  { href: "/", label: "홈" },
-  { href: "/map", label: "지도로 보기" },
-  { href: "/list", label: "리스트로 보기" },
+  { href: "/", label: "홈", short: "홈" },
+  { href: "/map", label: "지도로 보기", short: "지도" },
+  { href: "/list", label: "리스트로 보기", short: "리스트" },
 ];
 
 function activeTab(path: string): string {
@@ -37,14 +37,14 @@ export default function Gnb({ bell }: { bell: BellData | null }) {
     if (now) setFilters(now === "1");
     return () => window.removeEventListener("aw:filters-state", f);
   }, []);
-  const tabs = me ? [...TABS, { href: "/calendar", label: "내 캘린더" }] : TABS;
+  const tabs = me ? [...TABS, { href: "/calendar", label: "내 캘린더", short: "캘린더" }] : TABS;
 
   return (
     <header className="gnb-wrap">
       <GnbMotion />
       <div className="gnb">
         <Link href="/" className="gnb-logo" aria-label="ANI:WHERE 홈">
-          <img src="/logo_sm.webp" alt="ANI:WHERE" width={155} height={44} />
+          <img src="/logo_sm.webp" alt="ANI:WHERE" width={186} height={52} />
         </Link>
         <nav className={`gnb-tabs${me ? " four" : ""}`} aria-label="주요 메뉴">
           {tabs.map((t) => (
@@ -54,7 +54,11 @@ export default function Gnb({ bell }: { bell: BellData | null }) {
               className={on === t.href ? "on" : undefined}
               aria-current={on === t.href ? "page" : undefined}
             >
-              {t.label}
+              {/* 모바일은 짧은 이름 (A-Mobile: 홈 · 지도 · 리스트 · 캘린더) */}
+              <span className="pc-only">{t.label}</span>
+              <span className="m-only" aria-hidden>
+                {t.short}
+              </span>
             </Link>
           ))}
         </nav>
@@ -90,7 +94,7 @@ export default function Gnb({ bell }: { bell: BellData | null }) {
           )}
           {me ? (
             // 회원: 닉네임 글자 대신 프로필 사진 동그라미 → 마이페이지 (앱과 같게)
-            <Link href="/login" className="gnb-me" aria-label={`${me.nick} 마이페이지`}>
+            <Link href="/mypage" className="gnb-me" aria-label={`${me.nick} 마이페이지`}>
               <img
                 src={avatarUrl(me.avatar)}
                 alt=""

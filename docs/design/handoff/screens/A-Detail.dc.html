@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>A 팝업 상세 (리뷰)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#0d9488}a:hover{color:#0b7a70}
+</style>
+</helmet>
+<div style="font-family: 'Noto Sans KR', sans-serif; color: #26302d; background: #ffffff; min-height: 2300px">
+
+  <header style="background: #e9f7f2; border-radius: 0 0 28px 28px; padding: 12px 24px">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+      <a href="A-Home.dc.html" style="display: flex; align-items: center; text-decoration: none"><img src="../assets/aniwhere_logo.png" alt="ANI:WHERE 홈" style="height: 48px; width: auto; display: block"></a>
+      <nav aria-label="주 메뉴" style="display: flex; flex-wrap: wrap; gap: 4px">
+        <a href="A-Home.dc.html" style="padding: 9px 18px; border-radius: 999px; color: #26302d; font-weight: 600; font-size: 15px; text-decoration: none">홈</a>
+        <a href="A-Map.dc.html" style="padding: 9px 18px; border-radius: 999px; color: #26302d; font-weight: 600; font-size: 15px; text-decoration: none">지도로 보기</a>
+        <a href="A-List.dc.html" style="padding: 9px 18px; border-radius: 999px; color: #26302d; font-weight: 600; font-size: 15px; text-decoration: none">리스트로 보기</a>
+        <a href="A-Cal.dc.html" style="padding: 9px 18px; border-radius: 999px; color: #26302d; font-weight: 600; font-size: 15px; text-decoration: none">내 캘린더</a>
+      </nav>
+      <a href="A-MyPage.dc.html" aria-label="마이페이지" style="position: relative; width: 44px; height: 44px; border-radius: 50%; border: 2px solid #ffffff; background: #ffd6dc; box-sizing: border-box; display: block"><span style="position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; border-radius: 50%; background: #e9f7f2; border: 2px solid #21b287; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span></a>
+    </div>
+  </header>
+
+  <main style="max-width: 1200px; margin: 0 auto; padding: 28px 24px 64px; display: flex; flex-direction: column; gap: 28px">
+
+    <div style="display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start">
+      <div style="flex: 1 1 340px; max-width: 420px; display: flex; flex-direction: column; gap: 10px">
+        <div style="position: relative; aspect-ratio: 3 / 4; border-radius: 18px; border: 2.5px solid #9eddcc; background: #ffd6dc; display: flex; align-items: center; justify-content: center; box-sizing: border-box">
+          <span style="font-size: 13px; font-weight: 700; color: #7a3d47">포스터 1 / 4</span>
+          <button aria-label="이전 사진" style="position: absolute; left: 10px; top: 50%; width: 40px; height: 40px; margin-top: -20px; border-radius: 50%; border: 0; background: rgba(255,255,255,.85); color: #26302d; font-size: 18px; cursor: pointer">‹</button>
+          <button aria-label="다음 사진" style="position: absolute; right: 10px; top: 50%; width: 40px; height: 40px; margin-top: -20px; border-radius: 50%; border: 0; background: rgba(255,255,255,.85); color: #26302d; font-size: 18px; cursor: pointer">›</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+          <span style="aspect-ratio: 1; border-radius: 10px; background: #ffd6dc; border: 2px solid #14b8a6"></span>
+          <span style="aspect-ratio: 1; border-radius: 10px; background: #ffe6c2"></span>
+          <span style="aspect-ratio: 1; border-radius: 10px; background: #d9e4ff"></span>
+          <span style="aspect-ratio: 1; border-radius: 10px; background: #d6f2e9"></span>
+        </div>
+      </div>
+
+      <div style="flex: 999 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; gap: 6px; flex-wrap: wrap">
+            <span style="font-size: 12px; font-weight: 800; color: #0b5e57; background: #e6fbf7; padding: 3px 10px; border-radius: 999px">진행 중</span>
+            <span style="font-size: 12px; font-weight: 800; color: #ffffff; background: #2e9c82; padding: 3px 10px; border-radius: 999px">서울</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <h1 style="margin: 0; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 38px; line-height: 1.2">치이카와 팝업 스토어</h1>
+            <button aria-label="공유" style="width: 44px; height: 44px; border-radius: 50%; border: 1px solid #e3e9e7; background: #ffffff; color: #26302d; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="{{ic.share}}"></path></svg></button>
+            <button aria-label="북마크됨" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: #14b8a6; color: #ffffff; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="{{ic.bookmark}}"></path></svg></button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 14px"><span style="color: #f4b63f; letter-spacing: 1px" aria-hidden="true">★★★★★</span><strong>4.6</strong><span style="color: #5f6b68">다녀온 후기 18개 평균</span></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px">
+          <section aria-label="위치" style="background: #f6f8f7; border-radius: 16px; padding: 16px; display: flex; gap: 12px">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2" aria-hidden="true" style="flex: none"><path d="{{ic.pin}}"></path></svg>
+            <div style="display: flex; flex-direction: column; gap: 3px"><strong style="font-size: 15px">애니메이트 카페 홍대점</strong><span style="font-size: 13.5px; color: #5f6b68">서울 마포구 양화로 (예시 주소)</span><a href="A-Map.dc.html" style="font-size: 13.5px; font-weight: 700">지도에서 확인하기</a></div>
+          </section>
+          <section aria-label="일정" style="background: #f6f8f7; border-radius: 16px; padding: 16px; display: flex; gap: 12px">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2" aria-hidden="true" style="flex: none"><path d="{{ic.cal}}"></path></svg>
+            <div style="display: flex; flex-direction: column; gap: 3px"><strong style="font-size: 15px">2026.11.20 ~ 12.15</strong><span style="font-size: 13.5px; color: #5f6b68">11:00 ~ 20:00 · 사전예약 없이 입장</span></div>
+          </section>
+        </div>
+
+        <section aria-labelledby="d-gift" style="display: flex; flex-direction: column; gap: 10px">
+          <h2 id="d-gift" style="margin: 0; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 21px">혜택</h2>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <span style="font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: #e6fbf7; color: #0b5e57">특전 · 2만원 이상 엽서 1장</span>
+            <span style="font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: #f4f6f5">굿즈 · 아크릴 스탠드</span>
+            <span style="font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: #f4f6f5">굿즈 · 키링</span>
+            <span style="font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: #f4f6f5">이벤트 · 포토존</span>
+          </div>
+        </section>
+
+        <section aria-labelledby="d-link" style="display: flex; flex-direction: column; gap: 10px">
+          <h2 id="d-link" style="margin: 0; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 21px">참고 웹사이트</h2>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <a href="#" style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; border: 1px solid #e3e9e7; text-decoration: none; color: #26302d; font-size: 14px; font-weight: 700">공식 공지 (X)<span style="font-size: 11.5px; font-weight: 800; color: #0b5e57; background: #e6fbf7; padding: 1px 8px; border-radius: 999px">공식</span></a>
+            <a href="#" style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; border: 1px solid #e3e9e7; text-decoration: none; color: #26302d; font-size: 14px; font-weight: 700">모음 사이트<span style="font-size: 12px; color: #5f6b68">참고</span></a>
+          </div>
+        </section>
+
+        <section aria-label="팝업 소개" style="background: #f6f8f7; border-radius: 14px; padding: 16px 18px; font-size: 14px; line-height: 1.7">
+          <strong style="color: #0f6b5c">[체험]</strong> 입구 포토존과 스탬프 랠리가 있어요. <strong style="color: #0f6b5c">[굿즈]</strong> 한정 굿즈는 1인 3개까지 살 수 있어요.
+          <div style="text-align: right; margin-top: 6px"><a href="#" style="font-size: 13px; font-weight: 700">출처 보기</a></div>
+        </section>
+      </div>
+    </div>
+
+    <nav aria-label="상세 탭" style="display: flex; gap: 4px; border-bottom: 2px solid #eef2f1">
+      <a href="#" aria-current="page" style="padding: 14px 22px; font-size: 16px; font-weight: 800; color: #1f2a27; text-decoration: none; border-bottom: 3px solid #14b8a6; margin-bottom: -2px">리뷰 18</a>
+      <a href="#" style="padding: 14px 22px; font-size: 16px; font-weight: 600; color: #5f6b68; text-decoration: none">블로그 후기 15</a>
+      <a href="A-DetailEdit.dc.html" style="padding: 14px 22px; font-size: 16px; font-weight: 600; color: #5f6b68; text-decoration: none; display: flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z M14 6l4 4"></path></svg>수정하기</a>
+    </nav>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start">
+
+      <form aria-labelledby="d-write" style="flex: 1 1 320px; max-width: 380px; border: 1.5px solid #9eddcc; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box">
+        <h2 id="d-write" style="margin: 0; font-size: 17px; font-weight: 800">리뷰 쓰기</h2>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #f6f8f7">
+          <span style="width: 32px; height: 32px; border-radius: 50%; background: #e9f7f2; border: 2.5px solid #21b287; display: flex; align-items: center; justify-content: center; box-sizing: border-box; flex: none"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span>
+          <span style="display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; line-height: 1.4"><strong style="color: #0f6b5c">내 도장 Lv.2 단골 팬</strong><span style="color: #5f6b68">다녀온 후기를 남기면 도장 +1 · Lv.3까지 6개</span></span>
+        </div>
+        <div role="radiogroup" aria-label="리뷰 종류" style="display: flex; gap: 4px; background: #f4f6f5; border-radius: 999px; padding: 4px">
+          <button type="button" role="radio" aria-checked="true" style="flex: 1; font-family: inherit; font-size: 13.5px; font-weight: 800; border: 0; border-radius: 999px; padding: 10px 4px; background: #ffffff; color: #26302d; cursor: pointer">다녀온 후기</button>
+          <button type="button" role="radio" aria-checked="false" style="flex: 1; font-family: inherit; font-size: 13.5px; border: 0; border-radius: 999px; padding: 10px 4px; background: none; color: #5f6b68; cursor: pointer">기대평</button>
+          <button type="button" role="radio" aria-checked="false" style="flex: 1; font-family: inherit; font-size: 13.5px; border: 0; border-radius: 999px; padding: 10px 4px; background: none; color: #5f6b68; cursor: pointer">기타</button>
+        </div>
+        <div role="radiogroup" aria-label="별점" style="display: flex; gap: 2px; align-items: center">
+          <button type="button" role="radio" aria-checked="false" aria-label="1점" style="width: 40px; height: 40px; border: 0; background: none; font-size: 28px; color: #f4b63f; cursor: pointer; padding: 0">★</button>
+          <button type="button" role="radio" aria-checked="false" aria-label="2점" style="width: 40px; height: 40px; border: 0; background: none; font-size: 28px; color: #f4b63f; cursor: pointer; padding: 0">★</button>
+          <button type="button" role="radio" aria-checked="false" aria-label="3점" style="width: 40px; height: 40px; border: 0; background: none; font-size: 28px; color: #f4b63f; cursor: pointer; padding: 0">★</button>
+          <button type="button" role="radio" aria-checked="true" aria-label="4점" style="width: 40px; height: 40px; border: 0; background: none; font-size: 28px; color: #f4b63f; cursor: pointer; padding: 0">★</button>
+          <button type="button" role="radio" aria-checked="false" aria-label="5점" style="width: 40px; height: 40px; border: 0; background: none; font-size: 28px; color: #d3dad8; cursor: pointer; padding: 0">★</button>
+          <span style="font-size: 13px; color: #5f6b68; margin-left: 6px">별점만 골라도 등록돼요</span>
+        </div>
+        <label for="d-text" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">리뷰 내용</label>
+        <textarea id="d-text" rows="4" placeholder="웨이팅, 특전 남은 수, 굿즈 꿀팁을 알려 주세요" style="font-family: inherit; font-size: 14px; border-radius: 12px; border: 1px solid #e3e9e7; padding: 12px; resize: none; color: #26302d"></textarea>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 13px; font-weight: 700">사진 <span style="color: #5f6b68; font-weight: 500">2 / 4 · 한 장 10MB</span></span>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+            <span style="position: relative; aspect-ratio: 1; border-radius: 10px; background: #ffd6dc"><button type="button" aria-label="사진 1 빼기" style="position: absolute; right: 4px; top: 4px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(31,42,39,.75); color: #ffffff; font-size: 12px; line-height: 22px; padding: 0; cursor: pointer">✕</button></span>
+            <span style="position: relative; aspect-ratio: 1; border-radius: 10px; background: #ffe6c2"><button type="button" aria-label="사진 2 빼기" style="position: absolute; right: 4px; top: 4px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(31,42,39,.75); color: #ffffff; font-size: 12px; line-height: 22px; padding: 0; cursor: pointer">✕</button></span>
+            <button type="button" aria-label="사진 추가" style="aspect-ratio: 1; border-radius: 10px; border: 2px dashed #c6d0cd; background: #ffffff; color: #0d9488; font-size: 24px; cursor: pointer">+</button>
+            <span style="aspect-ratio: 1; border-radius: 10px; background: #f6f8f7"></span>
+          </div>
+          <span style="font-size: 12px; color: #5f6b68; line-height: 1.5">얼굴·영수증·연락처가 보이는 사진은 올리지 말아 주세요. 사진의 위치 정보는 지우고 저장해요.</span>
+        </div>
+        <button type="button" style="height: 48px; border-radius: 999px; border: 0; background: #14b8a6; color: #ffffff; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">등록하고 도장 받기</button>
+      </form>
+
+      <section aria-labelledby="d-list" style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+        <h2 id="d-list" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); margin: 0">리뷰 목록</h2>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 18px 20px; border-radius: 18px; background: #f6f8f7">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+            <span style="font-family: 'Jua', sans-serif; font-size: 44px; line-height: 1">4.6</span>
+            <span style="color: #f4b63f; letter-spacing: 1px" aria-hidden="true">★★★★★</span>
+            <span style="font-size: 12px; color: #5f6b68">다녀온 후기 18개</span>
+          </div>
+          <div style="flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 5px">
+            <sc-for list="{{dist}}" as="b" hint-placeholder-count="5">
+              <div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px"><span style="width: 24px; color: #5f6b68">{{b.s}}점</span><span style="flex: 1; height: 8px; border-radius: 999px; background: #e3e9e7; overflow: hidden"><span style="display: block; width: {{b.w}}; height: 100%; background: #f4b63f; border-radius: 999px"></span></span><span style="width: 18px; text-align: right; color: #5f6b68">{{b.n}}</span></div>
+            </sc-for>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 64px); gap: 6px" aria-label="사진 후기 모아 보기">
+            <span style="aspect-ratio: 1; border-radius: 10px; background: #ffd6dc"></span>
+            <span style="aspect-ratio: 1; border-radius: 10px; background: #ffe6c2"></span>
+            <a href="#" style="aspect-ratio: 1; border-radius: 10px; background: #d9e4ff; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 800; color: #26302d; text-decoration: none">+24</a>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px">
+          <sc-for list="{{chips}}" as="c" hint-placeholder-count="4">
+            <button style="font-family: inherit; font-size: 13px; font-weight: {{c.w}}; padding: 7px 14px; border-radius: 999px; border: 1px solid {{c.line}}; background: {{c.bg}}; color: {{c.fg}}; cursor: pointer">{{c.t}}</button>
+          </sc-for>
+          <label style="margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; color: #5f6b68">정렬<select style="height: 38px; font-family: inherit; font-size: 13px; font-weight: 700; padding: 0 10px; border-radius: 999px; border: 1px solid #e3e9e7; background: #ffffff; color: #26302d"><option>최신순</option><option>별점 높은 순</option></select></label>
+        </div>
+
+        <sc-for list="{{reviews}}" as="r" hint-placeholder-count="3">
+          <article style="border: 1.5px solid #e3e9e7; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+              <span style="width: 34px; height: 34px; border-radius: 50%; background: {{r.bg}}"></span>
+              <strong style="font-size: 14px">{{r.nick}}</strong>
+              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 2px; border-radius: 999px; background: {{r.rkFill}}"><span style="width: 20px; height: 20px; border-radius: 50%; background: #ffffff; border: 2px solid {{r.rkRing}}; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span><span style="font-size: 11.5px; font-weight: 800; color: {{r.rkFg}}">{{r.rk}}</span></span>
+              <span style="font-size: 12.5px; color: #5f6b68">{{r.date}}</span>
+              <span style="font-size: 12px; font-weight: 800; color: {{r.kindFg}}; background: {{r.kindBg}}; padding: 1px 8px; border-radius: 999px">{{r.kind}}</span>
+              <sc-if value="{{r.mine}}" hint-placeholder-val="{{ false }}"><button aria-label="내 리뷰 수정·삭제" style="margin-left: auto; width: 36px; height: 36px; border-radius: 50%; border: 0; background: #f4f6f5; color: #26302d; font-size: 16px; cursor: pointer">⋯</button></sc-if>
+            </div>
+            <span style="font-size: 14px; font-weight: 800; color: #9a6a00">{{r.stars}}</span>
+            <p style="margin: 0; font-size: 15px; line-height: 1.7">{{r.text}}</p>
+            <sc-if value="{{r.hasPhotos}}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; gap: 8px">
+                <sc-for list="{{r.photos}}" as="ph" hint-placeholder-count="3">
+                  <button aria-label="사진 크게 보기" style="position: relative; width: 120px; height: 120px; border-radius: 12px; border: 0; background: {{ph.bg}}; cursor: zoom-in; padding: 0"><span style="position: absolute; inset: 0; display: {{ph.moreDisplay}}; align-items: center; justify-content: center; border-radius: 12px; background: rgba(31,42,39,.55); color: #ffffff; font-size: 16px; font-weight: 800">{{ph.more}}</span></button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div style="display: flex; align-items: center; gap: 14px; font-size: 13px">
+              <button style="border: 0; background: none; padding: 6px 0; font-family: inherit; font-size: 13px; font-weight: 700; color: #0f6b5c; cursor: pointer">{{r.replies}}</button>
+              <button style="border: 0; background: none; padding: 6px 0; font-family: inherit; font-size: 13px; color: #5f6b68; cursor: pointer">답글 쓰기</button>
+            </div>
+          </article>
+        </sc-for>
+        <button style="align-self: center; height: 46px; padding: 0 28px; border-radius: 999px; border: 0; background: #e6fbf7; color: #0b5e57; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer">리뷰 더보기</button>
+      </section>
+    </div>
+
+    <section aria-labelledby="d-sim" style="display: flex; flex-direction: column; gap: 14px; border-top: 1px solid #eef2f1; padding-top: 28px">
+      <h2 id="d-sim" style="margin: 0; font-size: 19px; font-weight: 800">비슷한 팝업 · 이 근처 다른 팝업</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px">
+        <sc-for list="{{similar}}" as="s" hint-placeholder-count="5">
+          <a href="#" style="text-decoration: none; color: #26302d; display: flex; flex-direction: column; gap: 8px">
+            <span style="position: relative; display: block; aspect-ratio: 4 / 3; border-radius: 12px; border: 2.5px solid #9eddcc; background: {{s.bg}}; box-sizing: border-box"><span style="position: absolute; right: 8px; top: 8px; font-size: 11.5px; font-weight: 800; color: #ffffff; background: {{s.abg}}; padding: 1px 8px; border-radius: 999px">{{s.area}}</span></span>
+            <span style="font-family: 'Jua', sans-serif; font-size: 16px; color: #0f6b5c">{{s.t}}</span>
+            <span style="font-size: 12.5px; color: #5f6b68; margin-top: -4px">{{s.why}}</span>
+          </a>
+        </sc-for>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":2300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ph = (bg) => ({ bg, more: '', moreDisplay: 'none' });
+    const more = (bg, n) => ({ bg, more: n, moreDisplay: 'flex' });
+    return {
+      ic: {
+        share: 'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M8.6 13.5l6.8 4 M15.4 6.5l-6.8 4',
+        bookmark: 'M7 4h10v16l-5-3.5L7 20z',
+        pin: 'M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z M12 12.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+        cal: 'M4 6h16v14H4z M4 10h16 M8 3v4 M16 3v4'
+      },
+      dist: [
+        { s: 5, n: 12, w: '67%' }, { s: 4, n: 4, w: '22%' }, { s: 3, n: 1, w: '6%' }, { s: 2, n: 1, w: '6%' }, { s: 1, n: 0, w: '0%' }
+      ],
+      chips: [
+        { t: '전체 18', w: '800', line: '#14b8a6', bg: '#e6fbf7', fg: '#0b5e57' },
+        { t: '사진 후기만 9', w: '500', line: '#e3e9e7', bg: '#ffffff', fg: '#26302d' },
+        { t: '다녀온 후기', w: '500', line: '#e3e9e7', bg: '#ffffff', fg: '#26302d' },
+        { t: '기대평', w: '500', line: '#e3e9e7', bg: '#ffffff', fg: '#26302d' }
+      ],
+      reviews: [
+        { nick: '느긋한 우사기', date: '11.23', kind: '다녀온 후기', kindFg: '#0b5e57', kindBg: '#e6fbf7', stars: '★★★★★', text: '평일 오후 2시쯤 가면 줄 없이 바로 들어가요. 엽서 특전 아직 넉넉하고, 포토존은 입구 오른쪽에 있어요!', bg: '#ffd6dc', rk: 'Lv.2', rkRing: '#21b287', rkFill: '#e9f7f2', rkFg: '#0f6b5c', mine: true, hasPhotos: true, photos: [ph('#ffd6dc'), ph('#ffe6c2'), ph('#d6f2e9'), more('#d9e4ff', '+1')], replies: 'ㄴ 댓글 2개' },
+        { nick: '졸린 하치와레', date: '11.22', kind: '다녀온 후기', kindFg: '#0b5e57', kindBg: '#e6fbf7', stars: '★★★★☆', text: '키링은 오후 3시쯤 다 나갔어요. 아크릴 스탠드는 넉넉해요.', bg: '#d9e4ff', rk: 'Lv.4', rkRing: '#7656c4', rkFill: '#f1ecff', rkFg: '#5b3fae', mine: false, hasPhotos: true, photos: [ph('#efe0ff'), ph('#fff3b8')], replies: 'ㄴ 댓글 0개' },
+        { nick: '바쁜 모몬가', date: '11.21', kind: '기대평', kindFg: '#2c5bc5', kindBg: '#eaf0fc', stars: '', text: '주말에 가려고요. 포토존 사진 기대돼요.', bg: '#fff3b8', rk: 'Lv.1', rkRing: '#5fbf9f', rkFill: '#f0faf6', rkFg: '#0f6b5c', mine: false, hasPhotos: false, photos: [], replies: 'ㄴ 댓글 1개' }
+      ],
+      similar: [
+        { t: '치이카와 부산점', why: '같은 작품 · 다른 지역', area: '부산', abg: '#2f6fae', bg: '#ffd6dc' },
+        { t: '치이카와 겨울 카페', why: '같은 작품 · 다른 행사', area: '서울', abg: '#2e9c82', bg: '#ffe6c2' },
+        { t: '원피스 굿즈 팝업', why: '같은 건물', area: '서울', abg: '#2e9c82', bg: '#d9e4ff' },
+        { t: '하이큐!! 굿즈', why: '1.2km', area: '서울', abg: '#2e9c82', bg: '#d6f2e9' },
+        { t: '블루 아카이브 전시', why: '4.8km', area: '서울', abg: '#2e9c82', bg: '#efe0ff' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

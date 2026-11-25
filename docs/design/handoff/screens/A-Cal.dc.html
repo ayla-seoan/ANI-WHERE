@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>A 내 캘린더</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#0d9488}a:hover{color:#0b7a70}
+</style>
+</helmet>
+<div style="font-family: 'Noto Sans KR', sans-serif; color: #26302d; background: #ffffff; min-height: 1300px">
+
+  <header style="background: #e9f7f2; border-radius: 0 0 28px 28px; padding: 12px 24px">
+    <div style="max-width: 1232px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+      <a href="A-Home.dc.html" style="display: flex; align-items: center; text-decoration: none">
+        <img src="../assets/aniwhere_logo.png" alt="ANI:WHERE 홈" style="height: 48px; width: auto; display: block">
+      </a>
+      <nav aria-label="주 메뉴" style="display: flex; flex-wrap: wrap; gap: 4px">
+        <a href="A-Home.dc.html" style="padding: 9px 18px; border-radius: 999px; color: #26302d; font-weight: 600; font-size: 15px; text-decoration: none">홈</a>
+        <a href="A-Map.dc.html" style="padding: 9px 18px; border-radius: 999px; color: #26302d; font-weight: 600; font-size: 15px; text-decoration: none">지도로 보기</a>
+        <a href="#" style="padding: 9px 18px; border-radius: 999px; color: #26302d; font-weight: 600; font-size: 15px; text-decoration: none">리스트로 보기</a>
+        <a href="#" style="padding: 9px 18px; border-radius: 999px; background: #ffffff; color: #1f2a27; font-weight: 800; font-size: 15px; text-decoration: none">내 캘린더</a>
+      </nav>
+      <div style="display: flex; align-items: center; gap: 6px">
+        <button aria-label="알림" style="position: relative; width: 44px; height: 44px; border-radius: 50%; border: 0; background: #ffffff; color: #26302d; display: flex; align-items: center; justify-content: center; cursor: pointer">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ic.bell}}"></path></svg>
+          <span style="position: absolute; top: 10px; right: 11px; width: 8px; height: 8px; border-radius: 50%; background: #ff6b6b"></span>
+        </button>
+        <button aria-label="마이페이지" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid #ffffff; background: #ffd6dc; cursor: pointer"></button>
+      </div>
+    </div>
+  </header>
+
+  <main style="max-width: 1232px; margin: 0 auto; padding: 24px 24px 64px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+
+    <section aria-labelledby="c-cal" style="flex: 0 1 400px; max-width: 400px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+      <div style="position: relative; overflow: hidden; border: 1.5px solid #e3e9e7; border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+        <sc-for list="{{leaves}}" as="l" hint-placeholder-count="6">
+          <svg aria-hidden="true" style="position: absolute; left: {{l.x}}; top: {{l.y}}; transform: rotate({{l.rot}}); opacity: .55; pointer-events: none" width="{{l.size}}" height="{{l.size}}" viewBox="0 0 24 24"><path d="M12 2l2 4 4-1-1 4 4 2-4 2 1 4-4-1-2 6-2-6-4 1 1-4-4-2 4-2-1-4 4 1z" fill="{{l.c}}"></path></svg>
+        </sc-for>
+        <div style="position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <h1 id="c-cal" style="margin: 0; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 26px; line-height: 1.15">내 캘린더</h1>
+            <span style="font-size: 13px; color: #5f6b68">느긋한 우사기 · 북마크한 팝업 7곳</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px">
+            <button aria-label="이전 달" style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #e3e9e7; background: #ffffff; color: #26302d; cursor: pointer; display: flex; align-items: center; justify-content: center; transform: scaleX(-1)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="{{ic.chev}}"></path></svg></button>
+            <span style="font-family: 'Jua', sans-serif; font-size: 18px; min-width: 96px; text-align: center">2026년 11월</span>
+            <button aria-label="다음 달" style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #e3e9e7; background: #ffffff; color: #26302d; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="{{ic.chev}}"></path></svg></button>
+            <button style="height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid #14b8a6; background: #e6fbf7; color: #0b5e57; font-family: inherit; font-size: 13px; font-weight: 800; cursor: pointer">이번달</button>
+          </div>
+        </div>
+
+        <div style="position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); font-size: 12.5px; font-weight: 800; color: #5f6b68; text-align: center; border-bottom: 1px solid #eef2f1; padding-bottom: 8px">
+          <span style="color: #c0313f">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+        </div>
+
+        <div style="position: relative; display: flex; flex-direction: column">
+          <sc-for list="{{weeks}}" as="w" hint-placeholder-count="5">
+            <div style="position: relative; height: 92px; border-bottom: 1px solid #eef2f1">
+              <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); height: 100%">
+                <sc-for list="{{w.days}}" as="d" hint-placeholder-count="7">
+                  <div style="padding: 4px; border-left: 1px solid #eef2f1; background: {{d.cellBg}}">
+                    <span style="display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; border-radius: 999px; font-size: 11.5px; font-weight: 800; color: {{d.fg}}; background: {{d.bg}}">{{d.n}}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-for list="{{w.bars}}" as="b" hint-placeholder-count="2">
+                <a href="A-Detail.dc.html" style="position: absolute; left: {{b.left}}; width: {{b.width}}; top: {{b.top}}; height: 15px; padding: 0 2px; box-sizing: border-box; text-decoration: none">
+                  <span style="display: block; height: 100%; border-radius: {{b.radius}}; background: {{b.bg}}; color: #26302d; font-size: 10.5px; font-weight: 800; line-height: 15px; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{b.label}}</span>
+                </a>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position: relative; display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: #5f6b68">
+          <span>막대 = 북마크한 팝업 기간 · 둥근 끝 = 시작·종료일</span>
+        </div>
+      </div>
+
+      <section aria-labelledby="c-up" style="background: #f6f8f7; border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+        <h2 id="c-up" style="margin: 0; font-size: 17px; font-weight: 800">곧 있는 팝업</h2>
+        <sc-for list="{{upcoming}}" as="u" hint-placeholder-count="3">
+          <a href="A-Detail.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #ffffff; border-radius: 12px; text-decoration: none; color: #26302d">
+            <span style="font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; color: {{u.fg}}; background: {{u.bg}}; white-space: nowrap">{{u.badge}}</span>
+            <span style="font-size: 14px; font-weight: 800">{{u.t}}</span>
+            <span style="margin-left: auto; font-size: 13px; color: #5f6b68">{{u.when}}</span>
+          </a>
+        </sc-for>
+      </section>
+    </section>
+
+    <section aria-labelledby="c-tabs" style="flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+      <h2 id="c-tabs" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); margin: 0">내 팝업 목록</h2>
+      <div role="tablist" style="display: flex; gap: 4px; background: #f4f6f5; border-radius: 999px; padding: 4px">
+        <button role="tab" aria-selected="true" style="flex: 1; font-family: inherit; font-size: 15px; font-weight: 800; border: 0; border-radius: 999px; padding: 12px 8px; background: #ffffff; color: #26302d; cursor: pointer">북마크 7</button>
+        <button role="tab" aria-selected="false" style="flex: 1; font-family: inherit; font-size: 15px; border: 0; border-radius: 999px; padding: 12px 8px; background: none; color: #5f6b68; cursor: pointer">다녀온 팝업 3</button>
+        <button role="tab" aria-selected="false" style="flex: 1; font-family: inherit; font-size: 15px; border: 0; border-radius: 999px; padding: 12px 8px; background: none; color: #5f6b68; cursor: pointer">최근 본</button>
+      </div>
+      <sc-for list="{{bookmarks}}" as="p" hint-placeholder-count="5">
+        <a href="A-Detail.dc.html" style="display: flex; gap: 18px; align-items: center; padding: 14px 16px; border: 1.5px solid #e3e9e7; border-radius: 16px; text-decoration: none; color: #26302d">
+          <span style="width: 96px; aspect-ratio: 3 / 4; border-radius: 12px; border: 2.5px solid #9eddcc; background: {{p.bg}}; flex: none; box-sizing: border-box"></span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0">
+            <span style="display: flex; gap: 6px; flex-wrap: wrap">
+              <span style="font-size: 12px; font-weight: 800; padding: 2px 10px; border-radius: 999px; color: {{p.fg}}; background: {{p.sbg}}">{{p.state}}</span>
+              <span style="font-size: 12px; font-weight: 800; padding: 2px 10px; border-radius: 999px; color: #ffffff; background: #2e9c82">{{p.area}}</span>
+            </span>
+            <span style="font-family: 'Jua', sans-serif; font-size: 21px; line-height: 1.25; color: #0f6b5c">{{p.t}}</span>
+            <span style="font-size: 14px; color: #5f6b68">{{p.place}} · {{p.period}}</span>
+            <span style="align-self: flex-start; font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 999px; background: #f4f6f5; color: #26302d">특전 · {{p.gift}}</span>
+          </span>
+          <span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #14b8a6; color: #ffffff; display: flex; align-items: center; justify-content: center; flex: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M7 4h10v16l-5-3.5L7 20z"></path></svg></span>
+        </a>
+      </sc-for>
+      <button style="height: 44px; border-radius: 999px; border: 0; background: #e6fbf7; color: #0b5e57; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer">+2건 더보기</button>
+    </section>
+
+    <aside aria-labelledby="c-alert" style="flex: 1 1 260px; max-width: 300px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <h2 id="c-alert" style="margin: 0; font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 6px">알림 받은 내역 <button aria-label="알림 기준 보기" style="width: 22px; height: 22px; border-radius: 50%; border: 1px solid #c6d0cd; background: #ffffff; color: #5f6b68; font-size: 12px; font-weight: 800; cursor: pointer; padding: 0">?</button></h2>
+        <button style="font-family: inherit; font-size: 13px; font-weight: 700; border: 0; background: none; color: #0f6b5c; cursor: pointer; padding: 8px 4px">모두 읽음</button>
+      </div>
+      <span style="font-size: 12.5px; color: #5f6b68; margin-top: -6px">최근 3일</span>
+      <sc-for list="{{alerts}}" as="a" hint-placeholder-count="4">
+        <a href="A-Detail.dc.html" style="display: flex; gap: 10px; padding: 12px; border-radius: 14px; background: {{a.rowBg}}; text-decoration: none; color: #26302d">
+          <span style="width: 40px; height: 52px; border-radius: 8px; background: {{a.bg}}; flex: none"></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+            <span style="display: flex; align-items: center; gap: 6px"><span style="font-size: 11.5px; font-weight: 800; color: {{a.tagFg}}">{{a.tag}}</span><span style="font-size: 11.5px; color: #5f6b68">{{a.time}}</span></span>
+            <strong style="font-size: 14px; line-height: 1.35">{{a.t}}</strong>
+            <span style="font-size: 12.5px; color: #5f6b68; line-height: 1.45">{{a.why}}</span>
+          </span>
+        </a>
+      </sc-for>
+
+      <section aria-labelledby="c-near" style="margin-top: 8px; border-top: 1px solid #eef2f1; padding-top: 16px; display: flex; flex-direction: column; gap: 10px">
+        <h2 id="c-near" style="margin: 0; font-size: 17px; font-weight: 800">내 주변 추천</h2>
+        <span style="font-size: 12.5px; color: #5f6b68; margin-top: -4px">20km 안 · 진행 중이거나 3일 안에 열림 · 별점 높은 순</span>
+        <sc-for list="{{near}}" as="n" hint-placeholder-count="3">
+          <a href="A-Detail.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #26302d">
+            <span style="width: 44px; height: 44px; border-radius: 12px; background: {{n.bg}}; flex: none"></span>
+            <span style="display: flex; flex-direction: column; min-width: 0"><strong style="font-size: 14px">{{n.t}}</strong><span style="font-size: 12.5px; color: #5f6b68">{{n.s}}</span></span>
+            <span style="margin-left: auto; font-size: 12.5px; font-weight: 800; color: #0f6b5c; white-space: nowrap">{{n.km}}</span>
+          </a>
+        </sc-for>
+      </section>
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 16px; background: #e9f7f2; margin-top: 4px">
+        <img src="../assets/aniwhere_mascot.png" alt="" style="width: 44px; height: auto; display: block; flex: none">
+        <span style="font-size: 13px; line-height: 1.55">북마크한 팝업은 <strong>오픈·종료 3일 전</strong>부터 알려 드려요.</span>
+      </div>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ev = [
+      { t: '치이카와 팝업 스토어', s: 20, e: 45, lane: 0, bg: '#ffc9d2' },
+      { t: '주술회전 콜라보 카페', s: 15, e: 38, lane: 1, bg: '#cddcff' },
+      { t: '귀멸의 칼날 전시', s: 10, e: 30, lane: 2, bg: '#c8eedd' },
+      { t: '하이큐!! 굿즈', s: 10, e: 25, lane: 3, bg: '#ffdcae' },
+      { t: '산리오 겨울 마켓', s: 28, e: 61, lane: 3, bg: '#e4d6ff' }
+    ];
+    const weeks = [];
+    for (let w = 0; w < 5; w++) {
+      const s = w * 7 + 1, e = s + 6;
+      const days = [];
+      for (let d = s; d <= e; d++) {
+        const inMonth = d <= 30;
+        const sun = (d - 1) % 7 === 0;
+        const today = d === 25;
+        days.push({
+          n: inMonth ? d : d - 30,
+          fg: today ? '#ffffff' : (!inMonth ? '#9aa5a1' : (sun ? '#c0313f' : '#26302d')),
+          bg: today ? '#0b7a70' : 'transparent',
+          cellBg: today ? '#e6fbf7' : 'transparent'
+        });
+      }
+      const bars = [];
+      ev.forEach((x) => {
+        const a = Math.max(x.s, s), b = Math.min(x.e, e);
+        if (a > b) return;
+        const st = a === x.s ? '8px' : '0', en = b === x.e ? '8px' : '0';
+        bars.push({
+          left: ((a - s) / 7 * 100) + '%',
+          width: ((b - a + 1) / 7 * 100) + '%',
+          top: (28 + x.lane * 16) + 'px',
+          bg: x.bg,
+          label: (a === x.s || a === s) ? x.t : '',
+          radius: st + ' ' + en + ' ' + en + ' ' + st
+        });
+      });
+      weeks.push({ days, bars });
+    }
+    return {
+      ic: {
+        bell: 'M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0',
+        chev: 'M9 6l6 6-6 6'
+      },
+      weeks,
+      leaves: [
+        { x: '86%', y: '4%', rot: '20deg', c: '#e0884a', size: 26 },
+        { x: '93%', y: '18%', rot: '-30deg', c: '#f2a33a', size: 18 },
+        { x: '72%', y: '1%', rot: '50deg', c: '#d9a400', size: 16 },
+        { x: '3%', y: '88%', rot: '-15deg', c: '#e0884a', size: 22 },
+        { x: '48%', y: '95%', rot: '35deg', c: '#f2a33a', size: 16 },
+        { x: '95%', y: '70%', rot: '10deg', c: '#d9a400', size: 20 }
+      ],
+      upcoming: [
+        { badge: 'D-3 오픈', fg: '#2c5bc5', bg: '#eaf0fc', t: '산리오 겨울 마켓', when: '11.28 (토)' },
+        { badge: '종료 D-5', fg: '#c0313f', bg: '#fdecee', t: '귀멸의 칼날 전시', when: '11.30 (월)' },
+        { badge: '종료 D-13', fg: '#5f6b68', bg: '#f4f6f5', t: '주술회전 콜라보 카페', when: '12.08 (화)' }
+      ],
+      bookmarks: [
+        { t: '치이카와 팝업 스토어', area: '서울', place: '홍대 애니메이트 카페', period: '11.20 ~ 12.15', gift: '2만원 이상 엽서 1장', bg: '#ffd6dc', state: '진행 중', fg: '#0b5e57', sbg: '#e6fbf7' },
+        { t: '하이큐!! 굿즈', area: '서울', place: '연남', period: '오늘 종료', gift: '구매 시 스티커', bg: '#ffe6c2', state: '마감임박', fg: '#c0313f', sbg: '#fdecee' },
+        { t: '산리오 겨울 마켓', area: '서울', place: '잠실', period: '11.28 ~ 12.31', gift: '선착순 쇼핑백', bg: '#efe0ff', state: 'D-3', fg: '#2c5bc5', sbg: '#eaf0fc' },
+        { t: '귀멸의 칼날 전시', area: '서울', place: '강남', period: '11.10 ~ 11.30', gift: '입장 특전 카드', bg: '#d6f2e9', state: '진행 중', fg: '#0b5e57', sbg: '#e6fbf7' },
+        { t: '주술회전 콜라보 카페', area: '서울', place: '성수', period: '11.15 ~ 12.08', gift: '음료 주문 시 코스터', bg: '#d9e4ff', state: '진행 중', fg: '#0b5e57', sbg: '#e6fbf7' }
+      ],
+      alerts: [
+        { tag: '새 알림', tagFg: '#d63a3a', time: '오늘 09:00', t: '하이큐!! 굿즈가 오늘 끝나요', why: '북마크한 팝업이 곧 끝나요 (종료 3일 전부터 알려 드려요)', bg: '#ffe6c2', rowBg: '#fff6f6' },
+        { tag: '새 알림', tagFg: '#d63a3a', time: '오늘 09:00', t: '산리오 겨울 마켓이 3일 뒤 열려요', why: '북마크한 팝업이 곧 열려요 (오픈 3일 전부터 알려 드려요)', bg: '#efe0ff', rowBg: '#fff6f6' },
+        { tag: '읽음', tagFg: '#5f6b68', time: '어제', t: '삭제 요청이 승인됐어요', why: '내가 보낸 삭제 요청의 결과예요', bg: '#f4f6f5', rowBg: '#f6f8f7' },
+        { tag: '읽음', tagFg: '#5f6b68', time: '11.23', t: '귀멸의 칼날 전시가 곧 끝나요', why: '북마크한 팝업이 곧 끝나요', bg: '#d6f2e9', rowBg: '#f6f8f7' }
+      ],
+      near: [
+        { t: '원피스 굿즈 팝업', s: '홍대 · ★ 4.8 · 후기 12', km: '1.2km', bg: '#d9e4ff' },
+        { t: '블루 아카이브 전시', s: '성수 · ★ 4.7 · 후기 30', km: '6.4km', bg: '#efe0ff' },
+        { t: '짱구 겨울 팝업', s: '송도 · ★ 4.5 · 후기 8', km: '18km', bg: '#ffd6dc' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

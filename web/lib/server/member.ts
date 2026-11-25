@@ -3,6 +3,7 @@ import { scan } from "../guard";
 import { allMembers, WITHDRAWN } from "./auth";
 import { append, current, latest, rows, type Row } from "./store";
 import { esc, inboxId, markId, ntfName } from "./ntf";
+import { lvOfNick } from "./stamp";
 
 // 북마크 · 리뷰 · 알림 — common/favorite.py · review.py · admin.py 규칙 그대로 (append-only).
 
@@ -96,10 +97,12 @@ export type ReviewView = {
   edited: boolean;
   mine: boolean;
   parentId: string;
+  /** 글쓴이의 후기 도장 랭크 단계 (0 = 도장 없음, lib/stamp.ts) */
+  lv: number;
 };
 export type ThreadView = { post: ReviewView; replies: ReviewView[] };
 
-function toView(r: Row, who: (nick: string) => Author, myName: string): ReviewView {
+function toView(r: Row, who: (nick: string) => Author, myName: string, lvOf: (nick: string) => number = () => 0): ReviewView {
   const a = who(String(r.nickname));
   const n = Number(r.rating);
   return {
@@ -123,6 +126,7 @@ function toView(r: Row, who: (nick: string) => Author, myName: string): ReviewVi
     edited: Number(r.revision || 1) > 1,
     mine: canEdit(r, myName),
     parentId: String(r.parent_id || ""),
+    lv: lvOf(String(r.nickname)),
   };
 }
 
@@ -132,10 +136,10 @@ export type HomeReview = ReviewView & { cafeId: string };
  * 사진 있는 리뷰 먼저, 그다음 최신 순으로 limit 개. 저장소를 못 읽으면 빈 목록 */
 export async function homeReviews(popupIds: Set<string>, limit = 12): Promise<HomeReview[]> {
   try {
-    const [revRows, who] = await Promise.all([rows("reviews"), authorMap()]);
+    const [revRows, who, lvOf] = await Promise.all([rows("reviews"), authorMap(), lvOfNick()]);
     return current(revRows)
       .filter((r) => !String(r.parent_id || "") && popupIds.has(String(r.cafe_id)) && String(r.body || "").trim())
-      .map((r) => ({ ...toView(r, who, ""), cafeId: String(r.cafe_id) }))
+      .map((r) => ({ ...toView(r, who, "", lvOf), cafeId: String(r.cafe_id) }))
       .sort((a, b) => Number(b.images.length > 0) - Number(a.images.length > 0) || b.when.localeCompare(a.when))
       .slice(0, limit);
   } catch {
@@ -146,7 +150,7 @@ export async function homeReviews(popupIds: Set<string>, limit = 12): Promise<Ho
 /** 한 팝업의 리뷰를 원글 최신순, 답글은 오래된 순으로 (review.threads). 리뷰 본문은 상세 화면과 홈 후기 모음에서만 보인다 */
 export async function threadsFor(cafeId: string, myName: string): Promise<ThreadView[]> {
   // 리뷰 · 회원 이름표를 함께 읽는다 (11/19 속도: 예전엔 차례로 → 상세 1.6초)
-  const [revRows, who] = await Promise.all([rows("reviews", { cafe_id: cafeId }), authorMap()]);
+  const [revRows, who, lvOf] = await Promise.all([rows("reviews", { cafe_id: cafeId }), authorMap(), lvOfNick()]);
   const mine = current(revRows);
   const byId = new Map(mine.map((r) => [String(r.entry_id), r]));
   const root = (r: Row): string => {
@@ -159,7 +163,7 @@ export async function threadsFor(cafeId: string, myName: string): Promise<Thread
     }
     return cur ? String(cur.entry_id) : "";
   };
-  const view = (r: Row) => toView(r, who, myName);
+  const view = (r: Row) => toView(r, who, myName, lvOf);
   const posts = new Map<string, ThreadView>();
   for (const r of mine) if (!String(r.parent_id || "")) posts.set(String(r.entry_id), { post: view(r), replies: [] });
   for (const r of mine) {
