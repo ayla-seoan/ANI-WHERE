@@ -254,8 +254,9 @@ def survey_summary(rows: list[dict]) -> dict:
 
 
 # ---- 응답 검증 (11/20, 1차 강사 코멘트 "실측이면 참가자 · 측정 방법 · 원자료 공개") --------------------------------
-# '정리' 탭 줄은 손으로도 넣을 수 있어서, **구글 폼 응답 탭(1차 응답 · 2차 응답)에 같은 닉네임이 있고 폼이 찍은 받은 시각이
-# 지금보다 앞선 것**만 실제 응답으로 센다. 받은 시각이 없거나 미래(폼은 미래 시각을 찍지 못함)면 집계에서 뺀다.
+# '정리' 탭 줄은 손으로도 넣을 수 있어서, **구글 폼 응답 탭(1차 응답 · 2차 응답)에 같은 닉네임이 있는 것**만 실제 응답으로 센다.
+# 받은 시각은 따지지 않는다 (11/25 사용자 결정: 시각 · 날짜와 상관없이 쌓인 응답을 계속 보여 준다).
+# 11/20 ~ 11/25 에는 받은 시각이 없거나 미래인 응답을 뺐다. 지금은 빼지 않고 그 건수만 참고로 알려 준다.
 SURVEY_FORM_TABS = {"1차": "1차 응답", "2차": "2차 응답"}
 _FORM_TIME = re.compile(r"(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?")
 _KST = timezone(timedelta(hours=9))
@@ -283,7 +284,8 @@ def parse_form_time(text) -> datetime | None:
 
 
 def survey_verify(rows: list[dict], forms: dict[str, list[dict]], now: datetime | None = None) -> tuple[list[dict], dict]:
-    """(검증된 '정리' 줄, 설명). forms = {'1차': 1차 응답 탭 줄들, '2차': ...}."""
+    """(검증된 '정리' 줄, 설명). forms = {'1차': 1차 응답 탭 줄들, '2차': ...}.
+    '폼 응답 미래 시각' · '폼 응답 시각 없음' 은 참고 건수일 뿐 빼지 않는다 (11/25)."""
     now = now or datetime.now(_KST).replace(tzinfo=None)
     ok: set[tuple[str, str]] = set()
     future = no_time = 0
@@ -293,12 +295,11 @@ def survey_verify(rows: list[dict], forms: dict[str, list[dict]], now: datetime 
             t = parse_form_time(r.get("타임스탬프"))
             if not nick:
                 continue
+            ok.add((ver, nick))            # 시각과 상관없이 센다 (11/25)
             if t is None:
                 no_time += 1
             elif t > now:
                 future += 1
-            else:
-                ok.add((ver, nick))
 
     def key(r: dict) -> tuple[str, str]:
         return survey_version(r), str(r.get("닉네임") or "").strip()

@@ -7594,16 +7594,18 @@ def _admin_survey() -> None:
     if err:
         st.warning(err, icon=":material/error:")
         return
-    # 검증 (11/20): 구글 폼 응답 탭에 있고 받은 시각이 지금보다 앞선 응답만 센다 (stats.survey_verify)
+    # 검증 (11/20, 11/25 고침): 구글 폼 응답 탭에 있는 응답만 센다. 받은 시각은 따지지 않는다 (stats.survey_verify)
     forms = {ver: _survey_rows(sheet_id, tab)[0] for ver, tab in stats.SURVEY_FORM_TABS.items()}
     rows, check = stats.survey_verify(rows, forms)
     if check["제외"]:
         st.warning(f"검증된 응답 **{check['검증']}명**만 셉니다 — '정리' 탭 {check['전체']}명 중 {check['제외']}명 제외 "
-                   f"(폼 응답 탭에 없음 {check['폼에 없음']}명 · 폼 응답 시각이 미래 {check['폼 응답 미래 시각']}건 · "
-                   f"시각 없음 {check['폼 응답 시각 없음']}건). 실제 구글 폼으로 들어온 응답만 지표가 됩니다.",
+                   f"(폼 응답 탭에 없음 {check['폼에 없음']}명). 구글 폼 응답 탭에 있는 응답만 지표가 됩니다.",
                    icon=":material/verified_user:")
     else:
-        st.caption(f"검증된 응답 {check['검증']}명 (모두 구글 폼 응답 탭에 있고 받은 시각이 확인됨)")
+        st.caption(f"검증된 응답 {check['검증']}명 (모두 구글 폼 응답 탭에 있음)")
+    if check["폼 응답 미래 시각"] or check["폼 응답 시각 없음"]:
+        st.caption(f"참고: 받은 시각과 상관없이 모두 셉니다 — 폼 응답 중 받은 시각이 미래 {check['폼 응답 미래 시각']}건 · "
+                   f"시각 없음 {check['폼 응답 시각 없음']}건 포함")
     if not rows:
         st.info("아직 검증된 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
                 icon=":material/hourglass_empty:")

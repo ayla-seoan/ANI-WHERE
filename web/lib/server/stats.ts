@@ -305,8 +305,9 @@ export function surveySummary(input: SurveyRow[]): SurveySummary {
 export const surveyVersion = (r: SurveyRow) => (s(r, "버전").trim() === "1차" ? "1차" : "2차");
 
 // ---- 응답 검증 (11/20, 앱 stats.survey_verify 와 같은 규칙) ----------------------------------------------------
-// '정리' 탭 줄은 손으로도 넣을 수 있어서, 구글 폼 응답 탭(1차 응답 · 2차 응답)에 같은 닉네임이 있고
-// 폼이 찍은 받은 시각이 지금보다 앞선 것만 실제 응답으로 센다.
+// '정리' 탭 줄은 손으로도 넣을 수 있어서, 구글 폼 응답 탭(1차 응답 · 2차 응답)에 같은 닉네임이 있는 것만 실제 응답으로 센다.
+// 받은 시각은 따지지 않는다 (11/25 사용자 결정: 시각 · 날짜와 상관없이 쌓인 응답을 계속 보여 준다).
+// 미래 · 시각없음 은 참고 건수일 뿐 빼지 않는다.
 export const SURVEY_FORM_TABS = { "1차": "1차 응답", "2차": "2차 응답" } as const;
 export type SurveyCheck = { 전체: number; 검증: number; 제외: number; 미래: number; 시각없음: number; 폼에없음: number };
 
@@ -340,9 +341,9 @@ export function surveyVerify(
       if (!nick) continue;
       inForm.add(`${ver}|${nick}`);
       const t = formTime(s(r, "타임스탬프"));
+      ok.add(`${ver}|${nick}`); // 시각과 상관없이 센다 (11/25)
       if (!t) 시각없음++;
       else if (t > now) 미래++;
-      else ok.add(`${ver}|${nick}`);
     }
   }
   const key = (r: SurveyRow) => `${surveyVersion(r)}|${s(r, "닉네임").trim()}`;
