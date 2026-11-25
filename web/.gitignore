@@ -46,3 +46,6 @@ next-env.d.ts
 /.ask-check/
 /.rank-check/
 /.auth-check/
+
+# 화면 점검 스크립트가 만드는 시험용 그림
+/scripts/.e2e-img/
