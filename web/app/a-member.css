@@ -1339,10 +1339,14 @@ a.nh-item:hover {
 .mp-links > button:hover {
   color: var(--accent-deep);
 }
+/* 탈퇴하기는 작게 (11/26 요청): 12px · 보통 굵기, 글자 폭만큼만 눌린다 */
 .mp-links > .danger,
 .mp-links > .danger:hover {
+  align-self: flex-start;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 500;
   color: #c0313f;
-  font-weight: 700;
 }
 .mp-out-note {
   font-size: 12px;
@@ -1788,6 +1792,7 @@ a.nh-item:hover {
     border-bottom: 1px solid var(--line-soft);
   }
   .mp-links > .danger {
+    padding: 10px 0 6px;
     border-bottom: 0;
   }
 

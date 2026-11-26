@@ -7339,8 +7339,10 @@ html body .st-key-amem_logout button { border:0 !important; background:none !imp
   width:auto !important; box-shadow:none !important; }
 html body .st-key-amem_logout button p { font-size:14px !important; color:var(--am-ink) !important; font-weight:400 !important; }
 html body .st-key-amem_logout button:hover p { color:var(--accent-deep) !important; }
-html body .st-key-amem_set .st-key-withdraw_box button { padding:6px 0 !important; }
-html body .st-key-amem_set .st-key-withdraw_box button p { font-size:14px !important; color:#c0313f !important; font-weight:700 !important; text-decoration:none !important; }
+/* 탈퇴하기는 작게 (11/26 요청): 12px · 보통 굵기 */
+html body .st-key-amem_set .st-key-withdraw_box button { padding:4px 0 !important; min-height:0 !important; }
+html body .st-key-amem_set .st-key-withdraw_box button p { font-size:12px !important; color:#c0313f !important; font-weight:500 !important; text-decoration:none !important; }
+html body .st-key-amem_set .st-key-withdraw_box button svg { width:14px !important; height:14px !important; }
 .mp-out-note { font-size:12px; color:var(--am-ink-soft); line-height:1.5; margin-top:-8px; }
 /* ================= 후기 도장 랭크 안내 (창) ================= */
 html body div[data-testid="stDialog"] div[role="dialog"]:has(.rkp) { width:min(1100px, 94vw) !important; max-width:none !important; }
