@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>관리자 · 회원 정보</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f6f8f7}
+a{color:#0d9488}a:hover{color:#0b7a70}
+</style>
+</helmet>
+<div style="font-family: 'Noto Sans KR', sans-serif; color: #26302d; background: #f6f8f7; min-height: 1300px; display: flex; flex-wrap: wrap">
+
+  <nav aria-label="관리자 메뉴" style="flex: 1 1 220px; max-width: 232px; background: #1f2a27; color: #ffffff; padding: 20px 14px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; min-height: 1300px">
+    <a href="A-Home.dc.html" style="display: block; padding: 4px 6px 18px; text-decoration: none"><img src="../assets/aniwhere_logo.png" alt="ANI:WHERE 홈" style="height: 40px; width: auto; display: block"></a>
+    <span style="font-size: 11.5px; font-weight: 800; letter-spacing: .08em; color: #9aa5a1; padding: 0 10px 6px">관리자</span>
+    <sc-for list="{{menu}}" as="m" hint-placeholder-count="8">
+      <a href="{{m.href}}" style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 12px; text-decoration: none; color: {{m.fg}}; background: {{m.bg}}; font-size: 14.5px; font-weight: {{m.w}}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{m.ic}}"></path></svg>
+        <span style="flex: 1">{{m.t}}</span>
+        <span style="display: {{m.badgeDisplay}}; min-width: 22px; height: 22px; border-radius: 999px; background: #ff6b6b; color: #1f2a27; font-size: 12px; font-weight: 800; line-height: 22px; text-align: center">{{m.badge}}</span>
+      </a>
+    </sc-for>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px 0; border-top: 1px solid #3a4743">
+      <a href="#" style="font-size: 13px; color: #c9d3d0; text-decoration: none; padding: 7px 0">Claude 예약 작업 ↗</a>
+      <a href="#" style="font-size: 13px; color: #c9d3d0; text-decoration: none; padding: 7px 0">Supabase 데이터 보기 ↗</a>
+      <a href="A-Home.dc.html" style="font-size: 13px; color: #5eead4; text-decoration: none; padding: 7px 0; font-weight: 700">← 서비스로 돌아가기</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 640px; min-width: 0; padding: 26px 32px 64px; display: flex; flex-direction: column; gap: 18px; box-sizing: border-box">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 12px; font-weight: 800; color: #5f6b68">회원 정보 · 예시 데이터</span>
+      <h1 style="margin: 0; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 30px">회원 86명</h1>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+      <section aria-labelledby="m-yes" style="background: #ffffff; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px; border-top: 4px solid #0d9488">
+        <h2 id="m-yes" style="margin: 0; font-size: 15px; font-weight: 800">받는 정보</h2>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px">
+          <sc-for list="{{yes}}" as="y" hint-placeholder-count="5"><span style="font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 999px; background: #e6fbf7; color: #0b5e57">{{y}}</span></sc-for>
+        </div>
+        <span style="font-size: 12.5px; color: #5f6b68; line-height: 1.5">카카오·네이버 계정 번호와 손님 IP 는 소금 친 해시로만 저장해요. 접속 기록은 1년 지나면 자동 삭제.</span>
+      </section>
+      <section aria-labelledby="m-no" style="background: #ffffff; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px; border-top: 4px solid #9aa5a1">
+        <h2 id="m-no" style="margin: 0; font-size: 15px; font-weight: 800">받지 않는 정보</h2>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px">
+          <sc-for list="{{no}}" as="n" hint-placeholder-count="5"><span style="font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 999px; background: #f4f6f5; color: #26302d; text-decoration: line-through">{{n}}</span></sc-for>
+        </div>
+        <span style="font-size: 12.5px; color: #5f6b68; line-height: 1.5">만 14세 미만은 가입 화면 [필수] 확인으로 막아요. 법정대리인 동의 절차는 공개 전 보완 예정.</span>
+      </section>
+    </div>
+
+    <section aria-labelledby="m-list" style="background: #ffffff; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+        <h2 id="m-list" style="margin: 0; font-size: 16px; font-weight: 800; margin-right: auto">회원 목록</h2>
+        <label style="display: block"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">닉네임 검색</span><input placeholder="닉네임 검색" style="height: 40px; width: 200px; font-family: inherit; font-size: 13.5px; padding: 0 14px; border-radius: 999px; border: 1px solid #e3e9e7; color: #26302d; box-sizing: border-box"></label>
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #5f6b68">가입 방법<select style="height: 40px; font-family: inherit; font-size: 13px; font-weight: 700; padding: 0 10px; border-radius: 999px; border: 1px solid #e3e9e7; background: #ffffff; color: #26302d"><option>전체</option></select></label>
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #5f6b68">정렬<select style="height: 40px; font-family: inherit; font-size: 13px; font-weight: 700; padding: 0 10px; border-radius: 999px; border: 1px solid #e3e9e7; background: #ffffff; color: #26302d"><option>최근 접속순</option></select></label>
+      </div>
+      <div style="overflow-x: auto">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 760px">
+          <thead><tr style="text-align: left; color: #5f6b68; font-size: 12.5px">
+            <th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">닉네임</th>
+            <th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">후기 도장</th>
+            <th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">가입 방법</th>
+            <th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">가입일</th>
+            <th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">최근 접속</th>
+            <th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">권한</th>
+            <th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">관리</span></th>
+          </tr></thead>
+          <tbody>
+            <sc-for list="{{members}}" as="u" hint-placeholder-count="7">
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1"><span style="display: flex; align-items: center; gap: 8px"><span style="width: 30px; height: 30px; border-radius: 50%; background: {{u.av}}; flex: none"></span><strong>{{u.nick}}</strong></span></td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1"><span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 2px; border-radius: 999px; background: {{u.rkFill}}"><span style="width: 20px; height: 20px; border-radius: 50%; background: #ffffff; border: 2px solid {{u.rkRing}}; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span><span style="font-size: 12px; font-weight: 800; color: {{u.rkFg}}">{{u.rk}}</span></span> <span style="font-size: 12px; color: #5f6b68">후기 {{u.rv}}</span></td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1">{{u.via}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1; color: #5f6b68">{{u.joined}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1">{{u.last}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1"><span style="font-size: 12px; font-weight: 800; color: {{u.roleFg}}; background: {{u.roleBg}}; padding: 2px 10px; border-radius: 999px">{{u.role}}</span></td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1; text-align: right"><button aria-label="{{u.nick}} 관리" style="width: 34px; height: 34px; border-radius: 50%; border: 0; background: #f4f6f5; color: #26302d; cursor: pointer">⋯</button></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 4px">
+        <span style="font-size: 12.5px; color: #5f6b68">관리자는 .env 의 ADMIN_MEMBER_KEYS 로 정해요.</span>
+        <button disabled style="height: 38px; padding: 0 14px; border-radius: 999px; border: 1px dashed #c6d0cd; background: #ffffff; color: #5f6b68; font-family: inherit; font-size: 13px; font-weight: 700">강제 탈퇴 · 파기 (공개 전 보완 예정)</button>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const items = [
+      ['한눈에 보기', 'AdmX-1Home.dc.html', 'M4 11l8-7 8 7v9h-5v-6H9v6H4z', ''],
+      ['팝업 현황', 'AdmX-2Popups.dc.html', 'M8 6h12 M8 12h12 M8 18h12 M4 6h.01 M4 12h.01 M4 18h.01', ''],
+      ['이용 지표', 'AdmX-3Usage.dc.html', 'M5 20V10 M12 20V4 M19 20v-7', ''],
+      ['삭제 요청', 'AdmX-4Delete.dc.html', 'M5 7h14 M10 7V4h4v3 M7 7l1 13h8l1-13', '3'],
+      ['알림 관리', 'AdmX-5Alerts.dc.html', 'M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0', ''],
+      ['회원 정보', 'AdmX-6Members.dc.html', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c1-4 4.5-6 8-6s7 2 8 6', ''],
+      ['원본 데이터', 'AdmX-7Raw.dc.html', 'M4 6c0-2 16-2 16 0v12c0 2-16 2-16 0z M4 6c0 2 16 2 16 0 M4 12c0 2 16 2 16 0', ''],
+      ['사용자 테스트', 'AdmX-8Test.dc.html', 'M9 3h6 M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3', '']
+    ];
+    const active = 5;
+    const rk = {
+      1: { rk: 'Lv.1', rkRing: '#5fbf9f', rkFill: '#f0faf6', rkFg: '#0f6b5c' },
+      2: { rk: 'Lv.2', rkRing: '#21b287', rkFill: '#e9f7f2', rkFg: '#0f6b5c' },
+      3: { rk: 'Lv.3', rkRing: '#2c5bc5', rkFill: '#eaf0fc', rkFg: '#2c5bc5' },
+      4: { rk: 'Lv.4', rkRing: '#7656c4', rkFill: '#f1ecff', rkFg: '#5b3fae' },
+      5: { rk: 'Lv.5', rkRing: '#c99a00', rkFill: '#fff6d6', rkFg: '#7a5a00' }
+    };
+    const user = { role: '회원', roleFg: '#26302d', roleBg: '#f4f6f5' };
+    const admin = { role: '관리자', roleFg: '#ffffff', roleBg: '#1f2a27' };
+    return {
+      menu: items.map((x, i) => ({ t: x[0], href: x[1], ic: x[2], badge: x[3], badgeDisplay: x[3] ? 'inline-block' : 'none', fg: i === active ? '#1f2a27' : '#c9d3d0', bg: i === active ? '#5eead4' : 'transparent', w: i === active ? '800' : '500' })),
+      yes: ['닉네임', '약관 동의 기록', '프로필 사진 [선택]', '아이디 · 비밀번호 해시 (아이디 가입)', '접속 기록'],
+      no: ['이메일', '전화번호', '실명', '생일', '주소'],
+      members: [
+        Object.assign({ nick: '관리자', av: '#e9f7f2', rv: 6, via: '아이디', joined: '10.28', last: '방금' }, rk[2], admin),
+        Object.assign({ nick: '배고픈 아냐', av: '#ffe6c2', rv: 52, via: '카카오', joined: '10.29', last: '5시간 전' }, rk[5], user),
+        Object.assign({ nick: '졸린 하치와레', av: '#d9e4ff', rv: 27, via: '네이버', joined: '10.30', last: '1시간 전' }, rk[4], user),
+        Object.assign({ nick: '바쁜 모몬가', av: '#fff3b8', rv: 11, via: '카카오', joined: '11.02', last: '어제' }, rk[3], user),
+        Object.assign({ nick: '느긋한 우사기', av: '#ffd6dc', rv: 4, via: '카카오', joined: '10.28', last: '10분 전' }, rk[2], user),
+        Object.assign({ nick: '반짝이는 시로코', av: '#efe0ff', rv: 3, via: '아이디', joined: '11.12', last: '3시간 전' }, rk[2], user),
+        Object.assign({ nick: '용감한 네즈코', av: '#d6f2e9', rv: 1, via: '네이버', joined: '11.20', last: '2시간 전' }, rk[1], user)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

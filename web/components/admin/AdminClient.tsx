@@ -70,13 +70,13 @@ export function RefreshButton() {
 }
 
 /** 사용자 테스트 '새로고침' */
-export function SurveyReload() {
+export function SurveyReload({ className = "st-btn wide" }: { className?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   return (
     <button
       type="button"
-      className="st-btn wide"
+      className={className}
       disabled={busy}
       onClick={async () => {
         setBusy(true);

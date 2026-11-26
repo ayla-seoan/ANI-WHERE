@@ -11,6 +11,7 @@ import "./a-home.css";
 import "./a-browse.css";
 import "./a-detail.css";
 import "./a-member.css";
+import "./a-admin.css";
 import { getPopupData } from "@/lib/data";
 import Gnb from "@/components/Gnb";
 import Footer from "@/components/Footer";

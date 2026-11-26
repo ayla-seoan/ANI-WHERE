@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>관리자 · 삭제 요청</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Jua&amp;family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f6f8f7}
+a{color:#0d9488}a:hover{color:#0b7a70}
+</style>
+</helmet>
+<div style="font-family: 'Noto Sans KR', sans-serif; color: #26302d; background: #f6f8f7; min-height: 1300px; display: flex; flex-wrap: wrap">
+
+  <nav aria-label="관리자 메뉴" style="flex: 1 1 220px; max-width: 232px; background: #1f2a27; color: #ffffff; padding: 20px 14px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; min-height: 1300px">
+    <a href="A-Home.dc.html" style="display: block; padding: 4px 6px 18px; text-decoration: none"><img src="../assets/aniwhere_logo.png" alt="ANI:WHERE 홈" style="height: 40px; width: auto; display: block"></a>
+    <span style="font-size: 11.5px; font-weight: 800; letter-spacing: .08em; color: #9aa5a1; padding: 0 10px 6px">관리자</span>
+    <sc-for list="{{menu}}" as="m" hint-placeholder-count="8">
+      <a href="{{m.href}}" style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 12px; text-decoration: none; color: {{m.fg}}; background: {{m.bg}}; font-size: 14.5px; font-weight: {{m.w}}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{m.ic}}"></path></svg>
+        <span style="flex: 1">{{m.t}}</span>
+        <span style="display: {{m.badgeDisplay}}; min-width: 22px; height: 22px; border-radius: 999px; background: #ff6b6b; color: #1f2a27; font-size: 12px; font-weight: 800; line-height: 22px; text-align: center">{{m.badge}}</span>
+      </a>
+    </sc-for>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px 0; border-top: 1px solid #3a4743">
+      <a href="#" style="font-size: 13px; color: #c9d3d0; text-decoration: none; padding: 7px 0">Claude 예약 작업 ↗</a>
+      <a href="#" style="font-size: 13px; color: #c9d3d0; text-decoration: none; padding: 7px 0">Supabase 데이터 보기 ↗</a>
+      <a href="A-Home.dc.html" style="font-size: 13px; color: #5eead4; text-decoration: none; padding: 7px 0; font-weight: 700">← 서비스로 돌아가기</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 640px; min-width: 0; padding: 26px 32px 64px; display: flex; flex-direction: column; gap: 18px; box-sizing: border-box">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 12px; font-weight: 800; color: #5f6b68">삭제 요청 · 예시 데이터</span>
+      <h1 style="margin: 0; font-family: 'Jua', sans-serif; font-weight: 400; font-size: 30px">회원이 내려 달라고 한 팝업</h1>
+      <span style="font-size: 13.5px; color: #5f6b68">승인하면 지도·리스트에서 내리고(기록은 남김) 요청자에게 알림, 거부하면 사유와 함께 알림이 가요.</span>
+    </div>
+
+    <div role="tablist" style="display: flex; gap: 4px; background: #ffffff; border-radius: 999px; padding: 4px; align-self: flex-start; border: 1px solid #e3e9e7">
+      <button role="tab" aria-selected="true" style="height: 40px; padding: 0 18px; border-radius: 999px; border: 0; background: #1f2a27; color: #ffffff; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer">대기 3</button>
+      <button role="tab" aria-selected="false" style="height: 40px; padding: 0 18px; border-radius: 999px; border: 0; background: none; color: #5f6b68; font-family: inherit; font-size: 14px; cursor: pointer">처리 완료 12</button>
+    </div>
+
+    <article style="background: #ffffff; border-radius: 20px; border: 2px solid #14b8a6; padding: 20px; display: flex; flex-wrap: wrap; gap: 20px">
+      <span style="width: 96px; height: 128px; border-radius: 12px; background: #d6f2e9; border: 2px solid #9eddcc; flex: none"></span>
+      <div style="flex: 999 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+          <strong style="font-family: 'Jua', sans-serif; font-weight: 400; font-size: 22px">키키 전시</strong>
+          <span style="font-size: 12px; font-weight: 800; color: #0b5e57; background: #e6fbf7; padding: 2px 10px; border-radius: 999px">지금 지도에 보임</span>
+          <a href="A-Detail.dc.html" style="font-size: 13px; font-weight: 700">상세 열기 ↗</a>
+        </div>
+        <span style="font-size: 13.5px; color: #5f6b68">종로 · 등록된 기간 11.01 ~ 11.24 · 북마크 6 · 리뷰 4</span>
+        <div style="padding: 12px 14px; border-radius: 14px; background: #f6f8f7; display: flex; flex-direction: column; gap: 6px">
+          <span style="display: flex; align-items: center; gap: 6px; font-size: 13px"><span style="width: 20px; height: 20px; border-radius: 50%; background: #ffffff; border: 2px solid #5fbf9f; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><img src="../assets/aniwhere_mascot.png" alt="" style="width: 62%; height: auto; display: block"></span><strong>바쁜 모몬가</strong><span style="color: #5f6b68">Lv.1 · 어제 18:20 요청</span></span>
+          <span style="font-size: 14.5px; line-height: 1.6">"날짜가 틀려요. 공식 공지에 11월 24일까지라고 되어 있어서 이미 끝났어요."</span>
+        </div>
+        <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: #5f6b68">처리 사유 (요청자에게 알림으로 가요)<textarea rows="2" placeholder="예: 공식 공지 확인 결과 종료된 행사라 내렸어요" style="font-family: inherit; font-size: 14px; border-radius: 12px; border: 1px solid #e3e9e7; padding: 10px 12px; resize: none; color: #26302d"></textarea></label>
+      </div>
+      <div style="flex: 1 1 180px; max-width: 220px; display: flex; flex-direction: column; gap: 8px; justify-content: flex-end">
+        <button style="height: 46px; border-radius: 999px; border: 0; background: #1f2a27; color: #ffffff; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer">승인하고 내리기</button>
+        <button style="height: 46px; border-radius: 999px; border: 1px solid #e3e9e7; background: #ffffff; color: #26302d; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer">거부</button>
+        <button style="height: 40px; border-radius: 999px; border: 0; background: none; color: #0f6b5c; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">기간만 고치기 →</button>
+      </div>
+    </article>
+
+    <sc-for list="{{reqs}}" as="r" hint-placeholder-count="2">
+      <article style="background: #ffffff; border-radius: 18px; padding: 16px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+        <span style="width: 48px; height: 64px; border-radius: 8px; background: {{r.bg}}; flex: none"></span>
+        <div style="flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 3px">
+          <strong style="font-size: 15.5px">{{r.t}}</strong>
+          <span style="font-size: 13.5px">"{{r.why}}"</span>
+          <span style="font-size: 12.5px; color: #5f6b68">{{r.who}} · {{r.when}}</span>
+        </div>
+        <button style="height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid #14b8a6; background: #e6fbf7; color: #0b5e57; font-family: inherit; font-size: 13px; font-weight: 800; cursor: pointer">열어서 처리</button>
+      </article>
+    </sc-for>
+
+    <section aria-labelledby="d-hist" style="background: #ffffff; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+      <h2 id="d-hist" style="margin: 0; font-size: 15px; font-weight: 800">최근 처리 기록</h2>
+      <div style="overflow-x: auto">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 640px">
+          <thead><tr style="text-align: left; color: #5f6b68; font-size: 12.5px">
+            <th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">처리일</th><th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">팝업</th><th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">결과</th><th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">사유</th><th style="padding: 8px 10px; font-weight: 700; border-bottom: 1px solid #e3e9e7">요청자</th>
+          </tr></thead>
+          <tbody>
+            <sc-for list="{{hist}}" as="h" hint-placeholder-count="4">
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1; white-space: nowrap">{{h.d}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1; font-weight: 700">{{h.t}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1"><span style="font-size: 12px; font-weight: 800; color: {{h.fg}}; background: {{h.bg}}; padding: 2px 10px; border-radius: 999px">{{h.r}}</span></td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1; color: #26302d">{{h.why}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eef2f1; color: #5f6b68">{{h.who}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const items = [
+      ['한눈에 보기', 'AdmX-1Home.dc.html', 'M4 11l8-7 8 7v9h-5v-6H9v6H4z', ''],
+      ['팝업 현황', 'AdmX-2Popups.dc.html', 'M8 6h12 M8 12h12 M8 18h12 M4 6h.01 M4 12h.01 M4 18h.01', ''],
+      ['이용 지표', 'AdmX-3Usage.dc.html', 'M5 20V10 M12 20V4 M19 20v-7', ''],
+      ['삭제 요청', 'AdmX-4Delete.dc.html', 'M5 7h14 M10 7V4h4v3 M7 7l1 13h8l1-13', '3'],
+      ['알림 관리', 'AdmX-5Alerts.dc.html', 'M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0', ''],
+      ['회원 정보', 'AdmX-6Members.dc.html', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c1-4 4.5-6 8-6s7 2 8 6', ''],
+      ['원본 데이터', 'AdmX-7Raw.dc.html', 'M4 6c0-2 16-2 16 0v12c0 2-16 2-16 0z M4 6c0 2 16 2 16 0 M4 12c0 2 16 2 16 0', ''],
+      ['사용자 테스트', 'AdmX-8Test.dc.html', 'M9 3h6 M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3', '']
+    ];
+    const active = 3;
+    const ok = { r: '승인', fg: '#ffffff', bg: '#1f2a27' };
+    const no = { r: '거부', fg: '#26302d', bg: '#f4f6f5' };
+    return {
+      menu: items.map((x, i) => ({ t: x[0], href: x[1], ic: x[2], badge: x[3], badgeDisplay: x[3] ? 'inline-block' : 'none', fg: i === active ? '#1f2a27' : '#c9d3d0', bg: i === active ? '#5eead4' : 'transparent', w: i === active ? '800' : '500' })),
+      reqs: [
+        { t: '원피스 굿즈 팝업 (중복)', why: '같은 팝업이 두 번 올라와 있어요', who: '졸린 하치와레 · Lv.4', when: '3시간 전', bg: '#d9e4ff' },
+        { t: '나루토 콜라보 카페', why: '공식 공지에서 행사가 취소됐어요', who: '느긋한 우사기 · Lv.2', when: '1시간 전', bg: '#ffe6c2' }
+      ],
+      hist: [
+        Object.assign({ d: '11.24', t: '짱구 가을 팝업', why: '공식 공지 확인 · 종료된 행사', who: '반짝이는 시로코' }, ok),
+        Object.assign({ d: '11.22', t: '치이카와 팝업 스토어', why: '진행 중인 행사라 유지 · 기간만 고침', who: '용감한 네즈코' }, no),
+        Object.assign({ d: '11.20', t: '하이큐!! 카페 (중복)', why: '같은 팝업 중복 등록', who: '배고픈 아냐' }, ok),
+        Object.assign({ d: '11.19', t: '귀멸의 칼날 전시', why: '사유 불충분 · 공식 공지 정상', who: '바쁜 모몬가' }, no)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
