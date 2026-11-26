@@ -681,6 +681,11 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   align-items: start;
+  /* 사진 있는 후기는 세 줄을 차지하고(사진 없는 후기의 약 3배 높이), 그 옆 · 아래 빈칸은 사진 없는 후기가 채운다 (11/26 요청) */
+  grid-auto-flow: row dense;
+}
+.ah-wall > .ah-rv:has(.ah-rv-ph) {
+  grid-row: span 3;
 }
 @media (max-width: 900px) {
   .ah-wall {

@@ -3783,7 +3783,10 @@ html body .st-key-home [class*="st-key-ahal_on_"] button { background: var(--ah-
 html body .st-key-home [class*="st-key-ahal_on_"] button p, html body .st-key-home [class*="st-key-ahal_on_"] button span { color: #fff !important; }
 
 /* ---------- 꿀팁 가득! 실시간 후기 모음: 3칸 열 (11/26 요청 — 왼쪽 → 오른쪽으로 한 줄에 세 장씩) ---------- */
-html body .st-key-home .st-key-ah_wall { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px !important; align-items: start; }
+html body .st-key-home .st-key-ah_wall { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px !important; align-items: start;
+  grid-auto-flow: row dense; }
+/* 사진 있는 후기는 세 줄을 차지하고(사진 없는 후기의 약 3배 높이), 그 옆 · 아래 빈칸은 사진 없는 후기가 채운다 (11/26 요청) */
+html body .st-key-home .st-key-ah_wall > div:has(.ah-rv-ph) { grid-row: span 3; }
 html body .st-key-home .st-key-ah_wall > div { width: 100% !important; min-width: 0; margin: 0 !important; }
 @media (max-width: 900px) { html body .st-key-home .st-key-ah_wall { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 html body .st-key-home [class*="st-key-card_hv_"] { cursor: default; }
