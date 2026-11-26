@@ -198,11 +198,12 @@ export default function Settings({ a, suggest, notice }: { a: Account; suggest: 
       )}
 
       <div className="mp-links">
-        <Link href="/privacy">개인정보처리방침 · 이용약관</Link>
-        <Link href="/guide">사용자 튜토리얼</Link>
-        <button type="button" onClick={() => startTransition(() => logoutAction())}>
+        {/* 11/26 요청: 로그아웃은 테두리 버튼으로 맨 위 · 가운데, 아래 두 링크도 가운데. 탈퇴하기만 예전처럼 왼쪽 작게 */}
+        <button type="button" className="logout" onClick={() => startTransition(() => logoutAction())}>
           로그아웃
         </button>
+        <Link href="/privacy">개인정보처리방침 · 이용약관</Link>
+        <Link href="/guide">사용자 튜토리얼</Link>
         <button type="button" className="danger" aria-expanded={openOut} onClick={() => setOpenOut((o) => !o)}>
           탈퇴하기
         </button>

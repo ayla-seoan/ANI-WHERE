@@ -1326,7 +1326,7 @@ a.nh-item:hover {
 }
 .mp-links > a,
 .mp-links > button {
-  text-align: left;
+  text-align: center;
   padding: 10px 0;
   border: 0;
   background: none;
@@ -1339,10 +1339,24 @@ a.nh-item:hover {
 .mp-links > button:hover {
   color: var(--accent-deep);
 }
-/* 탈퇴하기는 작게 (11/26 요청): 12px · 보통 굵기, 글자 폭만큼만 눌린다 */
+/* 로그아웃: 테두리 알약 버튼, 맨 위 · 가운데 (11/26 요청) */
+.mp-links > .logout {
+  min-height: 44px;
+  margin: 4px 0 6px;
+  padding: 0 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  font-weight: 700;
+}
+.mp-links > .logout:hover {
+  border-color: var(--accent);
+}
+/* 탈퇴하기는 작게 (11/26 요청): 12px · 보통 굵기, 글자 폭만큼만 눌린다 — 왼쪽 그대로 */
 .mp-links > .danger,
 .mp-links > .danger:hover {
   align-self: flex-start;
+  text-align: left;
   padding: 6px 0;
   font-size: 12px;
   font-weight: 500;
@@ -1792,6 +1806,11 @@ a.nh-item:hover {
   .mp-links > button {
     padding: 13px 0;
     border-bottom: 1px solid var(--line-soft);
+  }
+  .mp-links > .logout {
+    margin: 0 0 8px;
+    padding: 0 16px;
+    border: 1.5px solid var(--line);
   }
   .mp-links > .danger {
     padding: 10px 0 6px;

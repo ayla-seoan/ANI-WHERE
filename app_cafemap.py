@@ -7334,13 +7334,16 @@ html body .st-key-amem_to_ntf button p { font-size:13px !important; font-weight:
 html body .st-key-amem_to_ntf button:hover { border-color:var(--accent) !important; }
 .mp-flag { font-size:12px; font-weight:800; padding:4px 10px; border-radius:999px; background:var(--am-gray); color:var(--am-ink-soft); white-space:nowrap; }
 .mp-flag.on { background:var(--accent-soft); color:#0b5e57; }
-.mp-links { border-top:1px solid var(--am-line-soft); padding-top:10px; display:flex; flex-direction:column; }
-html body .mp-links > a { text-align:left; padding:10px 0; font-size:14px; color:var(--am-ink) !important; text-decoration:none !important; }
+.mp-sep { border-top:1px solid var(--am-line-soft); margin-top:4px; }
+.mp-links { display:flex; flex-direction:column; }
+html body .mp-links > a { text-align:center; padding:10px 0; font-size:14px; color:var(--am-ink) !important; text-decoration:none !important; }
 html body .mp-links > a:hover { color:var(--accent-deep) !important; }
-html body .st-key-amem_logout, html body .st-key-amem_set .st-key-withdraw_box { margin-top:-10px !important; }
-html body .st-key-amem_logout button { border:0 !important; background:none !important; padding:6px 0 !important; min-height:0 !important;
-  width:auto !important; box-shadow:none !important; }
-html body .st-key-amem_logout button p { font-size:14px !important; color:var(--am-ink) !important; font-weight:400 !important; }
+html body .st-key-amem_set .st-key-withdraw_box { margin-top:-10px !important; }
+/* 로그아웃: 테두리 알약 버튼, 칸 폭 가득 · 글자 가운데 (11/26 요청) */
+html body .st-key-amem_logout button { width:100% !important; min-height:44px !important; border:1.5px solid var(--am-line, #e3e9e7) !important;
+  border-radius:999px !important; background:#fff !important; box-shadow:none !important; justify-content:center !important; }
+html body .st-key-amem_logout button p { font-size:14px !important; color:var(--am-ink) !important; font-weight:700 !important; }
+html body .st-key-amem_logout button:hover { border-color:var(--accent) !important; }
 html body .st-key-amem_logout button:hover p { color:var(--accent-deep) !important; }
 /* 탈퇴하기는 작게 (11/26 요청): 12px · 보통 굵기 */
 html body .st-key-amem_set .st-key-withdraw_box button { padding:4px 0 !important; min-height:0 !important; }
@@ -7449,7 +7452,6 @@ html body div[data-testid="stDialog"] div[role="dialog"]:has(.rkp) { width:min(1
   .mp-rv-stamp { transform:rotate(-10deg) scale(.8); }
   html body .st-key-amem_set { border:0; border-radius:0; padding:0 !important; gap:12px !important; }
   .mp-row { padding:10px 0; border-bottom:1px solid var(--am-line-soft); }
-  .mp-links { border-top:0; padding-top:0; }
   html body .mp-links > a { padding:13px 0; border-bottom:1px solid var(--am-line-soft); }
   /* 랭크 안내: 카드를 한 줄씩 (도장 왼쪽 · 글 오른쪽) */
   .rkp { padding:22px 16px; border-radius:20px; gap:16px; }
@@ -9717,14 +9719,16 @@ def _my_account(row: dict) -> None:
                             st.rerun()
                         except auth.AuthError as e:
                             st.warning(str(e), icon=":material/error:")
-        st.markdown(f'<div class="mp-links"><a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
-                    '<a href="./guide" target="_self">사용자 튜토리얼</a></div>', unsafe_allow_html=True)
-        if st.button("로그아웃", key="amem_logout", type="tertiary"):
+        # 11/26 요청: 로그아웃은 테두리 버튼으로 맨 위 · 가운데, 처리방침 · 튜토리얼 링크도 가운데. 탈퇴하기만 예전처럼 왼쪽 작게
+        st.markdown('<div class="mp-sep"></div>', unsafe_allow_html=True)
+        if st.button("로그아웃", key="amem_logout", width="stretch"):
             _logout()
             st.session_state["flash"] = ("로그아웃했어요.", ":material/logout:")
             st.rerun()
         with st.container(key="withdraw_box"), st.popover("탈퇴하기"):
             st.write("닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 **지난 기록까지 바로 지워요**. 후기 도장도 함께 없어져요. "
+        st.markdown(f'<div class="mp-links"><a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
+                    '<a href="./guide" target="_self">사용자 튜토리얼</a></div>', unsafe_allow_html=True)
                      "쓴 리뷰는 다른 이용자를 위해 '탈퇴한 회원'으로 남아요 (지우고 싶은 글은 먼저 삭제 요청해 주세요).")
             if local:
                 st.caption("아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.")
