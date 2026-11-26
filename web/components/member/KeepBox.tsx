@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { stateOf } from "@/lib/popup";
 import { areaFill, posterBg } from "../cards";
 import { RankStamp } from "../RankStamp";
-import { RankCard, RANK_HREF } from "../mypage/RankBits";
+import { RankCard } from "../mypage/RankBits";
+import RankGuideLink from "../mypage/RankGuideLink";
 import BookmarkButton from "./BookmarkButton";
 
 // 내 캘린더 가운데 칸 (A-Cal · A-MCal · A-MVisited, 앱 render_box_view):
@@ -214,9 +215,9 @@ export default function KeepBox({
               title="다녀온 팝업이 없어요"
               hint="팝업 상세의 리뷰에서 '다녀온 후기'를 쓰면 도장을 받고 여기에 기록돼요."
             >
-              <Link href={RANK_HREF} className="am-cta">
+              <RankGuideLink stamps={stamps} className="am-cta">
                 후기 도장 랭크 안내
-              </Link>
+              </RankGuideLink>
             </Empty>
           )}
         </>

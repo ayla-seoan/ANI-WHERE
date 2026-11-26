@@ -35,8 +35,9 @@ export function RankChip({ lv }: { lv: number }) {
 }
 
 /** 큰 도장 (마이페이지 96px · 랭크 안내 116px): 둘레 글자 + 단계 숫자 */
-export function RankStampBig({ tier, size = 96, dim }: { tier: Tier; size?: number; dim?: boolean }) {
-  const id = `rk-ring-${tier.lv}-${size}`;
+export function RankStampBig({ tier, size = 96, dim, idPrefix = "" }: { tier: Tier; size?: number; dim?: boolean; idPrefix?: string }) {
+  // 같은 화면에 같은 도장이 두 번 나와도(화면 + 팝업) SVG id 가 겹치지 않게
+  const id = `rk-ring-${idPrefix}${tier.lv}-${size}`;
   return (
     <span className={`rk-big${dim ? " dim" : ""}`} style={{ width: size, height: size }} role="img" aria-label={`Lv.${tier.lv} ${tier.name} 도장`}>
       <svg width={size} height={size} viewBox="0 0 80 80" aria-hidden>

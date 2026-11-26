@@ -6,7 +6,8 @@ import { todayKST } from "@/lib/popup";
 import { tierOf, TIERS } from "@/lib/stamp";
 import { avatarUrl } from "@/lib/avatar";
 import { RankStamp, RankStampBig } from "@/components/RankStamp";
-import { RANK_HREF, RankBar, RankLine, TierRow } from "@/components/mypage/RankBits";
+import { RankBar, RankLine, TierRow } from "@/components/mypage/RankBits";
+import RankGuideLink from "@/components/mypage/RankGuideLink";
 import MyReviews, { type MyReviewItem } from "@/components/mypage/MyReviews";
 import Settings from "@/components/mypage/Settings";
 import { myReviews } from "@/lib/server/a-member";
@@ -137,9 +138,9 @@ export default async function MyPage() {
               <RankLine stamps={stamps} />
               <RankBar stamps={stamps} />
             </div>
-            <Link href={RANK_HREF} className="mp-rank-link">
+            <RankGuideLink stamps={stamps} className="mp-rank-link">
               랭크 안내 보기
-            </Link>
+            </RankGuideLink>
           </div>
           <TierRow stamps={stamps} cells />
         </section>

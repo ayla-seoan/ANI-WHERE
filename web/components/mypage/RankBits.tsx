@@ -1,4 +1,4 @@
-import Link from "next/link";
+import RankGuideLink from "./RankGuideLink";
 import { nextTier, tierOf, TIERS, type Tier } from "@/lib/stamp";
 
 // 후기 도장 요약 조각 (A-MVisited · A-MyPage): 진행 막대, 5단계 줄, 60px 도장.
@@ -128,9 +128,9 @@ export function RankCard({ stamps, note }: { stamps: number; note?: string }) {
           </span>
           <RankLine stamps={stamps} short />
         </div>
-        <Link href={RANK_HREF} className="rkb-guide">
+        <RankGuideLink stamps={stamps} className="rkb-guide">
           랭크 안내
-        </Link>
+        </RankGuideLink>
       </div>
       <RankBar stamps={stamps} />
       <TierRow stamps={stamps} />
