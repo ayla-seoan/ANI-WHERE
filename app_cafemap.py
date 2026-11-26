@@ -3231,66 +3231,706 @@ def _ahome_rv_reset() -> None:
     st.session_state["ah_rv_n"] = AH_RV_STEP       # 종류를 바꾸면 다시 처음 6개부터
 
 
+A_FEED_CSS = """
+<style>
+/* ================= 꿀팁 가득! 실시간 후기 (11/26 사용자 시안 — components/home/ReviewFeed) ================= */
+.ah-fd-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: auto;
+  margin-left: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fdecee;
+  color: #c0313f;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.ah-fd-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e5484d;
+  animation: ahLive 1.6s ease-in-out infinite;
+}
+@keyframes ahLive {
+  50% {
+    opacity: 0.35;
+  }
+}
+.ah-fd {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.ah-fd-top {
+  border: 1.5px solid var(--mint-line, #9eddcc);
+  border-radius: 20px;
+  overflow: hidden;
+  background: #fff;
+}
+.ah-fd-hero {
+  position: relative;
+  height: 272px;
+  background: #f6f8f7 center / cover no-repeat;
+}
+.ah-fd-hero > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ah-fd-badge {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 8px;
+  border-radius: 999px;
+  background: #2e6b61;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+.ah-fd-badge img {
+  width: 20px;
+  height: auto;
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+.ah-fd-thumbs {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  gap: 8px;
+}
+.ah-fd-th {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  border-radius: 10px;
+  border: 3px solid #fff;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+.ah-fd-th img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ah-fd-th b {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+.ah-fd-in {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ah-fd-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ah-fd-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.ah-fd-time {
+  font-size: 12.5px;
+  color: var(--ink-soft, #5f6b68);
+}
+.ah-fd-stars {
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: #9a6a00;
+}
+.ah-fd-kind {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.ah-fd-kind.visit {
+  background: #e6fbf7;
+  color: #0b5e57;
+}
+.ah-fd-kind.hope {
+  background: #eaf0fc;
+  color: #2c5bc5;
+}
+.ah-fd-kind.etc {
+  background: #fff6d6;
+  color: #7a5a00;
+}
+.ah-fd-body {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.6;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-line;
+}
+.ah-fd-pop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft, #eef2f1);
+  font-size: 13.5px;
+  color: var(--ink);
+  min-width: 0;
+}
+.ah-fd-pop strong {
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ah-fd-pop > span:last-child {
+  font-size: 12.5px;
+  color: var(--ink-soft, #5f6b68);
+  white-space: nowrap;
+}
+.ah-fd-pop:hover strong {
+  color: var(--accent-deep);
+}
+.ah-fd-pp {
+  flex: none;
+  width: 30px;
+  height: 36px;
+  border-radius: 6px;
+  background: #f4f6f5 center / cover no-repeat;
+}
+.ah-fd-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.ah-fd-side .ah-chips {
+  justify-content: flex-start;
+}
+.ah-fd-line {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 22px;
+  position: relative;
+}
+.ah-fd-line::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  background: var(--line, #e3e9e7);
+}
+.ah-fd-line li {
+  position: relative;
+  border-bottom: 1px solid var(--line-soft, #eef2f1);
+}
+.ah-fd-line li:last-child {
+  border-bottom: 0;
+}
+.ah-fd-line li::before {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #2e9c82;
+  box-shadow: 0 0 0 3px #fff;
+}
+.ah-fd-line li.new::before {
+  background: #e5484d;
+}
+.ah-fd-line a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  color: var(--ink);
+  min-width: 0;
+}
+.ah-fd-line a:hover .ah-fd-lbody {
+  color: var(--accent-deep);
+}
+.ah-fd-lth {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: #f4f6f5 center / cover no-repeat;
+}
+.ah-fd-ltx {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.ah-fd-lmeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-soft, #5f6b68);
+  min-width: 0;
+}
+.ah-fd-lmeta > span:last-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ah-fd-lbody {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ah-fd-none {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft, #5f6b68);
+}
+@media (max-width: 900px) and (min-width: 641px) {
+  .ah-fd {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- 모바일: 대화창 ---- */
+.ah-fm-chat {
+  background: #eef7f3;
+  border-radius: 20px;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ah-fm-hi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ah-fm-bot {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ah-fm-bot img {
+  width: 24px;
+  height: auto;
+}
+.ah-fm-say {
+  padding: 8px 14px;
+  border-radius: 16px 16px 16px 4px;
+  background: #2e6b61;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.ah-fm-msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.ah-fm-av {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+.ah-fm-av > img {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #ddf3ec;
+  display: block;
+}
+.ah-fm-rk {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  line-height: 0;
+}
+.ah-fm-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ah-fm-who {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.ah-fm-who strong {
+  font-weight: 800;
+}
+.ah-fm-who span {
+  font-size: 11.5px;
+  color: var(--ink-soft, #5f6b68);
+}
+.ah-fm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 4px 16px 16px 16px;
+  background: #fff;
+  color: var(--ink);
+}
+.ah-fm-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+.ah-fm-tag strong {
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ah-fm-body {
+  font-size: 14px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ah-fm-ph {
+  display: flex;
+  gap: 6px;
+}
+.ah-fm-ph img {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
+}
+.ah-fm-pops {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.ah-fm-pop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line, #e3e9e7);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  min-width: 0;
+}
+.ah-fm-pp {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f4f6f5 center / cover no-repeat;
+}
+.ah-fm-pt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+.ah-fm-pt strong {
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ah-fm-pt span {
+  font-size: 11px;
+  color: var(--ink-soft, #5f6b68);
+  white-space: nowrap;
+}
+.ah-fd-cta {
+  margin-top: 10px;
+  height: 52px;
+  border-radius: 999px;
+  background: #1f2a27;
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 800;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.ah-fd-cta img {
+  width: 22px;
+  height: auto;
+  filter: brightness(0) invert(1);
+}
+@media (max-width: 640px) {
+  .ah-fd-cta.m-only {
+    display: flex !important;
+  }
+  .ah-fm.m-only {
+    display: block !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ah-fd-live i {
+    animation: none;
+  }
+}
+/* ---- 앱 전용: PC / 모바일 나누기 · 칸 배치 · 투명 버튼 ---- */
+html body .st-key-hh_rv .ah-h { display: flex; align-items: center; gap: 8px; }
+html body .st-key-hh_rv .ah-fd-live { margin-left: 4px; }
+html body .st-key-fd_pc [data-testid="stHorizontalBlock"] { gap: 20px !important; align-items: flex-start !important; }
+html body .st-key-fd_pc [data-testid="stColumn"] { min-width: 0; }
+html body [class*="st-key-fdx_"] { position: relative; gap: 0 !important; }
+html body [class*="st-key-fdx_"] [data-testid="stMarkdownContainer"] { margin: 0 !important; }
+html body [class*="st-key-fdo_"] { position: absolute !important; inset: 0 !important; z-index: 2; width: 100% !important; height: 100% !important; }
+html body [class*="st-key-fdo_"] > div, html body [class*="st-key-fdo_"] .stButton { width: 100% !important; height: 100% !important; }
+html body [class*="st-key-fdo_"] button { width: 100% !important; height: 100% !important; opacity: 0 !important; cursor: pointer; min-height: 0 !important; }
+html body [class*="st-key-fdx_top_"] [class*="st-key-fdo_"] { inset: auto 18px 14px 18px !important; height: 44px !important; }
+html body [class*="st-key-fdx_top_"]:has([class*="st-key-fdo_"]:hover) .ah-fd-pop strong,
+html body [class*="st-key-fdx_l_"]:hover .ah-fd-lbody { color: var(--accent-deep); }
+html body .st-key-fd_line { position: relative; gap: 0 !important; padding-left: 22px; }
+html body .st-key-fd_line::before { content: ""; position: absolute; left: 4px; top: 10px; bottom: 10px; width: 2px; background: #e3e9e7; }
+.ah-fd-li { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef2f1; min-width: 0; }
+.ah-fd-li::before { content: ""; position: absolute; left: -22px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%;
+  background: #2e9c82; box-shadow: 0 0 0 3px #fff; }
+.ah-fd-li.new::before { background: #e5484d; }
+html body .st-key-fd_pc .st-key-fd_kind { margin-bottom: 10px; }
+.ah-fm-av .av { width: 34px; height: 34px; }
+.ah-fm-av img:first-child { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; display: block; }
+.ah-fm-rk .rk-stamp img { width: 62%; height: auto; }
+html body .st-key-fd_chat { background: #eef7f3; border-radius: 20px; padding: 14px 12px !important; gap: 14px !important; }
+html body .st-key-fd_pops { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px !important; margin-top: 10px; }
+html body .st-key-fd_pops > div { width: auto !important; min-width: 0; }
+html body .st-key-fd_cta button { margin-top: 10px; height: 52px; min-height: 0 !important; border-radius: 999px !important;
+  border: 0 !important; background: #1f2a27 url("app/static/mascot.png") no-repeat calc(50% - 118px) center / 22px auto !important; }
+html body .st-key-fd_cta button p { color: #fff !important; font-size: 14.5px !important; font-weight: 800 !important; padding-left: 26px; }
+html body .st-key-fd_cta button:hover { background-color: #2e3d39 !important; }
+@media (min-width: 641px) { html body .st-key-fd_m { display: none !important; } }
+@media (max-width: 640px) { html body .st-key-fd_pc { display: none !important; } }
+</style>
+"""
+
+
+def _ahome_write() -> None:
+    """'다녀왔다면 후기 쓰고 도장 받기': 회원은 내 캘린더의 북마크 탭(거기서 팝업을 골라 리뷰 탭으로), 손님은 로그인부터."""
+    if _member():
+        _gnb_go("cal")
+        st.session_state["box_tab"] = "fav"
+    else:
+        _need_login("후기는 로그인하면 쓸 수 있어요.")
+
+
+def _ahome_kind(k: str) -> str:
+    return f'<span class="ah-fd-kind {RV_KIND_CLASS.get(k, "etc")}">{escape(k)}</span>' if k else ""
+
+
 def _home_reviews(df: pd.DataFrame, limit: int = AH_RV_MAX) -> None:
-    """꿀팁 가득! 실시간 후기 모음 (11/18 요청): 사진 있는 리뷰 먼저 → 최신순. 답글은 빼고, 지금 있는 팝업 것만.
-    A안 모양 (웹 ReviewWall): 높이가 제각각인 3단(모바일 2단) 카드 — 사진(+N) · 종류 배지 · 아바타 · 닉네임 · 랭크 칩 · 시간 ·
-    별점 · 본문 · 아래 팝업 줄(누르면 그 팝업 상세). 제목 오른쪽 칩은 리뷰 종류, '후기 더보기' 로 6개씩 더."""
+    """꿀팁 가득! 실시간 후기 (11/18 요청 · 11/26 사용자 시안으로 다시 배치, 웹 ReviewFeed 와 같은 구성).
+    PC: 왼쪽 '오늘의 꿀팁' 큰 카드(가장 최근 사진 후기, 없으면 가장 최근 후기) + 오른쪽 종류 칩 · 최신순 타임라인 6개.
+    모바일: 대화창처럼 최근 후기 3개 → 오늘 후기 많은 작품 칩 3개 → '다녀왔다면 후기 쓰고 도장 받기'.
+    답글은 빼고 지금 있는 팝업 것만. '후기 더보기' · '후기 전체 보기' 는 두지 않는다 (사용자 요청)."""
     from common import stamp
     by_id = {str(r["entry_id"]): r for r in df.to_dict("records")}
     cur = reviews.current_rows()
     rows = [r for r in cur if not str(r.get("parent_id") or "") and str(r.get("cafe_id")) in by_id
             and str(r.get("body") or "").strip()]
-    rows.sort(key=lambda r: (bool(images.paths(r.get("images"))), str(r.get("updated_at") or "")), reverse=True)
+    rows.sort(key=lambda r: str(r.get("updated_at") or ""), reverse=True)
     rows = rows[:limit]
-    kind = _home_head("꿀팁 가득! 실시간 후기 모음", "forum", key="rv",
-                      pills=review.KINDS if rows else None, pill_label="후기 종류", on_pick=_ahome_rv_reset)
+    st.markdown(A_FEED_CSS, unsafe_allow_html=True)
+    with st.container(horizontal=True, vertical_alignment="center", key="hh_rv"):
+        st.markdown(f'<div class="home-h ah-h">{_mi("forum")}꿀팁 가득! 실시간 후기 모음'
+                    '<span class="ah-fd-live"><i></i>LIVE</span></div>', unsafe_allow_html=True)
     if not rows:
         st.markdown('<div class="home-empty">아직 후기가 없어요. 다녀온 팝업에 첫 후기를 남겨 보세요.</div>', unsafe_allow_html=True)
         return
-    shown = rows if kind == "전체" else [r for r in rows if str(r.get("kind") or "") == kind]
-    if not shown:
-        st.markdown(f'<div class="home-empty">아직 \'{escape(kind)}\' 후기가 없어요.</div>', unsafe_allow_html=True)
-        return
-    n = int(st.session_state.get("ah_rv_n", AH_RV_STEP))
     table = stamp.counts(cur)
-    with st.container(key="ah_wall"):
-        for rv in shown[:n]:
-            pop = by_id[str(rv["cafe_id"])]
-            label, color, _ = _status(pop)
-            who, pic = _author(rv.get("nickname"))
-            pics = images.paths(rv.get("images"))
-            photo = ""
-            if pics:
-                photo = (f'<div class="ah-rv-ph"><img src="{escape(images.url(pics[0]))}" alt="후기 사진" loading="lazy" '
-                         f'referrerpolicy="no-referrer">'
-                         + (f'<span class="ah-rv-cnt">+{len(pics) - 1}</span>' if len(pics) > 1 else "") + '</div>')
-            stars = ""
-            if rv.get("rating") not in (None, ""):
+
+    def pop_of(rv: dict) -> dict:
+        return by_id[str(rv["cafe_id"])]
+
+    def pop_name(rv: dict) -> str:
+        p = pop_of(rv)
+        return str(p.get("work") or p.get("cafe_name") or "")
+
+    def pics_of(rv: dict) -> list[str]:
+        return [images.url(x) for x in images.paths(rv.get("images"))]
+
+    def place_of(p: dict) -> str:
+        area = geo.area_name(str(p.get("address") or ""))
+        try:
+            sd, ed = pd.to_datetime(p["start_date"]).date(), pd.to_datetime(p["end_date"]).date()
+            per = f"~ {ed.month:02d}.{ed.day:02d}" if sd <= TODAY else f"{sd.month:02d}.{sd.day:02d} ~"
+        except (KeyError, TypeError, ValueError):
+            per = ""
+        return " · ".join(x for x in (area, per) if x)
+
+    # ---------- PC ----------
+    with st.container(key="fd_pc"):
+        left, right = st.columns([1.55, 1], gap="medium")
+        with right:
+            kind = st.pills("후기 종류", ["전체"] + list(review.KINDS), default="전체", key="fd_kind",
+                            label_visibility="collapsed") or "전체"
+        lst = rows if kind == "전체" else [r for r in rows if str(r.get("kind") or "") == kind]
+        top = next((r for r in lst if pics_of(r)), lst[0] if lst else None)
+        with left:
+            if top is None:
+                st.markdown(f'<div class="home-empty">아직 \'{escape(kind)}\' 후기가 없어요.</div>', unsafe_allow_html=True)
+            else:
+                p = pop_of(top)
+                pics = pics_of(top)
+                hero = (f'<img src="{escape(pics[0])}" alt="후기 사진" loading="lazy" referrerpolicy="no-referrer">' if pics else "")
+                hero_bg = "" if pics else f' style="{_ahome_bg(_poster_url(p.get("images")))}"'
+                thumbs = ""
+                if len(pics) > 1:
+                    cells = []
+                    for i, src in enumerate(pics[1:3]):
+                        extra = f'<b>+{len(pics) - 3}</b>' if i == 1 and len(pics) > 3 else ""
+                        cells.append(f'<span class="ah-fd-th"><img src="{escape(src)}" alt="" loading="lazy" '
+                                     f'referrerpolicy="no-referrer">{extra}</span>')
+                    thumbs = f'<span class="ah-fd-thumbs">{"".join(cells)}</span>'
+                stars = ""
                 try:
-                    k = max(0, min(5, round(float(rv["rating"]))))
-                    stars = f'<span class="ah-rv-stars">{"★" * k}{"☆" * (5 - k)}</span>' if k else ""
+                    k = max(0, min(5, round(float(top.get("rating") or 0))))
+                    stars = f'<span class="ah-fd-stars">{"★" * k}{"☆" * (5 - k)}</span>' if k else ""
                 except (TypeError, ValueError):
-                    stars = ""
-            body = escape(str(rv.get("body") or "").strip()).replace("\r", "").replace("\n", "<br>")
-            with st.container(key=f"card_hv_{rv['entry_id']}"):
-                st.markdown(
-                    f'<div class="ah-rv">{photo}<div class="ah-rv-in">'
-                    + (f'<span class="ah-rv-kind {RV_KIND_CLASS.get(str(rv.get("kind")), "etc")}">{escape(str(rv.get("kind")))}</span>'
-                       if rv.get("kind") else "")
-                    + '<div class="ah-rv-who">' + _avatar_img(pic, 26, "ah-rv-av") + f'<strong>{escape(who)}</strong>'
-                    + _ahome_stamp(stamp.lv_of(str(rv.get("nickname") or ""), table))
-                    + f'<span class="ah-rv-time">{escape(_ahome_ago(rv.get("updated_at")))}</span></div>{stars}'
-                    f'<div class="ah-rv-body">{body}</div>'
-                    f'<div class="ah-rv-pop"><span class="ah-rv-pp" style="{_ahome_bg(_poster_url(pop.get("images")))}"></span>'
-                    f'<span class="ah-rv-pn">{escape(str(pop.get("work") or pop.get("cafe_name") or ""))}</span>'
-                    f'<span class="ah-st {color}">{escape(label)}</span></div></div></div>', unsafe_allow_html=True)
-                # 아래 팝업 줄만 덮는 투명 버튼 (A_HOME_CSS) → 그 팝업 상세
-                st.button("이 팝업 자세히 보기", key=f"open_hv_{rv['entry_id']}", width="stretch",
-                          on_click=_story_open, args=(str(rv["cafe_id"]),))
-    if len(shown) > n:
-        with st.container(horizontal=True, horizontal_alignment="center", key="ah_rv_morebox"):
-            st.button("후기 더보기", key="ah_rv_more",
-                      on_click=lambda: st.session_state.update(ah_rv_n=n + AH_RV_STEP))
+                    pass
+                who, _pic = _author(top.get("nickname"))
+                body = escape(str(top.get("body") or "").strip()).replace("\r", "").replace("\n", "<br>")
+                with st.container(key=f"fdx_top_{top['entry_id']}"):
+                    st.markdown(
+                        f'<div class="ah-fd-top"><div class="ah-fd-hero"{hero_bg}>{hero}'
+                        f'<span class="ah-fd-badge"><img src="app/static/mascot.png" alt="">오늘의 꿀팁</span>{thumbs}</div>'
+                        f'<div class="ah-fd-in"><div class="ah-fd-meta">{_ahome_kind(str(top.get("kind") or ""))}{stars}'
+                        f'<span class="ah-fd-who">{_ahome_stamp(stamp.lv_of(str(top.get("nickname") or ""), table))}'
+                        f'<strong>{escape(who)}</strong></span>'
+                        f'<span class="ah-fd-time">{escape(_ahome_ago(top.get("updated_at")))}</span></div>'
+                        f'<p class="ah-fd-body">{body}</p>'
+                        f'<div class="ah-fd-pop"><span class="ah-fd-pp" style="{_ahome_bg(_poster_url(p.get("images")))}"></span>'
+                        f'<strong>{escape(pop_name(top))}</strong><span>{escape(place_of(p))}</span></div></div></div>',
+                        unsafe_allow_html=True)
+                    st.button("이 팝업 자세히 보기", key=f"fdo_top_{top['entry_id']}", on_click=_story_open,
+                              args=(str(top["cafe_id"]),))
+        with right:
+            rest = [r for r in lst if r is not top][:6]
+            if not rest:
+                st.markdown('<p class="ah-fd-none">다른 후기가 아직 없어요.</p>', unsafe_allow_html=True)
+            with st.container(key="fd_line"):
+                for i, rv in enumerate(rest):
+                    p = pop_of(rv)
+                    pics = pics_of(rv)
+                    th = (f'background-image:url(&quot;{escape(pics[0])}&quot;)' if pics
+                          else _ahome_bg(_poster_url(p.get("images"))))
+                    with st.container(key=f"fdx_l_{rv['entry_id']}"):
+                        st.markdown(
+                            f'<div class="ah-fd-li{" new" if i == 0 else ""}"><span class="ah-fd-lth" style="{th}"></span>'
+                            f'<span class="ah-fd-ltx"><span class="ah-fd-lmeta">{_ahome_kind(str(rv.get("kind") or ""))}'
+                            f'<span>{escape(_ahome_ago(rv.get("updated_at")))} · {escape(pop_name(rv))}</span></span>'
+                            f'<span class="ah-fd-lbody">{escape(str(rv.get("body") or "").strip())}</span></span></div>',
+                            unsafe_allow_html=True)
+                        st.button("이 팝업 자세히 보기", key=f"fdo_l_{rv['entry_id']}", on_click=_story_open,
+                                  args=(str(rv["cafe_id"]),))
+
+    # ---------- 모바일 ----------
+    with st.container(key="fd_m"):
+        msgs = []
+        for rv in rows[:3]:
+            who, pic = _author(rv.get("nickname"))
+            t = next((x for x in stamp.TIERS if x.lv == stamp.lv_of(str(rv.get("nickname") or ""), table)), None)
+            rk = (f'<span class="ah-fm-rk"><span class="rk-stamp" style="width:20px;height:20px;border:2px solid {t.ring};'
+                  f'background:#fff"><img src="app/static/mascot.png" alt=""></span></span>' if t else "")
+            pics = pics_of(rv)
+            ph = ("<span class=\"ah-fm-ph\">" + "".join(f'<img src="{escape(s)}" alt="" loading="lazy" referrerpolicy="no-referrer">'
+                                                       for s in pics[:3]) + "</span>") if pics else ""
+            msgs.append((rv, f'<div class="ah-fm-msg"><span class="ah-fm-av">{_avatar_img(pic, 34, "")}{rk}</span>'
+                             f'<div class="ah-fm-box"><div class="ah-fm-who"><strong>{escape(who)}</strong>'
+                             f'<span>{escape(_ahome_ago(rv.get("updated_at")))}</span></div>'
+                             f'<div class="ah-fm-card"><span class="ah-fm-tag">{_ahome_kind(str(rv.get("kind") or ""))}'
+                             f'<strong>{escape(pop_name(rv))}</strong></span>'
+                             f'<span class="ah-fm-body">{escape(str(rv.get("body") or "").strip())}</span>{ph}</div></div></div>'))
+        with st.container(key="fd_chat"):
+            st.markdown('<div class="ah-fm-hi"><span class="ah-fm-bot"><img src="app/static/mascot.png" alt=""></span>'
+                        '<span class="ah-fm-say">방금 올라온 꿀팁이에요!</span></div>', unsafe_allow_html=True)
+            for rv, html_ in msgs:
+                with st.container(key=f"fdx_m_{rv['entry_id']}"):
+                    st.markdown(html_, unsafe_allow_html=True)
+                    st.button("이 팝업 자세히 보기", key=f"fdo_m_{rv['entry_id']}", on_click=_story_open,
+                              args=(str(rv["cafe_id"]),))
+        # 작품 칩: 오늘 후기가 많은 작품 3개 (같은 작품의 여러 지점은 한 칩, 누르면 그중 가장 최근 후기의 팝업). 오늘 것이 없으면 최근 후기로
+        today_rows = [r for r in rows if str(r.get("updated_at") or "")[:10] and _ahome_today(r.get("updated_at"))]
+        base, label = (today_rows, "오늘 후기") if today_rows else (rows, "최근 후기")
+        cnt: dict[str, list] = {}
+        for r in sorted(base, key=lambda r: str(r.get("updated_at") or "")):
+            nm = pop_name(r)
+            cnt[nm] = [r, cnt.get(nm, [None, 0])[1] + 1]
+        tops = sorted(cnt.items(), key=lambda kv: str(kv[1][0].get("updated_at") or ""), reverse=True)
+        tops = sorted(tops, key=lambda kv: -kv[1][1])[:3]
+        if tops:
+            with st.container(horizontal=True, key="fd_pops"):
+                for nm, (r, n) in tops:
+                    p = pop_of(r)
+                    with st.container(key=f"fdx_p_{r['entry_id']}"):
+                        st.markdown(f'<div class="ah-fm-pop"><span class="ah-fm-pp" style="{_ahome_bg(_poster_url(p.get("images")))}">'
+                                    f'</span><span class="ah-fm-pt"><strong>{escape(nm)}</strong><span>{label} {n}</span></span></div>',
+                                    unsafe_allow_html=True)
+                        st.button(f"{nm} 자세히 보기", key=f"fdo_p_{r['entry_id']}", on_click=_story_open,
+                                  args=(str(r["cafe_id"]),))
+        st.button("다녀왔다면 후기 쓰고 도장 받기", key="fd_cta", width="stretch", on_click=_ahome_write)
+
+
+def _ahome_today(stamp_) -> bool:
+    """이 기록이 오늘(한국 시간) 쓰였는지."""
+    try:
+        return datetime.fromisoformat(str(stamp_)).astimezone(timezone(timedelta(hours=9))).date() == TODAY
+    except (ValueError, TypeError):
+        return False
 
 
 def _home_more(sort: str, reserve: bool = False) -> None:

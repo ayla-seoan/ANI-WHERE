@@ -176,7 +176,7 @@ export default async function Home() {
       <ReserveSection items={reserve} today={today} />
 
       {/* 꿀팁 가득! 실시간 후기 모음 (앱 _home_reviews, 11/20 웹에 추가) */}
-      <ReviewSection reviews={reviews} popups={new Map(popups.map((p) => [p.id, toItem(p)]))} kinds={KINDS} today={today} />
+      <ReviewSection reviews={reviews} popups={new Map(popups.map((p) => [p.id, toItem(p)]))} kinds={KINDS} today={today} member={!!me} />
     </div>
   );
 }
