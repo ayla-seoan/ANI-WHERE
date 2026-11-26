@@ -254,9 +254,9 @@ def survey_summary(rows: list[dict]) -> dict:
 
 
 # ---- 응답 검증 (11/20, 1차 강사 코멘트 "실측이면 참가자 · 측정 방법 · 원자료 공개") --------------------------------
-# '정리' 탭 줄은 손으로도 넣을 수 있어서, **구글 폼 응답 탭(1차 응답 · 2차 응답)에 같은 닉네임이 있는 것**만 실제 응답으로 센다.
-# 받은 시각은 따지지 않는다 (11/25 사용자 결정: 시각 · 날짜와 상관없이 쌓인 응답을 계속 보여 준다).
-# 11/20 ~ 11/25 에는 받은 시각이 없거나 미래인 응답을 뺐다. 지금은 빼지 않고 그 건수만 참고로 알려 준다.
+# 11/26 사용자 결정: 예전처럼 **'정리' 탭의 응답을 모두 센다** (1차 응답 탭이 비어 있어 1차 15명이 통째로 빠졌다).
+# 구글 폼 응답 탭(1차 응답 · 2차 응답)과의 대조는 빼는 데 쓰지 않고, 화면 · 보고서에 '폼 응답 탭에서 확인된 수 / 없는 수' 를 참고로만 보여 준다.
+# 지난 규칙: 11/20 ~ 11/25 폼 응답 탭에 있고 받은 시각이 과거인 응답만, 11/25 ~ 11/26 폼 응답 탭에 있는 응답만 (받은 시각 무관).
 SURVEY_FORM_TABS = {"1차": "1차 응답", "2차": "2차 응답"}
 _FORM_TIME = re.compile(r"(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?")
 _KST = timezone(timedelta(hours=9))
@@ -284,8 +284,9 @@ def parse_form_time(text) -> datetime | None:
 
 
 def survey_verify(rows: list[dict], forms: dict[str, list[dict]], now: datetime | None = None) -> tuple[list[dict], dict]:
-    """(검증된 '정리' 줄, 설명). forms = {'1차': 1차 응답 탭 줄들, '2차': ...}.
-    '폼 응답 미래 시각' · '폼 응답 시각 없음' 은 참고 건수일 뿐 빼지 않는다 (11/25)."""
+    """(셀 '정리' 줄 = 닉네임이 있는 모든 줄, 설명). forms = {'1차': 1차 응답 탭 줄들, '2차': ...}.
+    11/26 부터 빼지 않는다: '검증' = 폼 응답 탭에서 확인된 사람 수, '폼에 없음' = 확인 안 된 사람 수, '제외' = 늘 0.
+    '폼 응답 미래 시각' · '폼 응답 시각 없음' 도 참고 건수다."""
     now = now or datetime.now(_KST).replace(tzinfo=None)
     ok: set[tuple[str, str]] = set()
     future = no_time = 0
@@ -305,9 +306,9 @@ def survey_verify(rows: list[dict], forms: dict[str, list[dict]], now: datetime 
         return survey_version(r), str(r.get("닉네임") or "").strip()
 
     people = {key(r) for r in rows if key(r)[1]}
-    kept = [r for r in rows if key(r) in ok]
-    good = {key(r) for r in kept}
-    return kept, {"전체": len(people), "검증": len(good), "제외": len(people - good),
+    kept = [r for r in rows if key(r)[1]]          # 모두 센다 (11/26)
+    good = people & ok
+    return kept, {"전체": len(people), "검증": len(good), "제외": 0,
                   "폼 응답 미래 시각": future, "폼 응답 시각 없음": no_time,
                   "폼에 없음": len({p for p in people - good if p not in {(v, str(r.get("닉네임") or "").strip())
                                                                           for v, rs in forms.items() for r in rs}})}

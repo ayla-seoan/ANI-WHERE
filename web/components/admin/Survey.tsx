@@ -431,14 +431,12 @@ export default function Survey({
             <H>사용자 테스트 (n8n 설문)</H>
             <SurveyReload />
           </div>
-          {!error && check && check.제외 > 0 && (
-            <Note kind="warn">
-              검증된 응답 <b>{check.검증}명</b>만 셉니다 — &apos;정리&apos; 탭 {check.전체}명 중 {check.제외}명 제외 (폼 응답 탭에
-              없음 {check.폼에없음}명). 구글 폼 응답 탭에 있는 응답만 지표가 됩니다.
-            </Note>
-          )}
-          {!error && check && check.제외 === 0 && check.검증 > 0 && (
-            <Caption>검증된 응답 {check.검증}명 (모두 구글 폼 응답 탭에 있음)</Caption>
+          {/* 11/26: 예전처럼 '정리' 탭의 응답을 모두 센다. 폼 응답 탭과의 대조는 참고로만 */}
+          {!error && check && check.전체 > 0 && (
+            <Caption>
+              &apos;정리&apos; 탭 응답 {check.전체}명을 모두 셉니다 — 구글 폼 응답 탭에서 확인 {check.검증}명
+              {check.폼에없음 > 0 ? ` · 폼 응답 탭에 없음 ${check.폼에없음}명` : ""}
+            </Caption>
           )}
           {!error && check && (check.미래 > 0 || check.시각없음 > 0) && (
             <Caption>
@@ -449,7 +447,7 @@ export default function Survey({
             <Note kind="warn">{error}</Note>
           ) : !rows.length ? (
             <Note icon={<IcHourglass />}>
-              아직 검증된 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.
+              아직 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.
             </Note>
           ) : (
             <>

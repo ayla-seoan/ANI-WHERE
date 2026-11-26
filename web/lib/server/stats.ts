@@ -348,12 +348,13 @@ export function surveyVerify(
   }
   const key = (r: SurveyRow) => `${surveyVersion(r)}|${s(r, "닉네임").trim()}`;
   const people = new Set(rows.filter((r) => s(r, "닉네임").trim()).map(key));
-  const kept = rows.filter((r) => ok.has(key(r)));
-  const good = new Set(kept.map(key));
+  // 11/26 사용자 결정: 예전처럼 '정리' 탭의 응답을 모두 센다 (앱 stats.survey_verify 와 같게). 폼 응답 탭과의 대조는 참고 숫자로만
+  const kept = rows.filter((r) => s(r, "닉네임").trim());
+  const good = new Set([...people].filter((p) => ok.has(p)));
   const out = [...people].filter((p) => !good.has(p));
   return {
     rows: kept,
-    check: { 전체: people.size, 검증: good.size, 제외: out.length, 미래, 시각없음, 폼에없음: out.filter((p) => !inForm.has(p)).length },
+    check: { 전체: people.size, 검증: good.size, 제외: 0, 미래, 시각없음, 폼에없음: out.filter((p) => !inForm.has(p)).length },
   };
 }
 
