@@ -1099,7 +1099,10 @@
   background: #fff;
 }
 /* 지역 줄은 알약 테두리(바탕) 없이 ‹ 지역 › 만 (11/25 요청). 날짜 줄만 알약 */
+/* ‹ › 는 지역 이름 바로 옆에 붙인다 (11/26 요청) */
 .dn-nav.dn-areanav {
+  justify-content: center;
+  gap: 2px;
   padding: 0 4px;
   border-radius: 0;
   background: none;

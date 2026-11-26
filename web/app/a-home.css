@@ -675,15 +675,22 @@
 }
 
 /* ---------- 꿀팁 가득! 실시간 후기 모음: 높이 제각각 3단 ---------- */
+/* 3칸 열 (11/26 요청): 카드가 왼쪽 → 오른쪽으로 한 줄에 세 장씩. 예전엔 세로로 흐르는 단(columns)이라 수가 적으면 칸이 비어 보였다 */
 .ah-wall {
-  columns: 3 300px;
-  column-gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .ah-wall {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .ah-rv {
-  break-inside: avoid;
-  display: inline-block;
+  display: block;
   width: 100%;
-  margin-bottom: 16px;
+  margin: 0;
   border: 1.5px solid var(--line);
   border-radius: 16px;
   overflow: hidden;
@@ -1172,11 +1179,10 @@
 
   /* 후기: 2단, 간단한 카드 */
   .ah-wall {
-    columns: 2;
-    column-gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
   .ah-rv {
-    margin-bottom: 10px;
     border-radius: 14px;
   }
   .ah-rv-ph img {

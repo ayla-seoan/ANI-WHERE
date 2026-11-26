@@ -3630,15 +3630,6 @@ html body .st-key-home [class*="st-key-hp_"] button[aria-checked="true"] * { col
 .ah-st.gray { color: #5f6b68; background: #eef2f1; }
 
 /* ---------- 북마크 팝업 / 특전 있는 작품들: 72px 동그라미 줄, 배지는 위쪽 ---------- */
-html body .st-key-home .st-key-story_row:has(.story.hot) { gap: 14px !important; padding: 8px 2px 4px !important; }
-html body .st-key-home .story.hot { padding-bottom: 0; gap: 6px; }
-html body .st-key-home .story.hot .ring {
-  width: 72px; height: 72px; padding: 3px; background: var(--accent); }
-html body .st-key-home .story.hot .pic { border: 3px solid #fff; }
-html body .st-key-home .story.hot .rg { top: -8px; bottom: auto; font-size: 10px; font-weight: 800; line-height: 1.5; color: #fff;
-  background: var(--accent-deep); padding: 1px 7px; border: 1.5px solid #fff; }
-html body .st-key-home .story.hot .nm { margin: 0; width: auto; max-width: 84px;
-  font-size: 12.5px; font-weight: 700; line-height: 1.4; white-space: nowrap; color: var(--ah-ink); }
 /* (11/25 요청) 회원 북마크 줄은 예전 모양 그대로 — 최애 추가하기 · 지역 배지 규칙은 STORY_CSS */
 
 html body .st-key-home .story-empty { font-size: 13px; color: var(--ah-soft); padding-top: 26px; }
@@ -3791,9 +3782,10 @@ html body .st-key-home [class*="st-key-ahal_off_"] button:hover { background: va
 html body .st-key-home [class*="st-key-ahal_on_"] button { background: var(--ah-purple) !important; }
 html body .st-key-home [class*="st-key-ahal_on_"] button p, html body .st-key-home [class*="st-key-ahal_on_"] button span { color: #fff !important; }
 
-/* ---------- 꿀팁 가득! 실시간 후기 모음: 높이 제각각 3단 ---------- */
-html body .st-key-home .st-key-ah_wall { display: block !important; columns: 3 300px; column-gap: 16px; }
-html body .st-key-home .st-key-ah_wall > div { break-inside: avoid; width: 100% !important; margin: 0 0 16px !important; }
+/* ---------- 꿀팁 가득! 실시간 후기 모음: 3칸 열 (11/26 요청 — 왼쪽 → 오른쪽으로 한 줄에 세 장씩) ---------- */
+html body .st-key-home .st-key-ah_wall { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px !important; align-items: start; }
+html body .st-key-home .st-key-ah_wall > div { width: 100% !important; min-width: 0; margin: 0 !important; }
+@media (max-width: 900px) { html body .st-key-home .st-key-ah_wall { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 html body .st-key-home [class*="st-key-card_hv_"] { cursor: default; }
 .ah-rv { border: 1.5px solid var(--ah-line); border-radius: 16px; overflow: hidden; background: #fff; }
 .ah-rv-ph { position: relative; background: var(--ah-surface); line-height: 0; }
@@ -3857,13 +3849,7 @@ html body .st-key-home .st-key-ah_rv_more button:hover { background: #d3f6ee !im
   html body .st-key-home [class*="st-key-hp_"] button p, html body .st-key-home [class*="st-key-hp_"] button * { font-size: 12.5px !important; }
 
   /* 동그라미 62px */
-  html body .st-key-home .st-key-story_row:has(.story.hot) { gap: 10px !important; padding: 8px 2px 2px !important; }
-  html body .st-key-home .st-key-story_row:has(.story.hot) > div { flex: 0 0 66px !important; width: 66px !important; min-width: 66px !important; }
   html body .st-key-home .st-key-story_row > div:has(.story-empty) { flex: 0 1 auto !important; width: auto !important; min-width: 0 !important; }
-  html body .st-key-home .story.hot .ring {
-    width: 62px; height: 62px; }
-  html body .st-key-home .story.hot .rg { padding: 1px 6px; }
-  html body .st-key-home .story.hot .nm { max-width: 66px; font-size: 12px; line-height: 17px; }
   
 
   /* 신규: 150px 카드, 상태 배지만 */
@@ -3954,8 +3940,7 @@ html body .st-key-home .st-key-ah_rv_more button:hover { background: #d3f6ee !im
   html body .st-key-home [class*="st-key-ahal_"] button span { font-size: 18px !important; margin: 0 !important; }
 
   /* 후기: 2단, 간단한 카드 */
-  html body .st-key-home .st-key-ah_wall { columns: 2; column-gap: 10px; }
-  html body .st-key-home .st-key-ah_wall > div { margin-bottom: 10px !important; }
+  html body .st-key-home .st-key-ah_wall { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px !important; }
   .ah-rv { border-radius: 14px; }
   .ah-rv-ph img { min-height: 110px; max-height: 190px; }
   .ah-rv-cnt { right: 6px; bottom: 6px; font-size: 11px; padding: 1px 6px; }
@@ -4034,7 +4019,7 @@ def _guest_stories(rows: list[dict], limit: int = 12) -> None:
     works = sorted(count, key=lambda w: (-count[w], w))[:limit]
     posters = _work_posters(rows)      # 포스터는 그 작품의 진행 중·예정 팝업 아무거나 (특전 팝업에 포스터가 없을 수 있음)
     with st.container(key="stories"):
-        st.markdown(f'<div class="ah-h">{_mi("redeem")}<span class="story-head">특전 있는 작품들</span></div>', unsafe_allow_html=True,
+        st.markdown('<div class="story-head">특전 있는 작품들</div>', unsafe_allow_html=True,
                     help="지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요. "
                          "로그인하고 팝업을 북마크하면 여기가 내 '북마크 팝업' 으로 바뀌어요.")
         with st.container(horizontal=True, key="story_row"):
@@ -4042,9 +4027,8 @@ def _guest_stories(rows: list[dict], limit: int = 12) -> None:
             for i, w in enumerate(works):
                 with st.container(key=f"card_story_{i}"):
                     st.markdown(
-                        f'<div class="story hot"><div class="ring"><span class="rg">{count[w]}</span>'
-                        f'<div class="pic" style="background-image:url(&quot;{posters.get(w, images.DEFAULT_POSTER_URL)}&quot;)"></div>'
-                        f'</div><div class="nm">{escape(w)}</div></div>', unsafe_allow_html=True)
+                        f'<div class="story hot"><div class="ring"><div class="pic" style="background-image:url(&quot;{posters.get(w, images.DEFAULT_POSTER_URL)}&quot;)"></div>'
+                        f'<span class="cnt">{count[w]}</span></div><div class="nm">{escape(w)}</div></div>', unsafe_allow_html=True)
                     st.button("보기", key=f"open_story_{i}", on_click=_story_pick, args=(w,))
 
 
@@ -6202,17 +6186,14 @@ html body .st-key-gnb .st-key-gnb_right { gap: 6px !important; }
 /* 검색 · 알림: 44px 흰 동그라미, 아이콘 22px */
 html body .st-key-gnb .st-key-gnb_right [class*="st-key-gnb_search_"] button,
 html body .st-key-gnb .st-key-gnb_right [data-testid="stPopover"] button { width: 44px !important; min-width: 44px !important;
-  height: 44px !important; min-height: 44px !important; border-radius: 50% !important; background-color: #fff !important;
-  background-size: 22px 22px !important; padding: 0 !important; }
-/* 프로필 사진 동그라미 44px, 손님 '로그인' 은 흰 알약 */
+  height: 44px !important; min-height: 44px !important; border-radius: 50% !important;
+  background-size: 22px 22px !important; padding: 0 !important; }   /* 흰 바탕 · 흰 테두리는 커서를 올렸을 때만 (11/26 요청 — 젤리 모션 button.gnb-on) */
+/* 프로필 사진 동그라미 44px. 손님 '로그인' 은 예전 글자 버튼 그대로 — 흰 바탕은 커서를 올렸을 때만 (11/26 요청) */
 html body .st-key-gnb .st-key-gnb_right .st-key-login_btn button { min-height: 44px !important; }
 html body .st-key-gnb .st-key-gnb_right .st-key-login_btn.aw-member button,
 html body.aw-member .st-key-gnb .st-key-gnb_right .st-key-login_btn button { width: 44px !important; height: 44px !important;
-  border: 2px solid #fff !important; }
-html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button { background: #fff !important; border-radius: 999px !important;
-  padding: 0 18px !important; height: 44px !important; }
-html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button p { font-family: inherit !important; font-size: 14px !important;
-  font-weight: 800 !important; color: #1F2A27 !important; }
+  border: 2px solid #9EDDCC !important; }
+html body.aw-member .st-key-gnb .st-key-gnb_right .st-key-login_btn button:hover { border-color: #fff !important; }
 @media (max-width: 640px) {
   html body .st-key-gnb { padding: 14px 16px 10px !important; border-radius: 0 0 24px 24px !important; row-gap: 10px !important; }
   html body .st-key-gnb .st-key-home_brand button { width: 157px !important; height: 44px !important; }
@@ -6222,9 +6203,6 @@ html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button
   html:not(.aw-scrolled) body .st-key-gnb .st-key-gnb_tabs button p,
   html body .st-key-gnb .st-key-gnb_tabs [class*="st-key-gnbtab_on_"][class*="st-key-gnbtab_on_"] button p { font-size: 13.5px !important;
     letter-spacing: -.02em !important; white-space: nowrap; }
-  html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button { height: 40px !important; min-height: 40px !important;
-    padding: 0 14px !important; }
-  html body:not(.aw-member) .st-key-gnb .st-key-gnb_right .st-key-login_btn button p { font-size: 13px !important; }
   /* 모바일 물어보기 버튼: 흰 동그라미 + 민트 테두리 + 마스코트, 등록(+)과 같은 56px (홈을 포함한 모든 화면 — A_BROWSE_CSS 와 같은 값) */
   html body .st-key-add_btn button { width: 56px !important; height: 56px !important; }
   html body .st-key-ask_fab { width: 56px !important; height: 56px; bottom: calc(76px + 56px + 12px); }
@@ -6556,7 +6534,7 @@ def _gnb(current: dict | None, on_map: bool = True) -> None:
                 av = _avatar_url(who.get("avatar")).replace('"', "%22")
                 st.markdown(f'<style>html body .st-key-gnb .st-key-gnb_right .st-key-login_btn button {{ width: 44px !important; height: 44px !important;'
                             f' min-height: 0 !important; padding: 0 !important; border-radius: 50% !important;'
-                            f' border: 2px solid #fff !important; background: #DDF3EC url("{av}") center / cover no-repeat !important; }}'
+                            f' border: 2px solid #9EDDCC !important; background: #DDF3EC url("{av}") center / cover no-repeat !important; }}'
                             f' .st-key-gnb_right .st-key-login_btn button p {{ font-size: 0 !important; line-height: 0 !important; }}'
                             f' .st-key-gnb_right .st-key-login_btn button:hover {{ border-color: var(--accent) !important; }}</style>',
                             unsafe_allow_html=True)
@@ -7968,7 +7946,7 @@ DAILY_CSS = """
 .st-key-daily_nav, .st-key-daily_areas { align-items: center !important; justify-content: space-between !important; gap: 2px !important;
   flex-wrap: nowrap !important; padding: 4px; border-radius: 999px; background: #fff; }
 /* 지역 줄은 알약 테두리(바탕) 없이 ‹ 지역 › 만 (11/25 요청). 날짜 줄만 알약 */
-html body .st-key-daily_areas { background: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 4px !important; }
+html body .st-key-daily_areas { background: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 4px !important; justify-content: center !important; gap: 2px !important; }   /* ‹ › 는 지역 이름 바로 옆에 (11/26 요청) */
 .st-key-daily_nav > div, .st-key-daily_areas > div { width: auto !important; flex: 0 0 auto !important; min-width: 0; }
 .st-key-daily_nav > div:has(.dn-date), .st-key-daily_areas > div:has(.dn-area) { flex: 0 1 auto !important; overflow: hidden; }
 .st-key-daily_nav button, .st-key-daily_areas button { min-height: 0 !important; width: 36px !important; height: 36px !important; padding: 0 !important;

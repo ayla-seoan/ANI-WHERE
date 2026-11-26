@@ -24,7 +24,7 @@ import { getMe, getMyFavs } from "@/lib/server/session";
 import { rankScores } from "@/lib/server/rank";
 import { homeReviews, KINDS } from "@/lib/server/member";
 import { rankOrder, TOP_N } from "@/lib/rank";
-import { GiftIcon, HelpIcon } from "@/components/Icons";
+import { HelpIcon } from "@/components/Icons";
 
 export const revalidate = 600;
 
@@ -130,31 +130,27 @@ export default async function Home() {
           </HScroll>
         </section>
       ) : (
-        // 손님: '특전 있는 작품들' — 같은 동그라미 모양, 위 배지는 그 작품의 특전 있는 팝업 수
-        <section className="stories ah-sec" aria-labelledby="story-h">
-          <SecHead
-            id="story-h"
-            title="특전 있는 작품들"
-            icon={<GiftIcon />}
-            help={
-              <span
-                className="help"
-                tabIndex={0}
-                aria-label="지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요."
-              >
-                <HelpIcon />
-                <span className="tip">
-                  지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요.
-                </span>
+        // 손님: '특전 있는 작품들' — 사용자 요청(11/26)으로 A안 이전 모양 그대로 (북마크 줄과 같은 동그라미, 오른쪽 아래 숫자)
+        <section className="stories stories-old" aria-labelledby="story-h">
+          <div className="story-head" id="story-h">
+            특전 있는 작품들
+            <span
+              className="help"
+              tabIndex={0}
+              aria-label="지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요."
+            >
+              <HelpIcon />
+              <span className="tip">
+                지금 진행 중이거나 곧 열리는 팝업 중 특전을 주는 팝업이 많은 작품이에요. 숫자는 특전 있는 팝업 수예요.
               </span>
-            }
-          />
+            </span>
+          </div>
           <HScroll className="story-row" label="특전 있는 작품들">
             {works.map((w) => (
               <Link key={w} href={`/list?work=${encodeURIComponent(w)}`} className="story hot" prefetch={false}>
                 <span className="ring">
-                  <span className="rg" aria-label={`특전 있는 팝업 ${count.get(w)}곳`}>{count.get(w)}</span>
                   <span className="pic" style={posterBg(posterOf.get(w) ?? "")} />
+                  <span className="cnt">{count.get(w)}</span>
                 </span>
                 <span className="nm">{w}</span>
               </Link>
