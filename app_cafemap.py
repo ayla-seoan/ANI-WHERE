@@ -10620,10 +10620,622 @@ a.adm-card.adm-link:hover { border-color: #14B8A6; }
 .adm-metric-h span strong { font-size: 1.1rem; color: #26302D; }
 </style>
 """
-ADMIN_TABS = [("board", "팝업 현황"), ("usage", "이용 지표"), ("survey", "사용자 테스트"), ("requests", "삭제 요청"),
-              ("notices", "알림 관리"), ("members", "회원 정보"), ("raw", "원본 데이터")]
-ST_COLOR = {"pending": "#D9821B", "approved": "#23866A", "rejected": "#C8352A"}
-ST_LABEL = {"pending": "대기", "approved": "승인", "rejected": "거부"}
+# 관리자 화면 A안 (11/26, docs/design/admin-handoff · 웹 web/app/a-admin.css 와 같은 값).
+# 왼쪽 어두운 사이드바(#1f2a27, 232px) + 8페이지. HTML 조각은 .ax-* 클래스, 누르는 칸은 st-key 로 꾸민다.
+#   버튼 키 규칙: axb_<모양>_<이름> (44px) · axbs_<모양>_<이름> (38px). 모양 = mint · dark · line · soft · ghost · red · dashed
+A_ADMIN_CSS = """
+<style>
+/* ================= 관리자 화면에서는 서비스 메뉴바 · 바닥글 · 맨 위로 버튼을 숨기고 폭을 다 쓴다 ================= */
+.stApp:has(.st-key-ax_side), .stApp:has(.st-key-ax_side) [data-testid="stAppViewContainer"],
+.stApp:has(.st-key-ax_side) .stMain { background: #f6f8f7 !important; }
+.stApp:has(.st-key-ax_side) [data-testid="stLayoutWrapper"]:has(> .st-key-topbar),
+.stApp:has(.st-key-ax_side) .st-key-topbar, .stApp:has(.st-key-ax_side) [data-testid="stElementContainer"]:has(.aw-foot),
+body:has(.st-key-ax_side) #aw-top { display: none !important; }
+.stMainBlockContainer:has(.st-key-ax_side) { max-width: none !important; padding: 26px 32px 64px 264px !important; }
+.st-key-ax_main { gap: 18px !important; color: #26302d; }
+.st-key-ax_main [data-testid="stMarkdownContainer"], .st-key-ax_side [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
+.st-key-ax_main [data-testid="stMarkdownContainer"] p { margin-bottom: 0; }
+/* Streamlit 의 h1 · p 글자 크기(더 구체적인 규칙)를 시안 값으로 */
+.st-key-ax_main h1.ax-h1 { font-size: 30px !important; line-height: 1.25 !important; padding: 0 !important; margin: 0 !important; }
+.st-key-ax_main p.ax-cap { font-size: 12.5px !important; line-height: 1.55 !important; color: #5f6b68; }
+.st-key-ax_main p.ax-sub { font-size: 13.5px !important; line-height: 1.5 !important; }
+.st-key-ax_main p.ax-quote { font-size: 14.5px !important; line-height: 1.6 !important; }
+.st-key-ax_main p.ax-quote.sm { font-size: 13px !important; }
+.st-key-ax_main .ax-nitem-b p { font-size: 13px !important; line-height: 1.5 !important; }
+.st-key-ax_main [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"]) { width: 100%; }
+
+/* ================= 사이드바 ================= */
+.st-key-ax_side { position: fixed !important; top: 0; left: 0; bottom: 0; width: 232px !important; z-index: 1000;
+  box-sizing: border-box; background: #1f2a27; padding: 20px 14px !important; gap: 4px !important;
+  overflow-y: auto; flex-wrap: nowrap !important; }
+.st-key-ax_brand { gap: 0 !important; }
+.st-key-ax_logo button { width: 156px !important; height: 44px !important; min-height: 0 !important; padding: 0 !important;
+  border: 0 !important; box-shadow: none !important; margin: 4px 6px 14px;
+  background: url("app/static/logo.png") no-repeat left center / contain !important; }
+.st-key-ax_logo button p { font-size: 0 !important; color: transparent !important; }
+.st-key-ax_logo button:focus-visible { outline: 2px solid #5eead4 !important; }
+.ax-side-h { display: block; font-size: 11.5px; font-weight: 800; letter-spacing: .08em; color: #9aa5a1; padding: 0 10px 6px; }
+.st-key-ax_menu { gap: 4px !important; flex-wrap: nowrap !important; }
+.st-key-ax_menu [data-testid="stElementContainer"], .st-key-ax_menu .stButton { width: 100% !important; }
+.st-key-ax_menu button { width: 100% !important; min-height: 0 !important; height: auto !important; padding: 11px 12px !important;
+  border-radius: 12px !important; border: 0 !important; background: transparent !important; box-shadow: none !important;
+  justify-content: flex-start !important; transition: background .15s; }
+.st-key-ax_menu button > div { justify-content: flex-start !important; gap: 10px !important; flex: 1 1 auto; }
+.st-key-ax_menu button p { font-size: 14.5px !important; font-weight: 500 !important; color: #c9d3d0 !important; white-space: nowrap; }
+.st-key-ax_menu button [data-testid="stIconMaterial"] { color: #c9d3d0 !important; font-size: 19px !important; }
+.st-key-ax_menu button:hover { background: #2b3835 !important; }
+.st-key-ax_menu button:hover p, .st-key-ax_menu button:hover [data-testid="stIconMaterial"] { color: #fff !important; }
+.st-key-ax_menu [class*="st-key-axnav_on_"] button { background: #5eead4 !important; }
+.st-key-ax_menu [class*="st-key-axnav_on_"] button p,
+.st-key-ax_menu [class*="st-key-axnav_on_"] button [data-testid="stIconMaterial"] { color: #1f2a27 !important; font-weight: 800 !important; }
+.st-key-ax_menu button:focus-visible { outline: 2px solid #5eead4 !important; outline-offset: 2px; }
+[data-testid="stLayoutWrapper"]:has(> .st-key-ax_foot) { margin-top: auto; }
+.st-key-ax_foot { gap: 2px !important; padding: 14px 10px 0 !important; border-top: 1px solid #3a4743; margin-top: 12px; }
+.ax-side-foot a { display: block; font-size: 13px; color: #c9d3d0 !important; text-decoration: none !important; padding: 7px 0; }
+.ax-side-foot a:hover { color: #fff !important; }
+.st-key-ax_back button { padding: 7px 0 !important; min-height: 0 !important; justify-content: flex-start !important; }
+.st-key-ax_back button p { font-size: 13px !important; font-weight: 700 !important; color: #5eead4 !important; }
+
+/* ================= 본문 공통 ================= */
+.ax-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[class*="st-key-axhead_"] { align-items: flex-end !important; justify-content: space-between; gap: 12px !important; flex-wrap: wrap !important; }
+[class*="st-key-axhead_"] > div:first-child { flex: 1 1 320px !important; min-width: 0; width: auto !important; }
+[class*="st-key-axhead_"] [class*="st-key-axheadr"] { flex: 0 0 auto !important; width: auto !important; max-width: 100%; gap: 8px !important;
+  flex-wrap: wrap !important; justify-content: flex-end; align-items: center !important; }
+[class*="st-key-axheadr"] > *, [class*="st-key-axheadr"] [data-testid="stElementContainer"] { width: auto !important; flex: 0 0 auto !important; }
+.st-key-ax_main h2.ax-h2 { font-family: inherit !important; font-size: 15px !important; font-weight: 800 !important; padding: 0 !important;
+  margin: 0 !important; line-height: 1.4 !important; }
+.ax-head-l { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ax-eyebrow { font-size: 12px; font-weight: 800; color: #5f6b68; }
+.ax-h1 { margin: 0; font-family: "Jua", sans-serif; font-weight: 400; font-size: 30px; line-height: 1.25; color: #26302d; }
+.ax-sub { margin: 0; font-size: 13.5px; color: #5f6b68; line-height: 1.5; }
+.ax-h2 { margin: 0; font-size: 15px; font-weight: 800; color: #26302d; }
+.ax-red { color: #c0313f; }
+.ax-deep { color: #0f6b5c; }
+.ax-muted { color: #5f6b68; }
+.ax-sm { font-size: 12.5px; }
+.ax-cap { margin: 0; font-size: 12.5px; color: #5f6b68; line-height: 1.55; }
+.ax-link, .ax-link:visited { font-size: 13px; font-weight: 700; color: #0d9488 !important; text-decoration: none !important; }
+.ax-link:hover { color: #0b7a70 !important; text-decoration: underline !important; }
+.ax-mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.ax-nowrap { white-space: nowrap; }
+.ax-warnbox { padding: 12px 16px; border-radius: 14px; background: #fff6d6; color: #7a5a00; font-size: 13.5px; font-weight: 700; }
+.ax-card { margin: 0; background: #fff; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px;
+  min-width: 0; box-sizing: border-box; }
+.ax-card-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ax-card-h h2, .ax-card-h .ax-h2 { margin: 0 !important; padding: 0 !important; font-family: inherit !important; font-size: 15px !important;
+  font-weight: 800 !important; color: #26302d; line-height: 1.4 !important; }
+.ax-empty { padding: 14px 16px; border-radius: 14px; background: #f6f8f7; color: #5f6b68; font-size: 13.5px; line-height: 1.55; }
+.ax-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.ax-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ax-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.ax-row > .ax-card { flex: 1 1 300px; }
+/* 흰 카드 (st.container key=axcard_…) */
+[class*="st-key-axcard_"] { background: #fff; border-radius: 20px; padding: 20px !important; gap: 10px !important; min-width: 0;
+  box-sizing: border-box; }
+[class*="st-key-axcard_"] h2 { margin: 0 !important; padding: 0 !important; font-family: inherit !important; font-size: 15px !important;
+  font-weight: 800 !important; line-height: 1.4 !important; color: #26302d; }
+.st-key-ax_main [data-testid="stColumn"] > [data-testid="stVerticalBlock"] { gap: 16px; }
+
+/* ---------- 버튼 (알약): axb_<모양>_ · axbs_<모양>_ ---------- */
+[class*="st-key-axb_"] button, [class*="st-key-axbs_"] button { height: 44px; min-height: 0 !important; padding: 0 16px !important;
+  border-radius: 999px !important; border: 0 !important; box-shadow: none !important; white-space: nowrap; }
+[class*="st-key-axbs_"] button { height: 38px; padding: 0 14px !important; }
+[class*="st-key-axb_"] button p, [class*="st-key-axbs_"] button p { font-size: 13.5px !important; font-weight: 800 !important; white-space: nowrap; }
+[class*="st-key-axbs_"] button p { font-size: 13px !important; }
+[class*="st-key-axb_"] button [data-testid="stIconMaterial"], [class*="st-key-axbs_"] button [data-testid="stIconMaterial"] { font-size: 17px !important; }
+[class*="st-key-axb_mint_"] button, [class*="st-key-axbs_mint_"] button { background: #14b8a6 !important; }
+[class*="st-key-axb_mint_"] button:not(:disabled):hover, [class*="st-key-axbs_mint_"] button:not(:disabled):hover { background: #0d9488 !important; }
+[class*="st-key-axb_mint_"] button *, [class*="st-key-axbs_mint_"] button * { color: #fff !important; }
+[class*="st-key-axb_dark_"] button, [class*="st-key-axbs_dark_"] button { background: #1f2a27 !important; }
+[class*="st-key-axb_dark_"] button:not(:disabled):hover, [class*="st-key-axbs_dark_"] button:not(:disabled):hover { background: #35433f !important; }
+[class*="st-key-axb_dark_"] button *, [class*="st-key-axbs_dark_"] button * { color: #fff !important; }
+[class*="st-key-axb_line_"] button, [class*="st-key-axbs_line_"] button { background: #fff !important; border: 1px solid #e3e9e7 !important; }
+[class*="st-key-axb_line_"] button:not(:disabled):hover, [class*="st-key-axbs_line_"] button:not(:disabled):hover { border-color: #14b8a6 !important; }
+[class*="st-key-axb_line_"] button p, [class*="st-key-axbs_line_"] button p { font-weight: 700 !important; color: #26302d !important; }
+[class*="st-key-axb_soft_"] button, [class*="st-key-axbs_soft_"] button { background: #e6fbf7 !important; }
+[class*="st-key-axb_soft_"] button:hover, [class*="st-key-axbs_soft_"] button:hover { background: #d3f5ee !important; }
+[class*="st-key-axb_soft_"] button *, [class*="st-key-axbs_soft_"] button * { color: #0b5e57 !important; }
+[class*="st-key-axb_softline_"] button, [class*="st-key-axbs_softline_"] button { background: #e6fbf7 !important; border: 1px solid #14b8a6 !important; }
+[class*="st-key-axb_softline_"] button *, [class*="st-key-axbs_softline_"] button * { color: #0b5e57 !important; }
+[class*="st-key-axb_ghost_"] button, [class*="st-key-axbs_ghost_"] button { background: none !important; }
+[class*="st-key-axb_ghost_"] button:not(:disabled):hover, [class*="st-key-axbs_ghost_"] button:not(:disabled):hover { background: #e6fbf7 !important; }
+[class*="st-key-axb_ghost_"] button p, [class*="st-key-axbs_ghost_"] button p { color: #0f6b5c !important; font-weight: 700 !important; }
+[class*="st-key-axb_red_"] button, [class*="st-key-axbs_red_"] button { background: none !important; }
+[class*="st-key-axb_red_"] button:not(:disabled):hover, [class*="st-key-axbs_red_"] button:not(:disabled):hover { background: #fdecee !important; }
+[class*="st-key-axb_red_"] button p, [class*="st-key-axbs_red_"] button p { color: #c0313f !important; font-weight: 700 !important; }
+[class*="st-key-axb_dashed_"] button, [class*="st-key-axbs_dashed_"] button { background: #fff !important; border: 1px dashed #c6d0cd !important; }
+[class*="st-key-axb_dashed_"] button p, [class*="st-key-axbs_dashed_"] button p { color: #5f6b68 !important; font-weight: 700 !important; }
+[class*="st-key-axb_"] button:disabled, [class*="st-key-axbs_"] button:disabled { opacity: .5; cursor: default; }
+[class*="st-key-axbs_mint_"] button:disabled, [class*="st-key-axb_mint_"] button:disabled { background: #14b8a6 !important; }
+[class*="st-key-axbs_mint_"] button:disabled *, [class*="st-key-axb_mint_"] button:disabled * { color: #fff !important; }
+[class*="st-key-axbs_dashed_"] button:disabled { background: #fff !important; border: 1px dashed #c6d0cd !important; opacity: .8; }
+[class*="st-key-axbs_dashed_"] button:disabled p { color: #5f6b68 !important; }
+[class*="st-key-axbs_line_"] button:disabled { background: #fff !important; border: 1px solid #e3e9e7 !important; }
+[class*="st-key-axlink_"] button { padding: 0 !important; min-height: 0 !important; height: auto !important; border: 0 !important;
+  background: none !important; box-shadow: none !important; }
+[class*="st-key-axlink_"] button p { font-size: 13px !important; font-weight: 700 !important; color: #0d9488 !important; }
+[class*="st-key-axlink_"] button:hover p { text-decoration: underline; color: #0b7a70 !important; }
+.st-key-ax_main [data-testid="stLinkButton"] a { border-radius: 999px !important; height: 38px; min-height: 0 !important; padding: 0 14px !important;
+  border: 1px solid #e3e9e7 !important; background: #fff !important; box-shadow: none !important; }
+.st-key-ax_main [data-testid="stLinkButton"] a p { font-size: 12.5px !important; font-weight: 700 !important; color: #26302d !important; }
+.st-key-ax_main [data-testid="stLinkButton"] a:hover { border-color: #14b8a6 !important; }
+.st-key-axraw_sb [data-testid="stLinkButton"] a { background: #1f2a27 !important; border-color: #1f2a27 !important; height: 44px; padding: 0 16px !important; }
+.st-key-axraw_sb [data-testid="stLinkButton"] a p { color: #fff !important; font-size: 13.5px !important; font-weight: 800 !important; }
+.st-key-ax_main [data-testid="stDownloadButton"] button { border-radius: 999px !important; height: 44px; min-height: 0 !important; padding: 0 16px !important;
+  background: #fff !important; border: 1px solid #e3e9e7 !important; box-shadow: none !important; }
+.st-key-ax_main [data-testid="stDownloadButton"] button p { font-size: 13.5px !important; font-weight: 700 !important; color: #26302d !important; }
+/* 입력칸: 알약 */
+.st-key-ax_main [data-baseweb="input"] { border-radius: 12px !important; }
+[class*="st-key-axq_"] [data-baseweb="input"], [class*="st-key-axq_"] [data-baseweb="select"] > div { border-radius: 999px !important; min-height: 40px;
+  background: #fff !important; border: 1px solid #e3e9e7 !important; }
+[class*="st-key-axq_"] [data-baseweb="input"] > div { background: #fff !important; }
+[class*="st-key-axq_"] input { font-size: 13.5px !important; }
+
+/* ---------- 꼬리표 · 점 ---------- */
+.ax-tag { display: inline-block; font-size: 11.5px; font-weight: 800; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  text-align: center; box-sizing: border-box; line-height: 1.35; }
+.ax-tag.t-red { background: #c0313f; color: #fff; }
+.ax-tag.t-red-soft { background: #fdecee; color: #c0313f; }
+.ax-tag.t-yellow { background: #fff6d6; color: #7a5a00; }
+.ax-tag.t-mint { background: #e6fbf7; color: #0b5e57; }
+.ax-tag.t-teal { background: #0d9488; color: #fff; }
+.ax-tag.t-blue { background: #eaf0fc; color: #2c5bc5; }
+.ax-tag.t-purple { background: #f1ecff; color: #5b3fae; }
+.ax-tag.t-gray { background: #f4f6f5; color: #26302d; }
+.ax-tag.t-dark { background: #1f2a27; color: #fff; }
+.ax-dot { display: inline-block; width: 12px; height: 8px; border-radius: 2px; box-sizing: border-box; flex: none; }
+.ax-dot.all { background: #26302d; } .ax-dot.new { background: #5fbf9f; } .ax-dot.soon { background: #2c5bc5; }
+.ax-dot.live { background: #0d9488; } .ax-dot.end { background: transparent; border: 1.5px dashed #9aa5a1; }
+.ax-dot.today { width: 2px; height: 12px; border-radius: 0; background: #e5484d; }
+.ax-dot.warn { background: #fff6d6; border: 1.5px solid #f2c94c; }
+.ax-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: #26302d; }
+.ax-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.ax-sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.rk-stamp { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%;
+  border-style: solid; box-sizing: border-box; vertical-align: middle; }
+.rk-stamp img { width: 62%; height: auto; display: block; }
+.rk-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 2px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 800; line-height: 1.4; white-space: nowrap; vertical-align: middle; }
+
+/* ================= 주 이동 ‹ 11.23 – 11.29 › ================= */
+[class*="st-key-axwk_"] { background: #fff; border-radius: 999px; padding: 4px !important; border: 1px solid #e3e9e7;
+  gap: 4px !important; flex-wrap: nowrap !important; width: auto !important; }
+[class*="st-key-axwk_"] button { min-height: 0 !important; }
+[class*="st-key-axwkp_"] button, [class*="st-key-axwkn_"] button { width: 36px !important; height: 36px !important; padding: 0 !important;
+  border-radius: 50% !important; }
+[class*="st-key-axwkp_"] button:hover, [class*="st-key-axwkn_"] button:hover { background: #f6f8f7 !important; }
+[class*="st-key-axwk_"] [data-testid="stPopover"] button { border: 0 !important; background: none !important; box-shadow: none !important;
+  padding: 0 4px !important; height: 36px; }
+[class*="st-key-axwk_"] [data-testid="stPopover"] button p { font-size: 14px !important; font-weight: 800 !important; color: #26302d !important;
+  white-space: nowrap; }
+[class*="st-key-axwk_"] [data-testid="stPopover"] button [data-testid="stIconMaterial"] { display: none; }
+
+/* ================= 한눈에 보기 ================= */
+.ax-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.ax-pill { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px; background: #fff;
+  border: 1px solid #e3e9e7; font-size: 13px; line-height: 1.35; }
+.ax-pill > i { width: 9px; height: 9px; border-radius: 50%; background: #9aa5a1; flex: none; }
+.ax-pill.ok { border: 1.5px solid #9eddcc; } .ax-pill.ok > i { background: #0d9488; }
+.ax-pill.warn { border: 1.5px solid #f2c94c; } .ax-pill.warn > i { background: #c77a12; }
+.ax-pill.blue > i { background: #2c5bc5; }
+.st-key-ax_kpis, .st-key-ax_seg5 { gap: 12px !important; flex-wrap: wrap !important; }
+.st-key-ax_kpis > *, .st-key-ax_seg5 > * { flex: 1 1 0 !important; min-width: 150px; width: auto !important; }
+.st-key-ax_seg5 { gap: 10px !important; }
+.st-key-ax_seg5 > * { min-width: 120px; }
+[class*="st-key-axk_"], [class*="st-key-axsg_"] { position: relative; height: 100% !important; gap: 0 !important; }
+[class*="st-key-axk_"] [data-testid="stElementContainer"]:has(.ax-kpi),
+[class*="st-key-axsg_"] [data-testid="stElementContainer"]:has(.ax-segc) { height: 100%; }
+[class*="st-key-axkb_"], [class*="st-key-axsgb_"] { position: absolute !important; inset: 0; z-index: 2; width: 100% !important; height: 100% !important; }
+[class*="st-key-axkb_"] > div, [class*="st-key-axkb_"] .stButton, [class*="st-key-axsgb_"] > div, [class*="st-key-axsgb_"] .stButton {
+  width: 100% !important; height: 100% !important; }
+[class*="st-key-axkb_"] button, [class*="st-key-axsgb_"] button { width: 100% !important; height: 100% !important; opacity: 0 !important; cursor: pointer; }
+.ax-kpi { background: #fff; border-radius: 18px; padding: 16px; color: #26302d; display: flex; flex-direction: column; gap: 4px;
+  border: 2px solid transparent; min-width: 0; box-sizing: border-box; height: 100%; }
+[class*="st-key-axk_"]:hover .ax-kpi { border-color: #c9efe7; }
+[class*="st-key-axk_on_"] .ax-kpi { border-color: #14b8a6; }
+.ax-kpi.alert { border-color: #f5b5bc; }
+.ax-kpi-l { font-size: 13px; color: #5f6b68; }
+.ax-kpi strong { font-family: "Jua", sans-serif; font-weight: 400; font-size: 34px; line-height: 1.1; }
+.ax-kpi.alert strong { color: #c0313f; }
+.ax-kpi-d { font-size: 12px; font-weight: 700; color: #5f6b68; line-height: 1.45; }
+.ax-kpi-d.up { color: #0b7a70; } .ax-kpi-d.red { color: #c0313f; }
+.ax-kpi.static strong { font-size: 30px; }
+.ax-kpi .ax-kpi-d strong { font-family: inherit; font-size: inherit; line-height: inherit; font-weight: 800; color: #0f6b5c; }
+.ax-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.ax-kpis.k4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ax-kgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.st-key-axcard_todo [class*="st-key-axtd_"] { background: #f6f8f7; border-radius: 14px; padding: 12px !important; gap: 12px !important;
+  align-items: center !important; flex-wrap: wrap !important; }
+[class*="st-key-axtd_"] > div:first-child { flex: 1 1 260px !important; min-width: 0; width: auto !important; }
+[class*="st-key-axtd_"] > div:not(:first-child) { flex: 0 0 auto !important; width: auto !important; }
+[class*="st-key-axtdr_"] { flex: 1 1 100% !important; gap: 6px !important; flex-wrap: wrap !important; }
+[class*="st-key-axtdr_"] > div:first-child { flex: 1 1 220px !important; }
+.ax-todo-i { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ax-todo-i > .ax-tag { width: 92px; flex: none; }
+.ax-todo-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ax-todo-b strong { font-size: 14.5px; overflow-wrap: anywhere; }
+.ax-todo-b > span { font-size: 12.5px; color: #5f6b68; line-height: 1.55; overflow-wrap: anywhere; }
+.ax-big { display: block; font-family: "Jua", sans-serif; font-size: 56px; line-height: 1; color: #0f6b5c; }
+.ax-big small { font-size: 24px; }
+.ax-north-d { display: block; font-size: 13px; line-height: 1.5; margin: 6px 0 2px; }
+.st-key-axcard_north .ax-muted.ax-sm { display: block; margin-top: 2px; }
+.ax-meter { position: relative; height: 12px; border-radius: 999px; background: #eef2f1; margin: 4px 0; }
+.ax-meter > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: #0d9488; }
+.ax-meter > i { position: absolute; top: -4px; width: 2px; height: 20px; background: #26302d; }
+.ax-mini { height: 130px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end;
+  border-bottom: 1px solid #c6d0cd; }
+.ax-mini > span { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+.ax-mini b { font-size: 11.5px; font-weight: 700; }
+.ax-mini i { width: 64%; min-height: 2px; border-radius: 4px 4px 0 0; background: #9eddcc; }
+.ax-mini .today i { background: #0d9488; }
+.ax-mini-x { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; font-size: 11.5px; color: #5f6b68;
+  text-align: center; margin-top: 6px; }
+.ax-mini-x .today { color: #26302d; font-weight: 800; }
+.ax-feed-i { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #eef2f1; }
+.ax-feed-i:last-child { border-bottom: 0; }
+.ax-feed-i > .ax-tag { width: 70px; padding: 2px 8px; flex: none; }
+.ax-feed-t { flex: 1; font-size: 13.5px; min-width: 0; overflow-wrap: anywhere; }
+.ax-feed-w { font-size: 12px; color: #5f6b68; white-space: nowrap; }
+[class*="st-key-axcardh_"] { justify-content: space-between; align-items: baseline !important; flex-wrap: wrap !important; gap: 10px !important; }
+[class*="st-key-axcardh_"] > div { width: auto !important; flex: 0 1 auto !important; }
+
+/* ================= 팝업 현황 ================= */
+.ax-segc { text-align: left; padding: 14px 16px; border-radius: 16px; border: 1px solid #e3e9e7; background: #fff; color: #26302d;
+  display: flex; flex-direction: column; gap: 2px; min-width: 0; box-sizing: border-box; height: 100%; }
+[class*="st-key-axsg_on_"] .ax-segc { border: 2px solid #14b8a6; padding: 13px 15px; }
+[class*="st-key-axsg_"]:hover .ax-segc { border-color: #9eddcc; }
+.ax-segc > span { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #5f6b68; }
+.ax-segc strong { font-family: "Jua", sans-serif; font-weight: 400; font-size: 28px; line-height: 1.15; }
+.ax-thumb { display: block; width: 22px; height: 28px; border-radius: 4px; background-color: #eef2f1; background-size: cover;
+  background-position: center; flex: none; }
+.ax-thumb.lg { width: 30px; height: 40px; border-radius: 6px; }
+.ax-thumb.md { width: 34px; height: 44px; border-radius: 6px; }
+.ax-thumb.xl { width: 96px; height: 128px; border-radius: 12px; border: 2px solid #9eddcc; box-sizing: border-box; }
+.ax-thumb.blank { background: #f4f6f5; }
+.ax-gt { display: flex; flex-direction: column; }
+.ax-gt-head, .ax-gt-row { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: center; }
+.ax-gt-head { font-size: 12px; color: #5f6b68; padding-bottom: 4px; border-bottom: 1px solid #eef2f1; }
+.ax-gt-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; }
+.ax-gt-days .today { color: #c0313f; font-weight: 800; }
+a.ax-gt-row, a.ax-gt-row:visited { text-decoration: none !important; color: #26302d !important; padding: 3px 0; border-radius: 8px; }
+a.ax-gt-row:hover { background: #f6f8f7; }
+.ax-gt-name { display: flex; align-items: center; gap: 8px; padding-right: 8px; min-width: 0; }
+.ax-gt-head .ax-gt-name { font-weight: 700; }
+.ax-gt-t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ax-gt-t b, .ax-gt-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ax-gt-t b { font-size: 13px; font-weight: 700; }
+.ax-gt-t small { font-size: 11px; color: #5f6b68; }
+.ax-warn { font-size: 11px; font-weight: 800; color: #7a5a00; background: #fff6d6; padding: 1px 6px; border-radius: 999px;
+  white-space: nowrap; flex: none; }
+.ax-gt-track { position: relative; height: 30px; }
+.ax-gt-grid { position: absolute; top: -3px; bottom: -3px; width: 1px; background: #eef2f1; }
+.ax-gt-today { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: #e5484d; z-index: 2; }
+.ax-gt-bar { position: absolute; top: 7px; bottom: 7px; border-radius: 4px; box-sizing: border-box; z-index: 1; }
+.ax-gt-bar.soon { background: #2c5bc5; } .ax-gt-bar.live { background: #0d9488; }
+.ax-gt-bar.end { background: transparent; border: 1.5px dashed #9aa5a1; }
+.ax-gt-bar.cl { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.ax-gt-bar.cr { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+[class*="st-key-axkcol_"] { background: #fff; border-radius: 18px; padding: 12px !important; gap: 8px !important; min-width: 0; }
+.ax-kcol { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ax-kcol.one { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.ax-kcol.one > .ax-kcol-h, .ax-kcol.one > .ax-cap, .ax-kcol.one > .ax-empty { grid-column: 1 / -1; }
+.ax-kcol-h { display: flex; align-items: center; gap: 6px; padding: 2px 4px 4px; }
+.ax-kcol-h .ax-dot { width: 10px; height: 10px; border-radius: 3px; }
+.ax-kcol-h strong { font-size: 14px; }
+.ax-kcol-h span { margin-left: auto; font-size: 13px; color: #5f6b68; font-weight: 700; }
+.ax-kcard, a.ax-kcard:visited { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 12px; background: #f6f8f7;
+  text-decoration: none !important; color: #26302d !important; border: 1.5px solid transparent; min-width: 0; }
+a.ax-kcard:hover { border-color: #c9efe7; }
+.ax-kcard.warn { border-color: #f2c94c; }
+.ax-kcard.static { opacity: .85; }
+.ax-kcard-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ax-kcard-t strong, .ax-kcard-t small, .ax-kcard-t em { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ax-kcard-t strong { font-size: 13px; }
+.ax-kcard-t small { font-size: 11.5px; color: #5f6b68; }
+.ax-kcard-t em { font-style: normal; font-size: 12px; color: #5f6b68; }
+.ax-kcard.warn .ax-kcard-t em { color: #7a5a00; font-weight: 700; }
+[class*="st-key-axkcol_"] [class*="st-key-axbs_"], [class*="st-key-axkcol_"] [class*="st-key-axbs_"] .stButton,
+[class*="st-key-axkcol_"] [class*="st-key-axbs_"] button { height: 36px; width: 100% !important; }
+
+/* ================= 이용 지표 ================= */
+.ax-flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ax-flow-c { position: relative; background: #fff; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ax-flow-c strong { font-family: "Jua", sans-serif; font-weight: 400; font-size: 38px; line-height: 1.1; }
+.ax-flow-c:not(:last-child)::after { content: "→"; position: absolute; right: -16px; top: 50%; margin-top: -12px; width: 24px; height: 24px;
+  border-radius: 50%; background: #fff; border: 1px solid #e3e9e7; font-size: 13px; line-height: 22px; text-align: center; color: #5f6b68;
+  z-index: 1; box-sizing: border-box; }
+.ax-lines { display: flex; flex-direction: column; gap: 14px; }
+.ax-lines-h, .ax-lines-r { display: grid; grid-template-columns: 110px repeat(7, minmax(0, 1fr)) 64px; gap: 8px; }
+.ax-lines-h { font-size: 12px; color: #5f6b68; text-align: center; }
+.ax-lines-h .today { font-weight: 800; color: #26302d; }
+.ax-lines-h span:last-child { font-weight: 800; }
+.ax-lines-r { align-items: end; height: 72px; padding-bottom: 6px; border-bottom: 1px solid #eef2f1; }
+.ax-lines-t { align-self: center; font-size: 13px; font-weight: 800; }
+.ax-lines-b { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 3px; }
+.ax-lines-b b { font-size: 11px; font-weight: 600; }
+.ax-lines-b i { width: 56%; max-width: 40px; min-height: 2px; border-radius: 4px 4px 0 0; }
+.ax-lines-r.blue i { background: #2c5bc5; } .ax-lines-r.teal i { background: #0d9488; } .ax-lines-r.amber i { background: #c77a12; }
+.ax-lines-s { align-self: center; font-family: "Jua", sans-serif; font-weight: 400; font-size: 22px; text-align: center; }
+.ax-details > summary { cursor: pointer; font-size: 13px; font-weight: 700; padding: 6px 0; color: #26302d; }
+.ax-bar-l { display: flex; flex-direction: column; gap: 4px; }
+.ax-bar-l > span { display: flex; justify-content: space-between; font-size: 13px; gap: 8px; }
+.ax-bar-l > i { display: block; height: 10px; border-radius: 999px; background: #eef2f1; overflow: hidden; }
+.ax-bar-l > i > span { display: block; height: 100%; border-radius: 999px; background: #0d9488; }
+.ax-bar-l.amber > i > span { background: #c77a12; }
+.ax-rank-i { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eef2f1; }
+.ax-rank-n { font-family: "Jua", sans-serif; font-size: 18px; width: 18px; color: #0f6b5c; }
+.ax-rank-i .ax-thumb { width: 26px; height: 34px; border-radius: 5px; }
+.ax-rank-t { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ================= 표 ================= */
+.ax-tbl-box { overflow: auto; max-width: 100%; }
+.ax-tbl-box.tall { max-height: 640px; }
+.ax-tbl-box.raw { max-height: 620px; border-radius: 14px; }
+.ax-tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 0 !important; }
+.ax-tbl th { text-align: left; color: #5f6b68; font-size: 12.5px; font-weight: 700; padding: 8px 10px; border: 0 !important;
+  border-bottom: 1px solid #e3e9e7 !important; white-space: nowrap; background: #fff; position: sticky; top: 0; z-index: 1; }
+.ax-tbl td { padding: 10px; border: 0 !important; border-bottom: 1px solid #eef2f1 !important; vertical-align: middle; }
+.ax-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ax-tbl tr.gone td { color: #5f6b68; }
+.ax-members { min-width: 960px; }
+.ax-hist { min-width: 760px; }
+
+/* ================= 삭제 요청 ================= */
+.st-key-ax_rqtabs, .st-key-ax_rawmode { background: #fff; border-radius: 999px; padding: 4px !important; border: 1px solid #e3e9e7;
+  gap: 4px !important; width: auto !important; flex-wrap: nowrap !important; }
+.st-key-ax_rqtabs button { height: 40px; min-height: 0 !important; padding: 0 18px !important; border-radius: 999px !important;
+  border: 0 !important; background: none !important; box-shadow: none !important; }
+.st-key-ax_rqtabs button p { font-size: 14px !important; color: #5f6b68 !important; white-space: nowrap; }
+.st-key-ax_rqtabs [class*="st-key-axrq_on_"] button { background: #1f2a27 !important; }
+.st-key-ax_rqtabs [class*="st-key-axrq_on_"] button p { color: #fff !important; font-weight: 800 !important; }
+.st-key-axcard_reqopen { border: 2px solid #14b8a6; }
+.st-key-axreq_body { gap: 20px !important; flex-wrap: wrap !important; align-items: flex-start !important; }
+.st-key-axreq_body > div:first-child { flex: 0 0 auto !important; width: auto !important; }
+.st-key-axreq_body > div:last-child { flex: 1 1 320px !important; min-width: 0; }
+.st-key-axreq_main { gap: 8px !important; }
+.ax-req-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ax-req-title strong { font-family: "Jua", sans-serif; font-weight: 400; font-size: 22px; overflow-wrap: anywhere; }
+.ax-req-meta { font-size: 13.5px; color: #5f6b68; }
+.ax-req-who { padding: 12px 14px; border-radius: 14px; background: #f6f8f7; display: flex; flex-direction: column; gap: 6px; }
+.ax-req-who > span { display: flex; align-items: center; gap: 6px; font-size: 13px; flex-wrap: wrap; }
+.ax-quote { margin: 0; font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.ax-quote.sm { font-size: 13px; color: #5f6b68; }
+.st-key-axreq_form { gap: 12px !important; flex-wrap: wrap !important; align-items: flex-end !important; }
+.st-key-axreq_form > div:first-child { flex: 999 1 300px !important; min-width: 0; }
+.st-key-axreq_btns { flex: 1 1 180px !important; max-width: 240px; gap: 8px !important; }
+.st-key-axreq_btns [data-testid="stElementContainer"], .st-key-axreq_btns .stButton, .st-key-axreq_btns button { width: 100% !important; }
+.st-key-axreq_btns [class*="st-key-axb_dark_"] button, .st-key-axreq_btns [class*="st-key-axb_line_"] button { height: 46px; }
+.st-key-axreq_form textarea { font-size: 14px !important; }
+.st-key-axreq_form label p { font-size: 13px !important; font-weight: 700 !important; color: #5f6b68 !important; }
+[class*="st-key-axreqm_"] { background: #fff; border-radius: 18px; padding: 16px 20px !important; gap: 16px !important; align-items: center !important;
+  flex-wrap: wrap !important; }
+[class*="st-key-axreqm_"] > div:first-child { flex: 1 1 260px !important; min-width: 0; width: auto !important; }
+[class*="st-key-axreqm_"] > div:last-child { flex: 0 0 auto !important; width: auto !important; margin-left: auto; }
+.ax-req-mini { display: flex; gap: 16px; align-items: center; min-width: 0; }
+.ax-req-mini-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ax-req-mini-b strong { font-size: 15.5px; overflow-wrap: anywhere; }
+.ax-req-mini-b > span { font-size: 13.5px; overflow-wrap: anywhere; }
+.ax-req-mini-b small { font-size: 12.5px; color: #5f6b68; }
+
+/* ================= 알림 관리 ================= */
+.st-key-axcard_rules { overflow-x: auto; }
+[class*="st-key-axrule_"] { gap: 10px !important; align-items: center !important; flex-wrap: nowrap !important; padding: 8px 0 !important;
+  border-bottom: 1px solid #eef2f1; min-width: 700px; }
+[class*="st-key-axrule_"] > div:nth-child(1) { flex: 3 1 220px !important; min-width: 200px; }
+[class*="st-key-axrule_"] > div:nth-child(2) { flex: 1.4 1 120px !important; min-width: 100px; }
+[class*="st-key-axrule_"] > div:nth-child(3), [class*="st-key-axrule_"] > div:nth-child(4) { flex: 0 0 84px !important; width: 84px !important; }
+[class*="st-key-axrule_"] > div:nth-child(5) { flex: 0 0 96px !important; width: 96px !important; }
+[class*="st-key-axrule_"] > div:nth-child(6) { flex: 0 0 116px !important; width: 116px !important; }
+.st-key-axrule_head { padding: 0 0 6px !important; border-bottom: 1px solid #e3e9e7; }
+.st-key-axrule_head p, .ax-rule-th { font-size: 12.5px !important; color: #5f6b68; font-weight: 700; white-space: nowrap; }
+[class*="st-key-axrule_"].ax-off, [class*="st-key-axrule_off_"] > div:nth-child(-n+4) { opacity: .6; }
+[class*="st-key-axrule_fixed"] { background: #fafbfb; border-radius: 10px; }
+.ax-rule-n { display: block; font-size: 14px; font-weight: 800; }
+.ax-rule small, .ax-rule-s { display: block; font-size: 12px; color: #5f6b68; line-height: 1.45; }
+.ax-rule .ax-rule-when { color: #8a9592; }
+.ax-rule-who { font-size: 13.5px; }
+[class*="st-key-axrule_"] [data-testid="stNumberInput"] input { text-align: center; padding: 0 4px !important; font-size: 14px !important; }
+[class*="st-key-axrule_"] [data-testid="stNumberInput"] button { display: none !important; }
+[class*="st-key-axrule_"] [data-baseweb="input"] { border-radius: 10px !important; height: 38px; }
+.ax-num-u { display: block; font-size: 11px; color: #5f6b68 !important; text-align: center; margin-top: 2px; }
+.ax-dash { color: #5f6b68; }
+.ax-sw-off { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #5f6b68; white-space: nowrap; }
+.ax-sw-off i { position: relative; width: 46px; height: 28px; border-radius: 999px; background: #c6d0cd; opacity: .6; flex: none; }
+.ax-sw-off i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; }
+[class*="st-key-axrule_"] [data-testid="stCheckbox"] label p { font-size: 12px !important; font-weight: 700 !important; color: #5f6b68 !important; }
+.st-key-ax_rulerow { gap: 16px !important; align-items: flex-start !important; flex-wrap: wrap !important; }
+.st-key-ax_rulerow > div:first-child { flex: 999 1 460px !important; min-width: 0; }
+.st-key-ax_rulerow > div:last-child { flex: 1 1 280px !important; max-width: 340px; }
+.ax-prev-box { border: 1.5px solid #e3e9e7; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: #f6f8f7; }
+.ax-prev-i { display: flex; gap: 10px; padding: 10px; border-radius: 12px; background: #fff; }
+.ax-prev-i > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ax-prev-i strong { font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+.ax-prev-i span span { font-size: 12px; color: #5f6b68; line-height: 1.4; }
+.ax-new { font-size: 11.5px; font-weight: 800; color: #d63a3a; }
+.st-key-ax_ntrow { gap: 16px !important; align-items: flex-start !important; flex-wrap: wrap !important; }
+.st-key-ax_ntrow > div:first-child { flex: 1 1 340px !important; max-width: 420px; }
+.st-key-ax_ntrow > div:last-child { flex: 999 1 400px !important; min-width: 0; }
+.st-key-axcard_ntform { gap: 12px !important; }
+.st-key-axcard_ntform label p { font-size: 13px !important; font-weight: 700 !important; color: #5f6b68 !important; }
+.st-key-axnt_btns { gap: 8px !important; }
+.st-key-axnt_btns > div { flex: 1 1 0 !important; }
+.st-key-axnt_btns button { width: 100%; height: 46px; }
+[class*="st-key-axnti_"] { background: #f6f8f7; border-radius: 14px; padding: 12px !important; gap: 12px !important; align-items: flex-start !important;
+  flex-wrap: wrap !important; border: 1.5px solid transparent; }
+[class*="st-key-axnti_on_"] { border-color: #14b8a6; }
+[class*="st-key-axnti_"] > div:first-child { flex: 1 1 260px !important; min-width: 0; width: auto !important; }
+[class*="st-key-axnti_"] > div:not(:first-child) { flex: 0 0 auto !important; width: auto !important; }
+.ax-nitem { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.ax-nitem-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ax-nitem-b strong { font-size: 14px; }
+.ax-nitem-b p { margin: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ax-nitem-b small { font-size: 12.5px; color: #5f6b68; }
+
+/* ================= 회원 정보 ================= */
+.ax-top-teal { border-top: 4px solid #0d9488; }
+.ax-top-gray { border-top: 4px solid #9aa5a1; }
+.ax-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ax-chip { font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 999px; }
+.ax-chip.yes { background: #e6fbf7; color: #0b5e57; }
+.ax-chip.no { background: #f4f6f5; color: #26302d; text-decoration: line-through; }
+.st-key-ax_mfilter { gap: 10px !important; align-items: flex-end !important; flex-wrap: wrap !important; }
+.st-key-ax_mfilter > div { flex: 0 1 auto !important; width: auto !important; }
+.st-key-ax_mfilter > div:first-child { flex: 0 1 240px !important; }
+.st-key-ax_mfilter label p { font-size: 13px !important; color: #5f6b68 !important; }
+.st-key-ax_mfoot { justify-content: space-between; align-items: center !important; gap: 12px !important; flex-wrap: wrap !important; }
+.st-key-ax_mfoot > div:first-child { flex: 1 1 300px !important; }
+.st-key-ax_mfoot > div:last-child { flex: 0 0 auto !important; width: auto !important; }
+
+/* ================= 원본 데이터 ================= */
+.st-key-ax_tabsel { gap: 6px !important; flex-wrap: wrap !important; }
+.st-key-ax_tabsel button { height: 40px; min-height: 0 !important; padding: 0 14px !important; border-radius: 999px !important;
+  border: 1px solid #e3e9e7 !important; background: #fff !important; box-shadow: none !important; }
+.st-key-ax_tabsel button p { font-size: 13px !important; color: #26302d !important; white-space: nowrap; }
+.st-key-ax_tabsel [class*="st-key-axtab_on_"] button { background: #1f2a27 !important; border-color: #1f2a27 !important; }
+.st-key-ax_tabsel [class*="st-key-axtab_on_"] button p { color: #fff !important; }
+.st-key-ax_aonly { background: #e6fbf7; border-radius: 14px; padding: 12px 16px !important; gap: 10px !important; align-items: center !important;
+  flex-wrap: wrap !important; }
+.st-key-ax_aonly > div:first-child { flex: 1 1 320px !important; min-width: 0; }
+.st-key-ax_aonly > div:last-child { flex: 0 0 auto !important; width: auto !important; }
+.ax-aonly { font-size: 13.5px; color: #0b5e57; }
+.st-key-ax_rawmode { border: 0; padding: 3px !important; }
+.st-key-ax_rawmode button { height: 34px; min-height: 0 !important; padding: 0 12px !important; border-radius: 999px !important; border: 0 !important;
+  background: none !important; box-shadow: none !important; }
+.st-key-ax_rawmode button p { font-size: 12.5px !important; color: #26302d !important; white-space: nowrap; }
+.st-key-ax_rawmode [class*="st-key-axmode_on_"] button { background: #0d9488 !important; }
+.st-key-ax_rawmode [class*="st-key-axmode_on_"] button p { color: #fff !important; font-weight: 800 !important; }
+.st-key-axcard_raw { padding: 14px 12px 12px !important; }
+.ax-rawt { font-size: 13px; }
+.ax-rawt th { background: #f6f8f7; font-size: 12px; }
+.ax-rawt tr.now td { background: #f3fcfa; }
+.ax-cell { display: block; max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ax-now { margin-left: 6px; font-family: "Pretendard", "NanumSquareRound", sans-serif; font-size: 11px; font-weight: 800; color: #0b5e57; background: #e6fbf7; padding: 1px 6px; border-radius: 999px; }
+.st-key-ax_pager { justify-content: space-between; align-items: center !important; gap: 10px !important; flex-wrap: wrap !important; }
+.st-key-ax_pager > div:first-child { flex: 1 1 260px !important; }
+.st-key-ax_pager > div:not(:first-child) { flex: 0 0 auto !important; width: auto !important; }
+.ax-pager-t { font-size: 12.5px; color: #5f6b68; }
+
+/* ================= 사용자 테스트 ================= */
+.st-key-ax_banner { background: #fff; border: 2px solid #f2c94c; border-radius: 18px; padding: 16px 18px !important; gap: 14px !important;
+  align-items: center !important; flex-wrap: wrap !important; }
+.st-key-ax_banner.ok, .st-key-ax_banner:has(.ax-banner-ok) { border-color: #9eddcc; }
+.st-key-ax_banner > div:first-child { flex: 1 1 300px !important; min-width: 0; }
+.st-key-ax_banner > div:last-child { flex: 0 0 auto !important; width: auto !important; }
+.ax-banner { display: flex; align-items: center; gap: 14px; }
+.ax-banner-n { font-family: "Jua", sans-serif; font-size: 34px; line-height: 1; color: #7a5a00; flex: none; }
+.ax-banner-ok .ax-banner-n { color: #0f6b5c; }
+.ax-banner-t { flex: 1; min-width: 0; font-size: 14px; line-height: 1.6; display: flex; flex-direction: column; }
+.ax-banner-t > span { font-size: 13px; color: #5f6b68; }
+.ax-gb { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.ax-gb-plot { position: relative; height: 200px; margin-left: 44px; border-bottom: 1px solid #c6d0cd; }
+.ax-gb-y span { position: absolute; left: -44px; width: 38px; text-align: right; font-size: 11px; color: #5f6b68; transform: translateY(50%); }
+.ax-gb-grid i { position: absolute; left: 0; right: 0; border-top: 1px dashed #e3e9e7; }
+.ax-gb-cols { position: absolute; inset: 0; display: grid; gap: 20px; padding: 0 6px; }
+.ax-gb-col { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%; min-width: 0; }
+.ax-gb-bar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; width: 28%; max-width: 48px; gap: 3px; }
+.ax-gb-bar b { font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.ax-gb-bar i { width: 100%; min-height: 1px; border-radius: 4px 4px 0 0; }
+.s-usual { background: #c77a12; } .s-v1 { background: #2c5bc5; } .s-v2 { background: #0d9488; }
+.ax-gb-x { display: grid; gap: 20px; margin-left: 44px; padding: 0 6px; font-size: 12px; text-align: center; line-height: 1.4; }
+.ax-cmp-i { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #f6f8f7; }
+.ax-cmp-i .ax-tag { width: 64px; }
+.ax-cmp-t { flex: 1; font-size: 13.5px; }
+.ax-stuck { margin: 4px 0 8px; padding-left: 18px; font-size: 13.5px; line-height: 1.6; }
+.st-key-ax_main .ax-stuck li { font-size: 13.5px !important; line-height: 1.6 !important; margin: 0 !important; padding: 0 !important; }
+.st-key-ax_survey_view { align-self: flex-start; }
+.st-key-axcard_detail [data-testid="stVerticalBlockBorderWrapper"] { box-shadow: none; }
+.st-key-ax_svlinks { gap: 6px !important; flex-wrap: wrap !important; justify-content: flex-end; }
+
+/* ================= 1100px 이하 ================= */
+@media (max-width: 1100px) {
+  .ax-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ax-kpis.k4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ax-grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .st-key-ax_rulerow > div:last-child { max-width: none; }
+}
+/* ================= 모바일 (640px 이하): 사이드바 → 위쪽 가로 메뉴 줄 ================= */
+@media (max-width: 640px) {
+  .stMainBlockContainer:has(.st-key-ax_side) { padding: 0 16px 48px !important; }
+  .st-key-ax_side { position: sticky !important; top: 0; bottom: auto; width: calc(100% + 32px) !important; max-width: none !important;
+    margin: 0 -16px; z-index: 20;
+    padding: 10px 0 8px !important; gap: 6px !important; overflow: visible; }
+  .st-key-ax_brand { flex-direction: row !important; align-items: center !important; gap: 8px !important; padding-left: 16px; }
+  .st-key-ax_brand > div { width: auto !important; }
+  .st-key-ax_logo button { width: 116px !important; height: 30px !important; margin: 0; }
+  .ax-side-h { padding: 0; }
+  .st-key-ax_menu { flex-direction: row !important; overflow-x: auto; padding: 0 16px 2px !important; scrollbar-width: none; }
+  .st-key-ax_menu::-webkit-scrollbar { display: none; }
+  .st-key-ax_menu > div, .st-key-ax_menu [data-testid="stElementContainer"], .st-key-ax_menu .stButton { flex: none !important; width: auto !important; }
+  .st-key-ax_menu button { width: auto !important; padding: 8px 12px !important; }
+  .st-key-ax_menu button > div { gap: 6px !important; }
+  .st-key-ax_menu button p { font-size: 13.5px !important; }
+  .st-key-ax_menu button [data-testid="stIconMaterial"] { font-size: 16px !important; }
+  [data-testid="stLayoutWrapper"]:has(> .st-key-ax_foot) { margin-top: 0; }
+  .st-key-ax_foot { flex-direction: row !important; flex-wrap: wrap !important; gap: 0 14px !important; padding: 4px 16px 0 !important;
+    border-top: 0; margin: 0; }
+  .st-key-ax_foot > div { width: auto !important; }
+  .ax-side-foot { display: flex; gap: 0 14px; flex-wrap: wrap; }
+  .ax-side-foot a { font-size: 12px; padding: 4px 0; }
+  .st-key-ax_back button { padding: 4px 0 !important; }
+  .st-key-ax_back button p { font-size: 12px !important; }
+  .st-key-ax_main { gap: 14px !important; padding-top: 14px; }
+  .st-key-ax_main h1.ax-h1 { font-size: 24px !important; }
+  [class*="st-key-axhead_"] { flex-direction: column !important; align-items: stretch !important; }
+  [class*="st-key-axhead_"] > div:first-child { flex: 0 0 auto !important; }
+  [class*="st-key-axhead_"] [class*="st-key-axheadr"] { justify-content: flex-start; }
+  [class*="st-key-axcard_"], .ax-card { padding: 16px !important; border-radius: 18px; }
+  .st-key-ax_kpis { gap: 8px !important; }
+  .st-key-ax_kpis > * { flex: 1 1 calc(50% - 8px) !important; min-width: 0; }
+  .ax-kpis, .ax-kpis.k4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .ax-kpi { padding: 12px; }
+  .ax-kpi strong { font-size: 28px; }
+  .st-key-ax_seg5 { gap: 6px !important; }
+  .st-key-ax_seg5 > * { flex: 1 1 calc(33% - 6px) !important; min-width: 0; }
+  .ax-segc { padding: 10px 12px; }
+  [class*="st-key-axsg_on_"] .ax-segc { padding: 9px 11px; }
+  .ax-segc strong { font-size: 22px; }
+  .ax-gt-head, .ax-gt-row { grid-template-columns: 112px minmax(0, 1fr); }
+  .ax-gt-name .ax-thumb { display: none; }
+  .ax-gt-days span { font-size: 11px; }
+  .ax-warn { display: none; }
+  .ax-gt-row:has(.ax-warn) .ax-gt-t b::after { content: " ·확인"; color: #7a5a00; font-size: 11px; }
+  .ax-grid2, .ax-grid3, .ax-flow { grid-template-columns: minmax(0, 1fr); }
+  .ax-flow-c:not(:last-child)::after { content: "↓"; right: 50%; top: auto; bottom: -18px; margin: 0 -12px 0 0; }
+  .ax-flow { gap: 14px; }
+  .ax-lines-h, .ax-lines-r { grid-template-columns: 52px repeat(7, minmax(0, 1fr)) 30px; gap: 3px; }
+  .ax-lines-h span { font-size: 10.5px; }
+  .ax-lines-t { font-size: 11.5px; line-height: 1.25; }
+  .ax-lines-s { font-size: 17px; }
+  .ax-lines-b b { font-size: 10px; }
+  .ax-lines-b i { width: 70%; }
+  .ax-todo-i { flex-wrap: wrap; }
+  .ax-todo-i > .ax-tag { width: auto; }
+  .ax-todo-b { flex-basis: 100%; }
+  .ax-feed-i { flex-wrap: wrap; gap: 4px 10px; }
+  .ax-feed-t { flex-basis: 100%; order: 3; }
+  .ax-feed-w { margin-left: auto; }
+  .st-key-axreq_body { gap: 14px !important; }
+  .ax-thumb.xl { width: 72px; height: 96px; }
+  .st-key-axreq_btns { max-width: none; flex-basis: 100% !important; }
+  .st-key-ax_ntrow > div:first-child { max-width: none; }
+  .st-key-ax_mfilter > div, .st-key-ax_mfilter > div:first-child { flex: 1 1 100% !important; }
+  .st-key-ax_tabsel { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px !important; }
+  .st-key-ax_tabsel > div { flex: none !important; }
+  .ax-gb-cols, .ax-gb-x { gap: 8px; }
+  .ax-gb-x { font-size: 11px; }
+  .ax-gb-bar { width: 40%; }
+  [class*="st-key-axwk_"] { flex-wrap: nowrap !important; }
+}
+</style>
+"""
+# 메뉴 8개 (웹 AxShell.AX_PAGES 와 같은 순서): (세션 값, 이름, 아이콘). 첫 화면 = 한눈에 보기
+AX_PAGES = [("home", "한눈에 보기", "home"), ("board", "팝업 현황", "format_list_bulleted"), ("usage", "이용 지표", "bar_chart"),
+            ("requests", "삭제 요청", "delete"), ("notices", "알림 관리", "notifications"), ("members", "회원 정보", "person"),
+            ("raw", "원본 데이터", "database"), ("survey", "사용자 테스트", "science")]
+AX_KST = timezone(timedelta(hours=9))
+AX_FEED_TONE = {"등록": "mint", "수정": "blue", "내림": "gray", "삭제 요청": "red-soft", "처리": "gray", "리뷰": "purple", "가입": "gray"}
+FIX_PAGE = 6        # 처리할 일: 정보 빠진 팝업은 처음 6곳, 나머지는 'N곳 더 보기'
 
 
 def _adm_tab(t: str) -> None:
@@ -10640,114 +11252,488 @@ def _adm_pick_week(key: str) -> None:
         st.session_state["adm_week"] = (admin.week_of(picked)[0] - admin.week_of(TODAY)[0]).days // 7
 
 
-def _week_nav(key: str) -> date:
-    """‹ [달력] › : 달력에서 아무 날이나 고르면 그 날이 든 주(월~일)를 본다."""
-    off = st.session_state.get("adm_week", 0)
-    mon, sun = admin.week_of(TODAY + timedelta(weeks=off))
-    pick = f"admwk_pick_{key}"
-    st.session_state[pick] = mon                     # 화살표로 옮겼을 때 달력도 같이
-    with st.container(horizontal=True, vertical_alignment="center", key=f"admwk_{key}"):
-        st.button("", icon=":material/chevron_left:", key=f"admwk_prev_{key}", type="tertiary", on_click=_adm_week, args=(-1,))
-        st.date_input("주 고르기", key=pick, format="YYYY.MM.DD", label_visibility="collapsed", width=150,
-                      on_change=_adm_pick_week, args=(pick,))
-        st.button("", icon=":material/chevron_right:", key=f"admwk_next_{key}", type="tertiary", on_click=_adm_week, args=(1,))
-        st.markdown(f"**{mon.month}/{mon.day}(월) ~ {sun.month}/{sun.day}(일)**" + (" · 이번 주" if off == 0 else ""))
-        if off:
-            st.button("이번 주", key=f"admwk_now_{key}", on_click=lambda: st.session_state.update(adm_week=0))
-    return mon
-
-
 def _adm_href(r: dict) -> str:
     """팝업 이름 링크 → 메인의 그 팝업 상세 (공유 링크와 같은 ?cafe=<번호>)."""
     return f"./?cafe={quote(str(r.get('entry_id') or ''))}"
 
 
-GANTT_COLOR = {"예정": "#3672BD", "진행": "#14B8A6", "종료": "#A9B3B0"}     # 진한 색으로 되돌림 (11/18 요청)
+def _aadm_when(stamp) -> str:
+    """기록 시각 → 한국 시간 'MM/DD HH:MM' (웹 whenText 와 같음)."""
+    try:
+        ts = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    return (ts.astimezone(AX_KST) if ts.tzinfo else ts).strftime("%m/%d %H:%M")
+
+
+def _aadm_md(d: date | None) -> str:
+    """'11.23'"""
+    return f"{d.month}.{d.day:02d}" if d else "?"
+
+
+def _aadm_thumb(images, cls: str = "") -> str:
+    """포스터 작은 그림 (배경 그림으로, 글자를 읽는 기계에는 숨김)."""
+    url = _poster_url(images)
+    return (f'<i class="ax-thumb {cls}" style="background-image:url({escape(json.dumps(url))})" aria-hidden="true"></i>'
+            if url else f'<i class="ax-thumb {cls} blank" aria-hidden="true"></i>')
+
+
+def _aadm_x(text) -> str:
+    """사용자가 쓴 글 한 줄: 줄바꿈 · 빈 줄을 한 칸으로 (st.markdown 의 HTML 조각이 빈 줄에서 끊기지 않게) + escape."""
+    return escape(" ".join(str(text if text is not None else "").split()))
+
+
+def _aadm_tag(tone: str, text: str) -> str:
+    return f'<span class="ax-tag t-{tone}">{escape(text)}</span>'
+
+
+def _aadm_head(key: str, eyebrow: str, title_html: str, sub: str = "", right=None) -> None:
+    """페이지 머리: 작은 이름 · 큰 제목(Jua 30px) · 오른쪽 도구(right = 그 자리에 그리는 함수)."""
+    with st.container(horizontal=True, key=f"axhead_{key}", vertical_alignment="bottom"):
+        st.markdown(f'<div class="ax-head-l"><span class="ax-eyebrow">{escape(eyebrow)}</span>'
+                    f'<h1 class="ax-h1">{title_html}</h1>' + (f'<p class="ax-sub">{sub}</p>' if sub else "") + '</div>',
+                    unsafe_allow_html=True)
+        if right:
+            with st.container(horizontal=True, key=f"axheadr_{key}", vertical_alignment="center", width="content"):
+                right()
+
+
+def _aadm_week(key: str) -> date:
+    """‹ 11.23 – 11.29 › : 가운데를 누르면 달력(그 날이 든 주로), 다른 주면 '이번 주'. 반환 = 고른 주 월요일."""
+    off = st.session_state.get("adm_week", 0)
+    mon, sun = admin.week_of(TODAY + timedelta(weeks=off))
+    with st.container(horizontal=True, key=f"axwk_{key}", vertical_alignment="center", width="content"):
+        st.button("", icon=":material/chevron_left:", key=f"axwkp_{key}", type="tertiary", on_click=_adm_week, args=(-1,))
+        with st.popover(f"{_aadm_md(mon)} – {_aadm_md(sun)}" + (" · 이번 주" if off == 0 else ""), width="content"):
+            pick = f"admwk_pick_{key}"
+            st.session_state[pick] = mon             # 화살표로 옮겼을 때 달력도 같이
+            st.date_input("이 날이 든 주 보기", key=pick, format="YYYY.MM.DD", on_change=_adm_pick_week, args=(pick,))
+        st.button("", icon=":material/chevron_right:", key=f"axwkn_{key}", type="tertiary", on_click=_adm_week, args=(1,))
+    if off:
+        st.button("이번 주", key=f"axbs_line_wknow_{key}", on_click=lambda: st.session_state.update(adm_week=0))
+    return mon
+
+
+def _aadm_refresh() -> None:
+    # 앱은 Supabase 를 처음에 한 번 불러와 기억한다 (매일 08:45 · 앱에서 저장할 때 자동 갱신).
+    # Supabase 화면에서 직접 고쳤을 때만 이 버튼으로 바로 새로 불러온다
+    if st.button("데이터 새로 불러오기", icon=":material/refresh:", key="axb_mint_refresh"):
+        storage_mod.refresh_all()
+        st.session_state["flash"] = ("Supabase 에서 새로 불러왔어요.", ":material/check_circle:")
+        st.rerun()
+
+
+def _aadm_service() -> None:
+    """← 서비스로 돌아가기 / 로고: 메인(홈)으로."""
+    st.session_state.update(selected=None, scroll_top=True, home_view=True, cal_view=False, box_view=False)
+    go("map")
+
+
+def _aadm_side(tab: str, pend: int) -> None:
+    """왼쪽 어두운 사이드바 (모바일은 위쪽 가로 메뉴 줄). 삭제 요청 대기 수는 빨간 배지."""
+    with st.container(key="ax_side"):
+        with st.container(key="ax_brand"):
+            if st.button("ANI:WHERE 홈", key="ax_logo", type="tertiary"):
+                _aadm_service()
+            st.markdown('<span class="ax-side-h">관리자</span>', unsafe_allow_html=True)
+        with st.container(key="ax_menu"):
+            for t, label, icon in AX_PAGES:
+                st.button(label, key=f"axnav_{'on_' if tab == t else ''}{t}", icon=f":material/{icon}:",
+                          on_click=_adm_tab, args=(t,))
+        if pend:
+            st.markdown('<style>.st-key-axnav_requests button::after, .st-key-axnav_on_requests button::after {'
+                        f' content: "{int(pend)}"; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box;'
+                        ' border-radius: 999px; background: #ff6b6b; color: #1f2a27; font-size: 12px; font-weight: 800;'
+                        ' line-height: 22px; text-align: center; margin-left: auto; flex: none; }</style>',
+                        unsafe_allow_html=True)
+        with st.container(key="ax_foot"):
+            st.markdown(f'<div class="ax-side-foot"><a href="{escape(ADMIN_ROUTINE_URL)}" target="_blank" '
+                        f'rel="noopener noreferrer">Claude 예약 작업 ↗</a><a href="{escape(_supabase_dashboard_url())}" '
+                        'target="_blank" rel="noopener noreferrer">Supabase 데이터 보기 ↗</a></div>', unsafe_allow_html=True)
+            if st.button("← 서비스로 돌아가기", key="ax_back", type="tertiary"):
+                _aadm_service()
+
+
+def _aadm_edit(cafe_id: str) -> None:
+    """정보 빠진 팝업 '수정하기' · 기간만 고치기 → 메인의 그 팝업 상세, 수정하기 탭을 연 채로."""
+    st.session_state[f"detail_tabs_{cafe_id}"] = "수정하기"
+    st.session_state["home_view"] = False
+    _adm_open_popup(cafe_id)
+
+
+def _aadm_lv_table() -> dict[str, int]:
+    """후기 도장 표 {글쓴이 꼬리표: 도장 수} (한 번 그릴 때 한 번)."""
+    from common import stamp
+    return stamp.counts(reviews.current_rows())
+
+
+def _aadm_lv(nick: str, table: dict[str, int]) -> int:
+    from common import stamp
+    return stamp.lv_of(str(nick or ""), table)
+
+
+# ------------------------------------------------------------ 한눈에 보기 (AdmX-1Home, 새 첫 화면)
+ADM_KPIS = [("new", "이번 주 새로 등록"), ("live", "진행 중"), ("soon", "오픈 예정"), ("members", "회원 (활동)"),
+            ("requests", "삭제 요청 대기")]
+
+
+def _adm_kpi_pick(k: str) -> None:
+    if k in ("members", "requests"):           # 회원 · 삭제 요청은 그 페이지로
+        st.session_state.update(adm_tab=k, adm_kpi=None)
+        return
+    st.session_state["adm_kpi"] = None if st.session_state.get("adm_kpi") == k else k
+
+
+def _adm_open_popup(cafe_id: str) -> None:
+    """관리자 목록에서 팝업을 누름 → 메인(리스트 보기)으로 가서 그 팝업 상세."""
+    st.session_state.update(list_only=True, cal_view=False, box_view=False, _gnb_to_map=True)
+    _gnb_open(cafe_id)
+
+
+def _aadm_kpi_lists(pop_rows: list[dict]) -> dict[str, list[dict]]:
+    """숫자 카드 목록 (예전 _admin_kpis 계산 그대로): 이번 주 새로 등록 · 진행 중 · 예정. 관리자가 내린 것 제외."""
+    mon, _ = admin.week_of(TODAY)
+    live, soon = [], []
+    for r in pop_rows:
+        if r.get("status") == "deleted":
+            continue
+        s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+        if s_ and e_ and s_ <= TODAY <= e_:
+            live.append(r)
+        elif s_ and s_ > TODAY:
+            soon.append(r)
+    return {"new": [r for r in admin.popup_board(store.all_rows(), mon)["새로 생성"] if r.get("status") != "deleted"],
+            "live": sorted(live, key=lambda r: str(r.get("end_date") or "")),
+            "soon": sorted(soon, key=lambda r: str(r.get("start_date") or ""))}
+
+
+def _aadm_kcard(r: dict, sub: str, warn: bool = False, link: bool = True) -> str:
+    body = (f'{_aadm_thumb(r.get("images"), "lg")}<span class="ax-kcard-t"><strong>{escape(str(r.get("work") or "") or admin.popup_name(r))}'
+            f'</strong><small>{escape(str(r.get("cafe_name") or ""))}</small><em>{escape(sub)}</em></span>')
+    cls = f'ax-kcard{" warn" if warn else ""}'
+    if not link:
+        return f'<div class="{cls} static">{body}</div>'
+    return f'<a class="{cls}" href="{_adm_href(r)}" target="_self">{body}</a>'
+
+
+def _admin_kpis(pop_rows: list[dict], pend_rows: list[dict], n_members: int) -> None:
+    """숫자 카드 5개 + 아래 작은 줄. 새로 등록 · 진행 · 예정은 누르면 목록이 펼쳐지고, 회원 · 요청은 그 페이지로."""
+    lists = _aadm_kpi_lists(pop_rows)
+    mon, _ = admin.week_of(TODAY)
+    last_new = sum(1 for r in admin.popup_board(store.all_rows(), mon - timedelta(days=7))["새로 생성"] if r.get("status") != "deleted")
+    ev = admin.member_events(members.all_rows())
+    joined = int(admin.daily_events(ev, "가입", mon)["명"].sum())
+    in7 = TODAY + timedelta(days=6)
+
+    def sign(n: int) -> str:
+        return f"+{n}" if n > 0 else (f"{n}" if n < 0 else "±0")
+    n_new = len(lists["new"])
+    nums = {
+        "new": (n_new, f"지난주 {last_new}곳보다 {sign(n_new - last_new)}", "up" if n_new >= last_new else ""),
+        "live": (len(lists["live"]), f'오늘 끝나는 곳 {sum(1 for r in lists["live"] if mycal._day(r.get("end_date")) == TODAY)}곳', ""),
+        "soon": (len(lists["soon"]), f'7일 안에 시작 {sum(1 for r in lists["soon"] if mycal._day(r.get("start_date")) <= in7)}곳', ""),
+        "members": (n_members, f"이번 주 가입 {joined}명", "up" if joined else ""),
+        "requests": (len(pend_rows), f"가장 오래된 것 {_aadm_when(pend_rows[0].get('updated_at'))}" if pend_rows else "처리할 요청 없음",
+                     "red" if pend_rows else ""),
+    }
+    picked = st.session_state.get("adm_kpi")
+    with st.container(horizontal=True, key="ax_kpis"):
+        for k, label in ADM_KPIS:
+            n, delta, tone = nums[k]
+            alert = " alert" if k == "requests" and n else ""
+            with st.container(key=f"axk_{'on_' if picked == k else ''}{k}"):
+                st.markdown(f'<div class="ax-kpi{alert}"><span class="ax-kpi-l">{label}</span><strong>{n}</strong>'
+                            f'<span class="ax-kpi-d {tone}">{escape(delta)}</span></div>', unsafe_allow_html=True)
+                st.button(f"{label} 보기", key=f"axkb_{k}", on_click=_adm_kpi_pick, args=(k,))
+    if picked not in lists:
+        return
+    rows = lists[picked]
+    label = dict(ADM_KPIS)[picked]
+    show_all = bool(st.session_state.get(f"adm_kpi_all_{picked}"))
+    shown = rows if show_all else rows[:12]
+    with st.container(key="axcard_kpilist"):
+        with st.container(horizontal=True, key="axcardh_kpilist"):
+            st.markdown(f'<h2>{label} <span class="ax-muted">{len(rows)}곳 · 누르면 상세로</span></h2>', unsafe_allow_html=True)
+            st.button("목록 닫기", key="axbs_line_kpiclose", on_click=lambda: st.session_state.update(adm_kpi=None))
+        cards = "".join(_aadm_kcard(r, _period(r, lambda d: f"{d:%m-%d}", show_raw=False)) for r in shown)
+        st.markdown(f'<div class="ax-kgrid">{cards}</div>' if cards else '<div class="ax-empty">해당하는 팝업이 없어요.</div>',
+                    unsafe_allow_html=True)
+        if len(rows) > 12:
+            with st.container(horizontal=True, horizontal_alignment="center", key="adm_kpi_foot"):
+                st.button("접기" if show_all else f"{len(rows) - 12}곳 더 보기", key=f"axbs_soft_kpimore_{picked}",
+                          on_click=lambda k=f"adm_kpi_all_{picked}": st.session_state.update({k: not st.session_state.get(k)}))
+
+
+def _aadm_pills(cafe_rows: list[dict]) -> None:
+    """수집 상태 알약: 최근 자동 수집 · 다음 월요일 정리 · 블로그 검색 이번 달 사용량."""
+    col = admin.last_collect(cafe_rows)
+    out = []
+    if col:
+        days = (TODAY - col["day"]).days if col["day"] else None
+        when = _aadm_when(col["at"])
+        when = f"오늘 {when[6:]}" if col["day"] == TODAY else when
+        ok = days is not None and days <= 1
+        out.append(f'<span class="ax-pill {"ok" if ok else "warn"}"><i></i><strong>최근 자동 수집</strong>{escape(when)} · '
+                   f'그날 새 팝업 {col["added"]}곳' + (f" · {days}일째 새 기록 없음" if days is not None and days > 1 else "") + '</span>')
+    else:
+        out.append('<span class="ax-pill warn"><i></i>자동 수집(AI) 기록이 아직 없어요</span>')
+    n, monday = admin.purge_due(cafe_rows, TODAY)
+    out.append(f'<span class="ax-pill gray"><i></i>다음 주 월 {monday.month}/{monday.day} 00:10 · 종료 · 내린 팝업 정리 {n}곳</span>')
+    try:
+        used, limit = blog.month_calls(api_usage), blog.monthly_limit()
+        out.append(f'<span class="ax-pill blue"><i></i>블로그 검색 이번 달 {used:,} / {limit:,}번</span>')
+    except Exception:          # 사용량 표를 못 읽으면 알약을 뺀다
+        pass
+    st.markdown(f'<div class="ax-pills" role="group" aria-label="수집 상태">{"".join(out)}</div>', unsafe_allow_html=True)
+
+
+def _aadm_decide_cb(req: dict, approve: bool) -> None:
+    _admin_decide(req, approve)
+    if st.session_state.get("flash", ("",))[0].startswith(("승인했어요", "거부했어요")):
+        st.session_state.pop("adm_todo_rej", None)
+
+
+def _admin_home() -> None:
+    """한눈에 보기: 머리(주 · 새로 불러오기) → 수집 알약 → 숫자 카드 5 → [처리할 일 | 북극성 + 일별 접속] → 최근 활동."""
+    all_rows = store.all_rows()
+    req_now = del_requests.current_rows()
+    pending = sorted([r for r in req_now if r.get("decision") == "pending"], key=lambda r: str(r.get("updated_at") or ""))
+    fixes = admin.need_fix(all_rows, TODAY)
+    n_todo = len(pending) + len(fixes)
+    mon_holder: dict = {}
+
+    def right() -> None:
+        mon_holder["mon"] = _aadm_week("home")
+        _aadm_refresh()
+    _aadm_head("home", f"한눈에 보기 · {TODAY:%Y.%m.%d}",
+               f'오늘 처리할 일 <span class="{"ax-red" if n_todo else ""}">{n_todo}건</span>', right=right)
+    mon = mon_holder.get("mon") or admin.week_of(TODAY)[0]
+    _aadm_pills(all_rows)
+    _admin_kpis(stats.popups(all_rows), pending, len(members.current_rows()))
+
+    left, side = st.columns([1.75, 1], gap="medium")
+    with left, st.container(key="axcard_todo"):
+        st.markdown('<div class="ax-card-h"><h2>처리할 일</h2><span class="ax-muted ax-sm">오래된 순</span></div>',
+                    unsafe_allow_html=True)
+        if not n_todo:
+            st.markdown('<div class="ax-empty">지금 처리할 일이 없어요. 새 삭제 요청이 오면 여기와 왼쪽 메뉴에 빨간 숫자로 보여요.</div>',
+                        unsafe_allow_html=True)
+        lv_table = _aadm_lv_table() if pending else {}
+        rejecting = st.session_state.get("adm_todo_rej")
+        for r in pending:
+            eid = str(r["entry_id"])
+            title = str(r.get("target_title") or "") or "(제목 없음)"
+            nick = str(r.get("requester_nick") or "")
+            with st.container(horizontal=True, key=f"axtd_{eid}", vertical_alignment="center"):
+                st.markdown(f'<div class="ax-todo-i">{_aadm_tag("red", "삭제 요청")}<div class="ax-todo-b"><strong>'
+                            f'{"리뷰 · " if r.get("target_type") == "review" else ""}{escape(title)}</strong>'
+                            f'<span>{escape(str(r.get("reason") or ""))} · {escape(nick)} {_ad_rank_chip(_aadm_lv(nick, lv_table))}'
+                            f' · {_aadm_when(r.get("updated_at"))}</span></div></div>', unsafe_allow_html=True)
+                if rejecting == eid:
+                    with st.container(horizontal=True, key=f"axtdr_{eid}", vertical_alignment="center"):
+                        st.text_input("거부 사유", key=f"adm_rj_{eid}", placeholder="요청자에게 보낼 거부 사유",
+                                      label_visibility="collapsed", max_chars=admin.MAX_REASON)
+                        st.button("취소", key=f"axbs_line_tdcancel_{eid}", on_click=lambda: st.session_state.pop("adm_todo_rej", None))
+                        st.button("거부 보내기", key=f"axbs_dark_tdno_{eid}", on_click=_aadm_decide_cb, args=(r, False))
+                else:
+                    st.button("거부", key=f"axbs_line_tdrej_{eid}", on_click=lambda e=eid: st.session_state.update(adm_todo_rej=e))
+                    st.button("승인", key=f"axbs_dark_tdok_{eid}", on_click=_aadm_decide_cb, args=(r, True))
+        show_all = bool(st.session_state.get("adm_home_fixall"))
+        for row, miss in (fixes if show_all else fixes[:FIX_PAGE]):
+            eid = str(row["entry_id"])
+            with st.container(horizontal=True, key=f"axtd_fix_{eid}", vertical_alignment="center"):
+                st.markdown(f'<div class="ax-todo-i">{_aadm_tag("yellow", "정보 빠짐")}<div class="ax-todo-b"><strong>'
+                            f'{escape(admin.popup_name(row))}</strong><span>빠진 정보: {escape(" · ".join(miss))} · '
+                            f'{escape(_period(row, lambda d: f"{d:%m-%d}", show_raw=False))}</span></div></div>',
+                            unsafe_allow_html=True)
+                st.button("수정하기", key=f"axbs_mint_fix_{eid}", on_click=_aadm_edit, args=(eid,))
+        if len(fixes) > FIX_PAGE:
+            with st.container(horizontal=True, horizontal_alignment="center", key="ax_fixmore"):
+                st.button("접기" if show_all else f"정보 빠진 팝업 {len(fixes) - FIX_PAGE}곳 더 보기", key="axbs_soft_fixmore",
+                          on_click=lambda: st.session_state.update(adm_home_fixall=not st.session_state.get("adm_home_fixall")))
+        st.markdown('<p class="ax-cap">정보 빠짐 = 아직 끝나지 않은 팝업 중 완결률이 세는 방문 전 정보(기간 · 주소 · 지도 좌표 · '
+                    '참고 링크 · 포스터)가 하나라도 빈 곳.</p>', unsafe_allow_html=True)
+
+    with side:
+        pops = stats.popups(all_rows)
+        now = stats.completeness(pops)
+        before = stats.completeness(stats.popups(all_rows, until=stats.NOTION_CUTOFF))
+        with st.container(key="axcard_north"):
+            diff = round(now["complete"] - before["complete"], 1)
+            delta = f"+{diff:g}" if diff > 0 else (f"{diff:g}" if diff < 0 else "±0")
+            st.markdown(
+                '<div class="ax-card-h"><h2>북극성 · 방문 전 정보 완결률</h2></div>'
+                f'<span class="ax-big">{now["complete"]:.1f}<small>%</small></span>'
+                + (f'<span class="ax-north-d">Notion 주간 수집 전 <strong>{before["complete"]:.1f}%</strong> → 지금 '
+                   f'<strong>{now["complete"]:.1f}%</strong> <span class="ax-muted">({delta}%p)</span></span>' if before["n"] else "")
+                + f'<div class="ax-meter" role="img" aria-label="완결률 {now["complete"]:.1f}%'
+                + (f', 세로선은 수집 전 {before["complete"]:.1f}%' if before["n"] else "") + '">'
+                f'<span style="width:{min(100, now["complete"]):.1f}%"></span>'
+                + (f'<i style="left:{min(100, before["complete"]):.1f}%"></i>' if before["n"] else "") + '</div>'
+                f'<span class="ax-muted ax-sm">팝업 {now["n"]}곳 기준 · /stats 와 같은 숫자</span>', unsafe_allow_html=True)
+            st.button("빠진 정보 있는 팝업 보기 →", key="axlink_north", on_click=lambda: st.session_state.update(adm_home_fixall=True))
+        with st.container(key="axcard_daily"):
+            days = admin.daily_active(visits.all_rows(), mon)
+            vals = [int(v) for v in days["접속 회원"]]
+            labels = list(days["날"])
+            dmax = max([1] + vals)
+            with st.container(horizontal=True, key="axcardh_daily"):
+                st.markdown('<h2>일별 접속 회원</h2>', unsafe_allow_html=True)
+                st.button("이용 지표 →", key="axlink_usage", on_click=_adm_tab, args=("usage",))
+            bars = "".join(f'<span class="{"today" if mon + timedelta(days=i) == TODAY else ""}"><b>{v}</b>'
+                           f'<i style="height:{round(v / dmax * 100)}%"></i></span>' for i, v in enumerate(vals))
+            xs = "".join(f'<span class="{"today" if mon + timedelta(days=i) == TODAY else ""}">{"월화수목금토일"[i]}</span>'
+                         for i in range(7))
+            aria = ", ".join(f"{lab} {v}명" for lab, v in zip(labels, vals))
+            st.markdown(f'<div class="ax-mini" role="img" aria-label="일별 접속 회원: {escape(aria)}">{bars}</div>'
+                        f'<div class="ax-mini-x" aria-hidden="true">{xs}</div>'
+                        '<p class="ax-cap" style="margin-top:8px">로그인한 회원만 세요 (같은 날 여러 번 와도 1명) · 진한 막대 = 오늘</p>',
+                        unsafe_allow_html=True)
+
+    feed = admin.recent_activity(all_rows, del_requests.all_rows(), reviews.all_rows(), members.all_rows(), auth.PROVIDER_LABEL, 8)
+    today_md = f"{TODAY:%m/%d}"
+    items = "".join(
+        f'<div class="ax-feed-i">{_aadm_tag(AX_FEED_TONE.get(f["kind"], "gray"), f["kind"])}'
+        f'<span class="ax-feed-t">{escape(f["text"])}</span><span class="ax-feed-w">'
+        f'{escape((lambda w: f"오늘 {w[6:]}" if w.startswith(today_md) else w)(_aadm_when(f["at"])))}</span></div>' for f in feed)
+    st.markdown('<section class="ax-card" aria-label="최근 활동"><div class="ax-card-h"><h2>최근 활동</h2></div>'
+                + (items or '<div class="ax-empty">아직 쌓인 기록이 없어요.</div>') + '</section>', unsafe_allow_html=True)
+
+
+# ------------------------------------------------------------ 팝업 현황 (AdmX-2Popups)
 GANTT_PAGE = 20     # 이 주 일정: 처음 20곳, 더보기마다 20곳 더 (11/18 요청)
 BOARD_PAGE = 10     # 고른 주 현황: 칸마다 처음 10곳, 더보기마다 10곳 더
+AX_SEG = [("", "전체", "all"), ("new", "새로 생성", "new"), ("soon", "예정", "soon"), ("live", "진행", "live"), ("end", "종료", "end")]
+AX_COL_OF = {"new": "새로 생성", "soon": "예정", "live": "진행", "end": "종료"}
+AX_COL_CLS = {"새로 생성": "new", "예정": "soon", "진행": "live", "종료": "end"}
 
 
-def _admin_gantt(mon: date) -> None:
-    """고른 주(월~일) 하루 단위 팝업 일정. 주 밖으로 이어지면 막대 끝을 ‹ › 로, 오늘 칸은 연한 민트."""
-    start, end = mon, mon + timedelta(days=6)
-    span = (end - start).days + 1
-    every = admin.gantt_rows(store.all_rows(), start, end, limit=10_000)
+def _admin_gantt(mon: date, every: list[dict]) -> None:
+    """고른 주(월~일) 하루 단위 간트: 팝업 이름은 왼쪽 칸, 오늘 빨간 선, 예정 파랑 · 진행 청록 · 종료는 점선 테두리, 빠진 정보는 '확인'."""
+    sun = mon + timedelta(days=6)
     n_key = f"adm_gantt_n_{mon.isoformat()}"
     rows = every[:st.session_state.get(n_key, GANTT_PAGE)]
 
     def pct(d: date) -> float:
-        return max(0.0, min(100.0, (d - start).days / span * 100))
-
-    # 오늘 칸: 연한 빨강 배경 + 가운데 빨간 선 (11/18 요청: 더 눈에 띄게)
-    wk = (f'<div class="gt-wk" style="left:{pct(TODAY):.2f}%;width:{100 / span:.2f}%"></div>'
-          f'<div class="gt-today" style="left:{pct(TODAY) + 50 / span:.2f}%"></div>'
-          if start <= TODAY <= end else "")
-    grid = "".join(f'<div class="gt-grid" style="left:{pct(start + timedelta(days=i)):.2f}%"></div>' for i in range(1, span))
+        return max(0.0, min(100.0, (d - mon).days / 7 * 100))
     wd = "월화수목금토일"
-    ticks = "".join(f'<div class="gt-tick{" now" if start + timedelta(days=i) == TODAY else ""}" '
-                    f'style="left:{(i + .5) / span * 100:.2f}%">'
-                    f'<span class="gt-full">{"오늘 " if start + timedelta(days=i) == TODAY else ""}'
-                    f'{(start + timedelta(days=i)).month}/{(start + timedelta(days=i)).day}({wd[i]})</span>'
-                    # 모바일은 칸이 좁아 날짜가 겹친다 → 요일 한 글자만 (오늘은 '오늘'), 11/18 요청
-                    f'<span class="gt-short">{"오늘" if start + timedelta(days=i) == TODAY else wd[i]}</span></div>'
-                    for i in range(span))
-    today = ""
-    html = [f'<div class="gt"><div class="gt-row gt-head"><div class="gt-lab"><b>팝업 {len(every)}곳</b></div>'
-            f'<div class="gt-track">{ticks}</div></div>']
+    in_week = mon <= TODAY <= sun
+    today_left = ((TODAY - mon).days + .5) / 7 * 100
+    days = "".join(f'<span class="{"today" if mon + timedelta(days=i) == TODAY else ""}">{wd[i]} {(mon + timedelta(days=i)).day}</span>'
+                   for i in range(7))
+    grid = "".join(f'<i class="ax-gt-grid" style="left:{(i + 1) / 7 * 100:.2f}%"></i>' for i in range(6))
+    html = [f'<div class="ax-gt"><div class="ax-gt-head"><span class="ax-gt-name">이 주에 걸친 {len(every)}곳</span>'
+            f'<span class="ax-gt-days">{days}</span></div>']
     for r in rows:
         s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
-        kind = "예정" if s > TODAY else ("종료" if e < TODAY else "진행")
-        left, right = pct(max(s, start)), pct(min(e, end) + timedelta(days=1))
+        kind = "soon" if s > TODAY else ("end" if e < TODAY else "live")
+        left, right = pct(max(s, mon)), pct(min(e, sun) + timedelta(days=1))
+        warn = kind != "end" and bool(admin.missing_of(r))
+        label = {"soon": "예정", "end": "종료", "live": "진행"}[kind]
         html.append(
-            f'<div class="gt-row"><div class="gt-lab"><a class="adm-link" href="{_adm_href(r)}" target="_self">'
-            f'<b>{escape(str(r.get("work") or ""))}</b></a> '
-            f'<span>{escape(str(r.get("cafe_name") or ""))} · {s.month}/{s.day}~{e.month}/{e.day}</span></div>'
-            f'<div class="gt-track">{wk}{grid}<div class="gt-bar{" cl" if s < start else ""}{" cr" if e > end else ""}" '
-            f'style="--c:{GANTT_COLOR[kind]};left:{left:.2f}%;width:{max(right - left, 0.8):.2f}%"></div></div></div>')
+            f'<a class="ax-gt-row" href="{_adm_href(r)}" target="_self"><span class="ax-gt-name">{_aadm_thumb(r.get("images"))}'
+            f'<span class="ax-gt-t"><b>{escape(str(r.get("work") or "") or admin.popup_name(r))}</b>'
+            f'<small>{escape(str(r.get("cafe_name") or ""))} · {_aadm_md(s)}~{_aadm_md(e)}</small></span>'
+            + ('<span class="ax-warn">확인</span>' if warn else "") +
+            f'</span><span class="ax-gt-track" aria-label="{label} {_aadm_md(s)}~{_aadm_md(e)}">{grid}'
+            + (f'<i class="ax-gt-today" style="left:{today_left:.2f}%"></i>' if in_week else "")
+            + f'<span class="ax-gt-bar {kind}{" cl" if s < mon else ""}{" cr" if e > sun else ""}" '
+            f'style="left:{left:.2f}%;width:{max(right - left, 1):.2f}%"></span></span></a>')
     if not rows:
-        html.append('<div class="adm-empty">이 기간에 걸친 팝업이 없어요.</div>')
-    html.append('<div class="gt-legend">' + "".join(f'<span><i style="background:{c}"></i>{k}</span>'
-                                                     for k, c in GANTT_COLOR.items())
-                + '<span><i style="background:#FF5A5A"></i>오늘 (빨간 칸)</span><span>막대가 칸 끝에 붙어 있으면 이 주 앞뒤로 이어져요</span></div></div>')
-    st.markdown("".join(html), unsafe_allow_html=True)
-    if len(every) > len(rows):
-        with st.container(horizontal=True, horizontal_alignment="center", key="adm_more_gantt"):
-            st.button(f"{len(every) - len(rows)}건 더보기", icon=":material/expand_more:", key="adm_gantt_more_btn",
-                      on_click=lambda: st.session_state.update({n_key: len(rows) + GANTT_PAGE}))
+        msg = ("예정 = 이 주가 끝난 뒤 4주 안에 시작하는 팝업이라 이 주 간트에는 없어요. 아래 보드에서 보세요."
+               if st.session_state.get("adm_st") == "soon" else "이 주에 걸친 팝업이 없어요. 위에서 다른 주를 골라 보세요.")
+        html.append(f'<div class="ax-empty">{msg}</div>')
+    html.append('</div>')
+    legend = ('<span class="ax-legend"><span><i class="ax-dot soon"></i>예정</span><span><i class="ax-dot live"></i>진행</span>'
+              '<span><i class="ax-dot end"></i>종료</span><span><i class="ax-dot today"></i>오늘</span>'
+              '<span><i class="ax-dot warn"></i>확인 = 정보 빠짐</span></span>')
+    with st.container(key="axcard_gantt"):
+        st.markdown(f'<div class="ax-card-h"><h2>주간 간트</h2>{legend}</div>' + "".join(html), unsafe_allow_html=True)
+        if len(every) > len(rows):
+            with st.container(horizontal=True, horizontal_alignment="center", key="adm_more_gantt"):
+                st.button(f"+{min(GANTT_PAGE, len(every) - len(rows))}곳 더보기 (남은 {len(every) - len(rows)}곳)",
+                          key="axb_soft_ganttmore", on_click=lambda: st.session_state.update({n_key: len(rows) + GANTT_PAGE}))
+        st.markdown('<p class="ax-cap">막대 끝이 각지면 이 주 앞뒤로 이어져요. 줄을 누르면 팝업 상세로 가요.</p>', unsafe_allow_html=True)
+
+
+def _aadm_kboard_card(r: dict, col: str) -> str:
+    """보드 카드: 포스터 · 이름 · 한 줄 상태. 정보가 빠졌으면 노란 테두리 + '확인 필요'. 종료 칸은 상세로 가지 않는다 (11/19)."""
+    s, e = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
+    miss = admin.missing_of(r) if col != "종료" else []
+    if miss:
+        sub = f"확인 필요: {' · '.join(miss)}"
+    elif col == "예정":
+        sub = f"{_aadm_md(s)} 오픈 · D-{(s - TODAY).days}" if s else "기간 확인 필요"
+    elif col == "진행":
+        sub = "오늘 종료" if e == TODAY else f"~{_aadm_md(e)}"
+    elif col == "종료":
+        sub = f"{_aadm_md(e)} 종료"
+    else:
+        sub = f"{_aadm_md(s)} ~ {_aadm_md(e)}"
+    return _aadm_kcard(r, sub, warn=bool(miss), link=col != "종료")
 
 
 def _admin_board() -> None:
-    mon = _week_nav("board")
-    st.markdown('<div class="adm-panel-h">이 주 일정 (간트 차트 · 하루 단위)</div>', unsafe_allow_html=True)
-    _admin_gantt(mon)
-    st.markdown('<div class="adm-panel-h">고른 주 현황</div>', unsafe_allow_html=True)
-    board = admin.popup_board(store.all_rows(), mon)
-    colors = {"새로 생성": "#14B8A6", "예정": "#3672BD", "진행": "#23866A", "종료": "#8A9592"}
-    # 지난 주를 고르면: 기간이 끝난 팝업은 다음 주 월요일에 DB 에서 지워져(supabase 012) 그 주에 끝난 팝업이 안 보일 수 있다 (11/19 요청)
+    """팝업 현황: 머리(주 · 검색) → 상태 카드 5(필터) → 주간 간트 → 상태별 보드. 칸 나누기는 admin.popup_board · gantt_rows."""
+    mon_holder: dict = {}
+
+    def right() -> None:
+        mon_holder["mon"] = _aadm_week("board")
+        with st.container(key="axq_popup", width=220):
+            st.text_input("팝업 검색", key="adm_pq", placeholder="작품 · 팝업 이름 검색", label_visibility="collapsed")
+    # 제목에 곳 수가 들어가서 머리를 먼저 그리고 숫자는 같은 함수로 센다 (주 · 검색어는 세션에 있음)
+    off = st.session_state.get("adm_week", 0)
+    mon = admin.week_of(TODAY + timedelta(weeks=off))[0]
+    sun = mon + timedelta(days=6)
+    q = str(st.session_state.get("adm_pq") or "").strip().lower()
+
+    def hit(r: dict) -> bool:
+        return not q or q in f'{r.get("work") or ""} {r.get("cafe_name") or ""} {r.get("characters") or ""}'.lower()
+    all_rows = store.all_rows()
+    board = {k: [r for r in v if hit(r)] for k, v in admin.popup_board(all_rows, mon).items()}
+    union = {str(r["entry_id"]) for v in board.values() for r in v}
+    _aadm_head("board", "팝업 현황", f'{"이번 주" if off == 0 else "이 주"} 팝업 {len(union)}곳', right=right)
+    mon = mon_holder.get("mon", mon)
+    if q:
+        with st.container(horizontal=True, key="ax_pq_note", vertical_alignment="center"):
+            st.markdown(f'<p class="ax-cap">\'{escape(st.session_state.get("adm_pq") or "")}\' 로 찾은 결과예요</p>',
+                        unsafe_allow_html=True)
+            st.button("찾기 지우기", key="axlink_pqclear", on_click=lambda: st.session_state.update(adm_pq=""))
+    stf = st.session_state.get("adm_st") or ""
+    if stf not in AX_COL_OF:
+        stf = ""
+    counts = {"": len(union), **{k: len(board[v]) for k, v in AX_COL_OF.items()}}
+    with st.container(horizontal=True, key="ax_seg5"):
+        for k, label, cls in AX_SEG:
+            with st.container(key=f"axsg_{'on_' if stf == k else ''}{cls}"):
+                st.markdown(f'<div class="ax-segc"><span><i class="ax-dot {cls}"></i>{label}</span><strong>{counts[k]}</strong></div>',
+                            unsafe_allow_html=True)
+                st.button(f"{label}만 보기", key=f"axsgb_{cls}", on_click=lambda v=k: st.session_state.update(adm_st=v))
+    keep = {str(r["entry_id"]) for r in board[AX_COL_OF[stf]]} if stf else None
+    every = [r for r in admin.gantt_rows(all_rows, mon, sun, limit=10_000) if hit(r) and (keep is None or str(r["entry_id"]) in keep)]
+    _admin_gantt(mon, every)
+
+    st.markdown('<h2 class="ax-h2">상태별 보드</h2>', unsafe_allow_html=True)
     past_week = mon < TODAY - timedelta(days=TODAY.weekday())
-    cols = st.columns(4, gap="small")
-    for i, (col, (name, rows)) in enumerate(zip(cols, board.items())):
+    names = [AX_COL_OF[stf]] if stf else list(board)
+    cols = st.columns(len(names), gap="small")
+    for col, name in zip(cols, names):
+        i = list(board).index(name)
+        items = board[name]
         n_key = f"adm_board_n_{i}_{mon.isoformat()}"
         n_show = st.session_state.get(n_key, BOARD_PAGE)
-        with col:
-            ended = name == "종료"      # 종료 칸은 정보만 (눌러도 상세로 가지 않음, 11/19 요청)
-            body = (lambda r: f'<img src="{escape(_poster_url(r.get("images")))}" alt="" loading="lazy"><div>'
-                    f'<b>{escape(str(r.get("work") or ""))}</b>'
-                    f'<span>{escape(str(r.get("cafe_name") or ""))}</span>'
-                    f'<em>{escape(str(r.get("start_date") or "")[5:])} ~ {escape(str(r.get("end_date") or "")[5:])}</em></div>')
-            cards = "".join(
-                (f'<div class="adm-card adm-pcard adm-static">{body(r)}</div>' if ended else
-                 f'<a class="adm-card adm-link adm-pcard" href="{_adm_href(r)}" target="_self">{body(r)}</a>')
-                for r in rows[:n_show]) or '<div class="adm-empty">없어요</div>'
-            note = ('<div class="adm-purge-note">기간이 끝난 팝업은 일주일 단위로 다음 주 월요일에 삭제돼요. '
-                    '지난 주에 종료된 팝업은 여기에 보이지 않을 수 있어요.</div>' if ended and past_week else "")
-            st.markdown(f'<div class="adm-col" style="--c:{colors[name]}"><div class="adm-colhead">{name}'
-                        f'<small>{len(rows)}곳</small></div>{note}{cards}</div>', unsafe_allow_html=True)
-            if len(rows) > n_show:
-                with st.container(horizontal=True, horizontal_alignment="center", key=f"adm_more_board_{i}"):
-                    st.button(f"{len(rows) - n_show}건 더보기", icon=":material/expand_more:", key=f"adm_board_more_btn_{i}",
-                              on_click=lambda k=n_key, n=n_show: st.session_state.update({k: n + BOARD_PAGE}))
-    st.caption("새로 생성 = 그 주에 처음 등록 · 예정 = 그 주가 끝난 뒤 4주 안에 시작 · 진행 = 그 주에 열려 있고 다음 주에도 이어짐 · 종료 = 그 주에 끝남")
+        with col, st.container(key=f"axkcol_{i}"):
+            note = ('<p class="ax-cap">지난 주에 끝난 팝업은 다음 주 월요일에 DB 에서 지워져 여기에 안 보일 수 있어요.</p>'
+                    if name == "종료" and past_week else "")
+            cards = "".join(_aadm_kboard_card(r, name) for r in items[:n_show]) or '<div class="ax-empty">없어요</div>'
+            st.markdown(f'<div class="ax-kcol{" one" if stf else ""}"><div class="ax-kcol-h"><i class="ax-dot {AX_COL_CLS[name]}"></i>'
+                        f'<strong>{name}</strong><span>{len(items)}</span></div>{note}{cards}</div>', unsafe_allow_html=True)
+            if len(items) > n_show:
+                st.button(f"{len(items) - n_show}곳 더보기", key=f"axbs_soft_boardmore_{i}",
+                          on_click=lambda k=n_key, n=n_show: st.session_state.update({k: n + BOARD_PAGE}))
+    st.markdown('<p class="ax-cap">새로 생성 = 그 주에 처음 등록 · 예정 = 그 주가 끝난 뒤 4주 안에 시작 · 진행 = 그 주에 열려 있고 다음 주에도 '
+                '이어짐 · 종료 = 그 주에 끝남. 종료된 팝업은 월~일 한 주가 지나 다음 주 월요일 00:10 에 DB 에서도 정리돼요.</p>',
+                unsafe_allow_html=True)
 
 
 # 사용자 테스트 바로가기 (11/18 요청). .env / Secrets 로 바꿀 수 있고, 없으면 지금 쓰는 폼 주소
@@ -10761,18 +11747,14 @@ N8N_URL = "http://localhost:5678"     # n8n 은 운영자 컴퓨터에서 돈다
 
 
 def _survey_links(sheet_id: str) -> None:
-    """1차 · 2차 설문 폼(참여자에게 보낼 주소 · 폼 고치기) · 응답 시트 · n8n 바로가기 버튼."""
-    for ver, (form, edit) in SURVEY_FORMS.items():
-        with st.container(horizontal=True, key=f"adm_survey_links_{ver}", vertical_alignment="center"):
-            st.link_button(f"{ver} 설문 폼 (참여자에게 보낼 주소)", form, icon=":material/assignment:",
-                           type="primary" if ver == "2차" else "secondary")
-            st.link_button(f"{ver} 폼 고치기", edit, icon=":material/edit_note:")
-    with st.container(horizontal=True, key="adm_survey_links"):
+    """설문 바로가기 (시안: 머리 오른쪽 알약 링크 ↗) — 1차 · 2차 폼(참여자에게 보낼 주소 · 폼 고치기) · 응답 시트 · n8n."""
+    with st.container(horizontal=True, key="ax_svlinks"):
+        for ver, (form, edit) in SURVEY_FORMS.items():
+            st.link_button(f"{ver} 폼 ↗", form)
+            st.link_button(f"{ver} 폼 고치기 ↗", edit)
         if sheet_id:
-            st.link_button("응답 시트 (1차 · 2차 같이)", f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit",
-                           icon=":material/table_view:")
-        st.link_button("n8n 워크플로", os.getenv("N8N_URL") or N8N_URL, icon=":material/account_tree:")
-    st.caption("n8n 은 운영자 컴퓨터(http://localhost:5678)에서 돌아서, 그 컴퓨터에서만 열려요. 테스트 날에는 n8n 을 켜 두세요.")
+            st.link_button("응답 시트 ↗", f"https://docs.google.com/spreadsheets/d/{quote(sheet_id)}/edit")
+        st.link_button("n8n ↗", os.getenv("N8N_URL") or N8N_URL)
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -10792,40 +11774,56 @@ def _survey_rows(sheet_id: str, tab: str = "정리") -> tuple[list[dict], str]:
         return [], f"시트를 읽지 못했어요 ({type(exc).__name__}). 잠시 뒤 다시 열어 주세요."
 
 
+SURVEY_VIEWS = ["1차 → 2차 개선", "2차 자세히", "1차 자세히"]
+
+
 def _admin_survey() -> None:
-    """사용자 테스트 (11/18 요청): n8n 이 구글 폼 응답을 정리해 쌓은 '정리' 탭 → A(평소 방법)/B(ANI:WHERE) 비교 ·
-    과제별 성공률 · 문제 정의(불편한 점 · 정보 출처) · 만족도 그래프 + 원본 표.
-    시트 주소(번호)는 .env / Secrets 의 SURVEY_SHEET_ID. 숫자는 stats.survey_summary (n8n 메일과 같은 규칙)."""
+    """사용자 테스트 (AdmX-8Test): 머리 → 배너(응답 수 · 폼 응답 탭 대조, 새로고침) → 보기 탭 → 숫자 카드 4 → 차트 →
+    [같은 사람 비교 | 막힌 곳] → 개선 표 → 불편한 점. n8n 이 구글 폼 응답을 정리해 쌓은 '정리' 탭을 읽는다.
+    시트 주소(번호)는 .env / Secrets 의 SURVEY_SHEET_ID. 숫자는 stats.survey_* (n8n 메일과 같은 규칙, 여기서 고치지 않는다)."""
     sheet_id = (os.getenv("SURVEY_SHEET_ID") or "").strip()
-    _survey_links(sheet_id)
+    view = st.session_state.get("adm_survey_view") or SURVEY_VIEWS[0]
+    _aadm_head("survey", "사용자 테스트", escape(view), right=lambda: _survey_links(sheet_id))
     if not sheet_id:
         st.info("설문 시트가 아직 연결되지 않았어요. `.env`(배포는 Streamlit Secrets)에 `SURVEY_SHEET_ID` 를 넣어 주세요 "
                 "(구글 시트 주소의 /d/ 와 /edit 사이 글자). 만드는 법: automation/n8n/README.md", icon=":material/link_off:")
         return
-    c1, c2 = st.columns([5, 1], vertical_alignment="center")
-    c1.markdown('<div class="adm-panel-h">사용자 테스트 (n8n 설문)</div>', unsafe_allow_html=True)
-    if c2.button("새로고침", icon=":material/refresh:", key="adm_survey_reload", width="stretch"):
-        _survey_rows.clear()
     rows, err = _survey_rows(sheet_id)
+    check: dict = {}
+    if not err:
+        # 11/26: '정리' 탭의 응답을 모두 센다 (예전처럼). 폼 응답 탭과의 대조 숫자는 참고로만 (stats.survey_verify)
+        forms = {ver: _survey_rows(sheet_id, tab)[0] for ver, tab in stats.SURVEY_FORM_TABS.items()}
+        rows, check = stats.survey_verify(rows, forms)
+    n = int(check.get("전체", 0))
+    ok = not err and n > 0
+    if err:
+        head = "<strong>설문 시트를 읽지 못했어요</strong>"
+    elif n:
+        head = (f"<strong>응답 {n}명 · 폼 응답 탭에서 확인 {check.get('검증', 0)}명 · "
+                f"폼 응답 탭에 없음 {check.get('폼에 없음', 0)}명</strong>")
+    else:
+        head = "<strong>아직 응답이 없어요 — 받는 중</strong>"
+    extra = ""
+    if check.get("폼 응답 미래 시각") or check.get("폼 응답 시각 없음"):
+        extra = (f" 받은 시각과 상관없이 모두 셉니다 — 폼 응답 중 받은 시각이 미래 {check['폼 응답 미래 시각']}건 · "
+                 f"시각 없음 {check['폼 응답 시각 없음']}건 포함.")
+    with st.container(horizontal=True, key="ax_banner", vertical_alignment="center"):
+        st.markdown(f'<div class="ax-banner{" ax-banner-ok" if ok else ""}"><span class="ax-banner-n">{"-" if err else f"{n}명"}</span>'
+                    f'<span class="ax-banner-t">{head}<span>\'정리\' 탭의 응답을 모두 세요. 구글 폼 응답 탭(1차 응답 · 2차 응답)과 '
+                    f'닉네임을 맞춰 본 수는 참고예요.{extra}</span></span></div>', unsafe_allow_html=True)
+        if st.button("새로고침", icon=":material/refresh:", key="axb_dark_svreload"):
+            _survey_rows.clear()
+            st.rerun()
     if err:
         st.warning(err, icon=":material/error:")
         return
-    # 11/26: '정리' 탭의 응답을 모두 센다 (예전처럼). 폼 응답 탭과의 대조 숫자는 참고로만 (stats.survey_verify)
-    forms = {ver: _survey_rows(sheet_id, tab)[0] for ver, tab in stats.SURVEY_FORM_TABS.items()}
-    rows, check = stats.survey_verify(rows, forms)
-    # 11/26: 예전처럼 '정리' 탭의 응답을 모두 센다. 폼 응답 탭과의 대조는 참고로만 보여 준다
-    st.caption(f"'정리' 탭 응답 {check['전체']}명을 모두 셉니다 — 구글 폼 응답 탭에서 확인 {check['검증']}명"
-               + (f" · 폼 응답 탭에 없음 {check['폼에 없음']}명" if check["폼에 없음"] else ""))
-    if check["폼 응답 미래 시각"] or check["폼 응답 시각 없음"]:
-        st.caption(f"참고: 받은 시각과 상관없이 모두 셉니다 — 폼 응답 중 받은 시각이 미래 {check['폼 응답 미래 시각']}건 · "
-                   f"시각 없음 {check['폼 응답 시각 없음']}건 포함")
     if not rows:
-        st.info("아직 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.",
-                icon=":material/hourglass_empty:")
+        st.info("아직 응답이 없어요. 참여자가 설문 폼을 내면 n8n 이 1분 안에 여기로 쌓아요.", icon=":material/hourglass_empty:")
         return
-    view = st.segmented_control("보기", ["1차 → 2차 개선", "2차 자세히", "1차 자세히"], default="1차 → 2차 개선",
-                                key="adm_survey_view", label_visibility="collapsed") or "1차 → 2차 개선"
-    if view == "1차 → 2차 개선":
+    with st.container(key="ax_survey_view"):
+        view = st.segmented_control("보기", SURVEY_VIEWS, default=SURVEY_VIEWS[0], key="adm_survey_view",
+                                    label_visibility="collapsed") or SURVEY_VIEWS[0]
+    if view == SURVEY_VIEWS[0]:
         _survey_improve(rows)
     else:
         ver = view[:2]
@@ -10833,12 +11831,42 @@ def _admin_survey() -> None:
         if not sub:
             st.info(f"{ver} 폼 응답이 아직 없어요.", icon=":material/hourglass_empty:")
         else:
-            _survey_detail(sub)
-    st.caption("구글 폼(1차 · 2차) → n8n(내 컴퓨터) → 구글 시트 '정리' 탭(버전 칸) → 여기. 이메일 · 이름 · 연락처는 받지 않고, "
-               "자유 답변의 전화번호 · 이메일은 n8n 이 지워요.")
+            with st.container(key="axcard_detail"):
+                _survey_detail(sub)
+    st.markdown('<p class="ax-cap">구글 폼(1차 · 2차) → n8n(운영자 컴퓨터, http://localhost:5678 에서만 열려요) → 구글 시트 \'정리\' 탭'
+                '(버전 칸) → 여기. 이메일 · 이름 · 연락처는 받지 않고, 자유 답변의 전화번호 · 이메일은 n8n 이 지워요.</p>',
+                unsafe_allow_html=True)
 
 
-SV_COLORS = ["#A9B3B0", "#14B8A6"]     # 1차 회색 · 2차 포인트 민트
+SV_COLORS = ["#A9B3B0", "#14B8A6"]     # 자세히 보기(예전 그래프): 1차 회색 · 2차 포인트 민트
+SV_SERIES3 = [("평소 방법", "s-usual"), ("1차", "s-v1"), ("2차", "s-v2")]     # 평소 #c77a12 · 1차 #2c5bc5 · 2차 #0d9488
+
+
+def _aadm_num(v: float) -> str:
+    return f"{v:g}" if float(v).is_integer() else f"{round(v, 1):g}"
+
+
+def _aadm_groupbars(title: str, groups: list[tuple[str, list]], series: list[tuple[str, str]], unit: str,
+                    top: float | None = None) -> str:
+    """묶음 세로 막대 (웹 AxGroupBars): 위쪽만 4px 둥글게 · 이중 축 없음 · 범례 + 막대 위 숫자. 한 그림 = 한 단위 · 한 눈금."""
+    mx = top or max([1.0] + [float(v or 0) for _, vals in groups for v in vals])
+    legend = "".join(f'<span><i class="ax-sw {cls}"></i>{escape(name)}</span>' for name, cls in series)
+    aria = " / ".join(f"{lab}: " + ", ".join(f"{series[i][0]} {'없음' if v is None else _aadm_num(v) + unit}"
+                                             for i, v in enumerate(vals)) for lab, vals in groups)
+    tmpl = f"grid-template-columns:repeat({len(groups)}, minmax(0, 1fr))"
+    cols = "".join(
+        '<span class="ax-gb-col">' + "".join(
+            f'<span class="ax-gb-bar"><b>{"-" if v is None else _aadm_num(v)}</b><i class="{series[i][1]}" '
+            f'style="height:{0 if v is None else min(100, v / mx * 100):.1f}%"></i></span>' for i, v in enumerate(vals))
+        + '</span>' for _, vals in groups)
+    xs = "".join(f"<span>{escape(lab)}</span>" for lab, _ in groups)
+    return (f'<figure class="ax-gb" aria-label="{escape(title)}"><figcaption class="ax-card-h"><h2>{escape(title)}</h2>'
+            f'<span class="ax-legend">{legend}</span></figcaption>'
+            f'<div class="ax-gb-plot" role="img" aria-label="{escape(aria)}"><span class="ax-gb-y" aria-hidden="true">'
+            f'<span style="bottom:100%">{_aadm_num(mx)}{unit}</span><span style="bottom:50%">{_aadm_num(mx / 2)}{unit}</span>'
+            f'<span style="bottom:0%">0</span></span><span class="ax-gb-grid" aria-hidden="true"><i style="bottom:100%"></i>'
+            f'<i style="bottom:50%"></i></span><span class="ax-gb-cols" style="{tmpl}">{cols}</span></div>'
+            f'<div class="ax-gb-x" style="{tmpl}" aria-hidden="true">{xs}</div></figure>')
 
 
 SV_GROUP_CSS = """<style>
@@ -10866,7 +11894,8 @@ def _sv_fmt(v, unit: str = "") -> str:
 
 
 def _survey_improve(rows: list[dict]) -> None:
-    """1차(로그인 · 물어보기 없던 첫 버전) → 2차(지금): 무엇이 나아지고 편해졌나 (11/18 요청). 숫자는 stats.survey_compare."""
+    """1차(로그인 · 물어보기 없던 첫 버전) → 2차(지금): 숫자 카드 4 · 3계열 막대 · 같은 사람 비교 · 막힌 곳 · 개선 표 · 불편한 점.
+    숫자는 stats.survey_compare (여기서 계산하지 않는다)."""
     c = stats.survey_compare(rows)
     a, b, tgt = c["1차"], c["2차"], stats.SURVEY_TARGET
     if not a["응답자"] or not b["응답자"]:
@@ -10876,51 +11905,67 @@ def _survey_improve(rows: list[dict]) -> None:
 
     def delta(x, y, unit):
         return None if x is None or y is None else f"{round(y - x, 1):+g}{unit}"
-
-    # 1) 숫자 카드: 2차 값 + 1차 대비 변화
-    _sv_groups([
-        ("참여", [("1차", f"{a['응답자']}명", None, "normal"), ("2차", f"{b['응답자']}명", None, "normal")]),
-        ("과제 성공률", [("1차", _sv_fmt(a["성공률"], "%"), None, "normal"),
-                      ("2차", _sv_fmt(b["성공률"], "%"), delta(a["성공률"], b["성공률"], "%p"), "normal")]),
-        ("질문 1 평균 시간", [("1차", _sv_fmt(a["질문1초"], "초"), None, "normal"),
-                         ("2차", _sv_fmt(b["질문1초"], "초"), delta(a["질문1초"], b["질문1초"], "초"), "inverse")]),
-        ("만족 · 의향 (2차, 1차 대비)", [("만족도 (5점)", _sv_fmt(b["만족도"]), delta(a["만족도"], b["만족도"], "점"), "normal"),
-                                   ("다시 쓸 의향", _sv_fmt(b["다시쓸의향"], "%"),
-                                    delta(a["다시쓸의향"], b["다시쓸의향"], "%p"), "normal")]),
-    ], key="improve")
     ok_s = b["성공률"] is not None and b["성공률"] >= tgt["success"]
     ok_t = b["질문1초"] is not None and b["질문1초"] <= tgt["q1"]
-    st.caption(f"초록 · 빨강 작은 숫자 = 1차 대비 변화. 2차 목표: 과제 성공률 {tgt['success']:g}% 이상 {'O' if ok_s else 'X'} · "
-               f"질문 1 평균 {tgt['q1']:g}초 이하 {'O' if ok_t else 'X'}. 시간은 응답자가 고른 구간의 가운데 값(대략값)"
-               + ("  ·  응답자가 적어 참고용이에요" if min(a["응답자"], b["응답자"]) < 10 else ""))
+    base = stats._avg([x for x in (a["평소초"], b["평소초"]) if x is not None])
+    f = _sv_fmt
+    kpis = [
+        ("참여", f"{a['응답자'] + b['응답자']}명", f"1차 {a['응답자']}명 · 2차 {b['응답자']}명", None),
+        (f"과제 성공률 (목표 {tgt['success']:g}% 이상 {'O' if ok_s else 'X'})", f(b["성공률"], "%"),
+         f"1차 {f(a['성공률'], '%')} → <strong>2차 {f(b['성공률'], '%')}</strong>", delta(a["성공률"], b["성공률"], "%p")),
+        (f"질문 1 평균 시간 (목표 {tgt['q1']:g}초 이하 {'O' if ok_t else 'X'})", f(b["질문1초"], "초"),
+         f"평소 {f(base, '초')} → 1차 {f(a['질문1초'], '초')} → <strong>2차 {f(b['질문1초'], '초')}</strong>",
+         delta(a["질문1초"], b["질문1초"], "초")),
+        ("만족도 (5점) · 다시 쓸 의향", f"{f(b['만족도'])} · {f(b['다시쓸의향'], '%')}",
+         f"1차 {f(a['만족도'])} · {f(a['다시쓸의향'], '%')} → <strong>2차</strong>", delta(a["만족도"], b["만족도"], "점")),
+    ]
+    st.markdown('<div class="ax-kpis k4">' + "".join(
+        f'<div class="ax-kpi static"><span class="ax-kpi-l">{escape(label)}</span><strong>{escape(v)}</strong>'
+        f'<span class="ax-kpi-d">{sub}{f" ({d})" if d else ""}</span></div>' for label, v, sub, d in kpis) + '</div>',
+        unsafe_allow_html=True)
+    tasks = list(stats.SURVEY_TASKS.items())
+    v2 = SV_SERIES3[1:]
+    charts = [
+        _aadm_groupbars("팝업 하나 찾는 시간 (초) · 평소 → 1차 → 2차",
+                        [("질문 1 · 이번 주말 서울 팝업 찾기", [base, a["질문1초"], b["질문1초"]])], SV_SERIES3, "초"),
+        _aadm_groupbars("과제별 성공률 (%) · 1차 vs 2차",
+                        [(f"{t} · {n}", [a["과제별"][t]["성공률"], b["과제별"][t]["성공률"]]) for t, n in tasks], v2, "%", top=100),
+        _aadm_groupbars("과제별 평균 시간 (초, 해낸 사람) · 1차 vs 2차",
+                        [(f"{t} · {n}", [a["과제별"][t]["평균초"], b["과제별"][t]["평균초"]]) for t, n in tasks], v2, "초"),
+        _aadm_groupbars("만족도 분포 (명) · 1차 vs 2차",
+                        [(f"{i}점", [a["만족도분포"].get(str(i), 0), b["만족도분포"].get(str(i), 0)]) for i in range(1, 6)], v2, "명"),
+    ]
+    st.markdown('<div class="ax-grid2">' + "".join(f'<section class="ax-card">{ch}</section>' for ch in charts) + '</div>',
+                unsafe_allow_html=True)
 
-    # 2) 그래프
-    g1, g2 = st.columns(2)
-    with g1:
-        st.markdown('<div class="adm-panel-h">팝업 하나 찾는 시간 (초) · 평소 방법 → 1차 → 2차</div>', unsafe_allow_html=True)
-        base = stats._avg([x for x in (a["평소초"], b["평소초"]) if x is not None])
-        st.bar_chart(pd.DataFrame({"방법": ["① 평소 방법", "② 1차", "③ 2차"],
-                                   "초": [base or 0, a["질문1초"] or 0, b["질문1초"] or 0]}),
-                     x="방법", y="초", color="#14B8A6", horizontal=True, height=190, x_label="", y_label="", sort=False)
-        st.markdown('<div class="adm-panel-h">과제별 성공률 (%) · 1차 vs 2차</div>', unsafe_allow_html=True)
-        st.bar_chart(pd.DataFrame([{"과제": f"{t} · {n}", **{v: c[v]["과제별"][t]["성공률"] or 0 for v in ("1차", "2차")}}
-                                   for t, n in stats.SURVEY_TASKS.items()]),
-                     x="과제", y=["1차", "2차"], color=SV_COLORS, stack=False, horizontal=True, height=280,
-                     x_label="", y_label="", sort=False)
-    with g2:
-        st.markdown('<div class="adm-panel-h">과제별 평균 시간 (초, 해낸 사람) · 1차 vs 2차</div>', unsafe_allow_html=True)
-        st.bar_chart(pd.DataFrame([{"과제": f"{t} · {n}", **{v: c[v]["과제별"][t]["평균초"] or 0 for v in ("1차", "2차")}}
-                                   for t, n in stats.SURVEY_TASKS.items()]),
-                     x="과제", y=["1차", "2차"], color=SV_COLORS, stack=False, horizontal=True, height=280,
-                     x_label="", y_label="", sort=False)
-        st.markdown('<div class="adm-panel-h">만족도 분포 (명) · 1차 vs 2차</div>', unsafe_allow_html=True)
-        st.bar_chart(pd.DataFrame([{"점수": f"{i}점", **{v: c[v]["만족도분포"].get(str(i), 0) for v in ("1차", "2차")}}
-                                   for i in range(1, 6)]),
-                     x="점수", y=["1차", "2차"], color=SV_COLORS, stack=False, height=190, x_label="", y_label="", sort=False)
+    same = c["같은 사람"]
+    left, right = st.columns([1.3, 1], gap="medium")
+    with left, st.container(key="axcard_same"):
+        st.markdown(f'<div class="ax-card-h"><h2>같은 사람 비교 (1차 → 2차) · {same["명"]}명</h2></div>', unsafe_allow_html=True)
+        if not same["명"]:
+            st.markdown('<p class="ax-cap">1차 · 2차 모두 낸 사람이 아직 없어요 (1차 폼에는 2차 로그인 닉네임을 적게 안내해요).</p>',
+                        unsafe_allow_html=True)
+        else:
+            cmp = [("나아짐", "teal", "질문 1 이 빨라진 사람", f"{same['빨라진 사람']} / {same['시간 잰 사람']}명"),
+                   ("나아짐", "teal", "해낸 과제가 늘어난 사람", f"{same['더 해낸 사람']}명"),
+                   ("나아짐", "teal", "만족도가 오른 사람", f"{same.get('만족도 오른 사람', 0)}명"),
+                   ("평균", "gray", "질문 1 에서 줄어든 시간 (시간 잰 사람)", f(same["평균 줄어든 초"], "초"))]
+            st.markdown("".join(f'<div class="ax-cmp-i">{_aadm_tag(tone, k)}<span class="ax-cmp-t">{escape(t)}</span>'
+                                f'<strong>{escape(n)}</strong></div>' for k, tone, t, n in cmp), unsafe_allow_html=True)
+            with st.expander(f"사람별 ({same['명']}명)"):
+                st.dataframe(pd.DataFrame(c["짝"]), hide_index=True, width="stretch")
+    with right:
+        stuck = ""
+        for v in ("1차", "2차"):
+            items = "".join(f"<li>{escape(str(bk))} — {n}번</li>" for bk, n in c[v]["막힌곳"])
+            stuck += f'<div><b class="ax-sm">{v}</b>' + (f'<ul class="ax-stuck">{items}</ul>' if items else '<p class="ax-cap">없어요.</p>') + '</div>'
+        st.markdown(f'<section class="ax-card"><div class="ax-card-h"><h2>막힌 곳</h2></div>{stuck}'
+                    '<p class="ax-cap">측정 한계 · 시간은 응답자가 고른 구간의 가운데 값(대략값)이에요.'
+                    + (" 응답자가 10명보다 적어 참고용이에요." if min(a["응답자"], b["응답자"]) < 10 else "") + '</p></section>',
+                    unsafe_allow_html=True)
 
-    # 3) 지표 표 (나아짐 / 그대로 / 나빠짐)
-    st.markdown('<div class="adm-panel-h">무엇이 나아졌나 (1차 → 2차)</div>', unsafe_allow_html=True)
-    table = []
+    # 무엇이 나아졌나 (나아짐 / 그대로 / 나빠짐)
+    trs = []
     for name, x, y, unit, up, goal in c["지표"]:
         if x is None or y is None:
             verdict = "-"
@@ -10928,40 +11973,26 @@ def _survey_improve(rows: list[dict]) -> None:
             verdict = "그대로"
         else:
             verdict = "나아짐" if (y > x) == up else "나빠짐"
-        table.append({"지표": name, "1차": _sv_fmt(x, unit), "2차": _sv_fmt(y, unit),
-                      "변화": "-" if x is None or y is None else f"{round(y - x, 1):+g}{'%p' if unit == '%' else unit}",
-                      "판정": verdict,
-                      "목표": "-" if goal is None else (f"{goal:g}{unit} 이상" if up else f"{goal:g}{unit} 이하")})
-    st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch", height=35 * (len(table) + 1) + 3)
+        chg = "-" if x is None or y is None else f"{round(y - x, 1):+g}{'%p' if unit == '%' else unit}"
+        aim = "-" if goal is None else (f"{goal:g}{unit} 이상" if up else f"{goal:g}{unit} 이하")
+        trs.append(f"<tr><td>{escape(name)}</td><td class='num'>{f(x, unit)}</td><td class='num'>{f(y, unit)}</td>"
+                   f"<td class='num'>{chg}</td><td>{verdict}</td><td>{aim}</td></tr>")
+    st.markdown('<section class="ax-card"><div class="ax-card-h"><h2>무엇이 나아졌나 (1차 → 2차)</h2></div><div class="ax-tbl-box">'
+                '<table class="ax-tbl"><thead><tr><th>지표</th><th class="num">1차</th><th class="num">2차</th><th class="num">변화</th>'
+                '<th>판정</th><th>목표</th></tr></thead><tbody>' + "".join(trs) + '</tbody></table></div></section>',
+                unsafe_allow_html=True)
 
-    # 4) 같은 사람 (닉네임으로 묶인 1차 · 2차)
-    same = c["같은 사람"]
-    st.markdown('<div class="adm-panel-h">같은 사람이 1차 · 2차 둘 다 해 봤을 때 (닉네임으로 묶음)</div>', unsafe_allow_html=True)
-    if not same["명"]:
-        st.caption("1차 · 2차 모두 낸 사람이 아직 없어요 (1차 폼에는 2차 로그인 닉네임을 적게 안내해요).")
-    else:
-        k = st.columns(4)
-        k[0].metric("두 번 다 한 사람", f"{same['명']}명")
-        k[1].metric("질문 1 이 빨라진 사람", f"{same['빨라진 사람']} / {same['시간 잰 사람']}명")
-        k[2].metric("평균 줄어든 시간", _sv_fmt(same["평균 줄어든 초"], "초"))
-        k[3].metric("해낸 과제가 늘어난 사람", f"{same['더 해낸 사람']}명")
-        with st.expander(f"사람별 ({same['명']}명)"):
-            st.dataframe(pd.DataFrame(c["짝"]), hide_index=True, width="stretch")
-
-    # 5) 막힌 곳 1차 · 2차 나란히 + 평소 불편한 점
-    c1, c2 = st.columns(2)
-    for col, v in ((c1, "1차"), (c2, "2차")):
-        with col:
-            st.markdown(f'<div class="adm-panel-h">{v} · 자주 막힌 곳</div>', unsafe_allow_html=True)
-            st.markdown("\n".join(f"- {escape(bk)} — {n}번" for bk, n in c[v]["막힌곳"]) or "없어요.", unsafe_allow_html=True)
     pains: dict = {}
     for v in ("1차", "2차"):
         for p_, n in c[v]["불편한점"]:
             pains[p_] = pains.get(p_, 0) + n
     if pains:
-        st.markdown('<div class="adm-panel-h">평소 불편한 점 (문제 정의 · 1차 · 2차 응답 합계)</div>', unsafe_allow_html=True)
-        st.bar_chart(pd.DataFrame(sorted(pains.items(), key=lambda kv: -kv[1]), columns=["불편한 점", "명"]),
-                     x="불편한 점", y="명", color="#F2A33A", horizontal=True, height=240, x_label="", y_label="", sort="-명")
+        pmax = max(pains.values()) or 1
+        bars = "".join(f'<div class="ax-bar-l amber"><span><b>{escape(str(p_))}</b><span>{n}명</span></span>'
+                       f'<i><span style="width:{n / pmax * 100:.0f}%"></span></i></div>'
+                       for p_, n in sorted(pains.items(), key=lambda kv: -kv[1]))
+        st.markdown('<section class="ax-card"><div class="ax-card-h"><h2>평소 불편한 점 (문제 정의 · 1차 · 2차 응답 합계, 명)</h2></div>'
+                    f'{bars}</section>', unsafe_allow_html=True)
 
 
 def _survey_detail(rows: list[dict]) -> None:
@@ -11037,20 +12068,73 @@ def _survey_detail(rows: list[dict]) -> None:
 
 
 def _admin_usage() -> None:
-    mon = _week_nav("usage")
+    """이용 지표 (AdmX-3Usage): 흐름 3(신규 가입 → 접속 회원 → 탈퇴) → 날짜별 3줄(줄마다 따로 눈금, 막대 위 숫자, 이중 축 없음)
+    → [가입 방법 | 북마크 많은 팝업 | 물어보기 많이 한 질문]. 숫자는 admin.daily_events · daily_active · stats.top_bookmarked."""
+    off = st.session_state.get("adm_week", 0)
+    holder: dict = {}
+    _aadm_head("usage", "이용 지표", "이번 주 이용" if off == 0 else "고른 주 이용",
+               right=lambda: holder.update(mon=_aadm_week("usage")))
+    mon = holder.get("mon") or admin.week_of(TODAY + timedelta(weeks=off))[0]
     ev = admin.member_events(members.all_rows())
-    charts = [
-        ("신규 이용자 수", admin.daily_events(ev, "가입", mon), MINT, "명"),
-        ("일별 접속 회원", admin.daily_active(visits.all_rows(), mon).rename(columns={"접속 회원": "명"}), "#3672BD", "명 (연인원)"),
-        ("탈퇴한 회원 수", admin.daily_events(ev, "탈퇴", mon), "#C8352A", "명"),
-    ]
-    for title, df, color, unit in charts:
-        total = int(df["명"].sum())
-        st.markdown(f'<div class="adm-metric-h"><b>{title}</b><span>이 주 합계 <strong>{total}</strong>{unit}</span></div>',
-                    unsafe_allow_html=True)
-        st.bar_chart(df, x="날", y="명", color=color, sort=False, height=200, x_label="", y_label="")
-    st.caption("신규 = 그날 가입한 회원 · 접속 회원 = 그날 로그인한 상태로 한 번 이상 들어온 회원 (같은 날 여러 번 와도 1명, "
-               "손님은 세지 않아요) · 탈퇴 = 그날 탈퇴한 회원. 날짜는 한국 시간.")
+    joined = [int(v) for v in admin.daily_events(ev, "가입", mon)["명"]]
+    act_df = admin.daily_active(visits.all_rows(), mon)
+    active = [int(v) for v in act_df["접속 회원"]]
+    quit_ = [int(v) for v in admin.daily_events(ev, "탈퇴", mon)["명"]]
+    labels = list(act_df["날"])
+    wd = "월화수목금토일"
+    passed = max(1, min(7, (TODAY - mon).days + 1))        # 하루 평균: 지난 날까지만 나눈다 (이번 주면 오늘까지)
+    avg = round(sum(active) / passed, 1)
+    peak = max(range(7), key=lambda i: (active[i], -i))
+    today_i = (TODAY - mon).days
+    st.markdown(
+        '<div class="ax-flow">'
+        f'<div class="ax-flow-c"><span class="ax-kpi-l">신규 가입</span><strong>{sum(joined)}</strong>'
+        '<span class="ax-muted ax-sm">그 주에 가입한 회원 (손님 방문은 세지 않아요)</span></div>'
+        f'<div class="ax-flow-c"><span class="ax-kpi-l">접속 회원 (하루 평균)</span><strong class="ax-deep">{avg:g}</strong>'
+        f'<span class="ax-muted ax-sm">연인원 {sum(active)}명 · 가장 많은 날 {wd[peak]} {active[peak]}명</span></div>'
+        f'<div class="ax-flow-c"><span class="ax-kpi-l">탈퇴 회원</span><strong>{sum(quit_)}</strong>'
+        '<span class="ax-muted ax-sm">그 주에 탈퇴한 회원</span></div></div>', unsafe_allow_html=True)
+    lines = [("신규 가입", joined, "blue"), ("접속 회원", active, "teal"), ("탈퇴 회원", quit_, "amber")]
+    head = "<span></span>" + "".join(
+        f'<span class="{"today" if i == today_i else ""}">{wd[i]} {(mon + timedelta(days=i)).day}{" (오늘)" if i == today_i else ""}</span>'
+        for i in range(7)) + "<span>합계</span>"
+    rows_html = ""
+    for title, data, tone in lines:
+        mx = max([1] + data)
+        aria = f"{title} 월~일: {', '.join(map(str, data))}, 합계 {sum(data)}"
+        rows_html += (f'<div class="ax-lines-r {tone}" role="img" aria-label="{escape(aria)}"><span class="ax-lines-t">{title}</span>'
+                      + "".join(f'<span class="ax-lines-b"><b>{v}</b><i style="height:{round(v / mx * 44)}px"></i></span>' for v in data)
+                      + f'<strong class="ax-lines-s">{sum(data)}</strong></div>')
+    table = ("<table class='ax-tbl'><thead><tr><th>날짜</th>" + "".join(f"<th class='num'>{t}</th>" for t, _, _ in lines)
+             + "</tr></thead><tbody>" + "".join(
+                 f"<tr><td>{escape(labels[i])}</td>" + "".join(f"<td class='num'>{d[i]}</td>" for _, d, _ in lines) + "</tr>"
+                 for i in range(7)) + "</tbody></table>")
+    st.markdown(
+        '<section class="ax-card" aria-label="날짜별 이용"><div class="ax-card-h"><h2>날짜별 · 신규 가입 → 접속 회원 → 탈퇴 회원</h2></div>'
+        f'<div class="ax-lines"><div class="ax-lines-h" aria-hidden="true">{head}</div>{rows_html}</div>'
+        '<p class="ax-cap">줄마다 따로 눈금을 써요 (숫자 크기가 달라서). 막대 위 숫자가 실제 값이에요. 신규 = 그날 가입한 회원 · '
+        '접속 회원 = 그날 로그인한 상태로 한 번 이상 들어온 회원 (같은 날 여러 번 와도 1명, 손님은 세지 않아요) · '
+        '탈퇴 = 그날 탈퇴한 회원. 날짜는 한국 시간.</p>'
+        f'<details class="ax-details"><summary>표로 보기</summary><div class="ax-tbl-box">{table}</div></details></section>',
+        unsafe_allow_html=True)
+
+    joins = admin.join_methods(members.current_rows(), auth.PROVIDER_LABEL)
+    join_html = "".join(f'<div class="ax-bar-l"><span><b>{escape(k)}</b><span>{n}명 · {p}%</span></span>'
+                        f'<i><span style="width:{p}%"></span></i></div>' for k, n, p in joins)
+    top = stats.top_bookmarked(favs.current_rows(), stats.popups(store.all_rows()), 5)
+    by_name = {admin.popup_name(r): r for r in mycal.latest_rows(store.all_rows())}
+    bm_html = "".join(f'<div class="ax-rank-i"><span class="ax-rank-n">{i + 1}</span>'
+                      f'{_aadm_thumb((by_name.get(t["팝업"]) or {}).get("images"))}<span class="ax-rank-t">{escape(str(t["팝업"]))}</span>'
+                      f'<span class="ax-muted">{int(t["북마크"])}</span></div>' for i, t in enumerate(top.to_dict("records")))
+    st.markdown(
+        '<div class="ax-grid3">'
+        '<section class="ax-card"><div class="ax-card-h"><h2>가입 방법</h2></div>'
+        + (join_html or '<div class="ax-empty">아직 가입한 회원이 없어요.</div>') + '<p class="ax-cap">지금 회원 기준 (탈퇴 제외)</p></section>'
+        '<section class="ax-card"><div class="ax-card-h"><h2>북마크 많은 팝업</h2></div>'
+        + (bm_html or '<div class="ax-empty">아직 북마크가 없어요.</div>') + '<p class="ax-cap">지금 북마크 수 (/stats 와 같은 숫자)</p></section>'
+        '<section class="ax-card"><div class="ax-card-h"><h2>물어보기 많이 한 질문</h2></div>'
+        '<div class="ax-empty">물어보기 질문은 저장소에 쌓지 않아서 (앱 서버의 로그 파일에만 남아요) 여기서 셀 수 없어요. '
+        '질문을 저장하게 되면 건수부터 보여 줄게요.</div></section></div>', unsafe_allow_html=True)
 
 
 def _admin_decide(req: dict, approve: bool) -> None:
@@ -11071,36 +12155,117 @@ def _admin_decide(req: dict, approve: bool) -> None:
                                   else "거부했어요. 요청자에게 사유를 알렸어요."), ":material/check_circle:")
 
 
+def _aadm_period_only(req: dict, cafe_id: str) -> None:
+    """'기간만 고치기': 기존 거부 흐름으로 거부 기록(처리 사유 '기간만 고치기로 처리' + 적은 글)을 남기고 그 팝업의 수정하기 탭으로."""
+    key = f"adm_rj_{req['entry_id']}"
+    text = " ".join(str(st.session_state.get(key) or "").split())
+    st.session_state[key] = (f"기간만 고치기로 처리 — {text}" if text else "기간만 고치기로 처리")[:admin.MAX_REASON]
+    _admin_decide(req, False)
+    _aadm_edit(cafe_id)
+
+
 def _admin_requests() -> None:
-    rows = sorted(del_requests.current_rows(), key=lambda r: str(r.get("updated_at", "")), reverse=True)
-    pending = [r for r in rows if r.get("decision") == "pending"]
-    done = [r for r in rows if r.get("decision") != "pending"]
-    st.markdown(f'<div class="adm-panel-h">처리 대기 {len(pending)}건</div>', unsafe_allow_html=True)
-    if not pending:
-        st.markdown('<div class="adm-empty">처리할 삭제 요청이 없어요.</div>', unsafe_allow_html=True)
-    for r in pending:
-        eid = str(r["entry_id"])
-        st.markdown(
-            f'<div class="adm-req" style="--st:{ST_COLOR["pending"]}"><div class="rail"></div><div>'
-            f'<div class="t"><span class="adm-pill">대기</span>{escape(admin.TARGET_LABEL.get(r.get("target_type"), "글"))} · '
-            f'{escape(str(r.get("target_title") or ""))}</div>'
-            f'<div class="d">요청 {escape(str(r.get("requester_nick") or ""))} · {escape(_when(str(r.get("updated_at", ""))))}</div>'
-            f'<div class="d">사유: {escape(str(r.get("reason") or ""))}</div></div></div>', unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([1, 3, 1], vertical_alignment="bottom")
-        c1.button("승인 (삭제)", key=f"adm_ok_{eid}", type="primary", width="stretch", on_click=_admin_decide, args=(r, True))
-        c2.text_input("거부 사유", key=f"adm_rj_{eid}", placeholder="거부할 때 요청자에게 보낼 사유", label_visibility="collapsed",
-                      max_chars=admin.MAX_REASON)
-        c3.button("거부", key=f"adm_no_{eid}", width="stretch", on_click=_admin_decide, args=(r, False))
-    with st.expander(f"처리한 요청 {len(done)}건"):
-        for r in done[:50]:
-            d = r.get("decision")
-            st.markdown(
-                f'<div class="adm-req" style="--st:{ST_COLOR.get(d, "#8A9592")}"><div class="rail"></div><div>'
-                f'<div class="t"><span class="adm-pill">{ST_LABEL.get(d, d)}</span>'
-                f'{escape(str(r.get("target_title") or ""))}</div>'
-                f'<div class="d">요청 {escape(str(r.get("requester_nick") or ""))} · 사유 {escape(str(r.get("reason") or ""))}</div>'
-                + (f'<div class="d">거부 사유: {escape(str(r.get("admin_reason") or ""))}</div>' if d == "rejected" else "")
-                + '</div></div>', unsafe_allow_html=True)
+    """삭제 요청 (AdmX-4Delete): 대기/처리 완료 탭 → 가장 오래된 요청 펼친 카드 → 나머지 작은 카드 → 처리 기록 표."""
+    now = del_requests.current_rows()
+    pending = sorted([r for r in now if r.get("decision") == "pending"], key=lambda r: str(r.get("updated_at") or ""))
+    done = sorted([r for r in now if r.get("decision") != "pending"],
+                  key=lambda r: str(r.get("decided_at") or r.get("updated_at") or ""), reverse=True)
+    _aadm_head("requests", "삭제 요청", "회원이 내려 달라고 한 글",
+               sub="승인하면 지도 · 리스트에서 내리고(기록은 남김) 요청자에게 알림, 거부하면 사유와 함께 알림이 가요.")
+    view = "done" if st.session_state.get("adm_rq") == "done" else "pending"
+    with st.container(horizontal=True, key="ax_rqtabs", width="content"):
+        st.button(f"대기 {len(pending)}", key=f"axrq_{'on_' if view == 'pending' else ''}pending",
+                  on_click=lambda: st.session_state.update(adm_rq="pending", adm_rq_open=None))
+        st.button(f"처리 완료 {len(done)}", key=f"axrq_{'on_' if view == 'done' else ''}done",
+                  on_click=lambda: st.session_state.update(adm_rq="done", adm_rq_open=None))
+    if view == "pending":
+        if not pending:
+            st.markdown('<div class="ax-empty">처리할 삭제 요청이 없어요. 회원이 상세 화면에서 \'삭제 요청\'을 보내면 여기에 와요.</div>',
+                        unsafe_allow_html=True)
+        else:
+            lv_table = _aadm_lv_table()
+            cafe_latest = {str(r["entry_id"]): r for r in mycal.latest_rows(store.all_rows())}
+            rv_latest = {str(r["entry_id"]): r for r in mycal.latest_rows(reviews.all_rows())}
+            fav_now, rv_now = favs.current_rows(), reviews.current_rows()
+            open_id = st.session_state.get("adm_rq_open")
+            cur = next((r for r in pending if str(r["entry_id"]) == open_id), pending[0])
+            _aadm_req_card(cur, lv_table, cafe_latest, rv_latest, fav_now, rv_now)
+            for r in pending:
+                if r is cur:
+                    continue
+                eid = str(r["entry_id"])
+                c = cafe_latest.get(str(r.get("target_id"))) if r.get("target_type") == "cafe" else None
+                nick = str(r.get("requester_nick") or "")
+                with st.container(horizontal=True, key=f"axreqm_{eid}", vertical_alignment="center"):
+                    st.markdown(f'<div class="ax-req-mini">{_aadm_thumb((c or {}).get("images"), "md")}<div class="ax-req-mini-b">'
+                                f'<strong>{escape(admin.TARGET_LABEL.get(r.get("target_type"), "글"))} · '
+                                f'{escape(str(r.get("target_title") or ""))}</strong><span>“{escape(str(r.get("reason") or ""))}”</span>'
+                                f'<small>{escape(nick)} {_ad_rank_chip(_aadm_lv(nick, lv_table))} · {_aadm_when(r.get("updated_at"))}</small>'
+                                '</div></div>', unsafe_allow_html=True)
+                    st.button("열어서 처리", key=f"axb_softline_rqopen_{eid}",
+                              on_click=lambda e=eid: st.session_state.update(adm_rq_open=e))
+    shown = done[:50] if view == "done" else done[:5]
+    trs = "".join(
+        f'<tr><td class="ax-nowrap">{_aadm_when(r.get("updated_at"))}</td><td><b>{escape(admin.TARGET_LABEL.get(r.get("target_type"), "글"))} · '
+        f'{escape(str(r.get("target_title") or ""))}</b></td><td>'
+        + _aadm_tag("dark" if r.get("decision") == "approved" else "gray", ST_LABEL.get(r.get("decision"), str(r.get("decision") or "")))
+        + f'</td><td>{escape(str(r.get("admin_reason") or "") or "-")}</td><td>{escape(str(r.get("reason") or ""))}</td>'
+        f'<td class="ax-muted">{escape(str(r.get("requester_nick") or ""))}</td></tr>' for r in shown)
+    with st.container(key="axcard_hist"):
+        st.markdown(f'<div class="ax-card-h"><h2>{f"처리 기록 {len(done)}건" if view == "done" else "최근 처리 기록"}</h2></div>'
+                    + ('<div class="ax-empty">아직 처리한 요청이 없어요.</div>' if not done else
+                       '<div class="ax-tbl-box"><table class="ax-tbl ax-hist"><thead><tr><th>처리일</th><th>대상</th><th>결과</th>'
+                       f'<th>처리 사유</th><th>요청 사유</th><th>요청자</th></tr></thead><tbody>{trs}</tbody></table></div>'),
+                    unsafe_allow_html=True)
+        if view == "pending" and len(done) > 5:
+            st.button(f"처리 기록 {len(done)}건 모두 보기 →", key="axlink_rqall",
+                      on_click=lambda: st.session_state.update(adm_rq="done", adm_rq_open=None))
+
+
+def _aadm_req_card(r: dict, lv_table: dict, cafe_latest: dict, rv_latest: dict, fav_now: list, rv_now: list) -> None:
+    """펼친 요청 카드: 포스터 · 지도에 보이는지 · 기간 · 북마크 · 리뷰 수, 요청자 + 랭크 칩, 사유, 처리 사유 입력,
+    승인 / 거부 / 기간만 고치기 (지도에 보이는 팝업만)."""
+    from common import stamp
+    eid = str(r["entry_id"])
+    is_cafe = r.get("target_type") == "cafe"
+    target = cafe_latest.get(str(r.get("target_id"))) if is_cafe else rv_latest.get(str(r.get("target_id")))
+    alive = bool(target) and target.get("status") != "deleted"
+    cafe_id = str(r.get("target_id")) if is_cafe else str((target or {}).get("cafe_id") or "")
+    host = cafe_latest.get(cafe_id)
+    nick = str(r.get("requester_nick") or "")
+    lv = _aadm_lv(nick, lv_table)
+    tier = stamp.tier_of(stamp.stamps_of(nick, lv_table))
+    state = ("지금 지도에 보임" if is_cafe else "지금 보임") if alive else ("이미 내려감" if is_cafe else "이미 지워짐")
+    meta = ""
+    if host:
+        s, e = mycal._day(host.get("start_date")), mycal._day(host.get("end_date"))
+        n_fav = sum(1 for f in fav_now if str(f.get("cafe_id")) == cafe_id)
+        n_rev = sum(1 for x in rv_now if str(x.get("cafe_id")) == cafe_id and not str(x.get("parent_id") or ""))
+        period = f"{_aadm_md(s)} ~ {_aadm_md(e)}" if s else _period(host, lambda d: f"{d:%m-%d}", show_raw=False)
+        meta = (f'<span class="ax-req-meta">{"" if is_cafe else escape(admin.popup_name(host)) + " 의 리뷰 · "}'
+                f'등록된 기간 {escape(period)} · 북마크 {n_fav} · 리뷰 {n_rev}</span>')
+    quote_rv = (f'<p class="ax-quote sm">리뷰 내용: {_aadm_x(str(target.get("body") or "")[:160]) or "(별점만)"}</p>'
+                if not is_cafe and target else "")
+    with st.container(key="axcard_reqopen"):
+        with st.container(horizontal=True, key="axreq_body"):
+            st.markdown(_aadm_thumb((host or {}).get("images"), "xl"), unsafe_allow_html=True)
+            with st.container(key="axreq_main"):
+                st.markdown(
+                    f'<div class="ax-req-title"><strong>{"" if is_cafe else "리뷰 · "}{escape(str(r.get("target_title") or "") or "(제목 없음)")}'
+                    f'</strong>{_aadm_tag("mint" if alive else "gray", state)}'
+                    + (f'<a class="ax-link" href="./?cafe={quote(cafe_id)}" target="_blank">상세 열기 ↗</a>' if cafe_id else "")
+                    + f'</div>{meta}{quote_rv}<div class="ax-req-who"><span>{_ad_stamp(lv, 20)}<strong>{escape(nick)}</strong>'
+                    f'<span class="ax-muted">{f"Lv.{lv} {tier.name} · " if tier else "도장 없음 · "}{_aadm_when(r.get("updated_at"))} 요청'
+                    f'</span></span><p class="ax-quote">“{escape(str(r.get("reason") or ""))}”</p></div>', unsafe_allow_html=True)
+                with st.container(horizontal=True, key="axreq_form", vertical_alignment="bottom"):
+                    st.text_area("처리 사유 (요청자에게 알림으로 가요 · 거부할 때는 꼭)", key=f"adm_rj_{eid}", height=90,
+                                 max_chars=admin.MAX_REASON, placeholder="예: 공식 공지를 확인해 보니 진행 중인 행사라 유지해요")
+                    with st.container(key="axreq_btns"):
+                        st.button("승인하고 내리기" if is_cafe else "승인하고 리뷰 지우기", key=f"axb_dark_rqok_{eid}",
+                                  on_click=_admin_decide, args=(r, True))
+                        st.button("거부", key=f"axb_line_rqno_{eid}", on_click=_admin_decide, args=(r, False))
+                        if is_cafe and alive:
+                            st.button("기간만 고치기 →", key=f"axb_ghost_rqfix_{eid}", on_click=_aadm_period_only, args=(r, cafe_id))
 
 
 def _admin_notice_save(entry_id: str | None) -> None:
@@ -11122,6 +12287,8 @@ def _admin_notice_save(entry_id: str | None) -> None:
 
 def _admin_notice_delete(row: dict) -> None:
     notices_store.soft_delete(str(row["entry_id"]))
+    if st.session_state.get("adm_nt_edit") == str(row["entry_id"]):
+        st.session_state.pop("adm_nt_edit", None)
     st.session_state["flash"] = ("공지를 삭제했어요.", ":material/check_circle:")
 
 
@@ -11138,90 +12305,150 @@ def _admin_rule_save(key: str, enabled: bool) -> None:
     st.session_state["flash"] = (f"'{d['name']}' 규칙을 {'저장했어요' if enabled else '껐어요'}.", ":material/check_circle:")
 
 
+def _aadm_rule_toggle(key: str) -> None:
+    """켜기 스위치를 누름 → 그 값으로 저장 (며칠 · 최대 개수는 칸에 적힌 값)."""
+    _admin_rule_save(key, bool(st.session_state.get(f"adm_rule_on_{key}")))
+
+
 def _admin_rule_editor(rules: dict[str, dict]) -> None:
-    """규칙 하나를 골라 며칠 전부터 · 최대 몇 개 · 켜기/끄기(삭제). 기록은 지우지 않고 쌓인다."""
-    keys = list(admin.RULES)
-    opened = bool(st.session_state.get("adm_rule_open"))
-    # 빨간 '수정하기' 버튼을 누르면 고칠 규칙 칸이 펼쳐지고, 한 번 더 누르면 접힌다 (11/18 요청)
-    st.markdown('<style>.st-key-adm_rule_toggle button { background: #E05555 !important; border-color: #E05555 !important; }'
-                '.st-key-adm_rule_toggle button:hover { background: #C8352A !important; border-color: #C8352A !important; }'
-                '.st-key-adm_rule_toggle button p, .st-key-adm_rule_toggle button span { color: #fff !important; }</style>',
-                unsafe_allow_html=True)
-    st.button("수정 닫기" if opened else "수정하기", icon=":material/expand_less:" if opened else ":material/edit:",
-              type="primary", key="adm_rule_toggle",
-              on_click=lambda: st.session_state.update(adm_rule_open=not st.session_state.get("adm_rule_open")))
-    if not opened:
-        return
-    with st.container(border=True):
-        k = st.selectbox("고칠 규칙", keys, format_func=lambda x: f'{admin.RULES[x]["name"]} '
-                         f'({"켜짐" if rules[x]["enabled"] else "꺼짐"})', key="adm_rule_pick")
-        d, cur = admin.RULES[k], rules[k]
-        c1, c2 = st.columns(2)
-        if d["days"] is not None:
-            c1.number_input("며칠 전부터 (공지는 며칠 동안)", min_value=0, max_value=30, value=int(cur["days"]), step=1,
-                            key=f"adm_rule_days_{k}")
-        else:
-            c1.markdown('<div class="adm-empty">이 규칙은 일수가 없어요.</div>', unsafe_allow_html=True)
-        if d["max_items"] is not None:
-            c2.number_input("최대 노출 개수", min_value=1, max_value=30, value=int(cur["max_items"]), step=1,
-                            key=f"adm_rule_max_{k}")
-        else:
-            c2.markdown('<div class="adm-empty">처리할 때마다 1건씩 가요.</div>', unsafe_allow_html=True)
-        b1, b2, _ = st.columns([1, 1, 2])
-        b1.button("저장" if cur["enabled"] else "저장하고 다시 켜기", type="primary", width="stretch",
-                  key=f"adm_rule_save_{k}", on_click=_admin_rule_save, args=(k, True))
-        if cur["enabled"]:
-            b2.button("이 알림 끄기 (삭제)", width="stretch", key=f"adm_rule_off_{k}", on_click=_admin_rule_save, args=(k, False))
-        st.caption("끈 규칙은 회원에게 더 이상 나가지 않아요. 기록은 남아서 언제든 다시 켤 수 있어요. 주간 브리핑 메일은 Apps Script 에서 고쳐요.")
+    """규칙 표: 알림 · 받는 사람 · 며칠 · 최대 개수 · 켜기 스위치 · 저장. 기록은 지우지 않고 쌓인다 (끄기 = 꺼진 기록 한 줄)."""
+    with st.container(horizontal=True, key="axrule_head"):
+        for t in ("알림", "받는 사람", "며칠", "최대 개수", "켜기", " "):
+            st.markdown(f'<span class="ax-rule-th">{t}</span>', unsafe_allow_html=True)
+    for k, d in admin.RULES.items():
+        cur = rules[k]
+        with st.container(horizontal=True, key=f"axrule_{'' if cur['enabled'] else 'off_'}{k}", vertical_alignment="center"):
+            st.markdown(f'<div class="ax-rule"><b class="ax-rule-n">{escape(d["name"])}</b><small>{escape(admin.why(k, rules))}</small>'
+                        f'<small class="ax-rule-when">{escape(d["when"].format(days=cur["days"]))} · {escape(d["where"])}</small></div>',
+                        unsafe_allow_html=True)
+            st.markdown(f'<span class="ax-rule-who">{escape(d["who"])}</span>', unsafe_allow_html=True)
+            dirty = False
+            with st.container(key=f"axrulec_days_{k}"):
+                if d["days"] is not None:
+                    v = st.number_input(f'{d["name"]} 며칠', min_value=0, max_value=30, value=int(cur["days"]), step=1,
+                                        key=f"adm_rule_days_{k}", label_visibility="collapsed")
+                    dirty = dirty or int(v) != int(cur["days"])
+                    st.markdown(f'<span class="ax-num-u">{"일 동안" if k == "notice" else "일 전부터"}</span>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<span class="ax-dash">—</span>', unsafe_allow_html=True)
+            with st.container(key=f"axrulec_max_{k}"):
+                if d["max_items"] is not None:
+                    v = st.number_input(f'{d["name"]} 최대 개수', min_value=1, max_value=30, value=int(cur["max_items"]), step=1,
+                                        key=f"adm_rule_max_{k}", label_visibility="collapsed")
+                    dirty = dirty or int(v) != int(cur["max_items"])
+                    st.markdown('<span class="ax-num-u">개</span>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<span class="ax-dash">—</span>', unsafe_allow_html=True)
+            st.session_state[f"adm_rule_on_{k}"] = bool(cur["enabled"])
+            st.toggle("켜짐" if cur["enabled"] else "꺼짐", key=f"adm_rule_on_{k}", on_change=_aadm_rule_toggle, args=(k,))
+            st.button("저장" if cur["enabled"] else "저장하고 켜기", key=f"axbs_mint_rulesave_{k}", disabled=not dirty and cur["enabled"],
+                      on_click=_admin_rule_save, args=(k, True))
+    # 아직 없는 기능 (시안의 제안) · 앱에서 못 고치는 메일: 표시만
+    with st.container(horizontal=True, key="axrule_off_rank", vertical_alignment="center"):
+        st.markdown('<div class="ax-rule"><b class="ax-rule-n">랭크 승급 (제안)</b><small>후기 도장 다음 단계에 닿았을 때</small>'
+                    '<small class="ax-rule-when">아직 없는 기능 — 표시만 해 둬요</small></div>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-rule-who">해당 회원</span>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-dash">—</span>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-dash">—</span>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-sw-off" role="switch" aria-checked="false" aria-disabled="true" aria-label="랭크 승급 켜기 (아직 없는 기능)">'
+                    '<i></i>꺼짐</span>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-muted ax-sm">아직 없는 기능</span>', unsafe_allow_html=True)
+    with st.container(horizontal=True, key="axrule_fixed_brief", vertical_alignment="center"):
+        st.markdown('<div class="ax-rule"><b class="ax-rule-n">주간 브리핑 메일</b>'
+                    '<small class="ax-rule-when">매주 월요일 11:00 · 메일 (automation/weekly_briefing.gs)</small></div>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-rule-who">운영자 본인 메일</span>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-dash">—</span>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-dash">—</span>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-sw-off" style="opacity:1">켜짐</span>', unsafe_allow_html=True)
+        st.markdown('<span class="ax-muted ax-sm">Apps Script 에서 고쳐요</span>', unsafe_allow_html=True)
+
+
+def _aadm_preview(rules: dict[str, dict], notice_rows: list[dict]) -> str:
+    """회원에게 보이는 알림 미리보기 (지금 데이터, 켜진 규칙만): 가장 가까운 오픈 · 종료 팝업, 최근 공지, 삭제 승인."""
+    pops = [r for r in stats.popups(store.all_rows()) if r.get("status") != "deleted"]
+    opening = sorted([r for r in pops if (s := mycal._day(r.get("start_date"))) and s >= TODAY],
+                     key=lambda r: str(r.get("start_date") or ""))
+    ending = sorted([r for r in pops if (s := mycal._day(r.get("start_date"))) and (e := mycal._day(r.get("end_date")))
+                     and s <= TODAY <= e and e != date(2099, 12, 31)], key=lambda r: str(r.get("end_date") or ""))
+    items: list[tuple[str, str, object]] = []
+    if rules["open"]["enabled"] and opening:
+        r = opening[0]
+        d = (mycal._day(r.get("start_date")) - TODAY).days
+        items.append((f'{"오늘 오픈" if d == 0 else f"오픈 D-{d}"} · {admin.popup_name(r)}', admin.why("open", rules), r.get("images")))
+    if rules["end"]["enabled"] and ending:
+        r = ending[0]
+        d = (mycal._day(r.get("end_date")) - TODAY).days
+        items.append((f'{"오늘 종료" if d == 0 else f"종료 D-{d}"} · {admin.popup_name(r)}', admin.why("end", rules), r.get("images")))
+    if rules["notice"]["enabled"] and notice_rows:
+        items.append((str(notice_rows[0].get("title") or ""), admin.why("notice", rules), None))
+    if rules["del_ok"]["enabled"]:
+        items.append(("삭제 요청이 승인되었어요", admin.why("del_ok", rules), None))
+    blank = '<i class="ax-thumb md blank" aria-hidden="true"></i>'
+    body = "".join(f'<div class="ax-prev-i">{_aadm_thumb(img, "md") if img else blank}'
+                   f'<span><small class="ax-new">새 알림</small><strong>{escape(t)}</strong><span>{escape(w)}</span></span></div>'
+                   for t, w, img in items) or '<div class="ax-empty">켜진 규칙으로 지금 보낼 알림이 없어요.</div>'
+    return ('<aside class="ax-card" aria-label="회원에게 보이는 알림 미리보기"><div class="ax-card-h"><h2>회원에게 이렇게 보여요</h2></div>'
+            f'<div class="ax-prev-box">{body}</div><p class="ax-cap">지금 데이터로 만든 모양이에요. 알림마다 \'왜 왔는지\' 한 줄이 붙어요 '
+            '(북마크 알림은 그 팝업을 북마크한 회원에게만).</p></aside>')
 
 
 def _admin_notices() -> None:
-    st.markdown('<div class="adm-panel-h">자동으로 나가는 알림</div>', unsafe_allow_html=True)
+    """알림 관리 (AdmX-5Alerts): [규칙 표 | 회원에게 보이는 미리보기] → [새 공지 | 보낸 공지(보이는 중 / 종에서 내려감)]."""
+    _aadm_head("notices", "알림 관리", "자동 알림 규칙과 공지")
     rules = _rules()
-    st.dataframe(admin.rules_table(rules), hide_index=True, width="stretch")
-    _admin_rule_editor(rules)
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
     rows = sorted([r for r in notices_store.current_rows() if r.get("target") == "all"],
                   key=lambda r: str(r.get("updated_at", "")), reverse=True)
-    left, right = st.columns([1.4, 1], gap="medium")
-    with right:
-        editing = st.session_state.get("adm_nt_edit")
-        cur = next((r for r in rows if str(r["entry_id"]) == editing), None) if editing else None
-        k = str(cur["entry_id"]) if cur else "new"
-        st.markdown(f'<div class="adm-panel-h">{"공지 수정" if cur else "새 공지 추가"}</div>', unsafe_allow_html=True)
-        st.text_input("제목", key=f"adm_nt_t_{k}", value=str(cur.get("title", "")) if cur else "", max_chars=60)
-        st.text_area("내용", key=f"adm_nt_b_{k}", value=str(cur.get("body", "")) if cur else "", max_chars=500, height=120)
-        c1, c2 = st.columns(2)
-        c1.button("저장", key=f"adm_nt_save_{k}", type="primary", width="stretch", on_click=_admin_notice_save,
-                  args=(str(cur["entry_id"]) if cur else None,))
-        if cur:
-            c2.button("취소", key="adm_nt_cancel", width="stretch", on_click=lambda: st.session_state.pop("adm_nt_edit", None))
-        st.caption("저장하면 모든 회원의 종 알림과 '내 캘린더 > 알림 받은 내역'에 보여요.")
-    with left:
-        st.markdown(f'<div class="adm-panel-h">공지 알림 {len(rows)}개</div>', unsafe_allow_html=True)
-        if not rows:
-            st.markdown('<div class="adm-empty">아직 보낸 공지 알림이 없어요. 오른쪽에서 추가해 보세요.</div>', unsafe_allow_html=True)
-        for r in rows:
-            eid = str(r["entry_id"])
-            st.markdown(
-                f'<div class="adm-req" style="--st:#14B8A6"><div class="rail"></div><div>'
-                f'<div class="t">{escape(str(r.get("title") or ""))}</div>'
-                f'<div class="d">{escape(str(r.get("body") or ""))}</div>'
-                f'<div class="d">{escape(_when(str(r.get("updated_at", ""))))} · 수정 {int(r.get("revision") or 1) - 1}회</div>'
-                '</div></div>', unsafe_allow_html=True)
-            c1, c2, _ = st.columns([1, 1, 3])
-            c1.button("수정", key=f"adm_nt_ed_{eid}", width="stretch",
-                      on_click=lambda e=eid: st.session_state.update(adm_nt_edit=e))
-            c2.button("삭제", key=f"adm_nt_del_{eid}", width="stretch", on_click=_admin_notice_delete, args=(r,))
+    with st.container(horizontal=True, key="ax_rulerow"):
+        with st.container(key="axcard_rules"):
+            st.markdown('<div class="ax-card-h"><h2>자동으로 나가는 알림</h2><span class="ax-muted ax-sm">바꾸면 다음 알림부터 적용돼요</span></div>',
+                        unsafe_allow_html=True)
+            _admin_rule_editor(rules)
+            st.markdown('<p class="ax-cap">끈 규칙은 회원에게 더 이상 나가지 않아요. 기록은 남아서 언제든 다시 켤 수 있어요.</p>',
+                        unsafe_allow_html=True)
+        st.markdown(_aadm_preview(rules, rows), unsafe_allow_html=True)
+    shown = admin.notice_shown(rows, rules["notice"], TODAY)
+    editing = st.session_state.get("adm_nt_edit")
+    cur = next((r for r in rows if str(r["entry_id"]) == editing), None) if editing else None
+    k = str(cur["entry_id"]) if cur else "new"
+    with st.container(horizontal=True, key="ax_ntrow"):
+        with st.container(key="axcard_ntform"):
+            st.markdown(f'<h2>{"공지 수정" if cur else "새 공지 보내기"}</h2>', unsafe_allow_html=True)
+            st.text_input("제목", key=f"adm_nt_t_{k}", value=str(cur.get("title", "")) if cur else "", max_chars=60,
+                          placeholder="예: 12월 점검 안내")
+            st.text_area("내용", key=f"adm_nt_b_{k}", value=str(cur.get("body", "")) if cur else "", max_chars=500, height=120)
+            st.markdown(f'<p class="ax-cap">받는 사람: 모든 회원 · 종 알림에 {rules["notice"]["days"]}일 동안 보여요 '
+                        "(기간은 위 '관리자 공지' 규칙에서 바꿔요). '내 캘린더 > 알림 받은 내역'에도 남아요.</p>", unsafe_allow_html=True)
+            with st.container(horizontal=True, key="axnt_btns"):
+                st.button("수정 저장" if cur else "공지 보내기", key=f"axb_mint_ntsave_{k}", on_click=_admin_notice_save,
+                          args=(str(cur["entry_id"]) if cur else None,))
+                if cur:
+                    st.button("취소", key="axb_line_ntcancel", on_click=lambda: st.session_state.pop("adm_nt_edit", None))
+        with st.container(key="axcard_ntlist"):
+            st.markdown(f'<h2>보낸 공지 {len(rows)}개</h2>', unsafe_allow_html=True)
+            if not rows:
+                st.markdown('<div class="ax-empty">아직 보낸 공지가 없어요. 왼쪽에서 첫 공지를 보내 보세요.</div>', unsafe_allow_html=True)
+            for r in rows:
+                eid = str(r["entry_id"])
+                on = shown.get(eid, False)
+                with st.container(horizontal=True, key=f"axnti_{'on_' if editing == eid else ''}{eid}"):
+                    st.markdown(f'<div class="ax-nitem">{_aadm_tag("mint" if on else "gray", "보이는 중" if on else "종에서 내려감")}'
+                                f'<div class="ax-nitem-b"><strong>{escape(str(r.get("title") or ""))}</strong>'
+                                f'<p>{escape(str(r.get("body") or "")).replace(chr(10), "<br>")}</p><small>{_aadm_when(r.get("updated_at"))} · '
+                                f'수정 {int(r.get("revision") or 1) - 1}회</small></div></div>', unsafe_allow_html=True)
+                    st.button("수정", key=f"axbs_line_nted_{eid}", on_click=lambda e=eid: st.session_state.update(adm_nt_edit=e))
+                    st.button("삭제", key=f"axbs_red_ntdel_{eid}", on_click=_admin_notice_delete, args=(r,))
+
+
+# 회원 정보: 받는 정보 / 받지 않는 정보 (PRIVACY_TABLE · docs/privacy-policy.md 와 같은 내용)
+AX_YES = ["닉네임", "로그인 수단 (카카오 · 네이버 · 아이디)", "회원 번호 (계정 고유 번호를 알아볼 수 없게 바꾼 값)", "약관 동의 시각",
+          "프로필 사진 [선택]", "아이디 · 암호화한 비밀번호 (아이디 가입)", "접속한 날 (일별 접속 수)"]
+AX_NO = ["이메일", "전화번호", "실명", "생일", "카카오 · 네이버 고유 번호 원래 값"]
 
 
 def _admin_members() -> None:
-    st.markdown(
-        '<div class="adm-info"><b>수집하는 정보</b> — 닉네임 · 로그인 수단(카카오/네이버/아이디) · 회원 번호(계정 고유 번호를 '
-        '알아볼 수 없게 바꾼 값) · 약관 동의 시각 · 프로필 사진(선택: 카카오·네이버 사진 주소 또는 직접 올린 사진) · '
-        '아이디 가입이면 아이디와 <b>암호화한</b> 비밀번호 · 접속한 날(일별 접속 수)<br>'
-        '<b>수집하지 않는 정보</b> — 이메일 · 전화번호 · 실명 · 생일 · 카카오/네이버 고유 번호 원래 값</div>',
-        unsafe_allow_html=True)
+    """회원 정보 (AdmX-6Members): [받는 정보 | 받지 않는 정보] → 닉네임 찾기 · 가입 방법 · 정렬 + 회원 표(후기 도장 포함)
+    → 비활성 '강제 탈퇴 · 파기'. 화면에 보이는 개인정보는 예전 표와 같은 칸만."""
+    from common import stamp
     rows = members.all_rows()
     latest = mycal.latest_rows(rows)
     first = {}
@@ -11231,19 +12458,69 @@ def _admin_members() -> None:
             first[str(r["entry_id"])] = d.isoformat() if d else ""
     last = admin.last_visit(visits.all_rows())
     keys = {k.strip() for k in (os.getenv("ADMIN_MEMBER_KEYS") or DEFAULT_ADMIN).split(",") if k.strip()}
-    table = pd.DataFrame([{
-        "회원 번호": str(r["entry_id"]), "닉네임": r.get("nickname") or "(탈퇴)",
-        "로그인 수단": auth.PROVIDER_LABEL.get(str(r.get("provider")), "-"),
-        "가입일": first.get(str(r["entry_id"]), ""), "약관 동의": str(r.get("agreed_at") or "")[:16].replace("T", " "),
-        "최근 접속": last.get(str(r["entry_id"]), "-"),
-        "상태": "탈퇴" if r.get("status") == "deleted" else "활동",
-        "권한": "관리자" if str(r["entry_id"]) in keys else "일반 회원",
-    } for r in latest])
-    st.markdown(f'<div class="adm-panel-h" style="margin-top:12px">회원 {len(table)}명</div>', unsafe_allow_html=True)
-    if table.empty:
-        st.markdown('<div class="adm-empty">아직 가입한 회원이 없어요.</div>', unsafe_allow_html=True)
-    else:
-        st.dataframe(table.sort_values("가입일", ascending=False), hide_index=True, width="stretch")
+    table = stamp.counts(reviews.current_rows())
+    people = []
+    for r in latest:
+        mid = str(r["entry_id"])
+        gone = r.get("status") == "deleted"
+        n = 0 if gone else table.get(f"m{mid[:4]}", 0)
+        t = stamp.tier_of(n)
+        people.append({"id": mid, "nick": str(r.get("nickname") or "") or "(탈퇴)",
+                       "via": auth.PROVIDER_LABEL.get(str(r.get("provider")), "-"), "joined": first.get(mid, ""),
+                       "agreed": str(r.get("agreed_at") or "")[:16].replace("T", " "), "last": last.get(mid, ""),
+                       "gone": gone, "admin": mid in keys, "stamps": n, "lv": t.lv if t else 0})
+    active = sum(1 for p in people if not p["gone"])
+    _aadm_head("members", "회원 정보", f"회원 {active}명",
+               sub=f"탈퇴 {len(people) - active}명 기록 포함 {len(people)}명" if len(people) > active else "")
+    st.markdown(
+        '<div class="ax-grid2"><section class="ax-card ax-top-teal"><div class="ax-card-h"><h2>받는 정보</h2></div><div class="ax-chips">'
+        + "".join(f'<span class="ax-chip yes">{escape(y)}</span>' for y in AX_YES)
+        + '</div><p class="ax-cap">비밀번호는 직접 저장하지 않고 Supabase DB 함수가 암호화해요. 사진은 선택 동의가 있을 때만 저장해요.</p></section>'
+        '<section class="ax-card ax-top-gray"><div class="ax-card-h"><h2>받지 않는 정보</h2></div><div class="ax-chips">'
+        + "".join(f'<span class="ax-chip no">{escape(n)}</span>' for n in AX_NO)
+        + '</div><p class="ax-cap">만 14세 이상인지는 가입 화면의 [필수] 동의로 확인해요.</p></section></div>', unsafe_allow_html=True)
+    vias = ["전체"] + list(dict.fromkeys(auth.PROVIDER_LABEL.values()))
+    sorts = {"join": "최근 가입순", "visit": "최근 접속순", "stamp": "도장 많은 순"}
+    with st.container(key="axcard_mlist"):
+        title_slot = st.empty()
+        with st.container(horizontal=True, key="ax_mfilter", vertical_alignment="bottom"):
+            with st.container(key="axq_mq"):
+                q = st.text_input("닉네임 검색", key="adm_mq", placeholder="닉네임 검색", label_visibility="collapsed")
+            with st.container(key="axq_mp", width=150):
+                via = st.selectbox("가입 방법", vias, key="adm_mp")
+            with st.container(key="axq_ms", width=160):
+                sort = st.selectbox("정렬", list(sorts), format_func=sorts.get, key="adm_ms")
+            if q or via != "전체" or sort != "join":
+                st.button("처음대로", key="axlink_mreset",
+                          on_click=lambda: st.session_state.update(adm_mq="", adm_mp="전체", adm_ms="join"))
+        low = str(q or "").strip().lower()
+        shown = [p for p in people if (not low or low in p["nick"].lower()) and (via == "전체" or p["via"] == via)]
+        if sort == "visit":
+            shown.sort(key=lambda p: p["last"], reverse=True)
+        elif sort == "stamp":
+            shown.sort(key=lambda p: (p["stamps"], p["joined"]), reverse=True)
+        else:
+            shown.sort(key=lambda p: p["joined"], reverse=True)
+        title_slot.markdown(f'<h2>회원 목록 {len(shown)}명</h2>', unsafe_allow_html=True)
+        if not people:
+            st.markdown('<div class="ax-empty">아직 가입한 회원이 없어요. 회원이 가입하면 여기에 쌓여요.</div>', unsafe_allow_html=True)
+        elif not shown:
+            st.markdown('<div class="ax-empty">조건에 맞는 회원이 없어요.</div>', unsafe_allow_html=True)
+        else:
+            trs = "".join(
+                f'<tr class="{"gone" if p["gone"] else ""}"><td><b>{escape(p["nick"])}</b></td>'
+                f'<td class="ax-nowrap">{_ad_rank_chip(p["lv"])} <span class="ax-muted ax-sm">도장 {p["stamps"]}개</span></td>'
+                f'<td>{escape(p["via"])}</td><td class="ax-nowrap">{p["joined"]}</td><td class="ax-nowrap ax-muted">{escape(p["agreed"])}</td>'
+                f'<td class="ax-nowrap">{escape(p["last"]) or "-"}</td><td>{_aadm_tag("gray", "탈퇴") if p["gone"] else "활동"}</td>'
+                f'<td>{_aadm_tag("dark" if p["admin"] else "gray", "관리자" if p["admin"] else "회원")}</td>'
+                f'<td class="ax-mono ax-muted">{escape(p["id"])}</td></tr>' for p in shown)
+            st.markdown('<div class="ax-tbl-box tall"><table class="ax-tbl ax-members"><thead><tr><th>닉네임</th><th>후기 도장</th>'
+                        '<th>가입 방법</th><th>가입일</th><th>약관 동의</th><th>최근 접속</th><th>상태</th><th>권한</th><th>회원 번호</th>'
+                        f'</tr></thead><tbody>{trs}</tbody></table></div>', unsafe_allow_html=True)
+        with st.container(horizontal=True, key="ax_mfoot", vertical_alignment="center"):
+            st.markdown('<span class="ax-muted ax-sm">관리자는 서버 환경변수 ADMIN_MEMBER_KEYS 의 회원 번호로 정해요. '
+                        '후기 도장 = 다녀온 후기를 쓴 팝업 수.</span>', unsafe_allow_html=True)
+            st.button("강제 탈퇴 · 파기 (공개 전 보완 예정)", key="axbs_dashed_purge", disabled=True)
 
 
 # 관리자 바로가기. 예약 작업 주소는 계정마다 달라서 .env / Streamlit Secrets 의 ADMIN_ROUTINE_URL (없으면 예약 작업 목록)
@@ -11254,79 +12531,17 @@ def _supabase_dashboard_url() -> str:
     host = urlparse(os.getenv("SUPABASE_URL", "")).hostname or ""
     ref = host.split(".")[0] if host.endswith(".supabase.co") else ""
     return f"https://supabase.com/dashboard/project/{ref}/editor" if ref else "https://supabase.com/dashboard/projects"
-ADM_KPIS = [("new", "이번 주 새로 등록", "곳"), ("live", "진행 중", "곳"), ("soon", "예정", "곳"),
-            ("members", "회원 (활동)", "명"), ("requests", "삭제 요청 대기", "건")]
 
 
-def _adm_kpi_pick(k: str) -> None:
-    if k in ("members", "requests"):           # 회원 · 삭제 요청은 그 탭으로
-        st.session_state.update(adm_tab=k, adm_kpi=None)
-        return
-    st.session_state["adm_kpi"] = None if st.session_state.get("adm_kpi") == k else k
-
-
-def _adm_open_popup(cafe_id: str) -> None:
-    """관리자 목록에서 팝업을 누름 → 메인(리스트 보기)으로 가서 그 팝업 상세."""
-    st.session_state.update(list_only=True, cal_view=False, box_view=False, _gnb_to_map=True)
-    _gnb_open(cafe_id)
-
-
-def _admin_kpis(pop_rows: list[dict], pend: int, n_members: int) -> None:
-    mon, _ = admin.week_of(TODAY)
-    live, soon = [], []
-    for r in pop_rows:
-        if r.get("status") == "deleted":
-            continue
-        s_, e_ = mycal._day(r.get("start_date")), mycal._day(r.get("end_date"))
-        if s_ and e_ and s_ <= TODAY <= e_:
-            live.append(r)
-        elif s_ and s_ > TODAY:
-            soon.append(r)
-    lists = {"new": [r for r in admin.popup_board(store.all_rows(), mon)["새로 생성"] if r.get("status") != "deleted"],
-             "live": sorted(live, key=lambda r: str(r.get("end_date") or "")),
-             "soon": sorted(soon, key=lambda r: str(r.get("start_date") or ""))}
-    nums = {"new": len(lists["new"]), "live": len(live), "soon": len(soon), "members": n_members, "requests": pend}
-    picked = st.session_state.get("adm_kpi")
-    with st.container(horizontal=True, key="adm_kpis"):
-        for k, label, unit in ADM_KPIS:
-            alert = " alert" if k == "requests" and pend else ""
-            with st.container(key=f"admk_{'on_' if picked == k else ''}{k}"):
-                arrow = ("expand_less" if picked == k else "expand_more") if k in ("new", "live", "soon") else "chevron_right"
-                st.markdown(f'<div class="adm-kpi{alert}"><span>{label}{_mi(arrow, "kpi-arr")}</span>'
-                            f'<b>{nums[k]}<small>{unit}</small></b></div>', unsafe_allow_html=True)
-                st.button("보기", key=f"admkb_{k}", on_click=_adm_kpi_pick, args=(k,))
-    if picked not in lists:
-        return
-    rows = lists[picked]
-    label = dict((k, l) for k, l, _ in ADM_KPIS)[picked]
-    # '고른 주 현황' 칸반과 같은 모양 (색 띠 머리 + 포스터 카드). 숫자 카드를 다시 누르면 접힌다
-    color = {"new": "#14B8A6", "live": "#23866A", "soon": "#3672BD"}[picked]
-    show_all = bool(st.session_state.get(f"adm_kpi_all_{picked}"))
-    shown = rows if show_all else rows[:12]
-    cards = "".join(
-        f'<a class="adm-card adm-link adm-pcard" href="{_adm_href(r)}" target="_self">'
-        f'<img src="{escape(_poster_url(r.get("images")))}" alt="" loading="lazy"><div>'
-        f'<b>{escape(str(r.get("work") or ""))}</b><span>{escape(str(r.get("cafe_name") or ""))}</span>'
-        f'<em>{escape(_period(r, lambda d: f"{d:%m-%d}", show_raw=False))}</em></div></a>'
-        for r in shown) or '<div class="adm-empty">해당하는 팝업이 없어요.</div>'
-    st.markdown(f'<div class="adm-col adm-kpilist" style="--c:{color}"><div class="adm-colhead">{label}'
-                f'<small>{len(rows)}곳 · 누르면 상세로</small></div><div class="adm-kgrid">{cards}</div></div>',
-                unsafe_allow_html=True)
-    with st.container(horizontal=True, horizontal_alignment="center", key="adm_kpi_foot"):
-        if len(rows) > 12:
-            st.button("접기" if show_all else f"{len(rows) - 12}곳 더 보기",
-                      icon=":material/expand_less:" if show_all else ":material/expand_more:", key=f"adm_kpi_more_{picked}",
-                      on_click=lambda k=f"adm_kpi_all_{picked}": st.session_state.update({k: not st.session_state.get(k)}))
-        st.button("목록 닫기", icon=":material/close:", key="adm_kpi_close", type="tertiary",
-                  on_click=lambda: st.session_state.update(adm_kpi=None))
+ST_LABEL = {"pending": "대기", "approved": "승인", "rejected": "거부"}
 
 
 def page_data() -> None:
-    """관리자 대시보드. 관리자(지정한 회원 번호)만."""
+    """관리자 대시보드 (A안, 11/26): 왼쪽 사이드바 + 8페이지. 관리자(지정한 회원 번호)만."""
     st.markdown(GLOBAL_CSS + STATS_CSS + ADMIN_CSS, unsafe_allow_html=True)
     _no_translate()
     with st.container(key="topbar"):
-        _gnb(None, on_map=False)      # 메인과 같은 메뉴바
+        _gnb(None, on_map=False)      # 메인과 같은 메뉴바 (관리자 화면에서는 CSS 로 숨김 — 로그인 쿠키 처리 · 화면 이동은 그대로)
     flash = st.session_state.pop("flash", None)
     if flash:
         if isinstance(flash, tuple):
@@ -11338,81 +12553,119 @@ def page_data() -> None:
                     '관리자 계정으로 로그인해 주세요.</div>', unsafe_allow_html=True)
         st.page_link(PAGES["login"], label="로그인하기", icon=":material/login:")
         return
-    rows = stats.popups(store.all_rows())
-    status = stats.status_counts(rows, TODAY)
-    mon, sun = admin.week_of(TODAY)
-    new_week = len(admin.popup_board(store.all_rows(), mon)["새로 생성"])
+    st.markdown(A_ADMIN_CSS, unsafe_allow_html=True)
+    tab = st.session_state.get("adm_tab", "home")
+    if tab not in dict((t, 1) for t, _, _ in AX_PAGES):
+        tab = "home"
     pend = sum(1 for r in del_requests.current_rows() if r.get("decision") == "pending")
-    n_members = sum(1 for r in members.current_rows())
-    # 바로가기: 매일 수집을 돌리는 Claude 예약 작업 · 앱 데이터가 있는 Supabase 표 (11/18 요청: Notion 트래커 → Supabase)
-    with st.container(horizontal=True, horizontal_alignment="right", key="adm_links"):
-        st.link_button("Claude 예약 작업 (매일 08:00 수집)", ADMIN_ROUTINE_URL, icon=":material/schedule:")
-        st.link_button("Supabase 데이터 보기", _supabase_dashboard_url(), icon=":material/database:")
-        # 앱은 Supabase 를 처음에 한 번 불러와 기억한다 (매일 08:45 · 앱에서 저장할 때 자동 갱신).
-        # Supabase 화면에서 직접 고쳤을 때만 이 버튼으로 바로 새로 불러온다
-        if st.button("데이터 새로 불러오기", icon=":material/refresh:", key="adm_refresh"):
-            storage_mod.refresh_all()
-            st.session_state["flash"] = ("Supabase 에서 새로 불러왔어요.", ":material/check_circle:")
-            st.rerun()
-    st.markdown(f'<div class="adm-eyebrow">ANI:WHERE ADMIN · {TODAY:%Y.%m.%d}</div>'
-                '<div class="adm-title">관리자 대시보드</div>'
-                f'<div class="adm-sub">저장소: {escape(store.mode)} · 모든 기록은 지우지 않고 쌓여요 (append-only)</div>'
-                , unsafe_allow_html=True)
-    _admin_kpis(rows, pend, n_members)
-    tab = st.session_state.get("adm_tab", "board")
-    with st.container(horizontal=True, key="adm_tabs"):
-        for t, label in ADMIN_TABS:
-            lab = f"{label} {pend}" if t == "requests" and pend else label
-            st.button(lab, key=f"admtab_{'on_' if tab == t else ''}{t}", on_click=_adm_tab, args=(t,))
-    if tab == "board":
-        _admin_board()
-    elif tab == "usage":
-        _admin_usage()
-    elif tab == "survey":
-        _admin_survey()
-    elif tab == "requests":
-        _admin_requests()
-    elif tab == "notices":
-        _admin_notices()
-    elif tab == "members":
-        _admin_members()
-    else:
-        _admin_raw()
+    _aadm_side(tab, pend)
+    with st.container(key="ax_main"):
+        if getattr(store, "fallback_reason", ""):
+            st.markdown(f'<div class="ax-warnbox" role="alert">Supabase 에 연결하지 못해 로컬 파일을 보여 주고 있어요: '
+                        f'{escape(store.fallback_reason[:200])}</div>', unsafe_allow_html=True)
+        {"home": _admin_home, "board": _admin_board, "usage": _admin_usage, "requests": _admin_requests,
+         "notices": _admin_notices, "members": _admin_members, "raw": _admin_raw, "survey": _admin_survey}[tab]()
+
+
+RAW_PAGE = 100
+
+
+def _aadm_csv_cell(v) -> str:
+    """CSV 한 칸. 엑셀이 수식으로 읽는 글(= + @ 로 시작)은 앞에 ' 를 붙인다 (웹 a-admin.ts csvCell 과 같음)."""
+    s = "" if v is None else str(v)
+    if s[:1] in ("=", "+", "@", "\t"):
+        s = "'" + s
+    return '"' + s.replace('"', '""') + '"' if any(ch in s for ch in '",\r\n') else s
 
 
 def _admin_raw() -> None:
-    """원본 데이터: 저장소에 실제로 쌓인 기록 (append-only 라서 수정·삭제도 행으로 보인다)."""
+    """원본 데이터 (AdmX-7Raw): 머리(CSV · Supabase 열기) → 표 고르기 칩 → '지금 내용만 / 모든 기록' → 찾기 + 표 + 페이지 나눔.
+    append-only 라서 수정·삭제도 행으로 보인다. CSV 는 화면과 같은 조건 (북마크 user 칸은 빼고)."""
     where = {"local": "내 컴퓨터의 data/*.json 파일", "sheets": "Google Sheets",
              "supabase": "Supabase 클라우드 (PostgreSQL)"}.get(store.mode, store.mode)
-    st.markdown(f'<div class="stats-title">데이터 보기</div><div class="stats-sub">지금 저장소: <b>{where}</b> '
-                f'(STORAGE_MODE={escape(os.getenv("STORAGE_MODE", "local"))})</div>', unsafe_allow_html=True)
-    if getattr(store, "fallback_reason", ""):
-        st.warning(f"Supabase 에 연결하지 못해 로컬 파일을 보여 주고 있어요: {store.fallback_reason[:200]}",
-                   icon=":material/cloud_off:")
-    if store.mode == "local":
-        st.caption("Supabase 로 옮기면 같은 표가 Supabase 대시보드 → Table Editor 에도 보여요 (db.md 6절).")
     stores = {"cafes": store, "reviews": reviews, "favorites": favs, "members": members,
               "del_requests": del_requests, "notices": notices_store, "visits": visits}
-    cols = st.columns(len(stores))
-    for col, (name, s_) in zip(cols, stores.items()):
-        col.metric(f"{DATA_TABLES[name]} ({name})", f"{len(s_.all_rows())}행",
-                   f"지금 {len(s_.current_rows())}건", delta_color="off", border=True)
-    tab = st.segmented_control("표", list(DATA_TABLES), format_func=lambda n: DATA_TABLES[n], default="cafes",
-                               key="data_tab") or "cafes"
-    rows = stores[tab].all_rows()
-    if not rows:
-        st.info("아직 기록이 없어요.", icon=":material/info:")
-        return
-    df = pd.DataFrame(rows).drop(columns=DATA_HIDE[tab], errors="ignore")
-    q = st.text_input("찾기", placeholder="entry_id · 이름 · 작품 등", key="data_q")
-    if q.strip():
-        df = df[df.astype(str).apply(lambda r: r.str.contains(q.strip(), case=False, regex=False)).any(axis=1)]
-    if st.toggle("최신 기록만 (수정 이력 숨기기)", key="data_now") and "entry_id" in df:
-        df = df.sort_values("revision").groupby("entry_id", as_index=False).tail(1)
-    if "updated_at" in df:
-        df = df.sort_values("updated_at", ascending=False)
-    st.caption(f"{len(df)}행 · 최근 쓴 순서")
-    st.dataframe(df, hide_index=True, width="stretch", height=520)
+    tab = st.session_state.get("data_tab") or "cafes"
+    if tab not in stores:
+        tab = "cafes"
+    only_now = bool(st.session_state.get("data_now"))
+    q = str(st.session_state.get("data_q") or "").strip()
+    all_rows = stores[tab].all_rows()
+    cols = [c for c in stores[tab].headers if c not in DATA_HIDE[tab]]
+    rows = all_rows
+    if q:
+        low = q.lower()
+        rows = [r for r in rows if any(low in str(r.get(c) if r.get(c) is not None else "").lower() for c in cols)]
+    if only_now:
+        rows = mycal.latest_rows(rows)
+    rows = sorted(rows, key=lambda r: str(r.get("updated_at") or ""), reverse=True)
+    csv = "﻿" + "\r\n".join(",".join(_aadm_csv_cell(v) for v in line)
+                                for line in [cols] + [[r.get(c, "") for c in cols] for r in rows]) + "\r\n"
+
+    def right() -> None:
+        st.download_button("CSV 내려받기", csv.encode("utf-8"), file_name=f"{tab}{'_now' if only_now else ''}_{TODAY:%Y%m%d}.csv",
+                           mime="text/csv", key="axraw_csv", on_click="ignore", width="content")
+        with st.container(key="axraw_sb", width="content"):
+            st.link_button("Supabase 에서 열기 ↗", _supabase_dashboard_url(), width="content")
+    _aadm_head("raw", "원본 데이터", "표별 원본",
+               sub=f"지금 저장소: <b>{escape(where)}</b> (STORAGE_MODE={escape(os.getenv('STORAGE_MODE', 'local'))})", right=right)
+    with st.container(horizontal=True, key="ax_tabsel"):
+        for name, s_ in stores.items():
+            st.button(f"{name} {DATA_TABLES[name]} · {len(s_.all_rows()):,}줄 · 지금 {len(s_.current_rows()):,}",
+                      key=f"axtab_{'on_' if tab == name else ''}{name}",
+                      on_click=lambda n=name: st.session_state.update(data_tab=n, adm_raw_p=1))
+    with st.container(horizontal=True, key="ax_aonly", vertical_alignment="center"):
+        st.markdown('<span class="ax-aonly"><strong>append-only 표</strong> · 수정 · 삭제도 새 줄로 쌓여요. 같은 entry_id 의 마지막 '
+                    'revision 이 지금 내용이에요.</span>', unsafe_allow_html=True)
+        with st.container(horizontal=True, key="ax_rawmode", width="content"):
+            st.button("지금 내용만", key=f"axmode_{'on_' if only_now else ''}now",
+                      on_click=lambda: st.session_state.update(data_now=True, adm_raw_p=1))
+            st.button("모든 기록", key=f"axmode_{'' if only_now else 'on_'}all",
+                      on_click=lambda: st.session_state.update(data_now=False, adm_raw_p=1))
+    if not all_rows:
+        st.markdown('<div class="ax-empty">아직 기록이 없어요. 앱이나 웹에서 이 표에 쓰면 여기에 쌓여요.</div>', unsafe_allow_html=True)
+    else:
+        pages = max(1, -(-len(rows) // RAW_PAGE))
+        page = min(pages, max(1, int(st.session_state.get("adm_raw_p") or 1)))
+        shown = rows[(page - 1) * RAW_PAGE: page * RAW_PAGE]
+        newest = {str(r["entry_id"]): int(r.get("revision") or 0) for r in mycal.latest_rows(all_rows)}
+        with st.container(key="axcard_raw"):
+            with st.container(key="axq_rawq", width=320):
+                st.text_input("찾기", key="data_q", placeholder="찾기: entry_id · 이름 · 작품 등", label_visibility="collapsed",
+                              on_change=lambda: st.session_state.update(adm_raw_p=1))
+            trs = []
+            for r in shown:
+                is_now = newest.get(str(r.get("entry_id"))) == int(r.get("revision") or 0)
+                tds = []
+                for c in cols:
+                    v = "" if r.get(c) is None else str(r.get(c))
+                    if c == "revision":
+                        tds.append(f'<td class="ax-mono num">{escape(v)}' + ('<span class="ax-now">지금</span>' if is_now and not only_now else "")
+                                   + '</td>')
+                    elif c == "status":
+                        tds.append(f'<td>{_aadm_tag("red-soft" if v == "deleted" else "mint", v)}</td>')
+                    else:
+                        cls = ' class="ax-mono ax-muted"' if c in ("row_id", "entry_id", "updated_at") else ""
+                        tds.append(f'<td{cls}><span class="ax-cell">{_aadm_x(v)}</span></td>')
+                trs.append(f'<tr class="{"now" if is_now and not only_now else ""}">{"".join(tds)}</tr>')
+            st.markdown('<div class="ax-tbl-box raw"><table class="ax-tbl ax-rawt"><thead><tr>'
+                        + "".join(f'<th class="ax-mono">{escape(c)}</th>' for c in cols) + f'</tr></thead><tbody>{"".join(trs)}</tbody>'
+                        '</table></div>' if rows else '<div class="ax-empty">찾는 기록이 없어요. 찾기 글을 바꿔 보세요.</div>',
+                        unsafe_allow_html=True)
+            with st.container(horizontal=True, key="ax_pager", vertical_alignment="center"):
+                rng = f"{(page - 1) * RAW_PAGE + 1}–{min(page * RAW_PAGE, len(rows))}" if rows else "0"
+                st.markdown(f'<span class="ax-pager-t">{len(rows)}행 · 최근 쓴 순서 · {rng}'
+                            + (f" (팝업 {len(store.current_rows())}곳)" if tab == "cafes" else "") + '</span>', unsafe_allow_html=True)
+                if pages > 1:
+                    st.button("", icon=":material/chevron_left:", key="axbs_line_rawprev", disabled=page <= 1,
+                              on_click=lambda: st.session_state.update(adm_raw_p=page - 1))
+                    st.markdown(f'<span class="ax-pager-t">{page} / {pages}</span>', unsafe_allow_html=True)
+                    st.button("", icon=":material/chevron_right:", key="axbs_line_rawnext", disabled=page >= pages,
+                              on_click=lambda: st.session_state.update(adm_raw_p=page + 1))
+    st.markdown('<p class="ax-cap">Supabase 화면에서 직접 고쳤다면 \'데이터 새로 불러오기\'(한눈에 보기)를 눌러야 앱에 보여요. 북마크 표의 '
+                '회원 칸(user)은 화면 · CSV 에 내보내지 않아요.'
+                + (" Supabase 로 옮기면 같은 표가 Supabase 대시보드 → Table Editor 에도 보여요 (db.md 6절)." if store.mode == "local" else "")
+                + '</p>', unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------ 리스트 옆 '팝업에게 물어보기' 대화창

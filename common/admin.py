@@ -295,3 +295,147 @@ def why(key: str, settings: dict[str, dict] | None = None) -> str:
         return ""
     days = (settings or {}).get(key, {}).get("days", d["days"])
     return d["why"].format(days=days)
+
+
+# ------------------------------------------------------------------ 관리자 화면 A안 (11/26, docs/design/admin-handoff)
+# 모두 읽기만 한다 (저장소에 쓰지 않음). 웹 web/lib/server/a-admin.ts 와 같은 규칙 · 같은 숫자.
+# 완결률은 stats.completeness 를 그대로 쓰고, 여기서는 화면에 맞게 묶기만 한다.
+
+def _now_rows(all_rows: list[dict]) -> list[dict]:
+    """entry_id 별 최신 행 중 내리지 않은 것 (Storage.current_rows 와 같은 규칙)."""
+    return [r for r in mycal.latest_rows(all_rows) if r.get("status") != "deleted"]
+
+
+def popup_name(r: dict) -> str:
+    return f'{r.get("work") or ""} · {r.get("cafe_name") or ""}'.strip(" ·") or "(이름 없음)"
+
+
+def missing_of(row: dict) -> list[str]:
+    """이 팝업에서 빠진 '방문 전 정보'. 완결률(stats.completeness)이 빠졌다고 보는 칸을 그대로 쓴다."""
+    from . import stats
+    fields = stats.completeness([row])["fields"]
+    return [name for name in stats.VISIT_FIELDS.values() if not fields.get(name)]
+
+
+def need_fix(cafe_rows: list[dict], today: date) -> list[tuple[dict, list[str]]]:
+    """지금 보이는(내리지 않은) 팝업 중 아직 끝나지 않았고 방문 전 정보가 빠진 곳. 오래 손대지 않은 순."""
+    out = []
+    for r in _now_rows(cafe_rows):
+        e = mycal._day(r.get("end_date"))
+        if e and e < today:
+            continue                          # 끝난 팝업은 고칠 일이 아니다
+        miss = missing_of(r)
+        if miss:
+            out.append((r, miss))
+    return sorted(out, key=lambda t: str(t[0].get("updated_at") or ""))
+
+
+def last_collect(cafe_rows: list[dict]) -> dict | None:
+    """가장 최근 자동 수집 기록(editor='AI')의 시각 · 그날(한국 날짜) 새로 들어온(revision 1) 팝업 수. 없으면 None."""
+    last = max((str(r.get("updated_at") or "") for r in cafe_rows if r.get("editor") == "AI"), default="")
+    if not last:
+        return None
+    day = _day(last)
+    added = sum(1 for r in cafe_rows if r.get("editor") == "AI" and int(r.get("revision") or 0) == 1
+                and _day(r.get("updated_at")) == day)
+    return {"at": last, "day": day, "added": added}
+
+
+def purge_due(cafe_rows: list[dict], today: date) -> tuple[int, date]:
+    """다음 월요일 00:10 정리(supabase 012)에서 지워질 팝업 수: 다음 월요일 전에 끝났거나 지금 내려가 있는 팝업."""
+    monday = week_of(today)[0] + timedelta(days=7)
+    n = 0
+    for r in mycal.latest_rows(cafe_rows):
+        e = mycal._day(r.get("end_date"))
+        if (e and e < monday) or r.get("status") == "deleted":
+            n += 1
+    return n, monday
+
+
+def join_methods(member_now: list[dict], labels: dict[str, str]) -> list[tuple[str, int, int]]:
+    """지금 회원(current_rows, 탈퇴 제외)의 로그인 수단별 (이름, 명, %)."""
+    by: dict[str, int] = {}
+    for r in member_now:
+        k = labels.get(str(r.get("provider")), "기타")
+        by[k] = by.get(k, 0) + 1
+    n = len(member_now)
+    return sorted(((k, v, round(v / n * 100) if n else 0) for k, v in by.items()), key=lambda t: -t[1])
+
+
+def notice_shown(notice_rows: list[dict], rule: dict, today: date) -> dict[str, bool]:
+    """전체 공지마다 회원 종에 지금 보이는지 (화면의 _inbox 와 같은 규칙: 규칙이 켜져 있고, {days}일 안, 최근 {max}개 안)."""
+    out: dict[str, bool] = {}
+    n = 0
+    for r in sorted(notice_rows, key=lambda r: str(r.get("updated_at") or ""), reverse=True):
+        d = _day(r.get("updated_at"))
+        ok = bool(rule.get("enabled")) and not (d and (today - d).days > int(rule.get("days") or 14))
+        if ok:
+            n += 1
+            ok = n <= int(rule.get("max_items") or 5)
+        out[str(r.get("entry_id"))] = ok
+    return out
+
+
+def recent_activity(cafes: list[dict], reqs: list[dict], review_rows: list[dict], member_rows: list[dict],
+                    labels: dict[str, str], limit: int = 8) -> list[dict]:
+    """저장된 기록(팝업 · 삭제 요청 · 리뷰 · 회원)에서 최근 일 {kind, text, at}. 같은 날 같은 종류의 자동 기록은 한 줄로 묶는다.
+    kind: 등록 · 수정 · 내림 · 삭제 요청 · 처리 · 리뷰 · 가입."""
+    out: list[dict] = []
+    groups: dict[str, dict] = {}
+
+    def group(key: str, kind: str, at: str, text) -> dict:
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {"kind": kind, "at": at, "n": 0, "text": text}
+        g["n"] += 1
+        g["at"] = max(g["at"], at)
+        return g
+
+    for r in cafes:
+        at = str(r.get("updated_at") or "")
+        day = _day(at)
+        if not day:
+            continue
+        who = str(r.get("editor") or "")
+        rev = int(r.get("revision") or 0)
+        if r.get("status") == "deleted":
+            if r.get("source") == "기간 종료":
+                group(f"end:{day}", "내림", at, lambda n: f"기간이 끝난 팝업 {n}곳을 지도에서 내림")
+            else:
+                out.append({"kind": "내림", "at": at,
+                            "text": f'{popup_name(r)} 내림' + (f' ({r.get("source")})' if r.get("source") else "")})
+        elif who == "AI":
+            if rev == 1:
+                group(f"ai-new:{day}", "등록", at, lambda n: f"AI 자동 수집으로 새 팝업 {n}곳")
+            else:
+                group(f"ai-fix:{day}", "수정", at, lambda n: f"AI 자동 수집이 팝업 {n}곳 정보를 갱신")
+        else:
+            out.append({"kind": "등록" if rev == 1 else "수정", "at": at,
+                        "text": f'{f"{who}님이 " if who else ""}{popup_name(r)} {"등록" if rev == 1 else "수정"}'})
+    for r in reqs:
+        at = str(r.get("updated_at") or "")
+        title = str(r.get("target_title") or "")
+        d = r.get("decision")
+        if d == "pending":
+            out.append({"kind": "삭제 요청", "at": at, "text": f'{r.get("requester_nick") or "회원"}님이 {title} 삭제 요청'})
+        elif d in ("approved", "rejected"):
+            out.append({"kind": "처리", "at": at, "text": f'{title} 삭제 요청 {"승인" if d == "approved" else "거부"}'})
+    names = {str(r.get("entry_id")): popup_name(r) for r in mycal.latest_rows(cafes)}
+    for r in review_rows:
+        if int(r.get("revision") or 0) != 1 or r.get("status") == "deleted":
+            continue
+        at = str(r.get("updated_at") or "")
+        name = names.get(str(r.get("cafe_id")), "(내려간 팝업)")
+        group(f'rv:{_day(at)}:{r.get("cafe_id")}', "리뷰", at, lambda n, name=name: f"{name}에 새 글 {n}개")
+    for r in member_rows:
+        if int(r.get("revision") or 0) != 1:
+            continue
+        at = str(r.get("updated_at") or "")
+        g = group(f"join:{_day(at)}", "가입", at, None)
+        by = g.setdefault("by", {})
+        p = labels.get(str(r.get("provider")), "기타")
+        by[p] = by.get(p, 0) + 1
+        g["text"] = lambda n, by=by: f'새 회원 {n}명 ({" · ".join(f"{k} {v}" for k, v in by.items())})'
+    for g in groups.values():
+        out.append({"kind": g["kind"], "at": g["at"], "text": g["text"](g["n"])})
+    return sorted(out, key=lambda f: f["at"], reverse=True)[:limit]
