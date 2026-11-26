@@ -30,6 +30,8 @@ export type FeedCard = {
 export type FeedPop = { id: string; name: string; poster: string; n: number; label: string };
 
 const LIST_MAX = 6;
+const SLIDE_MAX = 8;
+const SLIDE_MS = 3000;
 const MOBILE_MAX = 3;
 const KIND_CLASS: Record<string, string> = { "다녀온 후기": "visit", 기대평: "hope", 기타: "etc" };
 const two = (n: number) => String(n).padStart(2, "0");
@@ -79,10 +81,23 @@ export default function ReviewFeed({
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => setNow(Date.now()), []);
 
+  const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+
   const all = [...cards].sort(byNew);
   const list = kind === "전체" ? all : all.filter((c) => c.kind === kind);
-  const top = list.find((c) => c.photos.length) ?? list[0];
-  const rest = list.filter((c) => c !== top).slice(0, LIST_MAX);
+  // '오늘의 꿀팁' 배너: 사진을 붙인 후기를 3초마다 넘긴다 (11/26 요청, ‹ › 버튼). 사진 후기가 없으면 가장 최근 후기 하나
+  const photoCards = list.filter((c) => c.photos.length).slice(0, SLIDE_MAX);
+  const slides = photoCards.length ? photoCards : list.slice(0, 1);
+  const n = slides.length;
+  const top = slides[n ? idx % n : 0];
+  const rest = list.filter((c) => c !== slides[0]).slice(0, LIST_MAX);
+  const go = (d: number) => setIdx((i) => (((i + d) % n) + n) % n);
+  useEffect(() => {
+    if (n < 2 || paused) return;
+    const t = window.setInterval(() => setIdx((i) => (i + 1) % n), SLIDE_MS);
+    return () => window.clearInterval(t);
+  }, [n, paused, idx]);
   const mobile = all.slice(0, MOBILE_MAX);
 
   return (
@@ -101,13 +116,36 @@ export default function ReviewFeed({
           {/* ---------- PC: 큰 꿀팁 카드 + 오른쪽 타임라인 ---------- */}
           <div className="ah-fd pc-only">
             {top ? (
-              <article className="ah-fd-top">
+              <article
+                className="ah-fd-top"
+                aria-roledescription="carousel"
+                aria-label="오늘의 꿀팁"
+                onMouseEnter={() => setPaused(true)}
+                onMouseLeave={() => setPaused(false)}
+                onFocus={() => setPaused(true)}
+                onBlur={() => setPaused(false)}
+              >
                 <div className="ah-fd-hero" style={top.photos[0] ? undefined : posterBg(top.poster)}>
                   {top.photos[0] && <img src={top.photos[0]} alt="후기 사진" loading="lazy" referrerPolicy="no-referrer" />}
                   <span className="ah-fd-badge">
                     <img src="/mascot.png" alt="" />
                     오늘의 꿀팁
                   </span>
+                  {n > 1 && (
+                    <>
+                      <button type="button" className="ah-fd-arw prev" aria-label="이전 꿀팁" onClick={() => go(-1)}>
+                        ‹
+                      </button>
+                      <button type="button" className="ah-fd-arw next" aria-label="다음 꿀팁" onClick={() => go(1)}>
+                        ›
+                      </button>
+                      <span className="ah-fd-dots" aria-hidden>
+                        {slides.map((c, i) => (
+                          <i key={c.id} className={i === idx % n ? "on" : undefined} />
+                        ))}
+                      </span>
+                    </>
+                  )}
                   {top.photos.length > 1 && (
                     <span className="ah-fd-thumbs">
                       {top.photos.slice(1, 3).map((src, i) => (
@@ -146,7 +184,11 @@ export default function ReviewFeed({
             <div className="ah-fd-side">
               <div className="ah-chips" role="group" aria-label="후기 종류">
                 {["전체", ...kinds].map((k) => (
-                  <button key={k} type="button" className="ah-chip" aria-pressed={kind === k} onClick={() => setKind(k)}>
+                  <button key={k} type="button" className="ah-chip" aria-pressed={kind === k} onClick={() => {
+                      setKind(k);
+                      setIdx(0);
+                    }}
+                  >
                     {k}
                   </button>
                 ))}

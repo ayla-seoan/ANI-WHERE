@@ -1753,3 +1753,56 @@
     animation: none;
   }
 }
+
+/* '오늘의 꿀팁' 배너 넘기기 (11/26 요청): 사진 후기를 3초마다, ‹ › 버튼 · 아래 점 */
+.ah-fd-arw {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 40px;
+  height: 40px;
+  margin-top: -20px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #26302d;
+  font-size: 24px;
+  line-height: 38px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  padding: 0;
+}
+.ah-fd-arw:hover {
+  background: #fff;
+  color: #0d9488;
+}
+.ah-fd-arw.prev {
+  left: 12px;
+}
+.ah-fd-arw.next {
+  right: 12px;
+}
+.ah-fd-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 3;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(31, 42, 39, 0.35);
+}
+.ah-fd-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.6);
+  transition: width 0.2s;
+}
+.ah-fd-dots i.on {
+  width: 18px;
+  background: #fff;
+}

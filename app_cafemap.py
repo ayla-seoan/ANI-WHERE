@@ -3723,6 +3723,68 @@ A_FEED_CSS = """
     animation: none;
   }
 }
+
+/* '오늘의 꿀팁' 배너 넘기기 (11/26 요청): 사진 후기를 3초마다, ‹ › 버튼 · 아래 점 */
+.ah-fd-arw {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 40px;
+  height: 40px;
+  margin-top: -20px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #26302d;
+  font-size: 24px;
+  line-height: 38px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  padding: 0;
+}
+.ah-fd-arw:hover {
+  background: #fff;
+  color: #0d9488;
+}
+.ah-fd-arw.prev {
+  left: 12px;
+}
+.ah-fd-arw.next {
+  right: 12px;
+}
+.ah-fd-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 3;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(31, 42, 39, 0.35);
+}
+.ah-fd-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.6);
+  transition: width 0.2s;
+}
+.ah-fd-dots i.on {
+  width: 18px;
+  background: #fff;
+}
+.ah-fd-car { position: relative; }
+.ah-fd-car .ah-fd-slide { display: none; }
+.ah-fd-car .ah-fd-slide.on { display: block; }
+.ah-fd-car > .ah-fd-badge { z-index: 3; }
+.ah-fd-car .ah-fd-arw, .ah-fd-car .ah-fd-dots { top: auto; }
+.ah-fd-car .ah-fd-arw { top: 136px; }
+.ah-fd-car .ah-fd-dots { bottom: auto; top: 246px; }
+a.ah-fd-pop, a.ah-fd-pop:hover { text-decoration: none !important; color: #26302d !important; }
+a.ah-fd-pop:hover strong { color: #0d9488; }
 /* ---- 앱 전용: PC / 모바일 나누기 · 칸 배치 · 투명 버튼 ---- */
 html body .st-key-hh_rv .ah-h { display: flex; align-items: center; gap: 8px; }
 html body .st-key-hh_rv .ah-fd-live { margin-left: 4px; }
@@ -3756,6 +3818,46 @@ html body .st-key-fd_cta button:hover { background-color: #2e3d39 !important; }
 @media (min-width: 641px) { html body .st-key-fd_m { display: none !important; } }
 @media (max-width: 640px) { html body .st-key-fd_pc { display: none !important; } }
 </style>
+"""
+
+
+# '오늘의 꿀팁' 배너 넘기기 (11/26): 3초마다 다음 슬라이드, ‹ › 로 넘기면 3초를 다시 센다, 마우스를 올리면 멈춤.
+# Streamlit 이 다시 그리면 새 배너가 생기므로 MutationObserver 로 새 것만 붙이고, 사라진 배너의 타이머는 스스로 멈춘다
+_FEED_CAR_JS = r"""
+(function () {
+  var d = document;
+  function setup() {
+    d.querySelectorAll('.ah-fd-car:not([data-car])').forEach(function (c) {
+      c.setAttribute('data-car', '1');
+      var s = c.querySelectorAll('.ah-fd-slide'), dots = c.querySelectorAll('.ah-fd-dots i');
+      if (s.length < 2) return;
+      var i = 0, paused = false, t = null;
+      function show(k) {
+        i = (k + s.length) % s.length;
+        s.forEach(function (e, j) { e.classList.toggle('on', j === i); });
+        dots.forEach(function (e, j) { e.classList.toggle('on', j === i); });
+      }
+      function start() {
+        if (t) clearInterval(t);
+        t = setInterval(function () {
+          if (!c.isConnected) { clearInterval(t); return; }
+          if (!paused) show(i + 1);
+        }, 3000);
+      }
+      var p = c.querySelector('.ah-fd-arw.prev'), n = c.querySelector('.ah-fd-arw.next');
+      if (p) p.addEventListener('click', function (e) { e.preventDefault(); show(i - 1); start(); });
+      if (n) n.addEventListener('click', function (e) { e.preventDefault(); show(i + 1); start(); });
+      c.addEventListener('mouseenter', function () { paused = true; });
+      c.addEventListener('mouseleave', function () { paused = false; });
+      start();
+    });
+  }
+  setup();
+  if (!window.__awFeedCarObs) {
+    window.__awFeedCarObs = new MutationObserver(setup);
+    window.__awFeedCarObs.observe(d.body, { childList: true, subtree: true });
+  }
+})();
 """
 
 
@@ -3819,45 +3921,58 @@ def _home_reviews(df: pd.DataFrame, limit: int = AH_RV_MAX) -> None:
             kind = st.pills("후기 종류", ["전체"] + list(review.KINDS), default="전체", key="fd_kind",
                             label_visibility="collapsed") or "전체"
         lst = rows if kind == "전체" else [r for r in rows if str(r.get("kind") or "") == kind]
-        top = next((r for r in lst if pics_of(r)), lst[0] if lst else None)
+        # '오늘의 꿀팁' 배너 (11/26 요청): 사진을 붙인 후기를 3초마다 넘기고 ‹ › 로도 넘긴다 (웹 ReviewFeed 와 같게).
+        # 사진 후기가 없으면 가장 최근 후기 하나. 슬라이드는 한 번에 그려 두고 _FEED_CAR_JS 가 넘긴다 (Streamlit 다시 그리기 없이)
+        slides = [r for r in lst if pics_of(r)][:8] or lst[:1]
+        top = slides[0] if slides else None
         with left:
             if top is None:
                 st.markdown(f'<div class="home-empty">아직 \'{escape(kind)}\' 후기가 없어요.</div>', unsafe_allow_html=True)
             else:
-                p = pop_of(top)
-                pics = pics_of(top)
-                hero = (f'<img src="{escape(pics[0])}" alt="후기 사진" loading="lazy" referrerpolicy="no-referrer">' if pics else "")
-                hero_bg = "" if pics else f' style="{_ahome_bg(_poster_url(p.get("images")))}"'
-                thumbs = ""
-                if len(pics) > 1:
-                    cells = []
-                    for i, src in enumerate(pics[1:3]):
-                        extra = f'<b>+{len(pics) - 3}</b>' if i == 1 and len(pics) > 3 else ""
-                        cells.append(f'<span class="ah-fd-th"><img src="{escape(src)}" alt="" loading="lazy" '
-                                     f'referrerpolicy="no-referrer">{extra}</span>')
-                    thumbs = f'<span class="ah-fd-thumbs">{"".join(cells)}</span>'
-                stars = ""
-                try:
-                    k = max(0, min(5, round(float(top.get("rating") or 0))))
-                    stars = f'<span class="ah-fd-stars">{"★" * k}{"☆" * (5 - k)}</span>' if k else ""
-                except (TypeError, ValueError):
-                    pass
-                who, _pic = _author(top.get("nickname"))
-                body = escape(str(top.get("body") or "").strip()).replace("\r", "").replace("\n", "<br>")
-                with st.container(key=f"fdx_top_{top['entry_id']}"):
-                    st.markdown(
-                        f'<div class="ah-fd-top"><div class="ah-fd-hero"{hero_bg}>{hero}'
-                        f'<span class="ah-fd-badge"><img src="app/static/mascot.png" alt="">오늘의 꿀팁</span>{thumbs}</div>'
-                        f'<div class="ah-fd-in"><div class="ah-fd-meta">{_ahome_kind(str(top.get("kind") or ""))}{stars}'
-                        f'<span class="ah-fd-who">{_ahome_stamp(stamp.lv_of(str(top.get("nickname") or ""), table))}'
+                parts = []
+                for si, rv in enumerate(slides):
+                    p = pop_of(rv)
+                    pics = pics_of(rv)
+                    hero = (f'<img src="{escape(pics[0])}" alt="후기 사진" loading="lazy" referrerpolicy="no-referrer">' if pics else "")
+                    hero_bg = "" if pics else f' style="{_ahome_bg(_poster_url(p.get("images")))}"'
+                    thumbs = ""
+                    if len(pics) > 1:
+                        cells = []
+                        for i, src in enumerate(pics[1:3]):
+                            extra = f'<b>+{len(pics) - 3}</b>' if i == 1 and len(pics) > 3 else ""
+                            cells.append(f'<span class="ah-fd-th"><img src="{escape(src)}" alt="" loading="lazy" '
+                                         f'referrerpolicy="no-referrer">{extra}</span>')
+                        thumbs = f'<span class="ah-fd-thumbs">{"".join(cells)}</span>'
+                    stars = ""
+                    try:
+                        k = max(0, min(5, round(float(rv.get("rating") or 0))))
+                        stars = f'<span class="ah-fd-stars">{"★" * k}{"☆" * (5 - k)}</span>' if k else ""
+                    except (TypeError, ValueError):
+                        pass
+                    who, _pic = _author(rv.get("nickname"))
+                    body = escape(str(rv.get("body") or "").strip()).replace("\r", "").replace("\n", "<br>")
+                    parts.append(
+                        f'<div class="ah-fd-slide{" on" if si == 0 else ""}"><div class="ah-fd-hero"{hero_bg}>{hero}{thumbs}</div>'
+                        f'<div class="ah-fd-in"><div class="ah-fd-meta">{_ahome_kind(str(rv.get("kind") or ""))}{stars}'
+                        f'<span class="ah-fd-who">{_ahome_stamp(stamp.lv_of(str(rv.get("nickname") or ""), table))}'
                         f'<strong>{escape(who)}</strong></span>'
-                        f'<span class="ah-fd-time">{escape(_ahome_ago(top.get("updated_at")))}</span></div>'
+                        f'<span class="ah-fd-time">{escape(_ahome_ago(rv.get("updated_at")))}</span></div>'
                         f'<p class="ah-fd-body">{body}</p>'
-                        f'<div class="ah-fd-pop"><span class="ah-fd-pp" style="{_ahome_bg(_poster_url(p.get("images")))}"></span>'
-                        f'<strong>{escape(pop_name(top))}</strong><span>{escape(place_of(p))}</span></div></div></div>',
-                        unsafe_allow_html=True)
-                    st.button("이 팝업 자세히 보기", key=f"fdo_top_{top['entry_id']}", on_click=_story_open,
-                              args=(str(top["cafe_id"]),))
+                        # 팝업 줄: 공유 링크와 같은 ?cafe= 주소로 그 팝업 상세를 연다 (슬라이드마다 팝업이 달라 버튼 하나로는 못 덮는다)
+                        f'<a class="ah-fd-pop" href="./?cafe={escape(str(rv["cafe_id"]))}" target="_self">'
+                        f'<span class="ah-fd-pp" style="{_ahome_bg(_poster_url(p.get("images")))}"></span>'
+                        f'<strong>{escape(pop_name(rv))}</strong><span>{escape(place_of(p))}</span></a></div></div>')
+                ctrl = ""
+                if len(slides) > 1:
+                    dots = "".join(f'<i class="{"on" if i == 0 else ""}"></i>' for i in range(len(slides)))
+                    ctrl = ('<button type="button" class="ah-fd-arw prev" aria-label="이전 꿀팁">‹</button>'
+                            '<button type="button" class="ah-fd-arw next" aria-label="다음 꿀팁">›</button>'
+                            f'<span class="ah-fd-dots" aria-hidden="true">{dots}</span>')
+                st.markdown(f'<div class="ah-fd-top ah-fd-car" aria-roledescription="carousel" aria-label="오늘의 꿀팁">'
+                            f'<span class="ah-fd-badge"><img src="app/static/mascot.png" alt="">오늘의 꿀팁</span>'
+                            f'{"".join(parts)}{ctrl}</div>', unsafe_allow_html=True)
+                if len(slides) > 1:
+                    components.html(f"<script>window.parent.eval({json.dumps(_FEED_CAR_JS)});</script>", height=0)
         with right:
             rest = [r for r in lst if r is not top][:6]
             if not rest:
