@@ -359,8 +359,14 @@ const AREA_ALIAS: Record<string, string> = {
 const SEOUL_AREAS = new Set(SEOUL_GU);
 const GYEONGGI_OF: Record<string, string> = { 판교: "성남", 분당: "성남" };
 
-/** 카드 왼쪽 위 지역 배지 이름. 앱 common/geo.py area_name 과 같은 결과가 나오게 맞춘 간단한 버전 */
+/** 카드 왼쪽 위 지역 배지 이름. 앱 common/geo.py area_name 과 같은 결과가 나오게 맞춘 간단한 버전.
+ *  구 이름은 '구' 를 빼고 보여 주지만, 한 글자만 남는 중구는 '중' 이 무슨 뜻인지 몰라 '중구' 로 둔다 (11/26 요청) */
 export function areaName(address: string): string {
+  const a = areaShort(address);
+  return a === "중" ? "중구" : a;
+}
+
+function areaShort(address: string): string {
   const a = (address || "").trim();
   if (!a) return "";
   if (a.startsWith("광주광역시") || /광주\s+(광산|북|남|동|서)구/.test(a) || a.includes("광주통합특별시"))
@@ -393,7 +399,7 @@ export function areaName(address: string): string {
 export function cityName(address: string): string {
   if ((address || "").trim().startsWith("서울")) return "서울";
   const area = areaName(address);
-  if (SEOUL_AREAS.has(area)) return "서울";
+  if (SEOUL_AREAS.has(area) || area === "중구") return "서울";
   return GYEONGGI_OF[area] || area;
 }
 

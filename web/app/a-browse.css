@@ -334,7 +334,7 @@
    3. 포스터 카드 (BrowseCard) + 격자
    ===================================================================== */
 .list-layout {
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 340px; /* 물어보기 폭 = 지도로 보기와 같은 340px (11/26 요청) */
   gap: 20px;
 }
 .bc-grid {
@@ -865,7 +865,7 @@
   pointer-events: none;
 }
 .map-layout {
-  grid-template-columns: 300px minmax(0, 1fr) 340px;
+  grid-template-columns: 200px minmax(0, 1fr) 340px; /* 데일리 노트 300 → 200px (11/26 요청) */
   gap: 16px;
   align-items: stretch;
   height: calc(100vh - 116px);
@@ -1252,7 +1252,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .map-layout {
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: 200px minmax(0, 1fr);
   }
 }
 

@@ -5865,12 +5865,13 @@ html body .st-key-apd_form [data-testid="stFormSubmitButton"] button:hover { bac
 html body .st-key-apn_form [data-testid="stFormSubmitButton"] button p,
 html body .st-key-apd_form [data-testid="stFormSubmitButton"] button p { font-size: 0 !important; color: transparent !important; }
 @media (min-width: 641px) {
-  /* 리스트: 목록 | 물어보기 320px (간격 20px) · 지도: (노트 300 | 지도) | 물어보기 340px (간격 16px) */
+  /* 리스트: 목록 | 물어보기 340px (간격 20px) · 지도: (노트 200 | 지도) | 물어보기 340px (간격 16px)
+     물어보기 폭은 리스트 · 지도 모두 340px (11/26 요청), 데일리 노트는 300 → 200px (11/26 요청) */
   html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel) { flex-wrap: nowrap !important; gap: 20px !important; }
   html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel) > [data-testid="stColumn"]:first-child {
     flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }
   html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel) > [data-testid="stColumn"]:has(.st-key-ask_panel) {
-    flex: 0 0 320px !important; width: 320px !important; min-width: 320px !important; }
+    flex: 0 0 340px !important; width: 340px !important; min-width: 340px !important; }
   html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel):has(.st-key-map_row) { gap: 16px !important; }
   html body [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-ask_panel):has(.st-key-map_row) > [data-testid="stColumn"]:has(.st-key-ask_panel) {
     flex: 0 0 340px !important; width: 340px !important; min-width: 340px !important; }
@@ -5898,7 +5899,7 @@ html body .st-key-map_frame [data-testid="stMarkdownContainer"]:has(.map-count) 
   html body .st-key-map_row > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: 16px !important;
     align-items: flex-start !important; }
   html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_daily) {
-    flex: 0 0 300px !important; width: 300px !important; min-width: 300px !important; }
+    flex: 0 0 200px !important; width: 200px !important; min-width: 200px !important; }
   html body .st-key-map_row [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-map_frame) {
     flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }
   /* 노트 칸: 회색 바탕 상자, 지도 · 물어보기와 같은 높이. 목록만 그 안에서 스크롤 */
@@ -8730,6 +8731,14 @@ html body .st-key-daily_areas { background: none !important; border: 0 !importan
 .dn-area span { margin-left: 5px; color: #0f6b5c; font-weight: 800; }
 .dn-hint { font-size: 13px; line-height: 1.5; color: #5f6b68; }
 .dn-hint b { color: #0f6b5c; }
+/* PC 노트 칸이 200px 로 좁아져서 (11/26 요청) 날짜 줄 ‹ › 와 글자를 줄여 '오늘 11월 26일 (목)' 이 잘리지 않게 */
+@media (min-width: 641px) {
+  html body .st-key-daily_nav { padding: 2px !important; gap: 0 !important; }
+  html body .st-key-daily_nav button { width: 26px !important; height: 32px !important; }
+  html body .st-key-daily_nav button span[data-testid="stIconMaterial"] { font-size: 20px !important; }
+  .st-key-daily_nav .dn-date { font-size: 13px; }
+  .st-key-daily_nav .dn-today { margin-right: 4px; padding: 1px 6px; font-size: 11px; }
+}
 /* 목록: 줄마다 썸네일 40×52 · 작품 · '지역 · ~ 12.15' · 상태 배지 */
 .dn-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0 0 2px; }
 .dn-item { display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 10px; row-gap: 3px; align-items: center; padding: 8px;
