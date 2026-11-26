@@ -9160,8 +9160,9 @@ def _footer() -> None:
 
 
 DESIGN_DIR = Path(__file__).resolve().parent / "docs" / "design"
-DESIGN_COMPONENTS = [("Badge", "배지"), ("Button", "버튼"), ("PosterCard", "포스터 카드"), ("StoryCircle", "북마크 팝업 동그라미"),
-                     ("Chip", "칩")]
+DESIGN_COMPONENTS = [("Badge", "배지"), ("Button", "버튼"), ("PillTabs", "알약 탭 · 메뉴바"), ("PosterCard", "포스터 카드"),
+                     ("StoryCircle", "북마크 팝업 동그라미"), ("Chip", "칩"), ("RankStamp", "후기 도장"),
+                     ("PreTimeline", "사전예약 타임라인"), ("ReviewCard", "후기 카드")]
 DESIGN_CSS = """
 <style>
 .st-key-design_wrap { max-width: 1040px; margin: 0 auto; }
@@ -9236,7 +9237,7 @@ def page_design() -> None:
         # 표지 (Claude Design 표지와 같은 그림). 960px 로 그리고 화면이 좁으면 줄여 보인다
         cover = (DESIGN_DIR / "components" / "Cover.html").read_text(encoding="utf-8")
         st.markdown(f'<div class="ds-cover">{cover}</div>', unsafe_allow_html=True)
-        st.markdown('<div class="ds-sub">ANI:WHERE 앱 코드(<code>app_cafemap.py</code>)에서 값을 그대로 옮긴 디자인 시스템이에요. '
+        st.markdown('<div class="ds-sub">ANI:WHERE 화면 코드(앱 · 공개 웹)에서 값을 그대로 옮긴 디자인 시스템이에요 (A안, 2026.11.26 기준). '
                     'Claude Design 에 같은 내용이 있고, 이 페이지는 누구나 볼 수 있게 앱 안에 둔 것이에요.</div>', unsafe_allow_html=True)
 
         # 1) 브랜드 안내서 (말투 · 색 쓰임 · 글꼴 · 모양 · 배지 뜻 · 아이콘 · 로고 · 옮기지 않은 것)
@@ -9245,8 +9246,9 @@ def page_design() -> None:
         # 2) 색 토큰
         st.markdown('<div class="ds-h2">색 토큰</div><div class="ds-sub">이름 · 값 · 언제 쓰는지. 칸의 색은 실제 값이에요.</div>',
                     unsafe_allow_html=True)
-        groups = [("포인트 · 브랜드", ("accent", "mint", "gnb")), ("글자 · 바탕 · 선", ("ink", "muted", "subtle", "line", "surface", "gray")),
-                  ("강조 · 상태", ("coral", "blue", "red", "purple", "orange", "star", "today", "gantt")), ("지역", ("city",))]
+        groups = [("포인트 · 브랜드", ("accent", "logo", "mint", "gnb")), ("글자 · 바탕 · 선", ("ink", "muted", "subtle", "line", "surface", "gray")),
+                  ("강조 · 상태", ("coral", "blue", "red", "purple", "orange", "star", "today", "gantt")), ("후기 도장 랭크", ("rank",)),
+                  ("지역", ("city",))]
         for title, pre in groups:
             cells = []
             for t in tok["color"]["tokens"]:
@@ -9295,7 +9297,7 @@ def page_design() -> None:
         st.markdown('<div class="ds-h2">로고 · 그림</div><div class="ds-sub">저장소 static/ 의 파일 그대로. 다시 그리거나 색을 바꾸지 않아요.</div>'
                     '<div class="ds-logos">'
                     + "".join(f'<figure><img src="app/static/{f}" alt="{a}"><figcaption>{f} · {a}</figcaption></figure>'
-                              for f, a in (("logo.png", "기본 로고"), ("logo_mint.png", "민트 로고"), ("logo2.png", "보조 로고"),
+                              for f, a in (("logo.png", "기본 로고"), ("mascot.png", "마스코트"),
                                            ("ask_avatar.png", "물어보기 도우미"), ("default_poster.png", "기본 포스터")))
                     + '</div>', unsafe_allow_html=True)
 
@@ -9725,10 +9727,10 @@ def _my_account(row: dict) -> None:
             _logout()
             st.session_state["flash"] = ("로그아웃했어요.", ":material/logout:")
             st.rerun()
-        with st.container(key="withdraw_box"), st.popover("탈퇴하기"):
-            st.write("닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 **지난 기록까지 바로 지워요**. 후기 도장도 함께 없어져요. "
         st.markdown(f'<div class="mp-links"><a href="{PRIVACY_URL}" target="_blank">개인정보처리방침 · 이용약관</a>'
                     '<a href="./guide" target="_self">사용자 튜토리얼</a></div>', unsafe_allow_html=True)
+        with st.container(key="withdraw_box"), st.popover("탈퇴하기"):
+            st.write("닉네임·프로필 사진·아이디와 비밀번호·접속 기록을 **지난 기록까지 바로 지워요**. 후기 도장도 함께 없어져요. "
                      "쓴 리뷰는 다른 이용자를 위해 '탈퇴한 회원'으로 남아요 (지우고 싶은 글은 먼저 삭제 요청해 주세요).")
             if local:
                 st.caption("아이디로 가입했다면 확인을 위해 아이디·비밀번호를 넣어 주세요. 비밀번호 기록도 지워요.")

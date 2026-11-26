@@ -1,70 +1,130 @@
 # ANI:WHERE
 
 애니 팝업 · 콜라보 카페 · 굿즈 행사를 **찾고, 북마크하고, 놓치지 않게** 돕는 지도 서비스의 디자인 시스템.
-흰 바탕 위에 포인트만 우유빛 민트, 둥근 글꼴, 포스터가 주인공인 카드. 실제 화면 코드(`app_cafemap.py`)에서 값을 그대로 옮겼다.
+흰 바탕 위에 포인트만 우유빛 민트, 둥근 글꼴, 포스터가 주인공인 카드. 실제 화면 코드(앱 `app_cafemap.py`, 공개 웹 `web/app/a-*.css`)에서 값을 그대로 옮겼다.
+2026.11.25~26 에 확정 시안(A안)대로 두 서비스의 화면을 바꿨고, 이 문서는 **바뀐 뒤의 화면** 기준이다.
+
+## A안에서 바뀐 점 (2026.11.26 기준)
+
+- **로고 · 마스코트**: 새 로고(`logo.png`)와 토끼 마스코트(`mascot.png`). 예전 민트 로고 · 보조 로고는 화면에서 쓰지 않아 목록에서 뺐다.
+- **메뉴바**: 연민트 바탕 + 알약 탭(고른 탭 = 흰 알약). 검색 · 알림 · 프로필 · 로그인은 평소 투명, 커서를 올렸을 때만 흰 바탕.
+- **홈**: 칸마다 모양이 다르다 — 동그라미 줄(북마크 팝업, 예전 모양 그대로) · 랭킹 배너(그대로) · 신규 등록 가로 넘기기 + `더보기` 카드 · 곧 끝나는 팝업 7일 칸 · **사전예약 타임라인(보라)** · **후기 모음 3칸 열**.
+- **리스트 · 지도**: 포스터 아래에 글자를 두는 새 카드(마우스를 올리면 캐릭터 · 주소 · 특전), 걸린 필터 칩, 지도는 3단(데일리 팝업 노트 · 지도 · 물어보기).
+- **상세**: 위는 사진 + 정보 2단, 아래는 화면 폭 전체 탭 `리뷰 · 블로그 후기 · 수정하기`.
+- **내 캘린더 · 마이페이지**: 달력은 작게(400px) 목록은 넓게, 마이페이지가 새로 생겼다.
+- **후기 도장 랭크(새 기능)**: 다녀온 후기가 있는 팝업 수로 5단계. 색은 `rank-*` 토큰, 모양은 컴포넌트 RankStamp.
+- **새 토큰**: 보라 계열(`purple-deep` · `purple-soft` · `purple-line`), `logo-green`, `accent-ink`, `mint-ink`, `ink-soft`, `red-deep`, `star-ink`, `rank-1~5`, 모서리 `radius-card` · `radius-panel` · `radius-gnb`, 크기(`size`).
+- **새 컴포넌트 문서**: 알약 탭 · 메뉴바(PillTabs), 후기 도장(RankStamp), 사전예약 타임라인(PreTimeline), 후기 카드(ReviewCard). 배지 · 버튼 · 포스터 카드 · 동그라미 · 칩은 지금 화면에 맞게 고쳤다.
 
 ## 말투 (콘텐츠 기본)
 
 - **친절한 존댓말, 짧게.** "~해요 / ~예요". 초등학생도 알아듣는 말로. 예: "북마크한 팝업은 오픈·종료 3일 전부터 알려 드려요."
-- **사용자 쪽 말로 이름 짓기.** 기능 이름이 아니라 하는 일: `최애 추가하기`, `N건 더보기`, `팝업 N곳 표시`.
+- **사용자 쪽 말로 이름 짓기.** 기능 이름이 아니라 하는 일: `최애 추가하기`, `N건 더보기`, `팝업 N곳 표시`, `북마크하고 오픈 알림 받기`.
 - **안 될 때는 이유와 다음 할 일.** "이 조건엔 행사가 없어요" + `검색어 지우기 (12곳)` 버튼. 빈 표를 보여 주지 않는다.
 - **이모지 대신 아이콘.** 버튼·안내에는 Material Symbols Rounded (`:material/…:`, HTML 안에서는 `<span class="mi">이름</span>`).
 - **숫자는 규칙으로 센 것만.** 물어보기 답의 건수·날짜는 `accent-deep` 굵게. AI 가 만든 글이면 'AI 산출', 규칙이면 '규칙 기반 대체' 를 기록에 남긴다.
+- **없는 것을 약속하지 않는다.** 후기 도장 랭크가 오르면 도장 색만 바뀐다 — 그 밖의 혜택을 화면에 쓰지 않는다. 사전예약 타임라인의 날짜는 팝업 오픈일이다(예약 오픈 시각은 데이터에 없다).
 - 버튼·링크에 마우스를 올리면 뜨는 설명(`title`)은 쓰지 않는다. 설명은 제목·입력칸 옆 `?` 로만.
 
 ## 색
 
 | 역할 | 토큰 | 쓰는 곳 |
 | --- | --- | --- |
-| 바탕 | `surface`, `surface-soft`, `gray-soft` | 페이지는 흰색. 칸·상자는 `surface-soft` |
-| 글자 | `ink`, `muted`, `subtle` | 본문 `ink`, 장소·기간 `muted`, 바닥글 `subtle` |
-| 포인트 | `accent`, `accent-deep`, `accent-soft` | 주 버튼·아이콘 `accent`, 포인트 글자 `accent-deep`, 고른 줄·오늘 칸 `accent-soft` |
-| 브랜드 민트 | `mint`, `mint-deep`, `mint-soft`, `mint-line` | 포스터 카드 테두리 `mint-line`, 카드 작품 이름 `mint-deep` |
-| 메뉴바 | `gnb` | 맨 위 메뉴바 바탕 하나에만 |
+| 바탕 | `surface`, `surface-soft`, `gray-soft` | 페이지는 흰색. 칸·상자는 `surface-soft`, 알약 탭 판은 `gray-soft` |
+| 글자 | `ink`, `ink-soft`, `muted`, `subtle` | 본문 `ink`, 장소·기간·시간 `ink-soft`, 바닥글 `subtle`. `muted` 는 예전 화면의 보조 글자 |
+| 포인트 | `accent`, `accent-deep`, `accent-soft`, `accent-ink` | 주 버튼·아이콘 `accent`, 포인트 글자 `accent-deep`, 고른 줄·오늘 칸 `accent-soft`, 그 위 글자 `accent-ink` |
+| 브랜드 민트 | `mint`, `mint-ink`, `mint-soft`, `mint-line`, `logo-green` | 포스터 카드 테두리 `mint-line`, 카드 작품 이름 `mint-ink`, 로고 초록 `logo-green` |
+| 메뉴바 | `gnb` | 맨 위 메뉴바 바탕 하나에만. 고른 탭은 흰 알약 |
 | 강조 하나 | `coral` | 등록하기 + 떠 있는 버튼, 새 알림 점. 한 화면에 한 곳 |
-| 상태 | `blue`/`blue-soft` 오픈 예정 · `red`/`red-soft` 마감임박 · `purple` 사전예약 · `orange` 종료 D-n | 상태에만 쓴다. 장식으로 쓰지 않는다 |
+| 상태 | `blue`/`blue-soft` 오픈 예정 · `red-deep`/`red-soft` 마감임박 · `ink-soft`/`gray-soft` 종료 | 상태에만 쓴다. 장식으로 쓰지 않는다 |
+| 사전예약 | `purple`, `purple-deep`, `purple-soft`, `purple-line` | 사전예약 배지 · 타임라인 · 알림 버튼에만. 다른 곳에 보라를 쓰지 않는다 |
+| 후기 도장 랭크 | `rank-1` ~ `rank-5` 의 `-ring` · `-fill` · `-ink` | 도장 테두리 · 바탕 · 글자. 초록 → 진한 초록 → 파랑 → 보라 → 금색 |
 | 지역 | `city-*` | 지역 배지. 시마다 다른 색, 포스터 위에서는 진하게 채우고 흰 테두리 |
 
-명암: `ink` 는 흰 바탕 위 13:1. `accent` · `mint` · `orange` 위의 흰 글자와 `muted` · `subtle` 글자는 4.5:1 이 안 된다(원본 값 그대로 둠) — 굵은 짧은 배지 글자나 큰 글자에만 쓰고, 읽어야 하는 문장은 `ink` 로.
+명암: `ink` 는 흰 바탕 위 13:1, `ink-soft` 5.5:1, `mint-ink` 6.4:1, `accent-ink` 는 `accent-soft` 위 7.1:1 — 작은 글자에도 쓴다. `accent` · `mint` · `orange` 위의 흰 글자와 `muted` · `subtle` 글자는 4.5:1 이 안 된다(원본 값 그대로 둠) — 굵은 짧은 배지 글자나 큰 글자에만 쓰고, 읽어야 하는 문장은 `ink` 로.
+
+로고의 초록(`logo-green` #21b287)과 화면 포인트(`accent` #14b8a6)는 서로 다른 색이다. 하나로 맞출지는 아직 정하지 않았다 — 지금은 화면 포인트에 `accent` 만 쓴다.
 
 ## 글꼴
 
-- **제목 `display` (Jua)**: 화면 제목, 칸 제목, 포스터 카드 작품 이름. 둥글고 귀여운 애니 느낌을 맡는다.
-- **본문 `body` (NanumSquareRound → Pretendard)**: 나머지 전부. 메뉴바 탭, 버튼, 배지까지.
-- **아이콘 `icon` (Material Symbols Rounded)**: 글자와 같은 색·크기를 따른다.
+- **제목** `display` (Jua): 화면 제목, 칸 제목, 카드 작품 이름(17px). 둥글고 귀여운 애니 느낌을 맡는다.
+- **본문** `body` (NanumSquareRound → Pretendard): 나머지 전부. 메뉴바 탭, 버튼, 배지까지.
+- **아이콘** `icon` (Material Symbols Rounded): 글자와 같은 색·크기를 따른다.
 - 홈 칸 제목은 `home-heading`(본문 글꼴 800) + 앞에 `accent` 아이콘.
+- 후기 도장의 둘레 글자 · 단계 숫자만 Titan One (없으면 Jua).
 
 ## 모양 · 간격
 
-- 둥글게: 카드 `radius-md`, 배너·큰 칸 `radius-lg`, 배지·칩·탭 알약·스토리 동그라미 `radius-pill`.
-- 포스터가 주인공: 카드는 포스터를 꽉 채우고(3:4 또는 4:3), 글자는 아래에 한두 줄. 배지는 포스터 위 모서리에 — 왼쪽 위 상태, 오른쪽 위 지역.
-- 그림자는 떠 있는 것에만: `shadow-float`(등록 + · 물어보기 버튼), `shadow-card`(후기 카드). 평평한 카드에는 테두리(`mint-line` 또는 `line`).
-- 간격은 `space-*` 단계로. 홈 칸 사이 `space-5`, 카드 사이 `space-3`.
+- 둥글게: 포스터 카드 `radius-md`(12px), 글이 든 카드 `radius-card`(16px), 배너·큰 칸 `radius-lg`(18px), 마이페이지 칸 `radius-panel`(22px), 메뉴바 아래 `radius-gnb`(28px), 배지·칩·알약 탭·알약 버튼·도장 `radius-pill`.
+- 포스터가 주인공: 리스트 카드는 포스터(3:4)를 크게 두고 글자는 그 **아래** 두 줄. 배지는 포스터 위 모서리에 — 왼쪽 위 상태, 오른쪽 위 지역, 오른쪽 아래 북마크.
+- 그림자는 떠 있는 것에만: `shadow-float`(등록 + · 물어보기 버튼), `shadow-card`(고른 랭킹 줄). 평평한 카드에는 테두리(`mint-line` 2.5px 또는 `line` 1.5px).
+- 간격은 `space-*` 단계로. 홈 칸 사이 `space-5`, 카드 사이 `space-3`~`space-4`.
+
+| 크기 | 값 | 쓰는 곳 |
+| --- | --- | --- |
+| `page-max` | 1232px | 페이지 폭 (양옆 24px, 모바일 16px). 지도로 보기만 화면 폭 전체 |
+| `gnb-height` | 76px | 메뉴바 높이. 로고 52px (모바일 44px) |
+| `btn-lg` | 46px | 주 버튼 (저장하기, 리뷰 등록, N건 더보기) |
+| `btn-round` | 44px | 메뉴바 동그란 버튼, 상세의 공유 · 북마크 |
+| `btn-sm` | 40px | 작은 알약 버튼 (오픈 알림 받기, 걸린 필터 칩) |
+| `calendar-width` | 400px | 내 캘린더의 달력 칸 |
+| `stamp` | 20 · 32 · 40 · 96px | 후기 도장 (닉네임 옆 · 리뷰 쓰기 칸 · 다녀온 팝업 카드 · 마이페이지) |
 
 ## 배지 뜻 (어디서나 같게)
 
 | 글자 | 색 | 뜻 |
 | --- | --- | --- |
-| `진행 중` | `accent-deep` on `accent-soft` | 지금 열려 있음 |
+| `진행 중` | `accent-ink` on `accent-soft` | 지금 열려 있음 |
 | `D-n` | `blue` on `blue-soft` | n일 뒤에 열림 |
-| `마감임박` | `red` on `red-soft` | 3일 안에 끝남 |
+| `마감임박` | `red-deep` on `red-soft` | 3일 안에 끝남 |
+| `종료 D-n` | `red-deep` on `red-soft` | n일 뒤에 끝남 (내 캘린더 '곧 있는 팝업') |
+| `종료` | `ink-soft` on `gray-soft` | 끝났음 |
 | `사전예약 D-n` | 흰 글자 on `purple` | 예약해야 들어감, n일 뒤 열림 |
-| `종료 D-n` · `오늘 종료` | 흰 글자 on `orange` | 이번 주에 끝남 (홈) |
+
+## 후기 도장 랭크
+
+| 랭크 | 다녀온 후기 | 도장 색 |
+| --- | --- | --- |
+| Lv.1 새싹 팬 | 1개 | 연한 초록 (`rank-1`) |
+| Lv.2 단골 팬 | 3개 | 진한 초록 (`rank-2`) |
+| Lv.3 성지순례러 | 10개 | 파랑 (`rank-3`) |
+| Lv.4 덕질 마스터 | 25개 | 보라 (`rank-4`) |
+| Lv.5 전설의 덕후 | 50개 | 금색 (`rank-5`) |
+
+도장 수 = 내가 '다녀온 후기'를 남긴 팝업 수. 별점만 남겨도 1개, 같은 팝업은 1개, 기대평 · 답글 · 지운 후기는 세지 않는다. 값의 원본은 `common/stamp.py`(웹 `web/lib/stamp.ts` 와 같은 표).
 
 ## 아이콘 (Iconography)
 
-Material Symbols Rounded 만 쓴다. 자주 쓰는 것: `bookmark_add` / `bookmark_added`(북마크), `map`, `format_list_bulleted`, `calendar_month`, `search`, `notifications`, `location_on`, `local_fire_department`(랭킹), `fiber_new`(신규), `hourglass_bottom`(이번 주), `event_available`(사전예약), `rate_review`(후기), `auto_awesome`(비슷한 팝업), `add`(등록·최애 추가). 아이콘은 혼자 뜻을 나르지 않는다 — 늘 글자와 함께.
+Material Symbols Rounded 만 쓴다. 자주 쓰는 것: `bookmark_add` / `bookmark_added`(북마크), `map`, `format_list_bulleted`, `calendar_month`, `search`, `notifications`, `location_on`, `local_fire_department`(랭킹), `fiber_new`(신규), `hourglass_bottom`(곧 끝나는), `event_available`(사전예약), `rate_review`(후기), `auto_awesome`(비슷한 팝업), `add`(등록·최애 추가), `edit`(수정하기). 아이콘은 혼자 뜻을 나르지 않는다 — 늘 글자와 함께.
 
 ## 로고 · 그림
 
-`Logos` 묶음: 기본 로고(`logo.png`), 민트 로고(`logo_mint.png`), 보조 로고(`logo2.png`). 메뉴바 왼쪽에 두고, 누르면 홈. `Images` 묶음: 물어보기 도우미 얼굴(`ask_avatar.png`), 포스터가 없을 때 대신 보이는 기본 포스터(`default_poster.png`). 로고는 다시 그리지 않고 파일 그대로 쓴다.
+- **기본 로고** `logo.png`: 메뉴바 왼쪽에 두고, 누르면 홈. 메뉴바에서는 높이 52px(모바일 44px).
+- **로고는 높이 32px 이상에서만** 쓴다. 그보다 작은 자리(앱 아이콘, 파비콘, 도장, 물어보기 버튼)에는 로고 대신 **마스코트만**(`mascot.png`) 쓴다.
+- **물어보기 도우미 얼굴** `ask_avatar.png`: 마스코트를 동그랗게 자른 그림. 물어보기 대화창의 말풍선 옆.
+- **기본 포스터** `default_poster.png`: 포스터가 없을 때 대신 보인다.
+- 로고 · 마스코트는 다시 그리거나 색을 바꾸지 않고 파일 그대로 쓴다. 연민트 메뉴바와 흰 바탕 위에 둔다.
+- 예전 로고(민트 로고 `logo_mint.png`, 보조 로고 `logo2.png`)는 A안부터 화면에서 쓰지 않는다. 새 화면 · 자료에 쓰지 않는다.
 
 ## 계절 배경
 
 내 캘린더 화면에서만 3~5월 꽃잎 · 6~8월 잎사귀 · 9~11월 단풍 · 12~2월 눈이 천천히 떨어진다(작은 SVG, 클릭을 막지 않음, '동작 줄이기' 설정이면 끔).
 
+## 파일
+
+| 파일 | 내용 |
+| --- | --- |
+| `docs/design/README.md` | 이 안내서 (말투 · 색 · 글꼴 · 모양 · 배지 · 랭크 · 로고) |
+| `docs/design/tokens.json` | 색 · 글꼴 · 간격 · 크기 · 모서리 · 그림자 토큰 |
+| `docs/design/components/*.md` · `*.html` | 컴포넌트 9개의 쓰는 규칙과 정적 예시 + 표지 |
+| `static/design/components.css` · `cover.css` | 예시를 그리는 CSS (토큰 이름으로) |
+| `docs/design/handoff/` | A안 확정 시안 묶음 (화면 시안 · 예전 토큰 · 로고 원본) |
+
+앱의 `/design` 화면과 공개 웹의 `/design` 이 이 파일들을 읽어 그린다. 값은 여기 한 곳에서만 고친다.
+
 ## 옮기지 않은 것 (Not synced)
 
 - 글꼴 파일: Jua 는 Google Fonts, NanumSquareRound · Pretendard 는 jsDelivr 의 CSS 로 불러온다. 파일은 저장소에 없어 `type.fonts` 는 비어 있고 이름만 `type.families` 에 있다.
-- 컴포넌트: 앱은 Streamlit(파이썬)이라 React 라이브러리가 없다. 아래 5개 카드(배지 · 버튼 · 포스터 카드 · 북마크 팝업 동그라미 · 칩)는 `app_cafemap.py` 의 CSS 를 보고 **손으로 옮긴 정적 모습**이다.
+- 컴포넌트: 앱은 Streamlit(파이썬), 공개 웹은 Next.js 라 두 쪽이 함께 쓰는 컴포넌트 라이브러리가 없다. 아래 9개 카드는 두 화면의 CSS 를 보고 **손으로 옮긴 정적 모습**이다 (누르는 동작 없음).
+- 화면 전체 배치(홈 칸 순서, 지도 3단, 상세 2단 + 탭, 마이페이지): 컴포넌트가 아니라 화면이라 여기 두지 않았다. 모양은 사용자 튜토리얼(`/guide`)의 화면 그림과 `handoff/` 시안을 본다.
 - 다크 모드: 앱에 없어 테마는 Light 하나.

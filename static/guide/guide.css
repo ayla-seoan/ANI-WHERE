@@ -1,4 +1,4 @@
-/* 사용자 튜토리얼 (/guide) 꾸밈 — 11/18. 내용은 docs/guide.md */
+/* 사용자 튜토리얼 (/guide) 꾸밈 — 11/18, 11/26 A안 화면에 맞춤. 내용은 docs/guide.md */
 .st-key-privacy_wrap { max-width: 980px !important; }
 .st-key-privacy_wrap img { max-width: 100%; }
 .g-hero { margin: 8px 0 26px; padding: 30px 30px 26px; border-radius: 22px; color: #fff;
@@ -50,10 +50,18 @@ table.g-table { width: 100%; border-collapse: separate; border-spacing: 0; borde
 table.g-table th { background: #EAF8F5; color: var(--accent-deep); text-align: left; padding: 10px 14px; font-weight: 800; }
 table.g-table td { padding: 10px 14px; border-top: 1px solid #EEF2F1; line-height: 1.6; vertical-align: top; }
 .g-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 800; font-size: .8rem; white-space: nowrap; }
-.g-badge.green { color: var(--accent-deep); background: var(--accent-soft); }
+.g-badge.green { color: #0B5E57; background: #E6FBF7; }
 .g-badge.blue { color: #2C5BC5; background: #EAF0FC; }
-.g-badge.red { color: #D93A4A; background: #FDECEE; }
+.g-badge.red { color: #C0313F; background: #FDECEE; }
 .g-badge.purple { color: #fff; background: #6C5CE7; }
+.g-badge.gray { color: #5F6B68; background: #F4F6F5; }
+/* 후기 도장 랭크 표의 작은 도장 (색은 common/stamp.py 의 테두리 · 바탕) */
+.g-rk { display: inline-block; width: 20px; height: 20px; border-radius: 50%; border: 3px solid #5FBF9F; background: #F0FAF6;
+  box-sizing: border-box; vertical-align: -5px; margin-right: 8px; }
+.g-rk.l2 { border-color: #21B287; background: #E9F7F2; }
+.g-rk.l3 { border-color: #2C5BC5; background: #EAF0FC; }
+.g-rk.l4 { border-color: #7656C4; background: #F1ECFF; }
+.g-rk.l5 { border-color: #C99A00; background: #FFF6D6; }
 /* 알림 시점 그래프 */
 .g-timeline { background: #F6F8F7; border-radius: 14px; padding: 14px 16px; margin: 4px 0 8px; }
 .g-tl-row { display: flex; align-items: center; gap: 12px; margin: 6px 0; }

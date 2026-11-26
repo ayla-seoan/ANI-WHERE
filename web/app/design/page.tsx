@@ -14,20 +14,24 @@ export const metadata: Metadata = {
 const COMPONENTS: [string, string][] = [
   ["Badge", "배지"],
   ["Button", "버튼"],
+  ["PillTabs", "알약 탭 · 메뉴바"],
   ["PosterCard", "포스터 카드"],
   ["StoryCircle", "북마크 팝업 동그라미"],
   ["Chip", "칩"],
+  ["RankStamp", "후기 도장"],
+  ["PreTimeline", "사전예약 타임라인"],
+  ["ReviewCard", "후기 카드"],
 ];
 const GROUPS: [string, string[]][] = [
-  ["포인트 · 브랜드", ["accent", "mint", "gnb"]],
+  ["포인트 · 브랜드", ["accent", "logo", "mint", "gnb"]],
   ["글자 · 바탕 · 선", ["ink", "muted", "subtle", "line", "surface", "gray"]],
   ["강조 · 상태", ["coral", "blue", "red", "purple", "orange", "star", "today", "gantt"]],
+  ["후기 도장 랭크", ["rank"]],
   ["지역", ["city"]],
 ];
 const LOGOS: [string, string][] = [
   ["logo.png", "기본 로고"],
-  ["logo_mint.png", "민트 로고"],
-  ["logo2.png", "보조 로고"],
+  ["mascot.png", "마스코트"],
   ["ask_avatar.png", "물어보기 도우미"],
   ["default_poster.png", "기본 포스터"],
 ];
@@ -59,8 +63,8 @@ export default function DesignPage() {
         {/* 표지 (Claude Design 표지와 같은 그림). 960px 로 그리고 화면이 좁으면 줄여 보인다 */}
         <div className="ds-cover" dangerouslySetInnerHTML={{ __html: comp["Cover.html"] || "" }} />
         <div className="ds-sub">
-          ANI:WHERE 앱 코드(<code>app_cafemap.py</code>)에서 값을 그대로 옮긴 디자인 시스템이에요. Claude Design 에 같은
-          내용이 있고, 이 페이지는 누구나 볼 수 있게 앱 안에 둔 것이에요.
+          ANI:WHERE 화면 코드(앱 · 공개 웹)에서 값을 그대로 옮긴 디자인 시스템이에요 (A안, 2026.11.26 기준). Claude Design 에
+          같은 내용이 있고, 이 페이지는 누구나 볼 수 있게 앱 안에 둔 것이에요.
         </div>
 
         {/* 1) 브랜드 안내서 */}

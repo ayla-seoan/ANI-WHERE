@@ -62,7 +62,7 @@ def pages(page, tag):
     assert not broken, f"깨진 그림: {broken}"
     if tag == "pc":
         expect(page.locator(".g-slides-wrap .aw-arrow.r.show")).to_be_visible()
-    for key in ("home", "map", "list", "bookmark", "cal", "add", "edit", "delete", "login", "ask", "mobile"):
+    for key in ("home", "map", "list", "detail", "bookmark", "cal", "rank", "add", "edit", "delete", "login", "mypage", "ask", "mobile"):
         assert page.locator(f"#{key}").count() == 1, f"/guide#{key} 칸이 없다"
     shot(page, f"web_guide_{tag}")
     print(tag, "/guide OK", no_hscroll(page, "/guide"))
@@ -77,7 +77,11 @@ def pages(page, tag):
     expect(page.locator(".ds-cover .cv .name")).to_have_text("ANI:WHERE")
     expect(page.locator(".ds-h2", has_text="색 토큰")).to_be_visible()
     assert page.locator(".ds-sw > div").count() > 10
-    assert page.locator(".ds-comp").count() == 5
+    assert page.locator(".ds-comp").count() == 9      # 컴포넌트 9개 (11/26: 알약 탭 · 후기 도장 · 사전예약 타임라인 · 후기 카드 추가)
+    expect(page.locator(".ds-grp", has_text="후기 도장 랭크")).to_be_visible()
+    page.wait_for_load_state("networkidle")
+    broken = page.evaluate("[...document.querySelectorAll('.pg-design img')].filter(i => i.complete && !i.naturalWidth).map(i => i.src)")
+    assert not broken, f"깨진 그림: {broken}"
     shot(page, f"web_design_{tag}")
     print(tag, "/design OK", no_hscroll(page, "/design"))
 

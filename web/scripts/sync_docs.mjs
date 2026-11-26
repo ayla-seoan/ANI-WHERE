@@ -3,7 +3,7 @@
 //   docs/privacy-policy.md · docs/guide.md · static/guide/guide.css · docs/design/** · static/design/*.css
 //     → web/content/docs.gen.ts (문자열로 묶어 빌드에 들어간다. 손으로 고치지 말고 원본을 고친 뒤 이 스크립트를 다시 돌린다)
 //   static/guide/*.png → web/public/guide/*.webp (sharp 로 줄인다)
-//   static/{logo,logo_mint,logo2,ask_avatar,default_poster}.png → web/public/design/
+//   static/{logo,mascot,ask_avatar,default_poster}.png → web/public/design/
 //   common/prompts/ask.v*.txt · cafe.v*.txt → web/content/prompts/ (서버가 실행 중에 파일로 읽는다 — 코드 안에 넣지 않는다)
 //   common/kr_regions.json → web/content/kr-regions.json (물어보기가 알아보는 시·도 · 시·군 · 구 이름)
 //
@@ -56,7 +56,7 @@ async function main() {
   }
 
   // ---- 로고 · 그림 (디자인 시스템 페이지)
-  const logos = ["logo.png", "logo_mint.png", "logo2.png", "ask_avatar.png", "default_poster.png"];
+  const logos = ["logo.png", "mascot.png", "ask_avatar.png", "default_poster.png"];
   for (const f of logos) {
     if (await exists(path.join(STATIC, f))) await fs.copyFile(path.join(STATIC, f), path.join(WEB, "public", "design", f));
   }
@@ -81,7 +81,11 @@ async function main() {
   const D = path.join(DOCS, "design");
   const comps = {};
   for (const f of (await fs.readdir(path.join(D, "components"))).sort()) {
-    comps[f] = await read(path.join(D, "components", f));
+    // 예시 그림 주소: 앱(Streamlit)의 app/static/x.png → 웹의 /design/x.png (위에서 옮긴 로고 · 그림)
+    comps[f] = (await read(path.join(D, "components", f))).replace(
+      /app\/static\/(logo|mascot|ask_avatar|default_poster)\.png/g,
+      (_, n) => `/design/${n}.png`,
+    );
   }
   const design = {
     tokens: JSON.parse(await read(path.join(D, "tokens.json"))),
