@@ -6873,5 +6873,30 @@
     "editor": "AI",
     "intro": "세가가 소닉 시리즈 35주년을 기념해 여는 공식 팬미팅\n아시아 7개 지역을 순회하는 SONIC 35th Official Fan Meeting Tour의 서울 회차\n\n[프로그램] 시리즈 주요 개발진 토크 — 작품 제작 과정과 역대 시리즈를 돌아보는 내용\n사인회\n경품 추첨\n\n[게스트] 호시노 카즈유키 — 소닉 시리즈 크리에이티브 디렉터\n오오타니 토모야 — 사운드 디렉터\n\n[특전] 방문객 전원에게 별도 기념품 제공\n\n[운영 안내] 오후 1시~6시 30분, 한국어로 진행\n정오 12시부터 입장 가능\n참가비 없음 (무료)\n\n[신청] 온라인 사전 신청, 접수 기간 11월 3일~11월 12일 오후 11시 59분\n신청자 중 추첨으로 참석자 선정, 당첨 결과는 개별 안내\n행사장 위치도 당첨자에게 개별 안내\n\n[주최] 세가퍼블리싱코리아\n\n※ 장소·포토존·체험·굿즈·식음 안내는 기사에 없다\n(출처: 경향게임스)",
     "intro_src": "https://www.khgames.co.kr/news/articleView.html?idxno=309957"
+  },
+  {
+    "row_id": "feadacb94f",
+    "entry_id": "5010ae801f",
+    "revision": 1,
+    "status": "active",
+    "updated_at": "2026-11-26T01:01:32+00:00",
+    "cafe_name": "롯데마트 제타플렉스 서울역점",
+    "work": "로보트 태권V 50주년 팝업스토어",
+    "characters": "",
+    "address": "서울 중구 한강대로 405",
+    "lat": 37.55601,
+    "lng": 126.97022,
+    "start_date": "2026-11-21",
+    "end_date": "2026-11-27",
+    "perks": "",
+    "goods": "",
+    "source": "AI 자동 수집",
+    "note": "정확한 주소 (Notion 좌표) | notion:5041cb77b7c99a81219882f10cf92b32",
+    "images": "https://yusliwxhuvjsfvfgiynk.supabase.co/storage/v1/object/public/uploads/c14828808fcd.webp",
+    "tags": "",
+    "links": "https://n.news.naver.com/mnews/article/421/0009262338 https://recal.kr/ko/e/offline/popup-robot-taekwonv-50th-toysrus",
+    "editor": "AI",
+    "intro": "",
+    "intro_src": ""
   }
 ]
