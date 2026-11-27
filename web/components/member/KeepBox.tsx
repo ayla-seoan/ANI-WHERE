@@ -153,8 +153,6 @@ export default function KeepBox({
     ["visited", `다녀온 팝업 ${visited.length}`],
     ["recent", "최근 본"],
   ];
-  // 도장은 끝난 팝업의 후기도 세지만, 이 목록은 지금 있는 팝업만 보여 준다
-  const hidden = stamps - visited.length;
   return (
     <>
       <h2 className="sr-only">내 팝업 목록</h2>
@@ -182,10 +180,8 @@ export default function KeepBox({
         ))}
       {tab === "visited" && (
         <>
-          <RankCard
-            stamps={stamps}
-            note={hidden > 0 ? `도장 ${stamps}개 중 ${hidden}개는 이미 끝난 팝업의 후기라 아래 목록에는 없어요.` : undefined}
-          />
+          {/* 도장 · 랭크 · 진행 막대만 (11/27 요청: 끝난 팝업 안내 줄은 두지 않는다) */}
+          <RankCard stamps={stamps} />
           {visited.length ? (
             <>
               {visited.slice(0, nVisited).map((v) => {

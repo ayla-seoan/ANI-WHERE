@@ -45,6 +45,11 @@ def _split(text, seps=r"\s*/\s*|,") -> list[str]:
     return [p.strip() for p in re.split(seps, _known(text)) if _known(p)]
 
 
+def _goods_word(text: str) -> str:
+    """굿즈 칸의 문장 끝 '~를 한다' 를 떼어 이름만 남긴다 ('한정 판매를 한다' → '한정 판매', 11/27)."""
+    return re.sub(r"\s*(?:을|를)?\s*(?:한다|합니다|해요|진행)\.?$", "", text).strip() or text
+
+
 def _work(name: str) -> str:
     """'프로젝트 세카이 (프로세카)' → '프로젝트 세카이' (괄호 속 별칭은 뺀다)."""
     return re.sub(r"\s*\(.*?\)\s*$", "", str(name or "")).strip()
@@ -105,7 +110,7 @@ def entry_from_row(row: dict, today: date | None = None) -> tuple[CafeEntry | No
         cafe_name=place, work=work, characters=_split(row.get("캐릭터"), r",|·"),
         address=address,
         start_date=s_day, end_date=e_day,
-        perks=_split(row.get("특전")), goods=_split(row.get("굿즈"), r","),
+        perks=_split(row.get("특전")), goods=[_goods_word(g) for g in _split(row.get("굿즈"), r",")],
         confidence="high",
     )
     # 출처·주최링크·참고링크(줄바꿈으로 여러 개)를 모두 '참고 웹사이트' 로. 겹치는 주소는 한 번만

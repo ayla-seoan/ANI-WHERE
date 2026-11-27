@@ -23,10 +23,9 @@
   padding: 24px var(--side) 64px;
   box-sizing: border-box;
 }
-/* 지도로 보기는 화면 폭을 다 쓴다 (A-Map) */
+/* 지도로 보기도 다른 탭과 같은 가운데 1232px 폭 (11/27 요청: 예전엔 화면 폭을 다 썼다). 위·아래 여백만 짧게 */
 body:has(.map-page) .main {
-  max-width: none;
-  padding: 16px var(--side) 24px;
+  padding: 24px var(--side) 24px; /* 위 24px = 리스트와 같아 물어보기 창이 같은 자리에 (11/27 요청) */
 }
 .page > footer,
 .page > .aw-foot {

@@ -868,9 +868,10 @@
   grid-template-columns: 200px minmax(0, 1fr) 340px; /* 데일리 노트 300 → 200px (11/26 요청) */
   gap: 16px;
   align-items: stretch;
-  height: calc(100vh - 116px);
-  height: calc(100dvh - 116px);
-  min-height: 520px;
+  /* 리스트의 물어보기 창(.ask-panel: 100vh - 118px)과 같은 높이 (11/27 요청) */
+  height: calc(100vh - 118px);
+  height: calc(100dvh - 118px);
+  min-height: 460px;
 }
 .map-col {
   position: relative;

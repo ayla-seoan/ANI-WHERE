@@ -87,8 +87,8 @@ export default function ReviewFeed({
   const all = [...cards].sort(byNew);
   const list = kind === "전체" ? all : all.filter((c) => c.kind === kind);
   // '오늘의 꿀팁' 배너: 사진을 붙인 후기를 3초마다 넘긴다 (11/26 요청, ‹ › 버튼). 사진 후기가 없으면 가장 최근 후기 하나
-  const photoCards = list.filter((c) => c.photos.length).slice(0, SLIDE_MAX);
-  const slides = photoCards.length ? photoCards : list.slice(0, 1);
+  // 배너는 사진이 없는 후기도 넘긴다 — 사진이 없으면 그 팝업 포스터를 보여 준다 (11/27 요청)
+  const slides = list.slice(0, SLIDE_MAX);
   const n = slides.length;
   const top = slides[n ? idx % n : 0];
   const rest = list.filter((c) => c !== slides[0]).slice(0, LIST_MAX);

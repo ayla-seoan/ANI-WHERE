@@ -133,7 +133,7 @@ export function RankCard({ stamps, note }: { stamps: number; note?: string }) {
         </RankGuideLink>
       </div>
       <RankBar stamps={stamps} />
-      <TierRow stamps={stamps} />
+      {/* 5단계 줄은 두지 않는다 (11/27 요청: 도장 · 랭크 · 남은 개수 · 진행 막대만). 단계는 '랭크 안내' 팝업에서 */}
       {note && <p className="rkb-note">{note}</p>}
     </section>
   );

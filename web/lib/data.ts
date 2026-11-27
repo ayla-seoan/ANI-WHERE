@@ -118,7 +118,8 @@ function normalize(row: Row): Popup | null {
     goods: list(row.goods),
     tags: list(row.tags),
     images: imageUrls(row.images),
-    links: linkUrls(row.links),
+    // 참고 웹사이트가 비어 있으면 AI 가 넣은 소개 출처를 대신 보여 준다 (11/27: 출처가 있는데 '웹사이트 없음' 으로 보였다)
+    links: linkUrls(row.links).length ? linkUrls(row.links) : linkUrls(row.intro_src),
     intro: str(row.intro),
     updatedAt: str(row.updated_at),
     createdAt: str(row.updated_at),

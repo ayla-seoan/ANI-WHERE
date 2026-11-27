@@ -885,6 +885,8 @@ def _detail_info_html(current: dict) -> str:
                   + '</div>')
     # 참고 웹사이트: 사이트 이름 + ↗. recal.kr 은 맨 뒤로 (다른 사이트가 없으면 그대로 첫 번째)
     links = cafe.order_links(cafe.parse_links(current.get("links") or "")[0])
+    if not links:      # 참고 웹사이트가 비어 있으면 AI 가 넣은 소개 출처를 대신 (11/27: 출처가 있는데 웹사이트가 없다고 보였다)
+        links = [u for u in [str(current.get("intro_src") or "").strip()] if u.startswith(("http://", "https://"))]
     link_html = ""
     if links:
         status = _link_status(tuple(links))      # 깨진 공식 링크는 '링크 확인 필요' (하루 동안 기억)
@@ -2811,6 +2813,14 @@ def _poster_url(value) -> str:
     return images.url(poster) if poster else images.DEFAULT_POSTER_URL
 
 
+def _goods_chip(goods: list[str]) -> str:
+    """포스터·카드 칩에 굿즈를 쓸 때는 긴 문장 대신 짧은 이름만 (11/27 요청): '한정 판매' 가 들어가면 '한정판매', 아니면 '굿즈'.
+    전체 굿즈 문구는 상세 · 커서 올림에 그대로 나온다. 웹 lib/popup.ts goodsChip 과 같게"""
+    if not goods:
+        return ""
+    return "한정판매" if any(re.search(r"한정\s*판매", g) for g in goods) else "굿즈"
+
+
 def _chips(r, full: bool = False) -> str:
     """이벤트 정보는 민트로 채운 칩, 굿즈는 민트 테두리 칩. full 이 아니면 몇 개만 보이고 나머지는 +N 으로 줄인다.
     카드(full 아님)에서는 칩 글자가 12자를 넘으면 '…' 로 줄인다 — 카드 밖으로 잘려 보였다 (11/18)."""
@@ -2822,6 +2832,8 @@ def _chips(r, full: bool = False) -> str:
     tags += [f'<span class="chip tag">{escape(cut(t))}</span>' for t in (all_tags if full else all_tags[:2])]
     shown = [f'<span class="chip">{escape(cut(g))}</span>' for g in (goods if full else goods[:3])]
     if not full:               # 카드 위에는 첫 번째 칩 하나만 (11/18 요청). 전부는 커서 올림·상세에서
+        if not tags and goods:     # 굿즈는 짧은 이름만 (11/27 요청)
+            return f'<span class="chip">{_goods_chip(goods)}</span>'
         return "".join((tags + shown)[:1])
     return "".join(tags + shown)
 
@@ -2935,7 +2947,7 @@ def _abrowse_chip(r) -> str:
     goods = _split(r.get("goods") or "")
     if tags:
         return f'<span class="bc-chip tag">{escape(tags[0])}</span>'
-    return f'<span class="bc-chip">{escape(goods[0])}</span>' if goods else ""
+    return f'<span class="bc-chip">{_goods_chip(goods)}</span>' if goods else ""
 
 
 def _poster_card(r, label: str, color: str = "green") -> str:
@@ -3922,8 +3934,9 @@ def _home_reviews(df: pd.DataFrame, limit: int = AH_RV_MAX) -> None:
                             label_visibility="collapsed") or "전체"
         lst = rows if kind == "전체" else [r for r in rows if str(r.get("kind") or "") == kind]
         # '오늘의 꿀팁' 배너 (11/26 요청): 사진을 붙인 후기를 3초마다 넘기고 ‹ › 로도 넘긴다 (웹 ReviewFeed 와 같게).
-        # 사진 후기가 없으면 가장 최근 후기 하나. 슬라이드는 한 번에 그려 두고 _FEED_CAR_JS 가 넘긴다 (Streamlit 다시 그리기 없이)
-        slides = [r for r in lst if pics_of(r)][:8] or lst[:1]
+        # 11/27 요청: 사진 없는 후기도 넘기고, 그때는 그 팝업 포스터를 보여 준다 (최근 8개).
+        # 슬라이드는 한 번에 그려 두고 _FEED_CAR_JS 가 넘긴다 (Streamlit 다시 그리기 없이)
+        slides = lst[:8]
         top = slides[0] if slides else None
         with left:
             if top is None:
@@ -4350,6 +4363,9 @@ html body .st-key-home { gap: 44px !important; padding-top: 4px;
   --ah-ink: #26302d; --ah-soft: #5f6b68; --ah-line: #e3e9e7; --ah-surface: #f6f8f7; --ah-mint-line: #9eddcc;
   --ah-purple: #6c5ce7; --ah-purple-deep: #5b3fae; --ah-purple-soft: #f1ecff; --ah-purple-line: #ddd3fb; }
 html body .st-key-home [class*="st-key-ahs_"], html body .st-key-home .st-key-stories { gap: 14px !important; margin: 0 !important; min-width: 0; }
+/* 북마크 팝업(손님은 특전 있는 작품들) ↔ 실시간 인기 급상승 랭킹 사이 여백을 반으로 (11/27 요청: PC 74 → 37px, 모바일 58 → 29px) */
+html body .st-key-home > :has(.st-key-stories) + :has(.st-key-home_banner) { margin-top: -37px !important; }
+@media (max-width: 640px) { html body .st-key-home > :has(.st-key-stories) + :has(.st-key-home_banner) { margin-top: -29px !important; } }
 /* 마크다운 칸의 아래 음수 여백(-1rem)을 없애 조각 높이가 보이는 그대로 잡히게 (내 섹션 안에서만) */
 html body .st-key-home [class*="st-key-ahs_"] [data-testid="stMarkdownContainer"],
 html body .st-key-home .st-key-stories [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
@@ -7733,10 +7749,9 @@ def render_box_view(tab: str) -> None:
     elif tab == "visited":
         stamps = keep["stamps"]
         cur = stamp.tier_of(stamps)
-        hidden = stamps - len(keep["visited"])          # 도장은 끝난 팝업의 후기도 세지만, 이 목록은 지금 있는 팝업만 보여 준다
+        # 위 카드는 도장 · 랭크 · 진행 막대만 (11/27 요청: 끝난 팝업 안내 줄은 두지 않는다)
         with st.container(key="amem_rkb"):
-            st.markdown(_amem_rank_card(stamps, f"도장 {stamps}개 중 {hidden}개는 이미 끝난 팝업의 후기라 아래 목록에는 없어요."
-                                        if hidden > 0 else ""), unsafe_allow_html=True)
+            st.markdown(_amem_rank_card(stamps), unsafe_allow_html=True)
             if st.button("랭크 안내", key="amem_rank_open_v", type="tertiary"):
                 _amem_rank_dialog()
         items = []
@@ -8317,7 +8332,8 @@ def _amem_rank_card(stamps: int, note: str = "") -> str:
     name = (f'<span class="rkb-name" style="color:{cur.fg}">Lv.{cur.lv} {cur.name}</span>' if cur
             else '<span class="rkb-name">아직 도장이 없어요</span>')
     return (f'<div class="rkb-card"><div class="rkb-top">{s60}<div class="rkb-txt"><span class="rkb-cap">내 후기 도장</span>{name}'
-            f'{_amem_rank_line(stamps, short=True)}</div></div>{_amem_rank_bar(stamps)}{_amem_tier_row(stamps)}'
+            # 도장 · 랭크 · 남은 개수 · 진행 막대만 (11/27 요청: 5단계 줄 · 끝난 팝업 안내는 빼고 랭크 안내 팝업에서)
+            f'{_amem_rank_line(stamps, short=True)}</div></div>{_amem_rank_bar(stamps)}'
             + (f'<p class="rkb-note">{escape(note)}</p>' if note else "") + "</div>")
 
 

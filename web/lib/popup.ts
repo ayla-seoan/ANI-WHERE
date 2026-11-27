@@ -325,6 +325,9 @@ const SEOUL_GU = [
 const METRO = ["부산", "대구", "대전", "울산", "인천", "세종"];
 // 시·도 이름 없이 동네로 적은 주소 (앱 geo 사전 중 자주 나오는 것만)
 const AREA_ALIAS: Record<string, string> = {
+  // 시·구 없이 '동대문디자인플라자 쇼룸 1층' 만 적힌 주소도 지역 배지가 뜨게 (11/27, 파인캐릭터 2026). DDP 는 중구 을지로
+  동대문디자인플라자: "중",
+  DDP: "중",
   홍대: "마포",
   합정: "마포",
   연남: "마포",
@@ -503,11 +506,18 @@ export type Item = {
 
 const FLAG_TAGS = new Set(["상시", "기간 확인 필요"]);
 
+/** 포스터 칩에 굿즈를 쓸 때는 긴 문장 대신 짧은 이름만 (11/27 요청): '한정' 이 들어가면 '한정판매', 아니면 '굿즈'.
+ *  전체 굿즈 문구는 상세 · 커서 올림에 그대로 나온다. 앱 _goods_chip 과 같게 */
+export function goodsChip(goods: string[]): string {
+  if (!goods.length) return "";
+  return goods.some((g) => /한정\s*판매/.test(g)) ? "한정판매" : "굿즈";
+}
+
 export function toItem(p: Popup): Item {
   // 앱 _chips: 카드에는 (태그 2개 + 굿즈 3개) 중 첫 번째 하나만. '상시'·'기간 확인 필요' 표시는 카드에서 뺀다
   const tags = p.tags.filter((t) => !FLAG_TAGS.has(t));
   const chipTag = tags.length > 0;
-  const chip = (chipTag ? tags[0] : p.goods[0]) ?? "";
+  const chip = chipTag ? tags[0] : goodsChip(p.goods);
   return {
     id: p.id,
     name: p.name,

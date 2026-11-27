@@ -1806,3 +1806,17 @@
   width: 18px;
   background: #fff;
 }
+
+/* 북마크 팝업(손님은 특전 있는 작품들) ↔ 실시간 인기 급상승 랭킹 사이 여백을 반으로 (11/27 요청: PC 82 → 41px, 모바일 60 → 30px).
+   랭킹 CSS 는 그대로 두고 바깥 여백만 당긴다 */
+.home.ah > .stories-old {
+  margin-bottom: 0;
+}
+.home.ah > .stories-old + .rank {
+  margin-top: -21px;
+}
+@media (max-width: 640px) {
+  .home.ah > .stories-old + .rank {
+    margin-top: -16px;
+  }
+}
