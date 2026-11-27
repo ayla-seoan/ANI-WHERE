@@ -7887,20 +7887,21 @@ html body .st-key-keep_box .st-key-box_tabs button p { font-size:15px !important
 html body .st-key-keep_box .st-key-box_tabs [class*="st-key-boxtab_on_"] button { background:#fff !important; }
 html body .st-key-keep_box .st-key-box_tabs [class*="st-key-boxtab_on_"] button p { color:var(--am-ink) !important; font-weight:800 !important; }
 html body .st-key-keep_box [class*="st-key-bx_"] { margin-bottom:0; }
-.am-card { display:flex; gap:18px; align-items:center; padding:14px 16px; border:1.5px solid var(--am-line); border-radius:16px;
+/* 내 캘린더 목록 카드는 작게 (11/27 요청): 포스터 60px, 위아래 여백 10px — 글자 높이에 맞춘다 */
+.am-card { display:flex; gap:14px; align-items:center; padding:10px 14px; border:1.5px solid var(--am-line); border-radius:14px;
   background:#fff; color:var(--am-ink); min-width:0; transition:border-color .15s; }
 [class*="st-key-bx_"]:hover .am-card { border-color:var(--accent); }
-.am-pst { position:relative; width:96px; aspect-ratio:3 / 4; border-radius:12px; border:2.5px solid var(--am-mint-line);
+.am-pst { position:relative; width:60px; aspect-ratio:3 / 4; border-radius:10px; border:2px solid var(--am-mint-line);
   background-color:var(--am-gray); background-size:cover; background-position:center; flex:none; box-sizing:border-box; }
-.am-stamp { position:absolute; right:-10px; bottom:-10px; display:flex; border-radius:50%; transform:rotate(-10deg);
+.am-stamp { position:absolute; right:-8px; bottom:-8px; display:flex; border-radius:50%; transform:rotate(-10deg) scale(.7); transform-origin:bottom right;
   box-shadow:0 2px 6px rgba(0,0,0,.12); }
-.am-body { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.am-body { flex:1; display:flex; flex-direction:column; gap:4px; min-width:0; }
 .am-chips { display:flex; gap:6px; flex-wrap:wrap; }
 .am-chips:empty { display:none; }
 .am-chips .am-st { padding:2px 10px; }
 .am-area { font-size:12px; padding:2px 10px; border-radius:999px; line-height:1.5; white-space:nowrap; }
-.am-t { font-family:"Jua", sans-serif; font-size:21px; line-height:1.25; color:#0f6b5c; overflow-wrap:anywhere; }
-.am-sub { font-size:14px; color:var(--am-ink-soft); overflow-wrap:anywhere; }
+.am-t { font-family:"Jua", sans-serif; font-size:18px; line-height:1.25; color:#0f6b5c; overflow-wrap:anywhere; }
+.am-sub { font-size:13px; color:var(--am-ink-soft); overflow-wrap:anywhere; }
 .am-perk { align-self:flex-start; max-width:100%; font-size:13px; font-weight:700; padding:4px 12px; border-radius:999px;
   background:var(--am-gray); color:var(--am-ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .am-got { font-size:12.5px; font-weight:800; color:#0f6b5c; }
@@ -7917,9 +7918,9 @@ html body .st-key-keep_box [class*="st-key-bx_"] { margin-bottom:0; }
 .am-empty p { margin:0 !important; font-size:13.5px !important; color:var(--am-ink-soft); line-height:1.55; }
 /* 북마크 단추 (카드 오른쪽, PC 만) */
 @media (min-width:641px) { .am-card.has-bm { padding-right:74px; } }
-html body .st-key-keep_box [class*="st-key-fav_"] { position:absolute !important; right:16px; top:50%; transform:translateY(-50%);
+html body .st-key-keep_box [class*="st-key-fav_"] { position:absolute !important; right:14px; top:50%; transform:translateY(-50%);
   z-index:3; width:40px !important; }
-html body .st-key-keep_box [class*="st-key-fav_"] button { width:40px !important; height:40px !important; min-width:0 !important;
+html body .st-key-keep_box [class*="st-key-fav_"] button { width:36px !important; height:36px !important; min-width:0 !important;
   min-height:0 !important; padding:0 !important; border-radius:10px !important; background:#fff !important;
   border:1.5px solid var(--am-line) !important; box-shadow:none !important; }
 html body .st-key-keep_box [class*="st-key-fav_"] button::before { display:none !important; }
@@ -8169,12 +8170,12 @@ html body div[data-testid="stDialog"] div[role="dialog"]:has(.rkp) { width:min(1
   .amc-up { padding:14px; }
   html body .st-key-keep_box .st-key-box_tabs button { padding:12px 4px !important; }
   html body .st-key-keep_box .st-key-box_tabs button p { font-size:14px !important; }
-  .am-card { gap:14px; padding:12px; }
-  .am-pst { width:84px; }
+  .am-card { gap:12px; padding:10px 12px; }
+  .am-pst { width:56px; }
   .am-body { gap:5px; }
   .am-chips .am-st, .am-area { font-size:11.5px; padding:2px 9px; }
-  .am-t { font-size:18px; }
-  .am-sub { font-size:13px; }
+  .am-t { font-size:16px; }
+  .am-sub { font-size:12.5px; }
   .am-perk { font-size:12px; padding:3px 10px; }
   html body .st-key-keep_box [class*="st-key-fav_"] { display:none !important; }
   html body [class*="st-key-bx_more_"] button, html body .st-key-amrv_more button { height:46px !important; }

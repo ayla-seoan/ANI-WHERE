@@ -1965,3 +1965,49 @@ a.nh-item:hover {
     animation: none;
   }
 }
+
+/* 내 캘린더 목록 카드를 작게 (11/27 요청: 북마크 카드가 너무 컸다) — 포스터를 글자 높이에 맞추고 위아래 여백을 줄인다 */
+.am-card {
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 14px;
+}
+.am-pst {
+  width: 60px;
+  border-width: 2px;
+  border-radius: 10px;
+}
+.am-stamp {
+  right: -8px;
+  bottom: -8px;
+  transform: rotate(-10deg) scale(0.7);
+  transform-origin: bottom right;
+}
+.am-body {
+  gap: 4px;
+}
+.am-t {
+  font-size: 18px;
+}
+.am-sub {
+  font-size: 13px;
+}
+.am-card .bm {
+  width: 36px;
+  height: 36px;
+}
+@media (max-width: 640px) {
+  .am-card {
+    gap: 12px;
+    padding: 10px 12px;
+  }
+  .am-pst {
+    width: 56px;
+  }
+  .am-t {
+    font-size: 16px;
+  }
+  .am-sub {
+    font-size: 12.5px;
+  }
+}
